@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sistema de Gestión Hotelera — Hotel Blanca Patagonia
 
-## Getting Started
+Aplicación web integral para la gestión del Hotel Blanca Patagonia (El Calafate):
+reservas online, check-in / check-out, consumos, facturación y reportes.
+Reemplaza el sistema heredado **Winpax** y reduce la dependencia de **Booking**.
 
-First, run the development server:
+> Proyecto de tesis — Tecnicatura/Analista de Sistemas, Colegio Universitario IES.
+> Autores: Octavio Fakiani · Santiago Morán.
+
+## Stack
+
+- **Next.js 16** (App Router, TypeScript) + **Tailwind CSS 4**
+- **Supabase** (PostgreSQL + Auth + Storage + RLS)
+- Pagos: **MercadoPago / Stripe** (capa de abstracción) · Email transaccional
+- Despliegue: **Vercel**
+
+## Puesta en marcha
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # completar con credenciales de Supabase
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ver el [manual técnico](docs/manual-tecnico.md) para el detalle (incluida la
+base de datos local con Supabase CLI).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Documentación
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Toda la documentación vive en [`docs/`](docs/):
 
-## Learn More
+- [Bitácora de avances](docs/bitacora.md) — registro cronológico del desarrollo.
+- [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
+- [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
+- [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
+- [Decisiones (ADR)](docs/decisiones/) — decisiones de arquitectura.
 
-To learn more about Next.js, take a look at the following resources:
+## Estructura
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+app/            # Next.js App Router — (public) portal · (admin) panel interno
+components/     # UI reutilizable
+lib/            # dominio, disponibilidad, pagos, clientes Supabase
+supabase/       # migraciones SQL + seed
+docs/           # documentación del proyecto / tesis
+tests/          # tests (Vitest)
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Script | Acción |
+|---|---|
+| `npm run dev` | Servidor de desarrollo |
+| `npm run build` | Build de producción |
+| `npm run lint` | ESLint |
+| `npm test` | Tests (Vitest) |
+| `npm run typecheck` | Chequeo de tipos |
