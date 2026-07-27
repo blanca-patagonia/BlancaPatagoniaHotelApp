@@ -1,34 +1,43 @@
+import Link from 'next/link'
+
 export default function Home() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
-      <div>
-        <p className="text-sm font-medium uppercase tracking-widest text-sky-600">
-          Hotel Blanca Patagonia · El Calafate
+    <main className="flex flex-1 flex-col">
+      <section className="flex flex-1 flex-col items-center justify-center gap-6 bg-gradient-to-b from-sky-50 to-stone-100 px-6 py-20 text-center">
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-700">
+          Hostería Boutique &amp; Cabañas
         </p>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
-          Sistema de Gestión Hotelera
+        <h1 className="text-4xl font-semibold tracking-tight text-stone-900 sm:text-6xl">
+          Blanca Patagonia
         </h1>
-        <p className="mx-auto mt-4 max-w-xl text-base text-gray-500">
-          Reservas, check-in / check-out, consumos, facturación y reportes en una
-          sola plataforma web. Proyecto de tesis — Analista de Sistemas (IES).
+        <p className="max-w-xl text-lg text-stone-600">
+          Frente al Lago Argentino, en El Calafate. Habitaciones con vista e
+          hidromasaje y cabañas con hogar a parrilla, a pasos de los glaciares del
+          Parque Nacional Los Glaciares.
         </p>
-      </div>
-
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-        <span className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-600">
-          Fase 2 — Panel de Recepción ✅
-        </span>
-        <span className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-400">
-          Próximo: Pagos y portal público
-        </span>
-      </div>
-
-      <a
-        href="/panel"
-        className="mt-4 rounded-lg bg-sky-700 px-5 py-2.5 font-medium text-white transition hover:bg-sky-800"
-      >
-        Ingresar al panel de gestión →
-      </a>
+        <div className="mt-2 flex flex-wrap justify-center gap-3">
+          <Link
+            href="/reservar"
+            className="rounded-lg bg-sky-700 px-6 py-3 font-medium text-white transition hover:bg-sky-800"
+          >
+            Reservá tu estadía
+          </Link>
+          <a
+            href="https://www.blancapatagonia.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-stone-300 bg-white/60 px-6 py-3 font-medium text-stone-700 transition hover:bg-white"
+          >
+            Conocé el hotel
+          </a>
+        </div>
+      </section>
+      <footer className="flex items-center justify-between border-t border-stone-200 bg-white px-6 py-4 text-sm text-stone-500">
+        <span>El Calafate · Santa Cruz · Argentina</span>
+        <Link href="/panel" className="hover:text-stone-800">
+          Acceso staff →
+        </Link>
+      </footer>
     </main>
-  );
+  )
 }

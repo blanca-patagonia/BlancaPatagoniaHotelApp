@@ -169,3 +169,34 @@ el sistema queda operable con cobros manuales y preparado para enchufarlas.
 **Pendiente / próximo paso:** **Fase 4 — Portal público de reservas** (búsqueda,
 checkout con pago, email de confirmación), reutilizando el motor de disponibilidad,
 cotización y la capa de pagos ya construidos.
+
+---
+
+## 2026-07-27 — Fase 4: Portal público de reservas
+
+**Resumen:** se construyó el **portal público** (sin login) para que el huésped
+final reserve online, reutilizando disponibilidad, cotización y pagos.
+
+**Detalle de lo realizado:**
+- **Landing** pública (boutique) con CTA a reservar y acceso discreto al staff.
+- **`/reservar`:** búsqueda por fechas/huéspedes → tipos disponibles con precio
+  (rack, con IVA), usando `disponibilidad_por_tipo` y `cotizar_estadia` (accesibles
+  por `anon`).
+- **`/reservar/checkout`:** resumen (total + seña) y datos del huésped.
+- **Alta pública** (`crearReservaPublica`, Server Action con `service_role`): asigna
+  unidad libre, cotiza y crea la reserva en estado **`pendiente`** (bloquea el
+  inventario por la exclusión). Traduce el error `23P01`.
+- **`/reservar/confirmacion/[codigo]`:** confirmación por código con la seña.
+- **Email de confirmación** (`lib/email/confirmacion.ts`): stub listo para proveedor real.
+
+**Verificado end-to-end:** landing → búsqueda → checkout → reserva
+**BP-260727-DC2C** (`pendiente`, canal `web`, huésped Pérez). La ocupación de Doble
+Standard subió a 2 (Fakiani + Pérez) → **la reserva pública bloqueó inventario en
+vivo**. El stub de email registró el envío. **43 tests en verde.**
+
+**Decisiones:** ver [ADR 0007](decisiones/0007-portal-publico-reservas.md). No hay
+pago de seña online (requiere pasarela) ni envío real de email; ambos quedan
+enganchados a las capas ya preparadas (ADR 0006).
+
+**Pendiente / próximo paso:** **Fase 5 — Check-in/out + consumos + factura PDF**;
+además: expiración de reservas `pendiente` sin seña y rate-limiting del portal.

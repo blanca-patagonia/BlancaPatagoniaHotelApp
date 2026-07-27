@@ -38,9 +38,11 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Integración real de pasarelas (requiere credenciales) · reembolsos automáticos por política
 
 ## Fase 4 — Portal público de reservas
-- [ ] Búsqueda de disponibilidad
-- [ ] Selección y checkout de pago
-- [ ] Email de confirmación automático
+- [x] Landing pública + búsqueda de disponibilidad (sin login)
+- [x] Checkout con datos del huésped → reserva `pendiente` (anti-overbooking en vivo)
+- [x] Página de confirmación por código con seña
+- [x] Email de confirmación (stub, listo para proveedor real)
+- [ ] Pago de seña online (requiere pasarela) · expiración de reservas pendientes
 
 ## Fase 5 — Check-in / Check-out + Consumos + Factura
 - [ ] Check-in digital (reemplazo de ficha en papel)

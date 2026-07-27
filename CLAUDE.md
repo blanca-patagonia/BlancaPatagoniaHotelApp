@@ -76,12 +76,13 @@ Tarifario 2025/2026 (Anexo A).
 - **Gate de cada fase:** typecheck + lint + tests en verde.
 
 ## Estado actual
-- **Fase 0 ✅** fundaciones · **Fase 1 ✅** núcleo de dominio · **Fase 2 ✅** panel
-  interno de Recepción (auth+roles, ocupación, reservas+ciclo, housekeeping, usuarios,
-  huéspedes) · **Fase 3 ✅** pagos (registro manual seña/saldo/reembolso + abstracción
-  `PaymentProvider` + webhook idempotente `/api/webhooks/pagos/{proveedor}`). 43 tests verdes.
-- **Próximo: Fase 4 — Portal público de reservas** (búsqueda, checkout, email).
-- Pagos: no se integran pasarelas reales (credenciales + dinero); stubs listos para enchufar.
+- **Fase 0-2 ✅** fundaciones + núcleo de dominio + panel interno de Recepción ·
+  **Fase 3 ✅** pagos (registro manual + `PaymentProvider` + webhook idempotente) ·
+  **Fase 4 ✅** portal público de reservas (`/reservar` búsqueda → checkout → confirmación;
+  reserva `pendiente` vía `service_role`, email stub). 43 tests verdes.
+- **Próximo: Fase 5 — Check-in/out + consumos + factura PDF.**
+- No se integran pasarelas reales ni envío de email real (credenciales/dinero);
+  stubs listos para enchufar (`lib/payments`, `lib/email`).
 - Admin de dev: `admin@blancapatagonia.local` / `blancadev1234` (`npm run seed:usuarios`).
 - Al embeber `huespedes` desde `reservas` usar `huespedes!reservas_huesped_id_fkey` (hay 2 FKs).
 - Pendiente de confirmar con el hotel: **inventario físico real** de unidades y
