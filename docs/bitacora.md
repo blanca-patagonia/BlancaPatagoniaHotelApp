@@ -138,3 +138,34 @@ queda **restringido** y el acceso por URL a áreas prohibidas **redirige**.
 **Pendiente / próximo paso:** **Fase 3 — Pagos** (MercadoPago/Stripe, seña →
 confirmación, webhooks). Nota de datos: el Tarifario cargado es 2025/2026, anterior
 a la fecha del sistema; para demos "en vivo" habría que cargar la temporada vigente.
+
+---
+
+## 2026-07-27 — Fase 3: Pagos
+
+**Resumen:** se incorporó el **registro de pagos** de las reservas (seña / saldo /
+reembolso) operable desde recepción, con una **abstracción de pasarelas** y un
+**webhook idempotente** listos para MercadoPago/Stripe.
+
+**Detalle de lo realizado:**
+- **Migración 0009 (`pagos`):** medio, tipo, monto, estado y `external_id` único
+  (idempotencia). RLS: staff lee, recepción+ gestiona.
+- **Dominio `lib/domain/pagos.ts`:** `resumenPagos` (pagado/saldo/saldada) y
+  `seniaSugerida` (primera noche) + tests.
+- **UI:** sección **Pagos** en el detalle de la reserva (Total / Pagado / Saldo,
+  lista y registro manual). Al saldarse, la reserva pasa **automáticamente** a
+  `pagada` (`registrarPago`).
+- **Abstracción `PaymentProvider`** (`lib/payments/`) con stubs MercadoPago/Stripe
+  y **webhook** `POST /api/webhooks/pagos/{proveedor}` idempotente (service_role).
+
+**Verificado:** registro de seña (USD 214,17) + saldo (USD 428,34) → reserva
+**Pagada** (como usuario de recepción); webhook: 1er POST inserta, 2do idéntico
+devuelve `duplicado`, proveedor desconocido → 404. **43 tests en verde.**
+
+**Decisiones:** ver [ADR 0006](decisiones/0006-pagos-abstraccion-e-idempotencia.md).
+No se integran pasarelas reales (requieren credenciales del hotel y mueven dinero);
+el sistema queda operable con cobros manuales y preparado para enchufarlas.
+
+**Pendiente / próximo paso:** **Fase 4 — Portal público de reservas** (búsqueda,
+checkout con pago, email de confirmación), reutilizando el motor de disponibilidad,
+cotización y la capa de pagos ya construidos.

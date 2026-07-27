@@ -7,6 +7,7 @@ import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { diasEntre } from '@/lib/fechas'
 import type { TarifaTipo } from '@/lib/domain/precios'
 import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
+import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -119,4 +120,42 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
 
   await supabase.from('reservas').update({ estado: nuevo }).eq('id', id)
   redirect(`/panel/reservas/${id}`)
+}
+
+/**
+ * Registra un pago (seña / saldo / reembolso) sobre la reserva. Si con este pago
+ * la reserva queda saldada, intenta la transición a `pagada`.
+ */
+export async function registrarPago(formData: FormData): Promise<void> {
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  const medio = String(formData.get('medio') ?? 'efectivo')
+  const tipo = String(formData.get('tipo') ?? 'saldo')
+  const monto = Number(formData.get('monto') ?? 0)
+  if (!reservaId) redirect('/panel/reservas')
+  if (!(monto > 0)) redirect(`/panel/reservas/${reservaId}?error=monto`)
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('pagos')
+    .insert({ reserva_id: reservaId, medio, tipo, monto, estado: 'aprobado' })
+  if (error) redirect(`/panel/reservas/${reservaId}?error=pago`)
+
+  // ¿Quedó saldada? → intentar pasar a 'pagada'.
+  const { data: reserva } = await supabase
+    .from('reservas')
+    .select('estado, total')
+    .eq('id', reservaId)
+    .single()
+  if (reserva && reserva.estado !== 'pagada') {
+    const { data: pagos } = await supabase
+      .from('pagos')
+      .select('tipo, monto, estado')
+      .eq('reserva_id', reservaId)
+    const resumen = resumenPagos(Number(reserva.total), (pagos ?? []) as Pago[])
+    if (resumen.saldada && puedeTransicionar(reserva.estado as EstadoReserva, 'pagada')) {
+      await supabase.from('reservas').update({ estado: 'pagada' }).eq('id', reservaId)
+    }
+  }
+
+  redirect(`/panel/reservas/${reservaId}`)
 }

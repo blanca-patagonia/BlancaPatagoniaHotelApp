@@ -13,13 +13,35 @@ import {
   type ReglaCancelacion,
 } from '@/lib/domain/cancelacion'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
-import { cambiarEstadoReserva } from '../actions'
+import { cambiarEstadoReserva, registrarPago } from '../actions'
 import { BADGE_ESTADO } from '../../_components/estilos'
+import {
+  resumenPagos,
+  seniaSugerida,
+  ETIQUETAS_MEDIO,
+  ETIQUETAS_TIPO_PAGO,
+  TIPOS_PAGO,
+  type MedioPago,
+  type TipoPago,
+  type EstadoPago,
+  type Pago,
+} from '@/lib/domain/pagos'
+
+const MEDIOS_MANUALES: MedioPago[] = ['efectivo', 'transferencia', 'tarjeta']
+
+interface PagoRow {
+  id: string
+  medio: MedioPago
+  tipo: TipoPago
+  monto: number | string
+  estado: EstadoPago
+  creado_en: string
+}
 
 const ACCION_ESTADO: Record<EstadoReserva, { verbo: string; color: string }> = {
   pendiente: { verbo: 'Marcar pendiente', color: 'bg-stone-600 hover:bg-stone-700' },
   confirmada: { verbo: 'Confirmar', color: 'bg-sky-700 hover:bg-sky-800' },
-  pagada: { verbo: 'Registrar pago', color: 'bg-emerald-600 hover:bg-emerald-700' },
+  pagada: { verbo: 'Marcar pagada', color: 'bg-emerald-600 hover:bg-emerald-700' },
   in_house: { verbo: 'Check-in', color: 'bg-amber-600 hover:bg-amber-700' },
   checkout: { verbo: 'Check-out', color: 'bg-stone-700 hover:bg-stone-800' },
   cancelada: { verbo: 'Cancelar', color: 'bg-red-600 hover:bg-red-700' },
@@ -97,6 +119,18 @@ export default async function DetalleReservaPage({
     })
     cargo = { dias, monto }
   }
+
+  const { data: pagosData } = await supabase
+    .from('pagos')
+    .select('id, medio, tipo, monto, estado, creado_en')
+    .eq('reserva_id', id)
+    .order('creado_en')
+  const pagos = (pagosData ?? []) as PagoRow[]
+  const resumen = resumenPagos(
+    Number(reserva.total),
+    pagos.map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado }) as Pago),
+  )
+  const senia = seniaSugerida(Number(reserva.total), noches)
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -193,6 +227,97 @@ export default async function DetalleReservaPage({
             según la política estándar.
           </p>
         )}
+      </div>
+
+      <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+        <h2 className="mb-3 text-sm font-medium text-stone-700">Pagos</h2>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-lg bg-stone-50 px-4 py-3">
+            <p className="text-xs text-stone-400">Total</p>
+            <p className="text-lg font-semibold text-stone-900">
+              USD {Number(reserva.total).toLocaleString('es-AR')}
+            </p>
+          </div>
+          <div className="rounded-lg bg-emerald-50 px-4 py-3">
+            <p className="text-xs text-emerald-600">Pagado</p>
+            <p className="text-lg font-semibold text-emerald-700">
+              USD {resumen.pagado.toLocaleString('es-AR')}
+            </p>
+          </div>
+          <div className="rounded-lg bg-amber-50 px-4 py-3">
+            <p className="text-xs text-amber-600">Saldo</p>
+            <p className="text-lg font-semibold text-amber-700">
+              USD {resumen.saldo.toLocaleString('es-AR')}
+            </p>
+          </div>
+        </div>
+
+        {pagos.length > 0 && (
+          <ul className="mt-4 divide-y divide-stone-100 text-sm">
+            {pagos.map((p) => (
+              <li key={p.id} className="flex items-center justify-between py-2">
+                <span className="text-stone-600">
+                  {ETIQUETAS_TIPO_PAGO[p.tipo]} · {ETIQUETAS_MEDIO[p.medio]}
+                </span>
+                <span
+                  className={`font-medium ${p.tipo === 'reembolso' ? 'text-red-600' : 'text-stone-800'}`}
+                >
+                  {p.tipo === 'reembolso' ? '−' : ''}USD {Number(p.monto).toLocaleString('es-AR')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {resumen.saldada ? (
+          <p className="mt-4 text-sm font-medium text-emerald-700">✓ Reserva saldada.</p>
+        ) : (
+          <form action={registrarPago} className="mt-4 flex flex-wrap items-end gap-2">
+            <input type="hidden" name="reserva_id" value={reserva.id} />
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-stone-500">Medio</span>
+              <select name="medio" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm">
+                {MEDIOS_MANUALES.map((m) => (
+                  <option key={m} value={m}>
+                    {ETIQUETAS_MEDIO[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-stone-500">Tipo</span>
+              <select
+                name="tipo"
+                defaultValue={resumen.tieneSenia ? 'saldo' : 'senia'}
+                className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+              >
+                {TIPOS_PAGO.map((t) => (
+                  <option key={t} value={t}>
+                    {ETIQUETAS_TIPO_PAGO[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-stone-500">Monto (USD)</span>
+              <input
+                name="monto"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={resumen.tieneSenia ? resumen.saldo : senia}
+                className="w-32 rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700">
+              Registrar pago
+            </button>
+          </form>
+        )}
+        <p className="mt-3 text-xs text-stone-400">
+          Seña sugerida (primera noche): USD {senia.toLocaleString('es-AR')}. Las pasarelas
+          (MercadoPago / Stripe) ingresan por webhook.
+        </p>
       </div>
     </div>
   )

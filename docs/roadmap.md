@@ -31,10 +31,11 @@ diseño / implementación / pruebas de la tesis.
 - [x] Estados de habitación (housekeeping) · huéspedes e historial · tarifario (lectura)
 
 ## Fase 3 — Pagos
-- [ ] Capa de abstracción `PaymentProvider` (MercadoPago + Stripe)
-- [ ] Flujo seña → confirmación
-- [ ] Webhooks idempotentes
-- [ ] Reembolsos según política
+- [x] Modelo de pagos (seña / saldo / reembolso) + registro manual desde recepción
+- [x] Flujo seña → saldo → `pagada` automática al saldar
+- [x] Capa de abstracción `PaymentProvider` (stubs MercadoPago + Stripe)
+- [x] Webhook idempotente (`external_id` único)
+- [ ] Integración real de pasarelas (requiere credenciales) · reembolsos automáticos por política
 
 ## Fase 4 — Portal público de reservas
 - [ ] Búsqueda de disponibilidad
