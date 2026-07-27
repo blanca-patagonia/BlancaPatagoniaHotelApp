@@ -15,10 +15,11 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Deploy inicial a Vercel
 
 ## Fase 1 — Núcleo de dominio
-- [ ] Migraciones: tipos de unidad, unidades, temporadas, tarifas, promociones, huéspedes
-- [ ] Seed con datos reales de la PP2 (Anexo A)
-- [ ] CRUD de administración (habitaciones, tipos, temporadas, tarifas, promociones)
-- [ ] Motor de disponibilidad con restricción de exclusión + tests
+- [x] Migraciones: tipos de unidad, unidades, temporadas, tarifas, promociones, huéspedes
+- [x] Seed con datos reales de la PP2 (Anexo A — Tarifario 2025/2026)
+- [x] Motor de disponibilidad con restricción de exclusión + tests (20 en verde)
+- [x] Lógica de dominio de precios (neto/rack + IVA) y cancelación
+- [ ] CRUD de administración (habitaciones, tipos, temporadas, tarifas, promociones) → UI en Fase 2
 
 ## Fase 2 — Reservas internas (Recepción)
 - [ ] Alta / consulta / cancelación de reservas

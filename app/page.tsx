@@ -16,10 +16,10 @@ export default function Home() {
 
       <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
         <span className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-600">
-          Fase 0 — Fundaciones ✅
+          Fase 1 — Núcleo de dominio ✅
         </span>
         <span className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-400">
-          Próximo: Núcleo de dominio
+          Próximo: Reservas (Recepción)
         </span>
       </div>
     </main>
