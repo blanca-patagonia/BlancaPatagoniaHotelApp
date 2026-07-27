@@ -14,16 +14,25 @@ Reemplaza el sistema heredado **Winpax** y reduce la dependencia de **Booking**.
 - Pagos: **MercadoPago / Stripe** (capa de abstracción) · Email transaccional
 - Despliegue: **Vercel**
 
-## Puesta en marcha
+## Puesta en marcha (desarrollo local)
+
+Requiere **Docker** (para Supabase local).
 
 ```bash
 npm install
-cp .env.example .env.local   # completar con credenciales de Supabase
+npx supabase start           # levanta Postgres + Auth local (Docker)
+npx supabase db reset        # aplica migraciones + seed (Tarifario real)
+# Copiar en .env.local la URL y las claves que imprime `npx supabase status`
+npm run seed:usuarios        # crea el admin de desarrollo
 npm run dev                  # http://localhost:3000
 ```
 
-Ver el [manual técnico](docs/manual-tecnico.md) para el detalle (incluida la
-base de datos local con Supabase CLI).
+**Panel interno:** entrar en `http://localhost:3000/panel` con el admin de
+desarrollo (por defecto `admin@blancapatagonia.local` / `blancadev1234`; se
+configuran con `ADMIN_EMAIL` / `ADMIN_PASSWORD`). Desde **Usuarios** se dan de
+alta el resto de los roles (gerencia, recepción, housekeeping).
+
+Ver el [manual técnico](docs/manual-tecnico.md) para el detalle.
 
 ## Documentación
 
@@ -55,3 +64,4 @@ tests/          # tests (Vitest)
 | `npm run lint` | ESLint |
 | `npm test` | Tests (Vitest) |
 | `npm run typecheck` | Chequeo de tipos |
+| `npm run seed:usuarios` | Crea/actualiza el admin de desarrollo |

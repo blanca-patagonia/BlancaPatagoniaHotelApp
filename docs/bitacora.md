@@ -93,3 +93,48 @@ anti-overbooking**, sobre Supabase local (Docker).
 de grilla de ocupación, alta/consulta/cancelación de reservas con la máquina de
 estados, y cableado del cálculo de precio + política sobre la UI. También:
 confirmar con el hotel el inventario físico real y la tarifa rack de cabañas.
+
+---
+
+## 2026-07-27 — Fase 2: Panel interno de Recepción
+
+**Resumen:** se construyó el **panel de gestión interno** (funciones de Front
+Office tipo WinPax) con **autenticación y control de acceso por rol**, sobre el
+núcleo de dominio de la Fase 1.
+
+**Detalle de lo realizado:**
+- **Autenticación y roles (ADR 0005):** login con Supabase Auth (Server Action),
+  guard `requerirAcceso(area)` + mapa de permisos (`lib/domain/permisos.ts`),
+  sidebar filtrado por rol y cierre de sesión. Bootstrap del admin con
+  `scripts/seed-usuarios.mjs` (`npm run seed:usuarios`).
+- **Dashboard** con KPIs del día (ocupación, llegadas/salidas, estados de unidad).
+- **Grilla de ocupación** (`/panel/ocupacion`): unidades × días con navegación por
+  semanas y estado de housekeeping.
+- **Reservas:** alta (`/panel/reservas/nueva`) con búsqueda de disponibilidad y
+  **cotización** (RPC `cotizar_estadia` — migración 0008 — + motor de precios con
+  IVA); listado, detalle y **máquina de estados** (confirmar, check-in/out,
+  cancelar con preview de cargo, no-show). El alta usa la RPC atómica
+  `crear_reserva` (anti-overbooking); el error `23P01` se traduce a la UI.
+- **Housekeeping:** cambio de estado de unidades (limpia/sucia/inspeccionada/bloqueada).
+- **Usuarios (niveles):** alta de staff con rol, cambio de rol y activar/desactivar
+  (cliente `service_role`, solo admin).
+- **Huéspedes** con historial de reservas y **Configuración** (tarifario en lectura).
+- Utilidades de fecha (`lib/fechas.ts`) y de cotización (`lib/pricing/cotizar.ts`).
+
+**Verificado end-to-end en el navegador:** login como admin; alta de una reserva
+(Doble Standard, 3 noches, USD 642,51 = 177×3 + IVA 21 %) que aparece en la grilla;
+ciclo de estados; alta de un usuario de recepción y comprobación de que su menú
+queda **restringido** y el acceso por URL a áreas prohibidas **redirige**.
+
+**Decisiones y aprendizajes:**
+- Control de acceso por rol en dos capas: app (guard/sidebar) + **RLS** (ver
+  [ADR 0005](decisiones/0005-autenticacion-y-roles.md)).
+- Al embeber `huespedes` desde `reservas` hay que **desambiguar** el FK
+  (`huespedes!reservas_huesped_id_fkey`) porque existe una segunda relación
+  (`reserva_huespedes`); si no, PostgREST devuelve `PGRST201`.
+- Los tests de integración se ejecutan **en serie** (`fileParallelism: false`) por
+  compartir la Postgres local. Suite: **38 tests en verde** + typecheck + lint.
+
+**Pendiente / próximo paso:** **Fase 3 — Pagos** (MercadoPago/Stripe, seña →
+confirmación, webhooks). Nota de datos: el Tarifario cargado es 2025/2026, anterior
+a la fecha del sistema; para demos "en vivo" habría que cargar la temporada vigente.

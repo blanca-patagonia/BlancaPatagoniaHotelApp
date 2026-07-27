@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts', 'lib/**/*.test.ts'],
+    // Los tests de integración comparten la misma Postgres local: se ejecutan en
+    // serie para evitar contención entre archivos.
+    fileParallelism: false,
   },
   resolve: {
     alias: {

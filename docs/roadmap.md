@@ -21,11 +21,14 @@ diseño / implementación / pruebas de la tesis.
 - [x] Lógica de dominio de precios (neto/rack + IVA) y cancelación
 - [ ] CRUD de administración (habitaciones, tipos, temporadas, tarifas, promociones) → UI en Fase 2
 
-## Fase 2 — Reservas internas (Recepción)
-- [ ] Alta / consulta / cancelación de reservas
-- [ ] Máquina de estados de la reserva
-- [ ] Cálculo de precio por temporada y promoción
-- [ ] Aplicación de la política de cancelación
+## Fase 2 — Panel interno de Recepción (funciones tipo WinPax)
+- [x] Autenticación de staff (Supabase Auth) + control de acceso por rol (ADR 0005)
+- [x] Shell del panel por rol (dashboard, sidebar) + gestión de usuarios (niveles)
+- [x] Grilla de ocupación (unidades × días)
+- [x] Alta de reservas con cotización (temporada + IVA) y motor anti-overbooking
+- [x] Consulta / máquina de estados (confirmar, check-in/out, cancelar, no-show)
+- [x] Aplicación de la política de cancelación (preview de cargo)
+- [x] Estados de habitación (housekeeping) · huéspedes e historial · tarifario (lectura)
 
 ## Fase 3 — Pagos
 - [ ] Capa de abstracción `PaymentProvider` (MercadoPago + Stripe)

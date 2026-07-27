@@ -1,0 +1,66 @@
+'use client'
+
+import { useActionState } from 'react'
+import { crearUsuario, type EstadoUsuario } from './actions'
+import { ROLES, ETIQUETAS_ROL } from '@/lib/domain/roles'
+
+const ESTADO_INICIAL: EstadoUsuario = {}
+
+export function FormularioUsuario() {
+  const [estado, accion, pendiente] = useActionState(crearUsuario, ESTADO_INICIAL)
+
+  return (
+    <form action={accion} className="grid gap-3 sm:grid-cols-2">
+      <input
+        name="nombre"
+        placeholder="Nombre y apellido"
+        required
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+      />
+      <input
+        name="email"
+        type="email"
+        placeholder="Email"
+        required
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+      />
+      <input
+        name="password"
+        type="password"
+        placeholder="Contraseña (mín. 8)"
+        required
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+      />
+      <select
+        name="rol"
+        defaultValue="recepcion"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+      >
+        {ROLES.map((r) => (
+          <option key={r} value={r}>
+            {ETIQUETAS_ROL[r]}
+          </option>
+        ))}
+      </select>
+
+      {estado.error && (
+        <p className="sm:col-span-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {estado.error}
+        </p>
+      )}
+      {estado.ok && (
+        <p className="sm:col-span-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {estado.ok}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={pendiente}
+        className="self-start rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800 disabled:opacity-60 sm:col-span-2"
+      >
+        {pendiente ? 'Creando…' : 'Crear usuario'}
+      </button>
+    </form>
+  )
+}

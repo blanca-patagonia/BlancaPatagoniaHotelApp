@@ -16,12 +16,19 @@ export default function Home() {
 
       <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
         <span className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-600">
-          Fase 1 — Núcleo de dominio ✅
+          Fase 2 — Panel de Recepción ✅
         </span>
         <span className="rounded-full border border-gray-200 px-4 py-1.5 text-sm text-gray-400">
-          Próximo: Reservas (Recepción)
+          Próximo: Pagos y portal público
         </span>
       </div>
+
+      <a
+        href="/panel"
+        className="mt-4 rounded-lg bg-sky-700 px-5 py-2.5 font-medium text-white transition hover:bg-sky-800"
+      >
+        Ingresar al panel de gestión →
+      </a>
     </main>
   );
 }
