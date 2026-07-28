@@ -45,10 +45,11 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Pago de seña online (requiere pasarela) · expiración de reservas pendientes
 
 ## Fase 5 — Check-in / Check-out + Consumos + Factura
-- [ ] Check-in digital (reemplazo de ficha en papel)
-- [ ] Registro de consumos por estadía
-- [ ] Consolidación automática al check-out
-- [ ] Factura PDF interna a Storage
+- [x] Check-in / check-out por máquina de estados
+- [x] Catálogo de productos/servicios + registro de consumos por reserva
+- [x] Cuenta consolidada (alojamiento + consumos)
+- [x] Factura interna (registro + comprobante imprimible; columnas AFIP preparadas)
+- [ ] Generación server-side de PDF a Storage · consolidación automática al check-out
 
 ## Fase 6 — Reportes / Dashboard gerencial
 - [ ] Ocupación, facturación mensual, ranking de canales, comparativos

@@ -8,6 +8,7 @@ import { diasEntre } from '@/lib/fechas'
 import type { TarifaTipo } from '@/lib/domain/precios'
 import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
+import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -158,4 +159,72 @@ export async function registrarPago(formData: FormData): Promise<void> {
   }
 
   redirect(`/panel/reservas/${reservaId}`)
+}
+
+/** Carga un consumo (producto × cantidad) a la cuenta de la reserva. */
+export async function agregarConsumo(formData: FormData): Promise<void> {
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  const productoId = String(formData.get('producto_id') ?? '')
+  const cantidad = Math.max(1, Number(formData.get('cantidad') ?? 1) || 1)
+  if (!reservaId || !productoId) redirect(`/panel/reservas/${reservaId}`)
+
+  const supabase = await crearClienteServidor()
+  const { data: producto } = await supabase
+    .from('productos_servicios')
+    .select('precio')
+    .eq('id', productoId)
+    .single()
+  if (producto) {
+    await supabase.from('consumos').insert({
+      reserva_id: reservaId,
+      producto_id: productoId,
+      cantidad,
+      precio_unitario: Number(producto.precio),
+    })
+  }
+  redirect(`/panel/reservas/${reservaId}`)
+}
+
+/** Quita un consumo de la cuenta. */
+export async function quitarConsumo(formData: FormData): Promise<void> {
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  const consumoId = String(formData.get('consumo_id') ?? '')
+  if (consumoId) {
+    const supabase = await crearClienteServidor()
+    await supabase.from('consumos').delete().eq('id', consumoId)
+  }
+  redirect(`/panel/reservas/${reservaId}`)
+}
+
+/** Emite la factura interna con la cuenta consolidada (alojamiento + consumos). */
+export async function emitirFactura(formData: FormData): Promise<void> {
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  if (!reservaId) redirect('/panel/reservas')
+
+  const supabase = await crearClienteServidor()
+  const { data: existente } = await supabase
+    .from('facturas')
+    .select('id')
+    .eq('reserva_id', reservaId)
+    .maybeSingle()
+
+  if (!existente) {
+    const { data: reserva } = await supabase
+      .from('reservas')
+      .select('total')
+      .eq('id', reservaId)
+      .single()
+    const { data: consumosData } = await supabase
+      .from('consumos')
+      .select('cantidad, precio_unitario')
+      .eq('reserva_id', reservaId)
+    const consumos: Consumo[] = (consumosData ?? []).map((c) => ({
+      cantidad: c.cantidad as number,
+      precioUnitario: Number(c.precio_unitario),
+    }))
+    const cuenta = cuentaConsolidada(Number(reserva?.total ?? 0), consumos)
+    await supabase.from('facturas').insert({ reserva_id: reservaId, total: cuenta.total })
+  }
+
+  redirect(`/panel/reservas/${reservaId}/factura`)
 }

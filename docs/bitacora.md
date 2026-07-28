@@ -200,3 +200,33 @@ enganchados a las capas ya preparadas (ADR 0006).
 
 **Pendiente / próximo paso:** **Fase 5 — Check-in/out + consumos + factura PDF**;
 además: expiración de reservas `pendiente` sin seña y rate-limiting del portal.
+
+---
+
+## 2026-07-28 — Fase 5: Consumos y factura interna
+
+**Resumen:** se incorporó el **cargo de consumos** a la cuenta de la reserva y la
+**factura interna** consolidada, con las columnas AFIP preparadas.
+
+**Detalle de lo realizado:**
+- **Migración 0010:** `productos_servicios` (catálogo: frigobar, desayuno,
+  excursiones, traslados), `consumos` (con precio congelado) y `facturas` (número
+  propio + columnas AFIP `cae`/`punto_venta`/etc. preparadas). Catálogo inicial en
+  la propia migración.
+- **Dominio `lib/domain/consumos.ts`:** `totalConsumos` y `cuentaConsolidada`
+  (alojamiento + consumos) + tests.
+- **UI:** sección **Consumos y cuenta** en el detalle de la reserva (cargar/quitar
+  consumos, cuenta consolidada) y **factura imprimible** en
+  `/panel/reservas/[id]/factura` (`window.print()` → PDF del navegador).
+- **Check-in / check-out**: por la máquina de estados ya existente.
+
+**Verificado end-to-end:** se cargó "Perito Moreno clásico" (USD 90) a la reserva
+BP-260727-755C y se emitió la factura **FAC-…** con total **USD 732,51** (642,51
+alojamiento + 90 consumo). **47 tests en verde.**
+
+**Decisiones:** ver [ADR 0008](decisiones/0008-consumos-y-factura-interna.md). Queda
+pendiente la generación server-side de PDF a Storage y la facturación electrónica
+AFIP (Fase 8), sobre las columnas ya previstas.
+
+**Pendiente / próximo paso:** **Fase 6 — Reportes / Dashboard gerencial** (ocupación,
+facturación mensual, ranking de canales), reutilizando los datos ya consolidados.

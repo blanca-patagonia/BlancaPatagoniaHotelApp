@@ -13,8 +13,20 @@ import {
   type ReglaCancelacion,
 } from '@/lib/domain/cancelacion'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
-import { cambiarEstadoReserva, registrarPago } from '../actions'
+import {
+  cambiarEstadoReserva,
+  registrarPago,
+  agregarConsumo,
+  quitarConsumo,
+  emitirFactura,
+} from '../actions'
 import { BADGE_ESTADO } from '../../_components/estilos'
+import {
+  cuentaConsolidada,
+  ETIQUETAS_CATEGORIA_PRODUCTO,
+  type CategoriaProducto,
+  type Consumo,
+} from '@/lib/domain/consumos'
 import {
   resumenPagos,
   seniaSugerida,
@@ -36,6 +48,20 @@ interface PagoRow {
   monto: number | string
   estado: EstadoPago
   creado_en: string
+}
+
+interface ConsumoRow {
+  id: string
+  cantidad: number
+  precio_unitario: number | string
+  producto: { nombre: string; categoria: CategoriaProducto } | null
+}
+
+interface ProductoRow {
+  id: string
+  nombre: string
+  categoria: CategoriaProducto
+  precio: number | string
 }
 
 const ACCION_ESTADO: Record<EstadoReserva, { verbo: string; color: string }> = {
@@ -131,6 +157,28 @@ export default async function DetalleReservaPage({
     pagos.map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado }) as Pago),
   )
   const senia = seniaSugerida(Number(reserva.total), noches)
+
+  const [{ data: consumosData }, { data: productosData }, { data: facturaData }] =
+    await Promise.all([
+      supabase
+        .from('consumos')
+        .select('id, cantidad, precio_unitario, producto:productos_servicios(nombre, categoria)')
+        .eq('reserva_id', id)
+        .order('creado_en'),
+      supabase
+        .from('productos_servicios')
+        .select('id, nombre, categoria, precio')
+        .eq('activo', true)
+        .order('categoria'),
+      supabase.from('facturas').select('numero').eq('reserva_id', id).maybeSingle(),
+    ])
+  const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
+  const productos = (productosData ?? []) as unknown as ProductoRow[]
+  const factura = facturaData as { numero: string } | null
+  const cuenta = cuentaConsolidada(
+    Number(reserva.total),
+    consumos.map((c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }) as Consumo),
+  )
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -318,6 +366,100 @@ export default async function DetalleReservaPage({
           Seña sugerida (primera noche): USD {senia.toLocaleString('es-AR')}. Las pasarelas
           (MercadoPago / Stripe) ingresan por webhook.
         </p>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-stone-700">Consumos y cuenta</h2>
+          {factura ? (
+            <Link
+              href={`/panel/reservas/${reserva.id}/factura`}
+              className="text-sm font-medium text-sky-700 hover:underline"
+            >
+              Ver factura {factura.numero}
+            </Link>
+          ) : (
+            <form action={emitirFactura}>
+              <input type="hidden" name="reserva_id" value={reserva.id} />
+              <button className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-stone-900">
+                Emitir factura
+              </button>
+            </form>
+          )}
+        </div>
+
+        {consumos.length > 0 && (
+          <ul className="mt-3 divide-y divide-stone-100 text-sm">
+            {consumos.map((c) => (
+              <li key={c.id} className="flex items-center justify-between py-2">
+                <span className="text-stone-600">
+                  {c.cantidad}× {c.producto?.nombre}
+                  <span className="ml-2 text-xs text-stone-400">
+                    {c.producto ? ETIQUETAS_CATEGORIA_PRODUCTO[c.producto.categoria] : ''}
+                  </span>
+                </span>
+                <span className="flex items-center gap-3">
+                  <span className="font-medium text-stone-800">
+                    USD {(c.cantidad * Number(c.precio_unitario)).toLocaleString('es-AR')}
+                  </span>
+                  <form action={quitarConsumo}>
+                    <input type="hidden" name="reserva_id" value={reserva.id} />
+                    <input type="hidden" name="consumo_id" value={c.id} />
+                    <button className="text-xs text-stone-400 transition hover:text-red-600" title="Quitar">
+                      ✕
+                    </button>
+                  </form>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form action={agregarConsumo} className="mt-3 flex flex-wrap items-end gap-2">
+          <input type="hidden" name="reserva_id" value={reserva.id} />
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Producto / servicio</span>
+            <select
+              name="producto_id"
+              required
+              className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+            >
+              {productos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} — USD {Number(p.precio).toLocaleString('es-AR')}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Cant.</span>
+            <input
+              name="cantidad"
+              type="number"
+              min="1"
+              defaultValue={1}
+              className="w-20 rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+            />
+          </label>
+          <button className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800">
+            Cargar
+          </button>
+        </form>
+
+        <dl className="mt-4 border-t border-stone-100 pt-3 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-stone-500">Alojamiento</dt>
+            <dd className="text-stone-700">USD {cuenta.alojamiento.toLocaleString('es-AR')}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-stone-500">Consumos</dt>
+            <dd className="text-stone-700">USD {cuenta.consumos.toLocaleString('es-AR')}</dd>
+          </div>
+          <div className="mt-1 flex justify-between border-t border-stone-100 pt-1 font-semibold text-stone-900">
+            <dt>Total cuenta</dt>
+            <dd>USD {cuenta.total.toLocaleString('es-AR')}</dd>
+          </div>
+        </dl>
       </div>
     </div>
   )
