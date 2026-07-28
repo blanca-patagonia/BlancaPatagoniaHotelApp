@@ -18,17 +18,17 @@ interface Reserva {
 export default async function ConfirmacionPage({
   params,
 }: {
-  params: Promise<{ codigo: string }>
+  params: Promise<{ token: string }>
 }) {
-  const { codigo } = await params
-  // El código de reserva actúa como token; se consulta con service_role.
+  const { token } = await params
+  // El token opaco actúa como credencial de acceso; se consulta con service_role.
   const admin = crearClienteAdmin()
   const { data } = await admin
     .from('reservas')
     .select(
       'codigo, estado, total, huesped:huespedes!reservas_huesped_id_fkey(apellido, email), estadias(periodo, unidad:unidades(nombre, tipo:tipos_unidad(nombre)))',
     )
-    .eq('codigo', codigo)
+    .eq('token', token)
     .single()
   if (!data) notFound()
 

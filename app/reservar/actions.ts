@@ -91,15 +91,23 @@ export async function crearReservaPublica(
     return { error: 'No se pudo crear la reserva. Intentá nuevamente.' }
   }
 
-  const codigo = (reserva as { codigo: string }).codigo
+  const nueva = reserva as { id: string; codigo: string }
+  // La URL pública usa el token opaco (no el código, que es enumerable).
+  const { data: full } = await admin
+    .from('reservas')
+    .select('token')
+    .eq('id', nueva.id)
+    .single()
+  const token = (full as { token: string } | null)?.token ?? nueva.id
+
   await enviarEmailConfirmacion({
     email,
     nombre: apellido,
-    codigo,
+    codigo: nueva.codigo,
     checkIn,
     checkOut,
     total: cot.resumen.total,
   })
 
-  redirect(`/reservar/confirmacion/${codigo}`)
+  redirect(`/reservar/confirmacion/${token}`)
 }

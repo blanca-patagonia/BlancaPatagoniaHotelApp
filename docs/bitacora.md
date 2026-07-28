@@ -275,3 +275,20 @@ el catálogo público.
 **Pendiente (Fase 7):** token inadivinable para la confirmación pública (evitar
 enumeración del código), rate-limiting de endpoints públicos, expiración de reservas
 `pendiente`. **49 tests en verde.**
+
+---
+
+## 2026-07-28 — Fase 7 (parcial): hardening de reservas
+
+**Resumen:** se resolvieron dos de los riesgos de la revisión de seguridad.
+
+**Detalle (migración 0011):**
+- **Token opaco de confirmación:** columna `reservas.token` (`uuid`); la URL pública
+  de confirmación usa el token en lugar del código. **Verificado:** la página abre
+  por token y **devuelve 404 por código** (enumeración anulada).
+- **Expiración de pendientes:** función `expirar_reservas_pendientes(dias)` que cancela
+  las reservas `pendiente` sin seña con más de N días (libera inventario). Con test de
+  integración (cancela la que no tiene seña, respeta la que sí).
+
+**Pendiente:** rate-limiting, programar la expiración por cron (pg_cron / Edge Function),
+y el deploy (Vercel + Supabase cloud). **50 tests en verde.**

@@ -56,9 +56,10 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Comparativos interanuales y exportación (CSV / Power BI)
 
 ## Fase 7 — Hardening de producción
-- [ ] Revisión de RLS y permisos
-- [ ] Backups, secrets, observabilidad
-- [ ] Dominio + SSL
+- [x] Revisión de seguridad + RLS (ver `docs/revision-seguridad.md`)
+- [x] Token opaco de confirmación (anti-enumeración) + expiración de reservas pendientes
+- [ ] Rate-limiting de endpoints públicos · programar expiración por cron
+- [ ] Backups, secrets, observabilidad · Dominio + SSL · Deploy (Vercel + Supabase cloud)
 - [ ] Migración de datos desde Winpax / Excel
 
 ## Fase 8 — AFIP WSFE/CAE (posterior)
