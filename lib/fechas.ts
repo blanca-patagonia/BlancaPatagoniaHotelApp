@@ -52,3 +52,29 @@ export function formatoFechaCorta(iso: string): string {
 export function contieneDia(p: Periodo, dia: string): boolean {
   return dia >= p.desde && dia < p.hasta
 }
+
+/**
+ * Noches del período `p` que caen dentro de la ventana `[ventanaDesde, ventanaHasta)`.
+ * Útil para prorratear la ocupación de una estadía a un mes.
+ */
+export function nochesEnVentana(p: Periodo, ventanaDesde: string, ventanaHasta: string): number {
+  const desde = p.desde > ventanaDesde ? p.desde : ventanaDesde
+  const hasta = p.hasta < ventanaHasta ? p.hasta : ventanaHasta
+  const n = diasEntre(desde, hasta)
+  return n > 0 ? n : 0
+}
+
+/** Primer y (exclusivo) último día de un mes `YYYY-MM`. */
+export function inicioFinDeMes(mes: string): { inicio: string; fin: string } {
+  const [y, m] = mes.split('-').map(Number)
+  const inicio = `${mes}-01`
+  const finAnio = m === 12 ? y + 1 : y
+  const finMes = m === 12 ? 1 : m + 1
+  const fin = `${finAnio}-${String(finMes).padStart(2, '0')}-01`
+  return { inicio, fin }
+}
+
+/** Mes actual en formato `YYYY-MM`. */
+export function mesActual(): string {
+  return hoyISO().slice(0, 7)
+}

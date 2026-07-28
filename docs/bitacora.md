@@ -230,3 +230,25 @@ AFIP (Fase 8), sobre las columnas ya previstas.
 
 **Pendiente / próximo paso:** **Fase 6 — Reportes / Dashboard gerencial** (ocupación,
 facturación mensual, ranking de canales), reutilizando los datos ya consolidados.
+
+---
+
+## 2026-07-28 — Fase 6: Reportes gerenciales
+
+**Resumen:** se agregó el **dashboard gerencial** (`/panel/reportes`, para admin y
+gerencia) con los indicadores clave de gestión.
+
+**Detalle de lo realizado:**
+- Nueva área **`reportes`** en el control de acceso (admin + gerencia) y en el sidebar.
+- Helpers de fecha `nochesEnVentana` e `inicioFinDeMes` (prorrateo de ocupación por
+  mes) + tests.
+- **`/panel/reportes`:** ocupación del mes (selector), ingresos cobrados (pagos),
+  facturación (comprobantes), **ranking de canales** (reservas + monto) y **reservas
+  por estado** (barras).
+
+**Verificado end-to-end:** con la ocupación de noviembre 2025 → **6/450
+noches-unidad**; ingresos USD 642,51, facturado USD 732,51, canales Directo/Web 1 c/u.
+Recepción **no** ve Reportes (gating). **49 tests en verde.**
+
+**Pendiente / próximo paso:** **Fase 7 — Hardening de producción** (revisión de RLS,
+expiración de reservas pendientes, backups, dominio y deploy a Vercel + Supabase cloud).

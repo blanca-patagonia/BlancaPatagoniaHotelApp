@@ -52,7 +52,8 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Generación server-side de PDF a Storage · consolidación automática al check-out
 
 ## Fase 6 — Reportes / Dashboard gerencial
-- [ ] Ocupación, facturación mensual, ranking de canales, comparativos
+- [x] Ocupación por mes, ingresos cobrados y facturación, ranking de canales, reservas por estado
+- [ ] Comparativos interanuales y exportación (CSV / Power BI)
 
 ## Fase 7 — Hardening de producción
 - [ ] Revisión de RLS y permisos
