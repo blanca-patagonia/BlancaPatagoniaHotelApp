@@ -252,3 +252,26 @@ Recepción **no** ve Reportes (gating). **49 tests en verde.**
 
 **Pendiente / próximo paso:** **Fase 7 — Hardening de producción** (revisión de RLS,
 expiración de reservas pendientes, backups, dominio y deploy a Vercel + Supabase cloud).
+
+---
+
+## 2026-07-28 — Revisión de seguridad
+
+**Resumen:** auditoría de seguridad del código y la base antes de continuar. Detalle
+completo en [revisión de seguridad](revision-seguridad.md).
+
+**Verificado ✅:** RLS habilitado en todas las tablas; ninguna tabla con RLS sin
+políticas; funciones `SECURITY DEFINER` con `search_path` fijo; y —lo más
+importante— el rol **anónimo** obtiene **0 filas** de huéspedes/reservas/pagos/
+perfiles/facturas/consumos (PII y datos financieros protegidos por RLS), leyendo solo
+el catálogo público.
+
+**Corregido:**
+- **Webhook *fail-closed* en producción** (crítico): sin secreto de firma, se rechaza
+  en prod (antes aceptaba) → evita pagos falsos. Bug adicional: el nombre de la
+  variable no coincidía con `.env.example` (`MERCADOPAGO_WEBHOOK_SECRET`); alineado.
+- **Validación de email** server-side y **tope de 30 noches** en el alta pública.
+
+**Pendiente (Fase 7):** token inadivinable para la confirmación pública (evitar
+enumeración del código), rate-limiting de endpoints públicos, expiración de reservas
+`pendiente`. **49 tests en verde.**

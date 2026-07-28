@@ -10,6 +10,9 @@ export interface EstadoReservaPublica {
   error?: string
 }
 
+const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const MAX_NOCHES_PUBLICO = 30
+
 interface UnidadLibre {
   id: string
   tipo_unidad_id: string
@@ -38,6 +41,10 @@ export async function crearReservaPublica(
     return { error: 'Datos de la reserva incompletos.' }
   }
   if (!apellido || !email) return { error: 'Ingresá tu apellido y tu email.' }
+  if (!RE_EMAIL.test(email)) return { error: 'Ingresá un email válido.' }
+  if (diasEntre(checkIn, checkOut) > MAX_NOCHES_PUBLICO) {
+    return { error: `La estadía no puede superar las ${MAX_NOCHES_PUBLICO} noches.` }
+  }
 
   const admin = crearClienteAdmin()
 

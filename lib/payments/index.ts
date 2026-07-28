@@ -60,8 +60,13 @@ class ProveedorStub implements PaymentProvider {
   }
 
   async verificarFirma(req: Request): Promise<boolean> {
-    const secreto = process.env[`WEBHOOK_SECRET_${this.nombre.toUpperCase()}`]
-    if (!secreto) return true // desarrollo: sin secreto configurado
+    const secreto = process.env[`${this.nombre.toUpperCase()}_WEBHOOK_SECRET`]
+    if (!secreto) {
+      // Sin secreto configurado: se acepta SOLO fuera de producción (enganche de
+      // desarrollo). En producción se rechaza (fail-closed) para que nadie pueda
+      // registrar pagos falsos sin la firma de la pasarela.
+      return process.env.NODE_ENV !== 'production'
+    }
     return req.headers.get('x-webhook-signature') === secreto
   }
 

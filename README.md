@@ -43,6 +43,7 @@ Toda la documentación vive en [`docs/`](docs/):
 - [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
 - [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
 - [Decisiones (ADR)](docs/decisiones/) — decisiones de arquitectura.
+- [Revisión de seguridad](docs/revision-seguridad.md) — auditoría de RLS y endpoints.
 
 ## Estructura
 
