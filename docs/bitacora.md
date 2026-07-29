@@ -357,3 +357,14 @@ se **difieren** a esa vista; en la fase de gestión solo se agregan módulos de 
 - **Dashboard como hub:** KPIs operativos (mantenimiento pendiente, objetos guardados)
   y sección **Módulos** con accesos rápidos filtrados por rol (badges de pendientes).
 - Verificado: dashboard limpio con los 10 módulos accesibles para admin.
+
+### 8.6 — Fidelidad e inventario (funciones WinPax/Odoo faltantes)
+
+- **Migración 0015:** `huespedes.puntos`; `productos_servicios.stock` + `stock_minimo`
+  y trigger que **descuenta stock** al cargar un consumo.
+- **Fidelidad** (`lib/domain/fidelidad.ts`): `puntosPorEstadia` (1 pto por USD 10) y
+  `nivelFidelidad` (bronce/plata/oro/platino) + tests. Los puntos se otorgan en el
+  **check-out** y se muestran (nivel + puntos) en el detalle del huésped.
+- **Inventario:** sección en Configuración con stock, mínimo, **alerta de stock bajo**
+  y reposición (admin/gerencia). Stock inicial sembrado (frigobar 24, desayuno 40).
+- **58 tests en verde.** Verificado: stock en base y sección de inventario en el panel.

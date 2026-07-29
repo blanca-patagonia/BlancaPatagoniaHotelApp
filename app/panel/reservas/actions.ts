@@ -7,6 +7,7 @@ import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
+import { puntosPorEstadia } from '@/lib/domain/fidelidad'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -90,7 +91,7 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
   const supabase = await crearClienteServidor()
   const { data: reserva } = await supabase
     .from('reservas')
-    .select('estado')
+    .select('estado, total, huesped_id')
     .eq('id', id)
     .single()
   if (!reserva) redirect('/panel/reservas')
@@ -100,6 +101,23 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
   }
 
   await supabase.from('reservas').update({ estado: nuevo }).eq('id', id)
+
+  // Fidelidad: el check-out otorga puntos al huésped (una sola vez; 'checkout' es terminal).
+  if (nuevo === 'checkout' && reserva.huesped_id) {
+    const puntos = puntosPorEstadia(Number(reserva.total))
+    if (puntos > 0) {
+      const { data: h } = await supabase
+        .from('huespedes')
+        .select('puntos')
+        .eq('id', reserva.huesped_id)
+        .single()
+      await supabase
+        .from('huespedes')
+        .update({ puntos: (h?.puntos ?? 0) + puntos })
+        .eq('id', reserva.huesped_id)
+    }
+  }
+
   redirect(`/panel/reservas/${id}`)
 }
 

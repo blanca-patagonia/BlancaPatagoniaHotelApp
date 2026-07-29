@@ -5,6 +5,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { BADGE_ESTADO } from '../../_components/estilos'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
+import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 
 interface Huesped {
   id: string
@@ -15,6 +16,7 @@ interface Huesped {
   doc_tipo: string
   doc_numero: string
   nacionalidad: string | null
+  puntos: number
 }
 interface ReservaHist {
   id: string
@@ -36,7 +38,7 @@ export default async function DetalleHuespedPage({
   const [{ data: huespedData }, { data: reservasData }] = await Promise.all([
     supabase
       .from('huespedes')
-      .select('id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad')
+      .select('id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos')
       .eq('id', id)
       .single(),
     supabase
@@ -64,6 +66,13 @@ export default async function DetalleHuespedPage({
         <span>{huesped.doc_tipo} {huesped.doc_numero || '—'}</span>
         <span>{huesped.email || 'sin email'}</span>
         <span>{huesped.nacionalidad || 'nacionalidad n/d'}</span>
+      </div>
+
+      <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm">
+        <span className="font-semibold text-amber-800">
+          Fidelidad {ETIQUETAS_NIVEL[nivelFidelidad(huesped.puntos)]}
+        </span>
+        <span className="text-amber-700">· {huesped.puntos} puntos</span>
       </div>
 
       <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Historial de reservas</h2>
