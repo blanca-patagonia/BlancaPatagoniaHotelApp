@@ -2,10 +2,8 @@
 
 import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { unidadesDisponibles } from '@/lib/availability/disponibilidad'
-import { cotizarEstadia } from '@/lib/pricing/cotizar'
-import { diasEntre } from '@/lib/fechas'
 import type { TarifaTipo } from '@/lib/domain/precios'
+import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
@@ -42,18 +40,7 @@ export async function crearReservaAction(
   const supabase = await crearClienteServidor()
   const tarifaTipo = CANAL_TARIFA[canal] ?? 'rack'
 
-  // 1) Buscar una unidad libre del tipo elegido.
-  const libres = await unidadesDisponibles(checkIn, checkOut)
-  const unidad = libres.find((u) => u.tipo_unidad_id === tipoUnidadId)
-  if (!unidad) return { error: 'No quedan unidades disponibles de ese tipo para esas fechas.' }
-
-  // 2) Cotizar según el canal.
-  const cot = await cotizarEstadia({ tipoUnidadId, checkIn, checkOut, tarifaTipo })
-  if (cot.faltanTarifas) return { error: 'No hay tarifa cargada para todas esas fechas.' }
-  const noches = diasEntre(checkIn, checkOut)
-  const precioNoche = noches > 0 ? Number((cot.resumen.totalNeto / noches).toFixed(2)) : 0
-
-  // 3) Reusar el huésped por email o crearlo.
+  // Reusar el huésped por email o crearlo.
   let huespedId: string | null = null
   if (email) {
     const { data: existente } = await supabase
@@ -73,29 +60,22 @@ export async function crearReservaAction(
     huespedId = nuevo.id
   }
 
-  // 4) Alta atómica (la exclusión anti-overbooking protege la operación).
-  const { data: reserva, error } = await supabase.rpc('crear_reserva', {
-    p_huesped_id: huespedId,
-    p_unidad_id: unidad.id,
-    p_tipo_unidad_id: tipoUnidadId,
-    p_check_in: checkIn,
-    p_check_out: checkOut,
-    p_huespedes: huespedesCant,
-    p_precio_noche: precioNoche,
-    p_total: cot.resumen.total,
-    p_canal: canal,
-    p_tarifa_tipo: tarifaTipo,
-    p_estado: 'confirmada',
+  if (!huespedId) return { error: 'No se pudo registrar al huésped.' }
+
+  // Alta atómica: unidad libre + cotización + anti-overbooking (helper compartido).
+  const res = await crearReservaEnUnidadLibre(supabase, {
+    tipoUnidadId,
+    checkIn,
+    checkOut,
+    huespedes: huespedesCant,
+    huespedId,
+    canal,
+    tarifaTipo,
+    estado: 'confirmada',
   })
+  if (!res.ok) return { error: res.error }
 
-  if (error) {
-    if (error.code === '23P01') {
-      return { error: 'La unidad se ocupó recién: elegí otras fechas o tipo.' }
-    }
-    return { error: `No se pudo crear la reserva: ${error.message}` }
-  }
-
-  redirect(`/panel/reservas/${(reserva as { id: string }).id}`)
+  redirect(`/panel/reservas/${res.reserva.id}`)
 }
 
 /**

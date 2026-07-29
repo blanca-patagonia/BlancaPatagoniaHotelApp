@@ -290,5 +290,10 @@ enumeración del código), rate-limiting de endpoints públicos, expiración de 
   las reservas `pendiente` sin seña con más de N días (libera inventario). Con test de
   integración (cancela la que no tiene seña, respeta la que sí).
 
+**Mejora de código:** se unificó la lógica de alta de reserva (antes duplicada entre
+recepción y portal público) en `lib/reservas/crear.ts` (`crearReservaEnUnidadLibre`):
+un único punto para elegir unidad libre + cotizar + crear atómicamente. Ambos flujos
+re-verificados en el navegador (interno USD 519,09; público USD 598,95).
+
 **Pendiente:** rate-limiting, programar la expiración por cron (pg_cron / Edge Function),
 y el deploy (Vercel + Supabase cloud). **50 tests en verde.**

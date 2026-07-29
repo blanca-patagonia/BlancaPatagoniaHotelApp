@@ -2,9 +2,9 @@
 
 import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { enviarEmailConfirmacion } from '@/lib/email/confirmacion'
 import { diasEntre } from '@/lib/fechas'
+import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 
 export interface EstadoReservaPublica {
   error?: string
@@ -12,11 +12,6 @@ export interface EstadoReservaPublica {
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MAX_NOCHES_PUBLICO = 30
-
-interface UnidadLibre {
-  id: string
-  tipo_unidad_id: string
-}
 
 /**
  * Crea una reserva desde el portal público. Corre con `service_role` (el visitante
@@ -48,22 +43,7 @@ export async function crearReservaPublica(
 
   const admin = crearClienteAdmin()
 
-  // Unidad libre (service_role → disponibilidad real, sin RLS).
-  const { data: libresData } = await admin.rpc('unidades_disponibles', {
-    desde: checkIn,
-    hasta: checkOut,
-    p_categoria: null,
-  })
-  const unidad = ((libresData ?? []) as UnidadLibre[]).find(
-    (u) => u.tipo_unidad_id === tipoUnidadId,
-  )
-  if (!unidad) return { error: 'Esa unidad ya no está disponible para esas fechas.' }
-
-  const cot = await cotizarEstadia({ tipoUnidadId, checkIn, checkOut, tarifaTipo: 'rack' })
-  if (cot.faltanTarifas) return { error: 'No hay tarifa disponible para esas fechas.' }
-  const noches = diasEntre(checkIn, checkOut)
-  const precioNoche = noches > 0 ? Number((cot.resumen.totalNeto / noches).toFixed(2)) : 0
-
+  // Registrar al huésped.
   const { data: huesped, error: eHuesped } = await admin
     .from('huespedes')
     .insert({ nombre: nombre || apellido, apellido, email, telefono })
@@ -71,27 +51,19 @@ export async function crearReservaPublica(
     .single()
   if (eHuesped || !huesped) return { error: 'No se pudieron registrar tus datos.' }
 
-  const { data: reserva, error } = await admin.rpc('crear_reserva', {
-    p_huesped_id: huesped.id,
-    p_unidad_id: unidad.id,
-    p_tipo_unidad_id: tipoUnidadId,
-    p_check_in: checkIn,
-    p_check_out: checkOut,
-    p_huespedes: huespedesCant,
-    p_precio_noche: precioNoche,
-    p_total: cot.resumen.total,
-    p_canal: 'web',
-    p_tarifa_tipo: 'rack',
-    p_estado: 'pendiente',
+  // Alta atómica (service_role): unidad libre + cotización + anti-overbooking.
+  const res = await crearReservaEnUnidadLibre(admin, {
+    tipoUnidadId,
+    checkIn,
+    checkOut,
+    huespedes: huespedesCant,
+    huespedId: huesped.id,
+    canal: 'web',
+    tarifaTipo: 'rack',
+    estado: 'pendiente',
   })
-  if (error) {
-    if (error.code === '23P01') {
-      return { error: 'La unidad se ocupó recién. Probá con otras fechas.' }
-    }
-    return { error: 'No se pudo crear la reserva. Intentá nuevamente.' }
-  }
-
-  const nueva = reserva as { id: string; codigo: string }
+  if (!res.ok) return { error: res.error }
+  const nueva = res.reserva
   // La URL pública usa el token opaco (no el código, que es enumerable).
   const { data: full } = await admin
     .from('reservas')
@@ -106,7 +78,7 @@ export async function crearReservaPublica(
     codigo: nueva.codigo,
     checkIn,
     checkOut,
-    total: cot.resumen.total,
+    total: Number(nueva.total),
   })
 
   redirect(`/reservar/confirmacion/${token}`)
