@@ -22,10 +22,10 @@ interface Row {
 export default async function ReservasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string }>
+  searchParams: Promise<{ estado?: string; grupo?: string }>
 }) {
   await requerirAcceso('reservas')
-  const { estado: filtro } = await searchParams
+  const { estado: filtro, grupo } = await searchParams
   const supabase = await crearClienteServidor()
 
   let q = supabase
@@ -33,23 +33,43 @@ export default async function ReservasPage({
     .select('id, codigo, estado, total, canal, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre), estadias(periodo)')
     .order('creada_en', { ascending: false })
     .limit(100)
-  if (filtro && (ESTADOS_RESERVA as readonly string[]).includes(filtro)) {
+  if (grupo) {
+    q = q.eq('grupo_id', grupo)
+  } else if (filtro && (ESTADOS_RESERVA as readonly string[]).includes(filtro)) {
     q = q.eq('estado', filtro)
   }
   const { data } = await q
   const reservas = (data ?? []) as unknown as Row[]
+  const totalGrupo = grupo ? reservas.reduce((acc, r) => acc + Number(r.total), 0) : 0
 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Reservas</h1>
-        <Link
-          href="/panel/reservas/nueva"
-          className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
-        >
-          + Nueva reserva
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/panel/reservas/nueva-grupo"
+            className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-100"
+          >
+            + Grupo
+          </Link>
+          <Link
+            href="/panel/reservas/nueva"
+            className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
+          >
+            + Nueva reserva
+          </Link>
+        </div>
       </div>
+
+      {grupo && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm">
+          <span className="text-sky-900">Reserva grupal · {reservas.length} unidad(es)</span>
+          <span className="font-semibold text-sky-900">
+            Total consolidado USD {totalGrupo.toLocaleString('es-AR')}
+          </span>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-1.5 text-sm">
         <Link

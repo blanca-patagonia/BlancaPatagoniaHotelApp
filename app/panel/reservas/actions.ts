@@ -208,3 +208,83 @@ export async function emitirFactura(formData: FormData): Promise<void> {
 
   redirect(`/panel/reservas/${reservaId}/factura`)
 }
+
+export interface EstadoReservaGrupal {
+  error?: string
+}
+
+/**
+ * Alta de una reserva GRUPAL: crea varias reservas (una por unidad) que comparten
+ * un `grupo_id`. Reutiliza el alta atómica por unidad (anti-overbooking) y permite
+ * check-out escalonado y facturación consolidada por grupo.
+ */
+export async function crearReservaGrupal(
+  _prev: EstadoReservaGrupal,
+  formData: FormData,
+): Promise<EstadoReservaGrupal> {
+  const checkIn = String(formData.get('check_in') ?? '')
+  const checkOut = String(formData.get('check_out') ?? '')
+  const canal = String(formData.get('canal') ?? 'directo')
+  const nombre = String(formData.get('nombre') ?? '').trim()
+  const apellido = String(formData.get('apellido') ?? '').trim()
+  const email = String(formData.get('email') ?? '').trim()
+
+  if (!checkIn || !checkOut || checkOut <= checkIn) return { error: 'Revisá las fechas.' }
+  if (!apellido) return { error: 'Ingresá el apellido del titular del grupo.' }
+
+  const selecciones: { tipoUnidadId: string; cantidad: number }[] = []
+  for (const [k, v] of formData.entries()) {
+    if (k.startsWith('qty_')) {
+      const cantidad = Math.max(0, Number(v) || 0)
+      if (cantidad > 0) selecciones.push({ tipoUnidadId: k.slice(4), cantidad })
+    }
+  }
+  if (selecciones.length === 0) return { error: 'Elegí al menos una unidad.' }
+
+  const supabase = await crearClienteServidor()
+  const tarifaTipo = CANAL_TARIFA[canal] ?? 'rack'
+
+  let huespedId: string | null = null
+  if (email) {
+    const { data: existente } = await supabase.from('huespedes').select('id').eq('email', email).maybeSingle()
+    huespedId = existente?.id ?? null
+  }
+  if (!huespedId) {
+    const { data: nuevo, error: eHuesped } = await supabase
+      .from('huespedes')
+      .insert({ nombre: nombre || apellido, apellido, email: email || null })
+      .select('id')
+      .single()
+    if (eHuesped || !nuevo) return { error: 'No se pudo registrar al titular.' }
+    huespedId = nuevo.id
+  }
+
+  if (!huespedId) return { error: 'No se pudo registrar al titular.' }
+
+  const grupoId = crypto.randomUUID()
+  let creadas = 0
+  let primerError: string | undefined
+  for (const s of selecciones) {
+    for (let i = 0; i < s.cantidad; i++) {
+      const res = await crearReservaEnUnidadLibre(supabase, {
+        tipoUnidadId: s.tipoUnidadId,
+        checkIn,
+        checkOut,
+        huespedes: 2,
+        huespedId,
+        canal,
+        tarifaTipo,
+        estado: 'confirmada',
+      })
+      if (!res.ok) {
+        primerError ??= res.error
+        break // no quedan más unidades de este tipo
+      }
+      await supabase.from('reservas').update({ grupo_id: grupoId }).eq('id', res.reserva.id)
+      creadas++
+    }
+  }
+
+  if (creadas === 0) return { error: primerError ?? 'No se pudo crear el grupo.' }
+  redirect(`/panel/reservas?grupo=${grupoId}`)
+}
