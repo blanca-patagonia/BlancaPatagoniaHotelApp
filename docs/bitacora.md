@@ -297,3 +297,22 @@ re-verificados en el navegador (interno USD 519,09; público USD 598,95).
 
 **Pendiente:** rate-limiting, programar la expiración por cron (pg_cron / Edge Function),
 y el deploy (Vercel + Supabase cloud). **50 tests en verde.**
+
+---
+
+## 2026-07-29 — Fase 8: Ampliación de funciones (WinPax / Odoo)
+
+Se analizaron WinPax y Odoo Hotel y se agregan funciones que faltaban. Se
+construyen de a una, verificadas y commiteadas.
+
+### 8.1 — Cuentas corrientes de agencias / empresas
+
+- **Migración 0012:** `agencias` (tipo, CUIT, email, % descuento), `movimientos_cuenta`
+  (cargo/pago) y `reservas.agencia_id`.
+- **Dominio `lib/domain/cuentas.ts`:** `saldoCuenta` (cargos − pagos) y
+  `aplicarDescuento` + tests.
+- **UI `/panel/agencias`** (admin/gerencia gestionan, recepción registra movimientos):
+  lista con saldo por agencia, alta de agencia, y detalle con movimientos y registro
+  de cargo/pago.
+- **Verificado:** agencia con cargo USD 642,51 + pago USD 400 → **saldo USD 242,51**.
+  **56 tests en verde.**

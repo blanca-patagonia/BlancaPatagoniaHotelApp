@@ -11,6 +11,7 @@ const HREF: Record<Area, string> = {
   reservas: '/panel/reservas',
   huespedes: '/panel/huespedes',
   housekeeping: '/panel/housekeeping',
+  agencias: '/panel/agencias',
   reportes: '/panel/reportes',
   config: '/panel/config',
   usuarios: '/panel/usuarios',

@@ -12,6 +12,7 @@ export const AREAS = [
   'reservas',
   'huespedes',
   'housekeeping',
+  'agencias',
   'reportes',
   'config',
   'usuarios',
@@ -25,6 +26,7 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   reservas: 'Reservas',
   huespedes: 'Huéspedes',
   housekeeping: 'Housekeeping',
+  agencias: 'Agencias',
   reportes: 'Reportes',
   config: 'Configuración',
   usuarios: 'Usuarios',
@@ -33,8 +35,8 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
 /** Áreas accesibles por rol. */
 export const PERMISOS: Record<Rol, readonly Area[]> = {
   admin: [...AREAS],
-  gerencia: ['dashboard', 'ocupacion', 'reservas', 'huespedes', 'housekeeping', 'reportes', 'config'],
-  recepcion: ['dashboard', 'ocupacion', 'reservas', 'huespedes'],
+  gerencia: ['dashboard', 'ocupacion', 'reservas', 'huespedes', 'housekeeping', 'agencias', 'reportes', 'config'],
+  recepcion: ['dashboard', 'ocupacion', 'reservas', 'huespedes', 'agencias'],
   housekeeping: ['dashboard', 'housekeeping'],
 }
 

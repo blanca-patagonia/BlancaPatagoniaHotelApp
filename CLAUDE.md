@@ -78,11 +78,13 @@ Tarifario 2025/2026 (Anexo A).
 ## Estado actual
 - **Fase 0-2 ✅** fundaciones + núcleo de dominio + panel interno de Recepción ·
   **Fase 3 ✅** pagos · **Fase 4 ✅** portal público de reservas ·
-  **Fase 5 ✅** consumos + factura interna · **Fase 6 ✅** reportes gerenciales
-  (`/panel/reportes`: ocupación por mes, ingresos, facturación, ranking de canales,
-  reservas por estado). 49 tests verdes.
-- **Próximo: Fase 7 — Hardening de producción + deploy** (RLS, expiración de pendientes,
-  backups, dominio, Vercel + Supabase cloud).
+  **Fase 5 ✅** consumos + factura · **Fase 6 ✅** reportes gerenciales ·
+  **Fase 7 (parcial) ✅** hardening (token confirmación, expiración pendientes, webhook
+  fail-closed) · **Fase 8 (en curso)** ampliación tipo WinPax/Odoo: **8.1 ✅ cuentas
+  corrientes de agencias/empresas** (`/panel/agencias`). 56 tests verdes, todo pusheado.
+- **Fase 8 pendiente:** reservas grupales, web check-in, mantenimiento, objetos perdidos,
+  encuestas, reportes avanzados (RevPAR/ADR), fidelidad.
+- **Deploy** (Vercel + Supabase cloud) pendiente — requiere cuentas del usuario.
 - No se integran pasarelas reales ni envío de email real (credenciales/dinero);
   stubs listos para enchufar (`lib/payments`, `lib/email`).
 - Admin de dev: `admin@blancapatagonia.local` / `blancadev1234` (`npm run seed:usuarios`).

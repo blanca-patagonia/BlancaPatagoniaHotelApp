@@ -1,0 +1,55 @@
+'use server'
+
+import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
+import { crearClienteServidor } from '@/lib/supabase/server'
+import { obtenerSesion } from '@/lib/auth/session'
+import { TIPOS_CUENTA } from '@/lib/domain/cuentas'
+
+export interface EstadoAgencia {
+  error?: string
+  ok?: string
+}
+
+export async function crearAgencia(
+  _prev: EstadoAgencia,
+  formData: FormData,
+): Promise<EstadoAgencia> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+
+  const nombre = String(formData.get('nombre') ?? '').trim()
+  const tipo = String(formData.get('tipo') ?? 'agencia')
+  const cuit = String(formData.get('cuit') ?? '').trim()
+  const email = String(formData.get('email') ?? '').trim()
+  const descuento = Math.min(100, Math.max(0, Number(formData.get('descuento_pct') ?? 0) || 0))
+
+  if (!nombre) return { error: 'Ingresá el nombre.' }
+  if (!(TIPOS_CUENTA as readonly string[]).includes(tipo)) return { error: 'Tipo inválido.' }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('agencias')
+    .insert({ nombre, tipo, cuit: cuit || null, email: email || null, descuento_pct: descuento })
+  if (error) return { error: `No se pudo crear: ${error.message}` }
+  revalidatePath('/panel/agencias')
+  return { ok: `Agencia ${nombre} creada.` }
+}
+
+export async function registrarMovimiento(formData: FormData): Promise<void> {
+  const agenciaId = String(formData.get('agencia_id') ?? '')
+  const tipo = String(formData.get('tipo') ?? '')
+  const monto = Number(formData.get('monto') ?? 0)
+  const concepto = String(formData.get('concepto') ?? '').trim()
+  if (!agenciaId || !['cargo', 'pago'].includes(tipo) || !(monto > 0)) {
+    redirect(`/panel/agencias/${agenciaId}`)
+  }
+  const supabase = await crearClienteServidor()
+  await supabase.from('movimientos_cuenta').insert({
+    agencia_id: agenciaId,
+    tipo,
+    monto,
+    concepto,
+  })
+  redirect(`/panel/agencias/${agenciaId}`)
+}
