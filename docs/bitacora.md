@@ -349,3 +349,11 @@ se **difieren** a esa vista; en la fase de gestión solo se agregan módulos de 
   `/panel/objetos-perdidos` (registro + marcar devuelto). Áreas nuevas en permisos.
 - **Verificado:** orden "Pérdida de agua" (prioridad alta) y objeto "Campera azul".
   **56 tests en verde.**
+
+### 8.5 — Consolidación de la gestión
+
+- **Limpieza de datos de prueba:** `supabase db reset` → base limpia (inventario,
+  tarifas y catálogo reales, sin reservas/agencias/órdenes de prueba) + admin recreado.
+- **Dashboard como hub:** KPIs operativos (mantenimiento pendiente, objetos guardados)
+  y sección **Módulos** con accesos rápidos filtrados por rol (badges de pendientes).
+- Verificado: dashboard limpio con los 10 módulos accesibles para admin.
