@@ -322,3 +322,30 @@ construyen de a una, verificadas y commiteadas.
 - Se sumaron al dashboard gerencial los KPIs hoteleros **ADR** (tarifa media diaria =
   ingreso alojamiento / noches vendidas) y **RevPAR** (ingreso por unidad disponible),
   calculados con `estadias.precio_noche` prorrateado al mes. Verificado (ADR USD 177).
+
+### 8.2 — Reservas grupales
+
+- **Migración 0013:** `reservas.grupo_id`. Una reserva grupal = varias reservas (una
+  por unidad) con el mismo `grupo_id`; reutiliza el alta atómica por unidad, el folio
+  y el ciclo de estados (habilita check-out escalonado y facturación consolidada).
+- **UI `/panel/reservas/nueva-grupo`** (cantidades por tipo + titular) + filtro
+  `?grupo=` en la lista con **total consolidado**.
+- **Verificado:** grupo de 2 Doble Standard + 1 Triple → 3 reservas, total consolidado
+  **USD 1.691,58**.
+
+### Decisión de alcance — dos vistas separadas
+
+Se define separar claramente **dos vistas**: (1) **gestión hotelera** (`/panel`, solo
+staff, con login) — el foco actual; y (2) **reservas de clientes** (sitio público
+`/reservar` + landing, tipo blancapatagonia.com) — a desarrollar como vista aparte más
+adelante. Las funciones **cara al cliente** (web check-in, encuestas de satisfacción)
+se **difieren** a esa vista; en la fase de gestión solo se agregan módulos de staff.
+
+### 8.4 — Mantenimiento y objetos perdidos (gestión interna)
+
+- **Migración 0014:** `ordenes_mantenimiento` (unidad, prioridad, estado, asignación) y
+  `objetos_perdidos` (descripción, ubicación, estado). RLS por rol.
+- **UI:** `/panel/mantenimiento` (alta + ciclo pendiente→en_proceso→resuelta) y
+  `/panel/objetos-perdidos` (registro + marcar devuelto). Áreas nuevas en permisos.
+- **Verificado:** orden "Pérdida de agua" (prioridad alta) y objeto "Campera azul".
+  **56 tests en verde.**

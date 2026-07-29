@@ -29,6 +29,12 @@ Tarifario 2025/2026 (Anexo A).
   `node_modules/next/dist/docs/` antes de tocar APIs de Next. `middleware` → `proxy`;
   `cookies()` es **async**.
 
+## Dos vistas separadas (decisión de producto)
+- **Gestión hotelera** (`app/panel`, login de staff) — el foco actual del desarrollo.
+- **Reservas de clientes** (público: `app/reservar` + landing) — vista aparte, se
+  amplía más adelante. Las funciones cara al cliente (web check-in, encuestas) van
+  ahí, NO en la gestión.
+
 ## Arquitectura (capas)
 - Presentación: `app/(public)` portal del huésped · `app/(admin)` panel por rol ·
   `app/api/...` route handlers · `app/api/webhooks/...`.

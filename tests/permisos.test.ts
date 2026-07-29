@@ -7,8 +7,8 @@ describe('permisos por rol', () => {
     for (const area of AREAS) expect(puedeAcceder('admin', area)).toBe(true)
   })
 
-  it('housekeeping solo ve inicio y housekeeping', () => {
-    expect(areasDe('housekeeping')).toEqual(['dashboard', 'housekeeping'])
+  it('housekeeping ve inicio, housekeeping y mantenimiento', () => {
+    expect(areasDe('housekeeping')).toEqual(['dashboard', 'housekeeping', 'mantenimiento'])
     expect(puedeAcceder('housekeeping', 'reservas')).toBe(false)
     expect(puedeAcceder('housekeeping', 'usuarios')).toBe(false)
   })
