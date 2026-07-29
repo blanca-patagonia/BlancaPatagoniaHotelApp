@@ -61,7 +61,7 @@ export default async function ReportesPage({
     supabase.from('unidades').select('id').eq('activo', true),
     supabase
       .from('estadias')
-      .select('periodo, estado')
+      .select('periodo, estado, precio_noche')
       .in('estado', ['pendiente', 'confirmada', 'pagada', 'in_house', 'checkout']),
     supabase.from('reservas').select('canal, estado, total'),
     supabase.from('pagos').select('tipo, monto').eq('estado', 'aprobado'),
@@ -71,10 +71,17 @@ export default async function ReportesPage({
   // Ocupación del mes (noches ocupadas / capacidad).
   const capacidad = (unidades?.length ?? 0) * diasDelMes
   let ocupadas = 0
+  let ingresoAlojamiento = 0
   for (const e of estadias ?? []) {
-    ocupadas += nochesEnVentana(parsearPeriodo(e.periodo as string), inicio, fin)
+    const n = nochesEnVentana(parsearPeriodo(e.periodo as string), inicio, fin)
+    ocupadas += n
+    ingresoAlojamiento += n * Number((e as { precio_noche?: number | string }).precio_noche ?? 0)
   }
   const ocupacionPct = capacidad ? Math.round((ocupadas / capacidad) * 100) : 0
+  // ADR (tarifa media diaria) = ingreso alojamiento / noches vendidas.
+  // RevPAR (ingreso por habitación disponible) = ingreso alojamiento / capacidad.
+  const adr = ocupadas ? Math.round(ingresoAlojamiento / ocupadas) : 0
+  const revpar = capacidad ? Math.round(ingresoAlojamiento / capacidad) : 0
 
   // Ingresos (pagos aprobados) y facturación — históricos.
   let ingresos = 0
@@ -120,12 +127,14 @@ export default async function ReportesPage({
         </form>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
           titulo={`Ocupación ${mes}`}
           valor={`${ocupacionPct}%`}
           detalle={`${ocupadas} de ${capacidad} noches-unidad`}
         />
+        <Kpi titulo="ADR (tarifa media)" valor={`USD ${adr.toLocaleString('es-AR')}`} detalle="por noche vendida (neto)" />
+        <Kpi titulo="RevPAR" valor={`USD ${revpar.toLocaleString('es-AR')}`} detalle="por unidad disponible (neto)" />
         <Kpi titulo="Reservas (histórico)" valor={String(reservas.length)} />
         <Kpi
           titulo="Ingresos cobrados"

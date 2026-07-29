@@ -316,3 +316,9 @@ construyen de a una, verificadas y commiteadas.
   de cargo/pago.
 - **Verificado:** agencia con cargo USD 642,51 + pago USD 400 → **saldo USD 242,51**.
   **56 tests en verde.**
+
+### 8.7 — Reportes avanzados (ADR / RevPAR)
+
+- Se sumaron al dashboard gerencial los KPIs hoteleros **ADR** (tarifa media diaria =
+  ingreso alojamiento / noches vendidas) y **RevPAR** (ingreso por unidad disponible),
+  calculados con `estadias.precio_noche` prorrateado al mes. Verificado (ADR USD 177).
