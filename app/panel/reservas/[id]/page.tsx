@@ -19,6 +19,7 @@ import {
   agregarConsumo,
   quitarConsumo,
   emitirFactura,
+  reprogramarReserva,
 } from '../actions'
 import { BADGE_ESTADO } from '../../_components/estilos'
 import {
@@ -195,9 +196,17 @@ export default async function DetalleReservaPage({
         </span>
       </div>
 
-      {errorParam === 'transicion' && (
+      {errorParam && (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          Esa transición de estado no es válida.
+          {errorParam === 'transicion'
+            ? 'Esa transición de estado no es válida.'
+            : errorParam === 'overlap'
+              ? 'No se pudo reprogramar: la unidad ya está ocupada en esas fechas.'
+              : errorParam === 'tarifa'
+                ? 'No hay tarifa cargada para esas fechas.'
+                : errorParam === 'fechas'
+                  ? 'Revisá las fechas de reprogramación.'
+                  : 'No se pudo completar la operación.'}
         </p>
       )}
 
@@ -276,6 +285,29 @@ export default async function DetalleReservaPage({
           </p>
         )}
       </div>
+
+      {periodo && !['cancelada', 'no_show', 'checkout'].includes(reserva.estado) && (
+        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-medium text-stone-700">Reprogramar</h2>
+          <form action={reprogramarReserva} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="reserva_id" value={reserva.id} />
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-stone-500">Nuevo check-in</span>
+              <input type="date" name="check_in" defaultValue={periodo.desde} className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-stone-500">Nuevo check-out</span>
+              <input type="date" name="check_out" defaultValue={periodo.hasta} className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+            </label>
+            <button className="rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-900">
+              Reprogramar
+            </button>
+          </form>
+          <p className="mt-2 text-xs text-stone-400">
+            Recotiza el total; se rechaza si la unidad ya está ocupada en esas fechas.
+          </p>
+        </div>
+      )}
 
       <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium text-stone-700">Pagos</h2>

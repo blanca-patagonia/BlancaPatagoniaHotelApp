@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import type { TarifaTipo } from '@/lib/domain/precios'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
+import { cotizarEstadia } from '@/lib/pricing/cotizar'
+import { diasEntre } from '@/lib/fechas'
 import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
@@ -305,4 +307,48 @@ export async function crearReservaGrupal(
 
   if (creadas === 0) return { error: primerError ?? 'No se pudo crear el grupo.' }
   redirect(`/panel/reservas?grupo=${grupoId}`)
+}
+
+/**
+ * Reprograma una reserva: cambia las fechas de su estadía, recotiza el total y
+ * respeta el anti-overbooking (si el nuevo período pisa otra estadía activa de la
+ * misma unidad, la restricción de exclusión lo rechaza).
+ */
+export async function reprogramarReserva(formData: FormData): Promise<void> {
+  const id = String(formData.get('reserva_id') ?? '')
+  const checkIn = String(formData.get('check_in') ?? '')
+  const checkOut = String(formData.get('check_out') ?? '')
+  if (!id) redirect('/panel/reservas')
+  if (!checkIn || !checkOut || checkOut <= checkIn) redirect(`/panel/reservas/${id}?error=fechas`)
+
+  const supabase = await crearClienteServidor()
+  const { data: estadia } = await supabase
+    .from('estadias')
+    .select('id, tipo_unidad_id')
+    .eq('reserva_id', id)
+    .limit(1)
+    .single()
+  const { data: reserva } = await supabase.from('reservas').select('tarifa_tipo').eq('id', id).single()
+  if (!estadia || !reserva) redirect(`/panel/reservas/${id}`)
+
+  const tarifaTipo: TarifaTipo = reserva.tarifa_tipo === 'neto' ? 'neto' : 'rack'
+  const cot = await cotizarEstadia({
+    tipoUnidadId: estadia.tipo_unidad_id as string,
+    checkIn,
+    checkOut,
+    tarifaTipo,
+  })
+  if (cot.faltanTarifas) redirect(`/panel/reservas/${id}?error=tarifa`)
+  const noches = diasEntre(checkIn, checkOut)
+  const precioNoche = noches > 0 ? Number((cot.resumen.totalNeto / noches).toFixed(2)) : 0
+
+  const { error } = await supabase
+    .from('estadias')
+    .update({ periodo: `[${checkIn},${checkOut})`, precio_noche: precioNoche })
+    .eq('id', estadia.id)
+  if (error) {
+    redirect(`/panel/reservas/${id}?error=${error.code === '23P01' ? 'overlap' : 'repro'}`)
+  }
+  await supabase.from('reservas').update({ total: cot.resumen.total }).eq('id', id)
+  redirect(`/panel/reservas/${id}`)
 }

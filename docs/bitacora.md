@@ -317,7 +317,7 @@ construyen de a una, verificadas y commiteadas.
 - **Verificado:** agencia con cargo USD 642,51 + pago USD 400 → **saldo USD 242,51**.
   **56 tests en verde.**
 
-### 8.7 — Reportes avanzados (ADR / RevPAR)
+### 8.3.b — Reportes avanzados (ADR / RevPAR)
 
 - Se sumaron al dashboard gerencial los KPIs hoteleros **ADR** (tarifa media diaria =
   ingreso alojamiento / noches vendidas) y **RevPAR** (ingreso por unidad disponible),
@@ -368,3 +368,28 @@ se **difieren** a esa vista; en la fase de gestión solo se agregan módulos de 
 - **Inventario:** sección en Configuración con stock, mínimo, **alerta de stock bajo**
   y reposición (admin/gerencia). Stock inicial sembrado (frigobar 24, desayuno 40).
 - **58 tests en verde.** Verificado: stock en base y sección de inventario en el panel.
+
+### 8.7 — Proveedores, reprogramación, mucamas y avisos (funciones de gestión)
+
+Cierre de las funciones de **gestión interna** faltantes detectadas al comparar con
+WinPax/Odoo (las de cara al cliente se difieren a la vista pública).
+
+- **Migración 0016:** `proveedores` (nombre, rubro, cuit, email, teléfono, activo) y
+  `movimientos_proveedor` (cargo/pago), `unidades.asignada_a` (mucama/o responsable) y
+  `avisos` (mensajería interna). RLS por rol; política para que el staff vea el nombre
+  de los perfiles (autor del aviso / mucama asignada).
+- **Proveedores** (`/panel/proveedores`): cuentas **por pagar** reutilizando el dominio
+  `saldoCuenta` de agencias — alta de proveedor, registro de factura (cargo) y pago, y
+  saldo por proveedor. Admin/gerencia gestionan.
+- **Reprogramación de reservas** (`reprogramarReserva` en el detalle): cambia el período
+  de la estadía, **recotiza** la nueva estancia y actualiza el total; si el nuevo período
+  se solapa con otra estadía activa el motor anti-overbooking la rechaza (`23P01` →
+  aviso "las fechas se solapan"). No disponible en estados terminales.
+- **Mucamas** (Housekeeping): selector por unidad para **asignar/desasignar** una mucama/o
+  (perfiles con rol `housekeeping`).
+- **Avisos** (`/panel/avisos`): tablón de mensajería interna del equipo; cualquier rol
+  del staff publica y lee, el autor (o admin) puede borrar.
+- Permisos, sidebar y hub del dashboard actualizados con las áreas nuevas.
+- **58 tests en verde** (typecheck + lint OK). Verificado en navegador: proveedor
+  "Lavandería del Sur" con factura USD 642,51 − pago USD 400 → **saldo USD 242,51**;
+  aviso publicado con autor y borrado; selector de mucama por unidad en Housekeeping.

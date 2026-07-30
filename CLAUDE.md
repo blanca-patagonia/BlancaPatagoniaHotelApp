@@ -87,9 +87,13 @@ Tarifario 2025/2026 (Anexo A).
   **Fase 5 ✅** consumos + factura · **Fase 6 ✅** reportes gerenciales ·
   **Fase 7 (parcial) ✅** hardening (token confirmación, expiración pendientes, webhook
   fail-closed) · **Fase 8 (en curso)** ampliación tipo WinPax/Odoo: **8.1 ✅ cuentas
-  corrientes de agencias/empresas** (`/panel/agencias`). 56 tests verdes, todo pusheado.
-- **Fase 8 pendiente:** reservas grupales, web check-in, mantenimiento, objetos perdidos,
-  encuestas, reportes avanzados (RevPAR/ADR), fidelidad.
+  corrientes de agencias · **8.2** reservas grupales · **8.3** mantenimiento, objetos
+  perdidos, encuestas, reportes avanzados (ADR/RevPAR) · **8.4/8.5** consolidación +
+  dashboard-hub · **8.6** fidelidad + inventario · **8.7** proveedores (cuentas por
+  pagar), reprogramación de reservas, asignación de mucamas y avisos internos. **58
+  tests verdes**, todo pusheado.
+- **Cara al cliente (diferido a la vista pública `app/reservar`):** web check-in y
+  encuestas de satisfacción NO van en la gestión.
 - **Deploy** (Vercel + Supabase cloud) pendiente — requiere cuentas del usuario.
 - No se integran pasarelas reales ni envío de email real (credenciales/dinero);
   stubs listos para enchufar (`lib/payments`, `lib/email`).

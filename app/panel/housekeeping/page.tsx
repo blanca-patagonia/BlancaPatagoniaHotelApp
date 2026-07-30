@@ -5,7 +5,7 @@ import {
   ETIQUETAS_ESTADO_HK,
   type EstadoHousekeeping,
 } from '@/lib/domain/unidades'
-import { cambiarEstadoUnidad } from './actions'
+import { cambiarEstadoUnidad, asignarMucama } from './actions'
 
 const COLOR_HK: Record<EstadoHousekeeping, string> = {
   limpia: 'bg-emerald-500',
@@ -19,17 +19,27 @@ interface UnidadRow {
   nombre: string
   estado: EstadoHousekeeping
   tipo: { nombre: string } | null
+  asignada_a: string | null
 }
 
 export default async function HousekeepingPage() {
   await requerirAcceso('housekeeping')
   const supabase = await crearClienteServidor()
-  const { data } = await supabase
-    .from('unidades')
-    .select('id, nombre, estado, tipo:tipos_unidad(nombre)')
-    .eq('activo', true)
-    .order('nombre')
+  const [{ data }, { data: mucamasData }] = await Promise.all([
+    supabase
+      .from('unidades')
+      .select('id, nombre, estado, tipo:tipos_unidad(nombre), asignada_a')
+      .eq('activo', true)
+      .order('nombre'),
+    supabase
+      .from('perfiles')
+      .select('id, nombre')
+      .eq('rol', 'housekeeping')
+      .eq('activo', true)
+      .order('nombre'),
+  ])
   const unidades = (data ?? []) as unknown as UnidadRow[]
+  const mucamas = (mucamasData ?? []) as { id: string; nombre: string }[]
 
   const conteo = new Map<EstadoHousekeeping, number>()
   for (const u of unidades) conteo.set(u.estado, (conteo.get(u.estado) ?? 0) + 1)
@@ -78,6 +88,24 @@ export default async function HousekeepingPage() {
                 </form>
               ))}
             </div>
+            <form action={asignarMucama} className="flex items-center gap-1">
+              <input type="hidden" name="unidad_id" value={u.id} />
+              <select
+                name="mucama_id"
+                defaultValue={u.asignada_a ?? ''}
+                className="rounded-md border border-stone-300 px-2 py-1 text-xs"
+              >
+                <option value="">Sin mucama</option>
+                {mucamas.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nombre}
+                  </option>
+                ))}
+              </select>
+              <button className="rounded-md bg-stone-100 px-2 py-1 text-xs text-stone-600 transition hover:bg-stone-200">
+                Asignar
+              </button>
+            </form>
           </div>
         ))}
       </div>

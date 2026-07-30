@@ -13,3 +13,14 @@ export async function cambiarEstadoUnidad(formData: FormData): Promise<void> {
   await supabase.from('unidades').update({ estado }).eq('id', id)
   redirect('/panel/housekeeping')
 }
+
+/** Asigna (o desasigna) una mucama/o a una unidad. */
+export async function asignarMucama(formData: FormData): Promise<void> {
+  const id = String(formData.get('unidad_id') ?? '')
+  const mucamaId = String(formData.get('mucama_id') ?? '')
+  if (id) {
+    const supabase = await crearClienteServidor()
+    await supabase.from('unidades').update({ asignada_a: mucamaId || null }).eq('id', id)
+  }
+  redirect('/panel/housekeeping')
+}
