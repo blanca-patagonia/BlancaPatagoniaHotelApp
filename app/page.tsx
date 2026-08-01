@@ -3,11 +3,11 @@ import Link from 'next/link'
 export default function Home() {
   return (
     <main className="flex flex-1 flex-col">
-      <section className="flex flex-1 flex-col items-center justify-center gap-6 bg-gradient-to-b from-sky-50 to-stone-100 px-6 py-20 text-center">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-700">
+      <section className="flex flex-1 flex-col items-center justify-center gap-6 bg-gradient-to-b from-lago-50 to-stone-100 px-6 py-20 text-center">
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-lago-700">
           Hostería Boutique &amp; Cabañas
         </p>
-        <h1 className="text-4xl font-semibold tracking-tight text-stone-900 sm:text-6xl">
+        <h1 className="font-display text-4xl font-semibold tracking-tight text-stone-900 sm:text-6xl">
           Blanca Patagonia
         </h1>
         <p className="max-w-xl text-lg text-stone-600">
@@ -18,7 +18,7 @@ export default function Home() {
         <div className="mt-2 flex flex-wrap justify-center gap-3">
           <Link
             href="/reservar"
-            className="rounded-lg bg-sky-700 px-6 py-3 font-medium text-white transition hover:bg-sky-800"
+            className="rounded-lg bg-lago-700 px-6 py-3 font-medium text-white transition hover:bg-lago-800"
           >
             Reservá tu estadía
           </Link>

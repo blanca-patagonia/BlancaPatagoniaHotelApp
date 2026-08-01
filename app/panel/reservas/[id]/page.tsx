@@ -21,7 +21,8 @@ import {
   emitirFactura,
   reprogramarReserva,
 } from '../actions'
-import { BADGE_ESTADO } from '../../_components/estilos'
+import { TONO_ESTADO } from '../../_components/estilos'
+import { Etiqueta } from '../../_components/ui'
 import {
   cuentaConsolidada,
   ETIQUETAS_CATEGORIA_PRODUCTO,
@@ -67,9 +68,9 @@ interface ProductoRow {
 
 const ACCION_ESTADO: Record<EstadoReserva, { verbo: string; color: string }> = {
   pendiente: { verbo: 'Marcar pendiente', color: 'bg-stone-600 hover:bg-stone-700' },
-  confirmada: { verbo: 'Confirmar', color: 'bg-sky-700 hover:bg-sky-800' },
+  confirmada: { verbo: 'Confirmar', color: 'bg-lago-700 hover:bg-lago-800' },
   pagada: { verbo: 'Marcar pagada', color: 'bg-emerald-600 hover:bg-emerald-700' },
-  in_house: { verbo: 'Check-in', color: 'bg-amber-600 hover:bg-amber-700' },
+  in_house: { verbo: 'Check-in', color: 'bg-lenga-600 hover:bg-lenga-700' },
   checkout: { verbo: 'Check-out', color: 'bg-stone-700 hover:bg-stone-800' },
   cancelada: { verbo: 'Cancelar', color: 'bg-red-600 hover:bg-red-700' },
   no_show: { verbo: 'No-show', color: 'bg-red-600 hover:bg-red-700' },
@@ -190,10 +191,12 @@ export default async function DetalleReservaPage({
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-stone-900">{reserva.codigo}</h1>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE_ESTADO[reserva.estado]}`}>
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-stone-900">
+          {reserva.codigo}
+        </h1>
+        <Etiqueta tono={TONO_ESTADO[reserva.estado]}>
           {ETIQUETAS_ESTADO_RESERVA[reserva.estado]}
-        </span>
+        </Etiqueta>
       </div>
 
       {errorParam && (
@@ -324,9 +327,9 @@ export default async function DetalleReservaPage({
               USD {resumen.pagado.toLocaleString('es-AR')}
             </p>
           </div>
-          <div className="rounded-lg bg-amber-50 px-4 py-3">
-            <p className="text-xs text-amber-600">Saldo</p>
-            <p className="text-lg font-semibold text-amber-700">
+          <div className="rounded-lg bg-lenga-50 px-4 py-3">
+            <p className="text-xs text-lenga-600">Saldo</p>
+            <p className="text-lg font-semibold text-lenga-700">
               USD {resumen.saldo.toLocaleString('es-AR')}
             </p>
           </div>
@@ -406,7 +409,7 @@ export default async function DetalleReservaPage({
           {factura ? (
             <Link
               href={`/panel/reservas/${reserva.id}/factura`}
-              className="text-sm font-medium text-sky-700 hover:underline"
+              className="text-sm font-medium text-lago-700 hover:underline"
             >
               Ver factura {factura.numero}
             </Link>
@@ -473,7 +476,7 @@ export default async function DetalleReservaPage({
               className="w-20 rounded-md border border-stone-300 px-2 py-1.5 text-sm"
             />
           </label>
-          <button className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800">
+          <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800">
             Cargar
           </button>
         </form>

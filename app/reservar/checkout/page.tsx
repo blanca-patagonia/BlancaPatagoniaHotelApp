@@ -35,7 +35,7 @@ export default async function CheckoutPage({
   return (
     <main className="flex flex-1 flex-col bg-stone-50">
       <header className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-4">
-        <Link href="/" className="font-semibold tracking-tight text-sky-700">
+        <Link href="/" className="font-semibold tracking-tight text-lago-700">
           Blanca Patagonia
         </Link>
         <Link

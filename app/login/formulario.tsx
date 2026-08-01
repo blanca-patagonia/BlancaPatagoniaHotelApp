@@ -17,7 +17,7 @@ export function FormularioLogin() {
           name="email"
           autoComplete="email"
           required
-          className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none transition focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20"
+          className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none transition focus:border-lago-600 focus:ring-2 focus:ring-lago-600/20"
           placeholder="admin@blancapatagonia.local"
         />
       </label>
@@ -29,7 +29,7 @@ export function FormularioLogin() {
           name="password"
           autoComplete="current-password"
           required
-          className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none transition focus:border-sky-600 focus:ring-2 focus:ring-sky-600/20"
+          className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none transition focus:border-lago-600 focus:ring-2 focus:ring-lago-600/20"
           placeholder="••••••••"
         />
       </label>
@@ -43,7 +43,7 @@ export function FormularioLogin() {
       <button
         type="submit"
         disabled={pendiente}
-        className="mt-2 rounded-lg bg-sky-700 px-4 py-2.5 font-medium text-white transition hover:bg-sky-800 disabled:opacity-60"
+        className="mt-2 rounded-lg bg-lago-700 px-4 py-2.5 font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
       >
         {pendiente ? 'Ingresando…' : 'Ingresar'}
       </button>

@@ -1,12 +1,30 @@
 import type { EstadoReserva } from '@/lib/domain/reservas'
+import type { EstadoHousekeeping } from '@/lib/domain/unidades'
+import type { Tono } from './ui'
 
-/** Clases de color para el badge de cada estado de reserva. */
-export const BADGE_ESTADO: Record<EstadoReserva, string> = {
-  pendiente: 'bg-stone-100 text-stone-700',
-  confirmada: 'bg-sky-100 text-sky-800',
-  pagada: 'bg-emerald-100 text-emerald-800',
-  in_house: 'bg-amber-100 text-amber-800',
-  checkout: 'bg-stone-200 text-stone-600',
-  cancelada: 'bg-red-100 text-red-700',
-  no_show: 'bg-red-100 text-red-700',
+/** Tono de la etiqueta de cada estado de reserva. */
+export const TONO_ESTADO: Record<EstadoReserva, Tono> = {
+  pendiente: 'neutro',
+  confirmada: 'lago',
+  pagada: 'exito',
+  in_house: 'alerta',
+  checkout: 'neutro',
+  cancelada: 'peligro',
+  no_show: 'peligro',
+}
+
+/** Color del punto que indica el estado de limpieza de una unidad. */
+export const PUNTO_HK: Record<EstadoHousekeeping, string> = {
+  limpia: 'bg-emerald-500',
+  sucia: 'bg-lenga-500',
+  inspeccionada: 'bg-lago-500',
+  bloqueada: 'bg-red-500',
+}
+
+/** Tono de la etiqueta de cada estado de limpieza. */
+export const TONO_HK: Record<EstadoHousekeeping, Tono> = {
+  limpia: 'exito',
+  sucia: 'alerta',
+  inspeccionada: 'lago',
+  bloqueada: 'peligro',
 }

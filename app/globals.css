@@ -1,26 +1,96 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Identidad visual — Blanca Patagonia
+  ------------------------------------
+  La paleta toma referencias del entorno del hotel (El Calafate):
+  · lago     — turquesa glaciar del Lago Argentino (color principal de marca)
+  · calafate — el violeta profundo de la baya que da nombre al pueblo (acentos)
+  · lenga    — el naranja del bosque en otoño (alertas y pendientes)
+  · roca     — grises cálidos de la estepa (texto y superficies; escala `stone`)
+*/
+
+@theme {
+  /* Turquesa glaciar — color principal */
+  --color-lago-50: #effcfb;
+  --color-lago-100: #d2f5f3;
+  --color-lago-200: #a8eae9;
+  --color-lago-300: #71d9da;
+  --color-lago-400: #38bfc2;
+  --color-lago-500: #1ba4a8;
+  --color-lago-600: #12838a;
+  --color-lago-700: #136970;
+  --color-lago-800: #15545a;
+  --color-lago-900: #16464b;
+  --color-lago-950: #072b30;
+
+  /* Baya de calafate — acentos */
+  --color-calafate-50: #f5f3ff;
+  --color-calafate-100: #ece9fe;
+  --color-calafate-200: #dbd5fe;
+  --color-calafate-300: #c0b3fc;
+  --color-calafate-400: #a186f8;
+  --color-calafate-500: #8558f1;
+  --color-calafate-600: #7436e4;
+  --color-calafate-700: #6425c8;
+  --color-calafate-800: #5420a3;
+  --color-calafate-900: #461d83;
+  --color-calafate-950: #2a1059;
+
+  /* Lenga en otoño — pendientes y alertas */
+  --color-lenga-50: #fef6ee;
+  --color-lenga-100: #fdead7;
+  --color-lenga-200: #fad1ae;
+  --color-lenga-300: #f7b17a;
+  --color-lenga-400: #f28744;
+  --color-lenga-500: #ee6a20;
+  --color-lenga-600: #df5016;
+  --color-lenga-700: #b93b14;
+  --color-lenga-800: #933018;
+  --color-lenga-900: #772a16;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Geist para la interfaz; Fraunces para títulos y marca. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-fraunces), Georgia, serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #ffffff;
+  --foreground: #1c1917;
 }
+
+/*
+  Nota: el panel y el portal están diseñados en claro. Antes existía un bloque
+  `prefers-color-scheme: dark` que invertía estas variables sin que el resto de
+  la UI acompañara, lo que dejaba texto casi blanco sobre fondos blancos. Se
+  quitó a propósito; un tema oscuro completo sería un trabajo aparte.
+*/
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Foco visible y consistente en toda la app (accesibilidad por teclado). */
+:focus-visible {
+  outline: 2px solid var(--color-lago-600);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* Los tabulares alinean mejor las columnas de importes. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
 }

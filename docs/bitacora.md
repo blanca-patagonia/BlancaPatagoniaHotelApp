@@ -393,3 +393,80 @@ WinPax/Odoo (las de cara al cliente se difieren a la vista pública).
 - **58 tests en verde** (typecheck + lint OK). Verificado en navegador: proveedor
   "Lavandería del Sur" con factura USD 642,51 − pago USD 400 → **saldo USD 242,51**;
   aviso publicado con autor y borrado; selector de mucama por unidad en Housekeeping.
+
+## Fase 9 — Mejora integral del panel de gestión
+
+### 9.1 — Identidad patagónica y base transversal
+
+Rediseño de los 13 módulos a partir de una base común, en lugar de retocar
+pantalla por pantalla (ver **ADR 0009**).
+
+- **Tres bugs corregidos:**
+  1. `globals.css` conservaba `font-family: Arial` del starter, que **pisaba a
+     Geist**: la fuente se descargaba y no se usaba. Verificado en el navegador:
+     `body` pasó de `Arial` a `Geist`.
+  2. La barra lateral era `hidden … sm:flex` sin alternativa, así que **desde un
+     teléfono no se podía navegar**. Ahora hay un cajón deslizable con foco,
+     cierre con `Escape` y bloqueo del scroll de fondo. Verificado a 375 px:
+     13 enlaces accesibles.
+  3. Se quitó el bloque `prefers-color-scheme: dark`, que invertía las variables
+     de color sin que la interfaz acompañara (texto casi blanco sobre blanco).
+- **Identidad visual:** paleta con nombres del entorno del hotel — `lago`
+  (turquesa glaciar), `calafate` (violeta de la baya), `lenga` (otoño) y `stone`
+  (estepa) — más **Fraunces** para títulos y marca junto a Geist para la
+  interfaz. Barra lateral en degradé glaciar con iconografía propia.
+- **Componentes compartidos** (`_components/ui.tsx`) e **iconos SVG propios**
+  (`_components/iconos.tsx`), sin dependencias nuevas.
+- **Listados:** búsqueda, filtros y paginación por URL (GET, sin JavaScript).
+  Antes los listados cortaban en `.limit(100)` **descartando filas en silencio**;
+  ahora informan «26–50 de 214». Lógica pura en `lib/listados.ts` con tests.
+- **Exportación a CSV** centralizada en `/panel/exportar/[recurso]`, con control
+  de permisos por área en un único punto auditable. Escapa la **inyección de
+  fórmulas** (un huésped `=1+1` no se ejecuta al abrir el archivo).
+- **Accesibilidad:** foco visible propio, `aria-label` en controles, `<caption>`
+  en tablas, salto al contenido, roles en formularios de búsqueda.
+- **Estados de carga y error** por ruta (`loading.tsx` / `error.tsx`): la
+  navegación deja de sentirse trabada y un fallo de red ya no tira la interfaz.
+- Se eliminó código muerto (`_components/proximamente.tsx`).
+
+### 9.2 — Mejora funcional módulo por módulo
+
+- **Inicio:** saludo y panorama del día; llegadas y salidas **accionables** (con
+  acceso directo a cada reserva), alertas de mantenimiento, objetos en depósito
+  y stock bajo, y grilla de módulos por rol.
+- **Ocupación:** hoy destacado, filtro por categoría (hostería / cabañas),
+  ventana de 14 o 30 días, salto a fecha, KPIs del período y **celdas
+  interactivas**: una celda libre abre la reserva con las fechas ya cargadas y
+  una ocupada lleva a su reserva.
+- **Reservas:** búsqueda por código, huésped o email; filtros combinados de
+  estado, canal y **rango de estadías** (por superposición de períodos);
+  paginación y exportación con los filtros aplicados.
+- **Huéspedes:** la búsqueda ahora cubre apellido, nombre, documento y email
+  (antes solo apellido); nivel de fidelidad y contacto en la grilla.
+- **Housekeeping:** vista **por responsable** además de por unidad, filtros por
+  estado y por mucama, y KPIs por estado de limpieza.
+- **Mantenimiento:** filtros por estado y prioridad, búsqueda, **antigüedad de
+  la orden** con destaque de las demoradas (7 días o más) y KPIs.
+- **Objetos perdidos:** búsqueda, filtro por estado y KPIs de depósito.
+- **Avisos:** tablón con **avisos fijados** (migración 0017), búsqueda y fechas
+  relativas. La restricción se impone en la base: un trigger garantiza que el
+  staff solo pueda cambiar `fijado`, nunca el texto ni la autoría.
+- **Agencias y Proveedores:** buscador, filtro «con saldo», KPIs de total a
+  cobrar / a pagar, estado activo y exportación. El alta quedó plegada para que
+  la lista sea lo primero que se ve.
+- **Reportes:** métricas extraídas a `lib/domain/metricas.ts` (**lógica pura y
+  testeada**: ocupación, ADR y RevPAR con prorrateo de estadías a caballo entre
+  meses), **comparativa contra el mes anterior**, gráfico de evolución de 6
+  meses, navegación entre meses y exportación de la serie de 12 meses.
+- **Configuración:** el tarifario pasó de solo lectura a **editable** por
+  admin/gerencia, con validación (importes positivos y neto ≤ rack) y mensajes
+  de confirmación o error.
+- **Usuarios:** buscador por nombre o email, **último acceso** de cada usuario y
+  KPIs de activos, inactivos y administradores.
+
+**Verificación:** 96 tests en verde (antes 58; se sumaron `csv`, `listados` y
+`metricas`), typecheck y lint limpios. Las 13 pantallas responden 200 sin caer
+en el límite de error. Probado contra la base: fijar un aviso se permite y
+**adulterar su mensaje se rechaza** (`Solo se puede fijar o desfijar un aviso`);
+la exportación de reportes devuelve 12 meses con las columnas correctas y un
+recurso inexistente responde 404.

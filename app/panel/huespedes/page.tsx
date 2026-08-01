@@ -1,84 +1,158 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
+import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda } from '@/lib/listados'
+import {
+  BarraHerramientas,
+  BotonExportar,
+  Buscador,
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  FILA,
+  Paginacion,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+} from '../_components/ui'
 
 interface Huesped {
   id: string
   apellido: string
   nombre: string
   email: string | null
+  telefono: string | null
   doc_numero: string
   nacionalidad: string | null
+  puntos: number | null
 }
 
 export default async function HuespedesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; pagina?: string }>
 }) {
   await requerirAcceso('huespedes')
-  const { q } = await searchParams
+  const { q, pagina: paginaCruda } = await searchParams
   const supabase = await crearClienteServidor()
+
+  const pagina = paginaActual(paginaCruda)
+  const { desde, hasta } = rangoDePagina(pagina)
 
   let query = supabase
     .from('huespedes')
-    .select('id, apellido, nombre, email, doc_numero, nacionalidad')
+    .select('id, apellido, nombre, email, telefono, doc_numero, nacionalidad, puntos', {
+      count: 'exact',
+    })
     .order('apellido')
-    .limit(200)
-  if (q && q.trim()) query = query.ilike('apellido', `%${q.trim()}%`)
-  const { data } = await query
+
+  // Antes solo se buscaba por apellido; ahora también por nombre, documento y email.
+  const termino = terminoBusqueda(q)
+  if (termino) {
+    query = query.or(
+      `apellido.ilike.%${termino}%,nombre.ilike.%${termino}%,doc_numero.ilike.%${termino}%,email.ilike.%${termino}%`,
+    )
+  }
+
+  const { data, count } = await query.range(desde, hasta)
   const huespedes = (data ?? []) as Huesped[]
+  const total = count ?? 0
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Huéspedes</h1>
-      <p className="mt-1 text-sm text-stone-500">Base de huéspedes e historial.</p>
+    <div className="mx-auto max-w-5xl">
+      <Encabezado
+        titulo="Huéspedes"
+        descripcion="Base de huéspedes, historial y programa de fidelidad."
+        icono="huespedes"
+        acciones={<BotonExportar href={`/panel/exportar/huespedes${construirQuery({ q })}`} />}
+      />
 
-      <form method="get" className="mt-4 flex gap-2">
-        <input
-          name="q"
-          defaultValue={q ?? ''}
-          placeholder="Buscar por apellido…"
-          className="w-64 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+      <BarraHerramientas>
+        <Buscador
+          accion="/panel/huespedes"
+          valor={q}
+          etiqueta="Buscar huéspedes"
+          placeholder="Apellido, nombre, documento o email…"
         />
-        <button className="rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-900">
-          Buscar
-        </button>
-      </form>
+        {q && (
+          <Link href="/panel/huespedes" className={botonClases('fantasma')}>
+            Limpiar
+          </Link>
+        )}
+      </BarraHerramientas>
 
-      <div className="mt-5 overflow-hidden rounded-xl border border-stone-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="px-4 py-2.5">Apellido y nombre</th>
-              <th className="px-4 py-2.5">Documento</th>
-              <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">Nacionalidad</th>
-            </tr>
-          </thead>
-          <tbody>
-            {huespedes.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-stone-400">
-                  Sin huéspedes.
-                </td>
-              </tr>
-            )}
-            {huespedes.map((h) => (
-              <tr key={h.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
-                <td className="px-4 py-2.5">
-                  <Link href={`/panel/huespedes/${h.id}`} className="font-medium text-sky-700 hover:underline">
-                    {h.apellido}, {h.nombre}
-                  </Link>
-                </td>
-                <td className="px-4 py-2.5 text-stone-600">{h.doc_numero || '—'}</td>
-                <td className="px-4 py-2.5 text-stone-600">{h.email || '—'}</td>
-                <td className="px-4 py-2.5 text-stone-600">{h.nacionalidad || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Tarjeta className="overflow-hidden">
+        {huespedes.length === 0 ? (
+          <EstadoVacio
+            titulo={q ? 'Ningún huésped coincide con la búsqueda' : 'Todavía no hay huéspedes'}
+            descripcion={
+              q
+                ? 'Se busca por apellido, nombre, documento o email.'
+                : 'Los huéspedes se cargan al crear una reserva.'
+            }
+            icono="huespedes"
+          />
+        ) : (
+          <>
+            <Tabla resumen="Listado de huéspedes con documento, contacto y nivel de fidelidad">
+              <thead>
+                <tr>
+                  <th className={TH}>Apellido y nombre</th>
+                  <th className={TH}>Documento</th>
+                  <th className={TH}>Contacto</th>
+                  <th className={TH}>Nacionalidad</th>
+                  <th className={TH}>Fidelidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {huespedes.map((h) => {
+                  const puntos = h.puntos ?? 0
+                  const nivel = nivelFidelidad(puntos)
+                  return (
+                    <tr key={h.id} className={FILA}>
+                      <td className={TD}>
+                        <Link
+                          href={`/panel/huespedes/${h.id}`}
+                          className="font-medium text-lago-700 hover:underline"
+                        >
+                          {h.apellido}, {h.nombre}
+                        </Link>
+                      </td>
+                      <td className={`${TD} tabular text-stone-600`}>{h.doc_numero || '—'}</td>
+                      <td className={`${TD} text-stone-600`}>
+                        {h.email || h.telefono ? (
+                          <div className="leading-tight">
+                            {h.email && <p>{h.email}</p>}
+                            {h.telefono && (
+                              <p className="text-xs text-stone-400">{h.telefono}</p>
+                            )}
+                          </div>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className={`${TD} text-stone-600`}>{h.nacionalidad || '—'}</td>
+                      <td className={TD}>
+                        {puntos > 0 ? (
+                          <Etiqueta tono="calafate">
+                            {ETIQUETAS_NIVEL[nivel]} · {puntos} pts
+                          </Etiqueta>
+                        ) : (
+                          <span className="text-stone-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </Tabla>
+            <Paginacion base="/panel/huespedes" params={{ q }} pagina={pagina} total={total} />
+          </>
+        )}
+      </Tarjeta>
     </div>
   )
 }

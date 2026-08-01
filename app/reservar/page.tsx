@@ -56,7 +56,7 @@ export default async function ReservarPage({
   return (
     <main className="flex flex-1 flex-col bg-stone-50">
       <header className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-4">
-        <Link href="/" className="font-semibold tracking-tight text-sky-700">
+        <Link href="/" className="font-semibold tracking-tight text-lago-700">
           Blanca Patagonia
         </Link>
         <Link href="/" className="text-sm text-stone-500 hover:text-stone-800">
@@ -78,7 +78,7 @@ export default async function ReservarPage({
               type="date"
               name="check_in"
               defaultValue={checkIn || hoyISO()}
-              className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600"
+              className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -87,7 +87,7 @@ export default async function ReservarPage({
               type="date"
               name="check_out"
               defaultValue={checkOut || sumarDias(hoyISO(), 2)}
-              className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600"
+              className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -98,12 +98,12 @@ export default async function ReservarPage({
               min={1}
               max={7}
               defaultValue={huespedes}
-              className="w-24 rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600"
+              className="w-24 rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
             />
           </label>
           <button
             type="submit"
-            className="rounded-lg bg-sky-700 px-4 py-2 font-medium text-white transition hover:bg-sky-800"
+            className="rounded-lg bg-lago-700 px-4 py-2 font-medium text-white transition hover:bg-lago-800"
           >
             Buscar
           </button>
@@ -139,7 +139,7 @@ export default async function ReservarPage({
                   {o.disponible ? (
                     <Link
                       href={`/reservar/checkout?tipo=${o.tipoUnidadId}&check_in=${checkIn}&check_out=${checkOut}&huespedes=${huespedes}`}
-                      className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800"
+                      className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
                     >
                       Reservar
                     </Link>

@@ -22,6 +22,22 @@ export async function publicarAviso(_prev: EstadoAviso, formData: FormData): Pro
   return {}
 }
 
+/**
+ * Fija o desfija un aviso para que quede al tope del tablón.
+ *
+ * El trigger `avisos_solo_fijar` garantiza en la base que un UPDATE del staff
+ * no pueda tocar el texto ni la autoría, solo esta bandera.
+ */
+export async function alternarFijado(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '')
+  const fijar = String(formData.get('fijar') ?? '') === '1'
+  if (id) {
+    const supabase = await crearClienteServidor()
+    await supabase.from('avisos').update({ fijado: fijar }).eq('id', id)
+  }
+  redirect('/panel/avisos')
+}
+
 export async function borrarAviso(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (id) {

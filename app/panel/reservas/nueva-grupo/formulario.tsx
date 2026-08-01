@@ -55,10 +55,10 @@ export function FormularioGrupo({
       <div>
         <h2 className="mb-2 text-sm font-medium text-stone-700">Titular del grupo</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <input name="apellido" placeholder="Apellido *" required className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600" />
-          <input name="nombre" placeholder="Nombre" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600" />
-          <input name="email" type="email" placeholder="Email" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600" />
-          <select name="canal" defaultValue="directo" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600">
+          <input name="apellido" placeholder="Apellido *" required className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
+          <input name="nombre" placeholder="Nombre" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
+          <input name="email" type="email" placeholder="Email" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
+          <select name="canal" defaultValue="directo" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600">
             <option value="directo">Directo (rack)</option>
             <option value="web">Web (rack)</option>
             <option value="booking">Booking (neto)</option>
@@ -76,7 +76,7 @@ export function FormularioGrupo({
       <button
         type="submit"
         disabled={pendiente}
-        className="self-start rounded-lg bg-sky-700 px-5 py-2.5 font-medium text-white transition hover:bg-sky-800 disabled:opacity-60"
+        className="self-start rounded-lg bg-lago-700 px-5 py-2.5 font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
       >
         {pendiente ? 'Creando grupo…' : 'Crear reserva grupal'}
       </button>

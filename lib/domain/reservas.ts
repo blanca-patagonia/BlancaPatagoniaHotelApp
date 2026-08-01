@@ -31,6 +31,21 @@ export const ETIQUETAS_ESTADO_RESERVA: Record<EstadoReserva, string> = {
   no_show: 'No-show',
 }
 
+/**
+ * Canales de venta. Debe coincidir con el default y los valores de
+ * `reservas.canal` (ver `0005_reservas_ocupacion.sql`).
+ */
+export const CANALES = ['directo', 'web', 'booking', 'expedia'] as const
+
+export type Canal = (typeof CANALES)[number]
+
+export const ETIQUETAS_CANAL: Record<Canal, string> = {
+  directo: 'Directo',
+  web: 'Web propia',
+  booking: 'Booking',
+  expedia: 'Expedia',
+}
+
 /** Estados que OCUPAN inventario (bloquean la unidad en el motor anti-overbooking). */
 export const ESTADOS_ACTIVOS: readonly EstadoReserva[] = [
   'pendiente',

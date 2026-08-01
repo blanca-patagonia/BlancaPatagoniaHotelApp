@@ -3,25 +3,39 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import {
   ESTADOS_RESERVA,
   ETIQUETAS_ESTADO_RESERVA,
+  ETIQUETAS_CANAL,
+  type Canal,
   type EstadoReserva,
 } from '@/lib/domain/reservas'
+import { mesActual } from '@/lib/fechas'
 import {
-  parsearPeriodo,
-  nochesEnVentana,
-  inicioFinDeMes,
-  diasEntre,
-  mesActual,
-} from '@/lib/fechas'
+  metricasDeMes,
+  mesRelativo,
+  ultimosMeses,
+  variacionPct,
+  etiquetaMes,
+  type EstadiaMetrica,
+} from '@/lib/domain/metricas'
+import { TONO_ESTADO } from '../_components/estilos'
+import {
+  BarraHerramientas,
+  BotonExportar,
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  FILA,
+  Kpi,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+} from '../_components/ui'
 
 const RE_MES = /^\d{4}-\d{2}$/
 const ESTADOS_NO_VENDIDOS: EstadoReserva[] = ['cancelada', 'no_show']
-
-const ETIQUETA_CANAL: Record<string, string> = {
-  directo: 'Directo',
-  web: 'Web (portal)',
-  booking: 'Booking',
-  expedia: 'Expedia',
-}
+/** Cantidad de meses del gráfico de evolución. */
+const MESES_GRAFICO = 6
 
 interface ReservaRow {
   canal: string
@@ -29,13 +43,15 @@ interface ReservaRow {
   total: number | string
 }
 
-function Kpi({ titulo, valor, detalle }: { titulo: string; valor: string; detalle?: string }) {
+/** Flecha de variación contra el mes anterior. */
+function Variacion({ valor }: { valor: number | null }) {
+  if (valor === null) return <span className="text-xs text-stone-400">sin base previa</span>
+  if (valor === 0) return <span className="text-xs text-stone-400">igual que el mes anterior</span>
+  const sube = valor > 0
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-5">
-      <p className="text-sm text-stone-500">{titulo}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-stone-900">{valor}</p>
-      {detalle && <p className="mt-1 text-xs text-stone-400">{detalle}</p>}
-    </div>
+    <span className={`text-xs font-medium ${sube ? 'text-emerald-600' : 'text-red-600'}`}>
+      {sube ? '▲' : '▼'} {Math.abs(valor)}% vs. mes anterior
+    </span>
   )
 }
 
@@ -47,13 +63,11 @@ export default async function ReportesPage({
   await requerirAcceso('reportes')
   const sp = await searchParams
   const mes = RE_MES.test(sp.mes ?? '') ? sp.mes! : mesActual()
-  const { inicio, fin } = inicioFinDeMes(mes)
-  const diasDelMes = diasEntre(inicio, fin)
 
   const supabase = await crearClienteServidor()
   const [
     { data: unidades },
-    { data: estadias },
+    { data: estadiasData },
     { data: reservasData },
     { data: pagos },
     { data: facturas },
@@ -61,27 +75,25 @@ export default async function ReportesPage({
     supabase.from('unidades').select('id').eq('activo', true),
     supabase
       .from('estadias')
-      .select('periodo, estado, precio_noche')
+      .select('periodo, precio_noche')
       .in('estado', ['pendiente', 'confirmada', 'pagada', 'in_house', 'checkout']),
     supabase.from('reservas').select('canal, estado, total'),
     supabase.from('pagos').select('tipo, monto').eq('estado', 'aprobado'),
     supabase.from('facturas').select('total'),
   ])
 
-  // Ocupación del mes (noches ocupadas / capacidad).
-  const capacidad = (unidades?.length ?? 0) * diasDelMes
-  let ocupadas = 0
-  let ingresoAlojamiento = 0
-  for (const e of estadias ?? []) {
-    const n = nochesEnVentana(parsearPeriodo(e.periodo as string), inicio, fin)
-    ocupadas += n
-    ingresoAlojamiento += n * Number((e as { precio_noche?: number | string }).precio_noche ?? 0)
-  }
-  const ocupacionPct = capacidad ? Math.round((ocupadas / capacidad) * 100) : 0
-  // ADR (tarifa media diaria) = ingreso alojamiento / noches vendidas.
-  // RevPAR (ingreso por habitación disponible) = ingreso alojamiento / capacidad.
-  const adr = ocupadas ? Math.round(ingresoAlojamiento / ocupadas) : 0
-  const revpar = capacidad ? Math.round(ingresoAlojamiento / capacidad) : 0
+  const cantidadUnidades = unidades?.length ?? 0
+  const estadias = (estadiasData ?? []) as unknown as EstadiaMetrica[]
+
+  // Métricas del mes elegido y del anterior, para la comparativa.
+  const actual = metricasDeMes(estadias, mes, cantidadUnidades)
+  const previo = metricasDeMes(estadias, mesRelativo(mes, -1), cantidadUnidades)
+
+  // Serie para el gráfico de evolución.
+  const serie = ultimosMeses(mes, MESES_GRAFICO).map((m) =>
+    metricasDeMes(estadias, m, cantidadUnidades),
+  )
+  const techoOcupacion = Math.max(10, ...serie.map((m) => m.ocupacionPct))
 
   // Ingresos (pagos aprobados) y facturación — históricos.
   let ingresos = 0
@@ -105,101 +117,179 @@ export default async function ReportesPage({
   const maxEstado = Math.max(1, ...[...porEstado.values()])
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Reportes</h1>
-          <p className="text-sm text-stone-500">Indicadores de gestión.</p>
-        </div>
-        <form method="get" className="flex items-end gap-2">
+    <div className="mx-auto max-w-6xl">
+      <Encabezado
+        titulo="Reportes"
+        descripcion="Indicadores de gestión del hotel."
+        icono="reportes"
+        acciones={<BotonExportar href={`/panel/exportar/reportes?mes=${mes}`} titulo="Exportar serie" />}
+      />
+
+      <BarraHerramientas>
+        <form method="get" action="/panel/reportes" className="flex items-end gap-2">
           <label className="flex flex-col gap-1 text-xs">
-            <span className="text-stone-500">Mes (ocupación)</span>
+            <span className="text-stone-500">Mes analizado</span>
             <input
               type="month"
               name="mes"
               defaultValue={mes}
-              className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+              aria-label="Mes analizado"
+              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
             />
           </label>
-          <button className="rounded-lg bg-stone-800 px-3 py-2 text-sm font-medium text-white hover:bg-stone-900">
-            Ver
-          </button>
+          <button className={botonClases('primario')}>Ver</button>
         </form>
-      </div>
+        <a href={`/panel/reportes?mes=${mesRelativo(mes, -1)}`} className={botonClases('secundario')}>
+          ‹ Mes anterior
+        </a>
+        <a href={`/panel/reportes?mes=${mesRelativo(mes, 1)}`} className={botonClases('secundario')}>
+          Mes siguiente ›
+        </a>
+      </BarraHerramientas>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">
+            Ocupación {etiquetaMes(mes)}
+          </p>
+          <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
+            {actual.ocupacionPct}%
+          </p>
+          <p className="mt-1.5 text-xs text-stone-400">
+            {actual.nochesVendidas} de {actual.nochesDisponibles} noches-unidad
+          </p>
+          <p className="mt-1">
+            <Variacion valor={variacionPct(actual.ocupacionPct, previo.ocupacionPct)} />
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">
+            ADR (tarifa media)
+          </p>
+          <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
+            USD {actual.adr.toLocaleString('es-AR')}
+          </p>
+          <p className="mt-1.5 text-xs text-stone-400">por noche vendida (neto)</p>
+          <p className="mt-1">
+            <Variacion valor={variacionPct(actual.adr, previo.adr)} />
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">RevPAR</p>
+          <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
+            USD {actual.revpar.toLocaleString('es-AR')}
+          </p>
+          <p className="mt-1.5 text-xs text-stone-400">por unidad disponible (neto)</p>
+          <p className="mt-1">
+            <Variacion valor={variacionPct(actual.revpar, previo.revpar)} />
+          </p>
+        </div>
+
         <Kpi
-          titulo={`Ocupación ${mes}`}
-          valor={`${ocupacionPct}%`}
-          detalle={`${ocupadas} de ${capacidad} noches-unidad`}
+          titulo="Ingreso alojamiento"
+          valor={`USD ${Math.round(actual.ingreso).toLocaleString('es-AR')}`}
+          detalle={`imputado a ${etiquetaMes(mes)}`}
+          icono="reportes"
         />
-        <Kpi titulo="ADR (tarifa media)" valor={`USD ${adr.toLocaleString('es-AR')}`} detalle="por noche vendida (neto)" />
-        <Kpi titulo="RevPAR" valor={`USD ${revpar.toLocaleString('es-AR')}`} detalle="por unidad disponible (neto)" />
-        <Kpi titulo="Reservas (histórico)" valor={String(reservas.length)} />
         <Kpi
           titulo="Ingresos cobrados"
           valor={`USD ${ingresos.toLocaleString('es-AR')}`}
-          detalle="pagos aprobados"
+          detalle="pagos aprobados (histórico)"
+          icono="ok"
+          tono="exito"
         />
         <Kpi
           titulo="Facturado"
           valor={`USD ${facturado.toLocaleString('es-AR')}`}
           detalle="comprobantes emitidos"
+          icono="agencias"
+          tono="calafate"
         />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
-          <h2 className="mb-3 text-sm font-medium text-stone-700">Ranking de canales</h2>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-stone-400">
-                <th className="py-1.5">Canal</th>
-                <th className="py-1.5 text-right">Reservas</th>
-                <th className="py-1.5 text-right">Monto (USD)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {canales.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-6 text-center text-stone-400">
-                    Sin datos.
-                  </td>
-                </tr>
-              )}
-              {canales.map(([canal, v]) => (
-                <tr key={canal} className="border-t border-stone-100">
-                  <td className="py-2 text-stone-700">{ETIQUETA_CANAL[canal] ?? canal}</td>
-                  <td className="py-2 text-right text-stone-800">{v.cantidad}</td>
-                  <td className="py-2 text-right text-stone-800">
-                    {v.monto.toLocaleString('es-AR')}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Evolución: columnas proporcionales al porcentaje de ocupación. */}
+      <Tarjeta
+        titulo={`Evolución de la ocupación · últimos ${MESES_GRAFICO} meses`}
+        className="mt-6"
+      >
+        <div className="flex items-end gap-3 px-5 pt-6 pb-4" role="img" aria-label="Gráfico de ocupación mensual">
+          {serie.map((m) => (
+            <div key={m.mes} className="flex flex-1 flex-col items-center gap-1.5">
+              <span className="tabular text-xs font-medium text-stone-600">{m.ocupacionPct}%</span>
+              <div className="flex h-32 w-full items-end">
+                <div
+                  className={`w-full rounded-t-lg transition-all ${
+                    m.mes === mes ? 'bg-lago-600' : 'bg-lago-200'
+                  }`}
+                  style={{ height: `${Math.max(2, (m.ocupacionPct / techoOcupacion) * 100)}%` }}
+                />
+              </div>
+              <span
+                className={`text-xs ${m.mes === mes ? 'font-semibold text-lago-800' : 'text-stone-400'}`}
+              >
+                {etiquetaMes(m.mes)}
+              </span>
+              <span className="tabular text-[10px] text-stone-400">
+                ADR {m.adr ? m.adr.toLocaleString('es-AR') : '—'}
+              </span>
+            </div>
+          ))}
         </div>
+      </Tarjeta>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
-          <h2 className="mb-3 text-sm font-medium text-stone-700">Reservas por estado</h2>
-          <div className="flex flex-col gap-2">
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Tarjeta titulo="Ranking de canales" descripcion="Reservas históricas por origen">
+          {canales.length === 0 ? (
+            <EstadoVacio titulo="Sin datos de canales" icono="reportes" />
+          ) : (
+            <Tabla resumen="Cantidad de reservas y monto por canal de venta">
+              <thead>
+                <tr>
+                  <th className={TH}>Canal</th>
+                  <th className={`${TH} text-right`}>Reservas</th>
+                  <th className={`${TH} text-right`}>Monto (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {canales.map(([canal, v]) => (
+                  <tr key={canal} className={FILA}>
+                    <td className={`${TD} text-stone-700`}>
+                      {ETIQUETAS_CANAL[canal as Canal] ?? canal}
+                    </td>
+                    <td className={`${TD} tabular text-right text-stone-800`}>{v.cantidad}</td>
+                    <td className={`${TD} tabular text-right text-stone-800`}>
+                      {v.monto.toLocaleString('es-AR')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Tabla>
+          )}
+        </Tarjeta>
+
+        <Tarjeta titulo="Reservas por estado" descripcion="Distribución histórica">
+          <div className="flex flex-col gap-2 p-5">
             {ESTADOS_RESERVA.map((e) => {
               const n = porEstado.get(e) ?? 0
               return (
                 <div key={e} className="flex items-center gap-3 text-sm">
-                  <span className="w-24 shrink-0 text-stone-500">{ETIQUETAS_ESTADO_RESERVA[e]}</span>
-                  <div className="h-4 flex-1 overflow-hidden rounded bg-stone-100">
+                  <span className="w-24 shrink-0">
+                    <Etiqueta tono={TONO_ESTADO[e]}>{ETIQUETAS_ESTADO_RESERVA[e]}</Etiqueta>
+                  </span>
+                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-stone-100">
                     <div
-                      className="h-full rounded bg-sky-500"
+                      className="h-full rounded-full bg-lago-500"
                       style={{ width: `${(n / maxEstado) * 100}%` }}
                     />
                   </div>
-                  <span className="w-6 text-right font-medium text-stone-700">{n}</span>
+                  <span className="tabular w-6 text-right font-medium text-stone-700">{n}</span>
                 </div>
               )
             })}
           </div>
-        </div>
+        </Tarjeta>
       </div>
     </div>
   )

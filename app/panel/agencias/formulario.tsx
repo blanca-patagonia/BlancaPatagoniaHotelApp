@@ -15,12 +15,12 @@ export function FormularioAgencia() {
         name="nombre"
         placeholder="Nombre"
         required
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       />
       <select
         name="tipo"
         defaultValue="agencia"
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       >
         {TIPOS_CUENTA.map((t) => (
           <option key={t} value={t}>
@@ -31,13 +31,13 @@ export function FormularioAgencia() {
       <input
         name="cuit"
         placeholder="CUIT"
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       />
       <input
         name="email"
         type="email"
         placeholder="Email"
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       />
       <label className="flex items-center gap-2 text-sm text-stone-600">
         Descuento %
@@ -48,7 +48,7 @@ export function FormularioAgencia() {
           max={100}
           step="0.5"
           defaultValue={0}
-          className="w-20 rounded-lg border border-stone-300 px-2 py-2 text-sm outline-none focus:border-sky-600"
+          className="w-20 rounded-lg border border-stone-300 px-2 py-2 text-sm outline-none focus:border-lago-600"
         />
       </label>
 
@@ -62,7 +62,7 @@ export function FormularioAgencia() {
       <button
         type="submit"
         disabled={pendiente}
-        className="self-start rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800 disabled:opacity-60 sm:col-span-2"
+        className="self-start rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60 sm:col-span-2"
       >
         {pendiente ? 'Creando…' : 'Crear agencia'}
       </button>

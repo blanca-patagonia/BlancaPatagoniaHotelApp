@@ -1,5 +1,24 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { formatoFechaCorta } from '@/lib/fechas'
+import { construirQuery, terminoBusqueda } from '@/lib/listados'
+import {
+  BarraHerramientas,
+  BotonExportar,
+  Buscador,
+  Chip,
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  FILA,
+  Kpi,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+} from '../_components/ui'
 import { FormularioObjeto } from './formulario'
 import { marcarDevuelto } from './actions'
 
@@ -11,66 +30,146 @@ interface Objeto {
   estado: 'guardado' | 'devuelto'
 }
 
-export default async function ObjetosPerdidosPage() {
+export default async function ObjetosPerdidosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; estado?: string }>
+}) {
   await requerirAcceso('objetos_perdidos')
+  const sp = await searchParams
   const supabase = await crearClienteServidor()
-  const { data } = await supabase
+
+  const estado = sp.estado === 'guardado' || sp.estado === 'devuelto' ? sp.estado : undefined
+
+  let consulta = supabase
     .from('objetos_perdidos')
     .select('id, descripcion, ubicacion, fecha_hallazgo, estado')
     .order('fecha_hallazgo', { ascending: false })
+
+  if (estado) consulta = consulta.eq('estado', estado)
+  const termino = terminoBusqueda(sp.q)
+  if (termino) consulta = consulta.or(`descripcion.ilike.%${termino}%,ubicacion.ilike.%${termino}%`)
+
+  const [{ data }, { data: todosData }] = await Promise.all([
+    consulta,
+    supabase.from('objetos_perdidos').select('estado'),
+  ])
+
   const objetos = (data ?? []) as Objeto[]
+  const todos = (todosData ?? []) as { estado: string }[]
+  const guardados = todos.filter((o) => o.estado === 'guardado').length
+  const devueltos = todos.filter((o) => o.estado === 'devuelto').length
+
+  const vigentes = { q: sp.q, estado }
+  const hayFiltros = Boolean(sp.q || estado)
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Objetos perdidos</h1>
-      <p className="mt-1 text-sm text-stone-500">Registro y devolución de objetos.</p>
+    <div className="mx-auto max-w-5xl">
+      <Encabezado
+        titulo="Objetos perdidos"
+        descripcion="Registro y devolución de objetos olvidados por los huéspedes."
+        icono="objetos"
+        acciones={<BotonExportar href="/panel/exportar/objetos-perdidos" />}
+      />
 
-      <div className="mt-5 rounded-xl border border-stone-200 bg-white p-5">
-        <FormularioObjeto />
+      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Kpi titulo="En depósito" valor={String(guardados)} detalle="sin reclamar" icono="objetos" tono="alerta" />
+        <Kpi titulo="Devueltos" valor={String(devueltos)} detalle="entregados" icono="ok" tono="exito" />
+        <Kpi titulo="Total" valor={String(todos.length)} detalle="registros" icono="reportes" />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-stone-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="px-4 py-2.5">Fecha</th>
-              <th className="px-4 py-2.5">Objeto</th>
-              <th className="px-4 py-2.5">Ubicación</th>
-              <th className="px-4 py-2.5">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {objetos.length === 0 && (
+      <BarraHerramientas>
+        <Buscador
+          accion="/panel/objetos-perdidos"
+          valor={sp.q}
+          etiqueta="Buscar objetos"
+          placeholder="Objeto o ubicación…"
+          ocultos={{ estado }}
+        />
+        <div className="flex gap-1.5">
+          <Chip
+            href={`/panel/objetos-perdidos${construirQuery(vigentes, { estado: undefined })}`}
+            activo={!estado}
+          >
+            Todos
+          </Chip>
+          <Chip
+            href={`/panel/objetos-perdidos${construirQuery(vigentes, { estado: 'guardado' })}`}
+            activo={estado === 'guardado'}
+          >
+            En depósito
+          </Chip>
+          <Chip
+            href={`/panel/objetos-perdidos${construirQuery(vigentes, { estado: 'devuelto' })}`}
+            activo={estado === 'devuelto'}
+          >
+            Devueltos
+          </Chip>
+        </div>
+        {hayFiltros && (
+          <Link href="/panel/objetos-perdidos" className={botonClases('fantasma')}>
+            Limpiar
+          </Link>
+        )}
+      </BarraHerramientas>
+
+      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
+          Registrar un objeto encontrado
+        </summary>
+        <div className="border-t border-stone-100 p-5">
+          <FormularioObjeto />
+        </div>
+      </details>
+
+      <Tarjeta className="overflow-hidden">
+        {objetos.length === 0 ? (
+          <EstadoVacio
+            titulo={hayFiltros ? 'Ningún objeto coincide' : 'No hay objetos registrados'}
+            descripcion={
+              hayFiltros
+                ? 'Probá con otro término o quitá los filtros.'
+                : 'Registrá acá lo que los huéspedes se olvidan en las habitaciones.'
+            }
+            icono="objetos"
+          />
+        ) : (
+          <Tabla resumen="Objetos perdidos con fecha de hallazgo, ubicación y estado">
+            <thead>
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-stone-400">
-                  Sin objetos registrados.
-                </td>
+                <th className={TH}>Hallazgo</th>
+                <th className={TH}>Objeto</th>
+                <th className={TH}>Ubicación</th>
+                <th className={TH}>Estado</th>
               </tr>
-            )}
-            {objetos.map((o) => (
-              <tr key={o.id} className="border-b border-stone-100 last:border-0">
-                <td className="px-4 py-2 text-stone-500">{o.fecha_hallazgo}</td>
-                <td className="px-4 py-2 font-medium text-stone-800">{o.descripcion}</td>
-                <td className="px-4 py-2 text-stone-600">{o.ubicacion || '—'}</td>
-                <td className="px-4 py-2">
-                  {o.estado === 'devuelto' ? (
-                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
-                      Devuelto
-                    </span>
-                  ) : (
-                    <form action={marcarDevuelto}>
-                      <input type="hidden" name="id" value={o.id} />
-                      <button className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-600 transition hover:bg-stone-200">
-                        Guardado · marcar devuelto
-                      </button>
-                    </form>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {objetos.map((o) => (
+                <tr key={o.id} className={FILA}>
+                  <td className={`${TD} tabular text-stone-500`}>
+                    {formatoFechaCorta(o.fecha_hallazgo)}
+                  </td>
+                  <td className={`${TD} font-medium text-stone-800`}>{o.descripcion}</td>
+                  <td className={`${TD} text-stone-600`}>{o.ubicacion || '—'}</td>
+                  <td className={TD}>
+                    {o.estado === 'devuelto' ? (
+                      <Etiqueta tono="exito">Devuelto</Etiqueta>
+                    ) : (
+                      <form action={marcarDevuelto} className="flex items-center gap-2">
+                        <input type="hidden" name="id" value={o.id} />
+                        <Etiqueta tono="alerta">En depósito</Etiqueta>
+                        <button className={botonClases('secundario', 'px-2.5 py-1 text-xs')}>
+                          Marcar devuelto
+                        </button>
+                      </form>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        )}
+      </Tarjeta>
     </div>
   )
 }

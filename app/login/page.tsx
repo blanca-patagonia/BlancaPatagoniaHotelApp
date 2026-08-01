@@ -10,7 +10,7 @@ export default async function LoginPage() {
     <main className="flex flex-1 items-center justify-center bg-stone-100 p-6">
       <div className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-8 shadow-sm">
         <div className="mb-6 text-center">
-          <p className="text-xs font-medium uppercase tracking-widest text-sky-700">
+          <p className="text-xs font-medium uppercase tracking-widest text-lago-700">
             Blanca Patagonia
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-stone-900">

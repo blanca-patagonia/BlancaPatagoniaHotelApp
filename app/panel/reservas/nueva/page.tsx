@@ -66,7 +66,7 @@ export default async function NuevaReservaPage({
             type="date"
             name="check_in"
             defaultValue={checkIn || hoyISO()}
-            className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600"
+            className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -75,7 +75,7 @@ export default async function NuevaReservaPage({
             type="date"
             name="check_out"
             defaultValue={checkOut || sumarDias(hoyISO(), 1)}
-            className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600"
+            className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -86,7 +86,7 @@ export default async function NuevaReservaPage({
             min={1}
             max={7}
             defaultValue={huespedes}
-            className="w-24 rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600"
+            className="w-24 rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
           />
         </label>
         <button
@@ -99,7 +99,7 @@ export default async function NuevaReservaPage({
 
       {buscado &&
         (opciones.length === 0 ? (
-          <p className="mt-6 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="mt-6 rounded-lg bg-lenga-50 px-4 py-3 text-sm text-lenga-800">
             No hay unidades disponibles para esas fechas y {huespedes} huésped(es).
           </p>
         ) : (

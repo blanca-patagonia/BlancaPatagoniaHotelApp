@@ -72,7 +72,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
       <div className="rounded-xl border border-stone-200 bg-white p-8 print:border-0 print:p-0">
         <div className="flex items-start justify-between border-b border-stone-200 pb-4">
           <div>
-            <p className="text-lg font-semibold tracking-tight text-sky-700">Blanca Patagonia</p>
+            <p className="text-lg font-semibold tracking-tight text-lago-700">Blanca Patagonia</p>
             <p className="text-xs text-stone-500">
               Hostería Boutique &amp; Cabañas · El Calafate, Santa Cruz
             </p>

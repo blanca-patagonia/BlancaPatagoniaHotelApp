@@ -44,7 +44,7 @@ export function FormularioReserva({
           {opciones.map((o, i) => (
             <label
               key={o.tipoUnidadId}
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-stone-200 bg-white px-4 py-3 transition hover:border-sky-400 has-[:checked]:border-sky-600 has-[:checked]:bg-sky-50"
+              className="flex cursor-pointer items-center gap-3 rounded-lg border border-stone-200 bg-white px-4 py-3 transition hover:border-lago-400 has-[:checked]:border-lago-600 has-[:checked]:bg-lago-50"
             >
               <input
                 type="radio"
@@ -52,7 +52,7 @@ export function FormularioReserva({
                 value={o.tipoUnidadId}
                 defaultChecked={i === 0}
                 required
-                className="accent-sky-600"
+                className="accent-lago-600"
               />
               <span className="flex-1">
                 <span className="font-medium text-stone-800">{o.nombre}</span>
@@ -79,7 +79,7 @@ export function FormularioReserva({
           <select
             name="canal"
             defaultValue="directo"
-            className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none focus:border-sky-600"
+            className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none focus:border-lago-600"
           >
             <option value="directo">Directo / Mostrador (rack)</option>
             <option value="web">Web (rack)</option>
@@ -98,7 +98,7 @@ export function FormularioReserva({
       <button
         type="submit"
         disabled={pendiente}
-        className="self-start rounded-lg bg-sky-700 px-5 py-2.5 font-medium text-white transition hover:bg-sky-800 disabled:opacity-60"
+        className="self-start rounded-lg bg-lago-700 px-5 py-2.5 font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
       >
         {pendiente ? 'Confirmando…' : 'Confirmar reserva'}
       </button>
@@ -127,7 +127,7 @@ function Campo({
         type={tipo}
         name={nombre}
         required={requerido}
-        className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none focus:border-lago-600"
       />
     </label>
   )

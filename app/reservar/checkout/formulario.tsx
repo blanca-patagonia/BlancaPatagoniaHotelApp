@@ -41,7 +41,7 @@ export function FormularioCheckout({
       <button
         type="submit"
         disabled={pendiente}
-        className="self-start rounded-lg bg-sky-700 px-6 py-3 font-medium text-white transition hover:bg-sky-800 disabled:opacity-60"
+        className="self-start rounded-lg bg-lago-700 px-6 py-3 font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
       >
         {pendiente ? 'Reservando…' : 'Confirmar reserva'}
       </button>
@@ -73,7 +73,7 @@ function Campo({
         type={tipo}
         name={nombre}
         required={requerido}
-        className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none focus:border-lago-600"
       />
     </label>
   )

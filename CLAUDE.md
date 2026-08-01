@@ -90,8 +90,17 @@ Tarifario 2025/2026 (Anexo A).
   corrientes de agencias · **8.2** reservas grupales · **8.3** mantenimiento, objetos
   perdidos, encuestas, reportes avanzados (ADR/RevPAR) · **8.4/8.5** consolidación +
   dashboard-hub · **8.6** fidelidad + inventario · **8.7** proveedores (cuentas por
-  pagar), reprogramación de reservas, asignación de mucamas y avisos internos. **58
-  tests verdes**, todo pusheado.
+  pagar), reprogramación de reservas, asignación de mucamas y avisos internos ·
+  **Fase 9** mejora integral del panel: identidad visual propia (ADR 0009),
+  componentes compartidos, búsqueda + paginación + export CSV en todos los
+  listados, navegación móvil y más funciones por módulo. **96 tests verdes**,
+  todo pusheado.
+- **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
+  (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
+  iconos de `iconos.tsx`. Paleta de marca: `lago` / `calafate` / `lenga` / `stone`
+  (no usar `sky` ni `amber`). Títulos con `font-display`.
+- ⚠️ El builder de PostgREST es **thenable**: una función `async` no debe devolverlo
+  pelado o el `await` del llamador ejecuta la consulta (ver `reservas/consulta.ts`).
 - **Cara al cliente (diferido a la vista pública `app/reservar`):** web check-in y
   encuestas de satisfacción NO van en la gestión.
 - **Deploy** (Vercel + Supabase cloud) pendiente — requiere cuentas del usuario.

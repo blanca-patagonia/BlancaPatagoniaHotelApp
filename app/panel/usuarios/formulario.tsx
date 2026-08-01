@@ -15,26 +15,26 @@ export function FormularioUsuario() {
         name="nombre"
         placeholder="Nombre y apellido"
         required
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       />
       <input
         name="email"
         type="email"
         placeholder="Email"
         required
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       />
       <input
         name="password"
         type="password"
         placeholder="Contraseña (mín. 8)"
         required
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       />
       <select
         name="rol"
         defaultValue="recepcion"
-        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-sky-600"
+        className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
       >
         {ROLES.map((r) => (
           <option key={r} value={r}>
@@ -57,7 +57,7 @@ export function FormularioUsuario() {
       <button
         type="submit"
         disabled={pendiente}
-        className="self-start rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800 disabled:opacity-60 sm:col-span-2"
+        className="self-start rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60 sm:col-span-2"
       >
         {pendiente ? 'Creando…' : 'Crear usuario'}
       </button>

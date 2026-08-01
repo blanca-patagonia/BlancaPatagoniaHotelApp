@@ -1,61 +1,154 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { terminoBusqueda } from '@/lib/listados'
+import {
+  BarraHerramientas,
+  Buscador,
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  Tarjeta,
+  botonClases,
+} from '../_components/ui'
+import { Icono } from '../_components/iconos'
 import { FormularioAviso } from './formulario'
-import { borrarAviso } from './actions'
+import { borrarAviso, alternarFijado } from './actions'
 
 interface Aviso {
   id: string
   mensaje: string
   creado_en: string
+  fijado: boolean
   autor_id: string | null
   autor: { nombre: string } | null
 }
 
-export default async function AvisosPage() {
+/** Fecha legible y relativa para el tablón. */
+function cuando(iso: string): string {
+  const fecha = new Date(iso)
+  const minutos = Math.round((Date.now() - fecha.getTime()) / 60000)
+  if (minutos < 1) return 'recién'
+  if (minutos < 60) return `hace ${minutos} min`
+  if (minutos < 60 * 24) return `hace ${Math.floor(minutos / 60)} h`
+  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+export default async function AvisosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
   const sesion = await requerirAcceso('avisos')
+  const { q } = await searchParams
   const supabase = await crearClienteServidor()
-  const { data } = await supabase
+
+  let consulta = supabase
     .from('avisos')
-    .select('id, mensaje, creado_en, autor_id, autor:perfiles(nombre)')
+    .select('id, mensaje, creado_en, fijado, autor_id, autor:perfiles(nombre)')
+    // Los fijados van primero; dentro de cada grupo, del más nuevo al más viejo.
+    .order('fijado', { ascending: false })
     .order('creado_en', { ascending: false })
     .limit(100)
+
+  const termino = terminoBusqueda(q)
+  if (termino) consulta = consulta.ilike('mensaje', `%${termino}%`)
+
+  const { data } = await consulta
   const avisos = (data ?? []) as unknown as Aviso[]
+  const fijados = avisos.filter((a) => a.fijado).length
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Avisos</h1>
-      <p className="mt-1 text-sm text-stone-500">Mensajería interna del equipo.</p>
+    <div className="mx-auto max-w-3xl">
+      <Encabezado
+        titulo="Avisos"
+        descripcion="Tablón interno del equipo: novedades, pedidos y recordatorios."
+        icono="avisos"
+      />
 
-      <div className="mt-5 rounded-xl border border-stone-200 bg-white p-5">
+      <Tarjeta className="mb-4 p-5">
         <FormularioAviso />
-      </div>
+      </Tarjeta>
 
-      <div className="mt-6 flex flex-col gap-2">
-        {avisos.length === 0 && (
-          <p className="rounded-xl border border-stone-200 bg-white px-4 py-8 text-center text-sm text-stone-400">
-            Sin avisos.
-          </p>
+      <BarraHerramientas>
+        <Buscador
+          accion="/panel/avisos"
+          valor={q}
+          etiqueta="Buscar avisos"
+          placeholder="Buscar en los mensajes…"
+        />
+        {fijados > 0 && (
+          <span className="text-xs text-stone-500">
+            {fijados} aviso(s) fijado(s)
+          </span>
         )}
-        {avisos.map((a) => {
-          const puedeBorrar = a.autor_id === sesion.userId || sesion.rol === 'admin'
-          return (
-            <div key={a.id} className="rounded-xl border border-stone-200 bg-white p-4">
-              <p className="text-stone-800">{a.mensaje}</p>
-              <div className="mt-2 flex items-center justify-between text-xs text-stone-400">
-                <span>
-                  {a.autor?.nombre ?? 'Staff'} · {new Date(a.creado_en).toLocaleString('es-AR')}
-                </span>
-                {puedeBorrar && (
-                  <form action={borrarAviso}>
-                    <input type="hidden" name="id" value={a.id} />
-                    <button className="text-stone-400 transition hover:text-red-600">Borrar</button>
-                  </form>
+        {q && (
+          <Link href="/panel/avisos" className={botonClases('fantasma')}>
+            Limpiar
+          </Link>
+        )}
+      </BarraHerramientas>
+
+      {avisos.length === 0 ? (
+        <Tarjeta>
+          <EstadoVacio
+            titulo={q ? 'Ningún aviso coincide con la búsqueda' : 'Todavía no hay avisos'}
+            descripcion={
+              q
+                ? 'Probá con otras palabras.'
+                : 'Usá el tablón para dejarle mensajes al resto del equipo.'
+            }
+            icono="avisos"
+          />
+        </Tarjeta>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {avisos.map((a) => {
+            const puedeBorrar = a.autor_id === sesion.userId || sesion.rol === 'admin'
+            return (
+              <li
+                key={a.id}
+                className={`rounded-2xl border bg-white p-4 shadow-sm ${
+                  a.fijado ? 'border-lenga-300 ring-1 ring-lenga-100' : 'border-stone-200'
+                }`}
+              >
+                {a.fijado && (
+                  <p className="mb-1.5">
+                    <Etiqueta tono="alerta">Fijado</Etiqueta>
+                  </p>
                 )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+                <p className="whitespace-pre-line text-stone-800">{a.mensaje}</p>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400">
+                  <span>
+                    {a.autor?.nombre ?? 'Staff'} · {cuando(a.creado_en)}
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <form action={alternarFijado}>
+                      <input type="hidden" name="id" value={a.id} />
+                      <input type="hidden" name="fijar" value={a.fijado ? '0' : '1'} />
+                      <button
+                        className="inline-flex items-center gap-1 text-stone-400 transition hover:text-lenga-700"
+                        aria-label={a.fijado ? 'Desfijar el aviso' : 'Fijar el aviso arriba'}
+                      >
+                        <Icono nombre="montana" tam={13} />
+                        {a.fijado ? 'Desfijar' : 'Fijar'}
+                      </button>
+                    </form>
+                    {puedeBorrar && (
+                      <form action={borrarAviso}>
+                        <input type="hidden" name="id" value={a.id} />
+                        <button className="text-stone-400 transition hover:text-red-600">
+                          Borrar
+                        </button>
+                      </form>
+                    )}
+                  </span>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }

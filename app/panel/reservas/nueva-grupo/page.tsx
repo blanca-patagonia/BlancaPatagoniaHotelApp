@@ -47,11 +47,11 @@ export default async function NuevaGrupoPage({
       >
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-stone-600">Check-in</span>
-          <input type="date" name="check_in" defaultValue={checkIn || hoyISO()} className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600" />
+          <input type="date" name="check_in" defaultValue={checkIn || hoyISO()} className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-stone-600">Check-out</span>
-          <input type="date" name="check_out" defaultValue={checkOut || sumarDias(hoyISO(), 2)} className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-sky-600" />
+          <input type="date" name="check_out" defaultValue={checkOut || sumarDias(hoyISO(), 2)} className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600" />
         </label>
         <button type="submit" className="rounded-lg bg-stone-800 px-4 py-2 font-medium text-white transition hover:bg-stone-900">
           Buscar disponibilidad
@@ -60,7 +60,7 @@ export default async function NuevaGrupoPage({
 
       {buscado &&
         (opciones.length === 0 ? (
-          <p className="mt-6 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="mt-6 rounded-lg bg-lenga-50 px-4 py-3 text-sm text-lenga-800">
             No hay unidades disponibles para esas fechas.
           </p>
         ) : (

@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
-import { BADGE_ESTADO } from '../../_components/estilos'
+import { TONO_ESTADO } from '../../_components/estilos'
+import { Etiqueta } from '../../_components/ui'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 
@@ -68,11 +69,11 @@ export default async function DetalleHuespedPage({
         <span>{huesped.nacionalidad || 'nacionalidad n/d'}</span>
       </div>
 
-      <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm">
-        <span className="font-semibold text-amber-800">
+      <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-lenga-50 px-3 py-1.5 text-sm">
+        <span className="font-semibold text-lenga-800">
           Fidelidad {ETIQUETAS_NIVEL[nivelFidelidad(huesped.puntos)]}
         </span>
-        <span className="text-amber-700">· {huesped.puntos} puntos</span>
+        <span className="text-lenga-700">· {huesped.puntos} puntos</span>
       </div>
 
       <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Historial de reservas</h2>
@@ -99,7 +100,7 @@ export default async function DetalleHuespedPage({
               return (
                 <tr key={r.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
                   <td className="px-4 py-2.5">
-                    <Link href={`/panel/reservas/${r.id}`} className="font-medium text-sky-700 hover:underline">
+                    <Link href={`/panel/reservas/${r.id}`} className="font-medium text-lago-700 hover:underline">
                       {r.codigo}
                     </Link>
                   </td>
@@ -110,9 +111,9 @@ export default async function DetalleHuespedPage({
                     USD {Number(r.total).toLocaleString('es-AR')}
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE_ESTADO[r.estado]}`}>
+                    <Etiqueta tono={TONO_ESTADO[r.estado]}>
                       {ETIQUETAS_ESTADO_RESERVA[r.estado]}
-                    </span>
+                    </Etiqueta>
                   </td>
                 </tr>
               )

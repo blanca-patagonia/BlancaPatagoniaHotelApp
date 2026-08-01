@@ -81,7 +81,7 @@ export default async function ProveedorDetallePage({
             <span className="text-stone-500">Concepto</span>
             <input name="concepto" className="w-40 rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
           </label>
-          <button className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800">
+          <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800">
             Registrar
           </button>
         </form>

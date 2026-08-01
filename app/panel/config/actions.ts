@@ -4,6 +4,35 @@ import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
 
+/**
+ * Actualiza el precio neto y rack de una tarifa (tipo de unidad × temporada).
+ *
+ * Solo admin/gerencia. El tarifario es la base de toda cotización, así que se
+ * validan los importes antes de tocar la base: nada de precios negativos ni de
+ * un neto por encima del rack (el neto es siempre el precio de agencia).
+ */
+export async function actualizarTarifa(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+
+  const id = String(formData.get('tarifa_id') ?? '')
+  const neto = Number(formData.get('precio_neto'))
+  const rack = Number(formData.get('precio_rack'))
+
+  if (!id || !Number.isFinite(neto) || !Number.isFinite(rack) || neto < 0 || rack < 0) {
+    redirect('/panel/config?error=importes')
+  }
+  if (neto > rack) redirect('/panel/config?error=neto_mayor')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('tarifas')
+    .update({ precio_neto: neto, precio_rack: rack })
+    .eq('id', id)
+
+  redirect(error ? '/panel/config?error=guardar' : '/panel/config?ok=tarifa')
+}
+
 /** Repone stock de un producto (suma unidades). Solo admin/gerencia. */
 export async function reponerStock(formData: FormData): Promise<void> {
   const sesion = await obtenerSesion()

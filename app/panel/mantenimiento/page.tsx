@@ -1,15 +1,45 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { hoyISO, diasEntre } from '@/lib/fechas'
+import { construirQuery, terminoBusqueda } from '@/lib/listados'
+import {
+  BarraHerramientas,
+  BotonExportar,
+  Buscador,
+  Chip,
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  Kpi,
+  Tarjeta,
+  botonClases,
+  type Tono,
+} from '../_components/ui'
+import { Icono } from '../_components/iconos'
 import { FormularioOrden } from './formulario'
 import { cambiarEstadoOrden } from './actions'
 
 type Prioridad = 'baja' | 'media' | 'alta'
 type EstadoM = 'pendiente' | 'en_proceso' | 'resuelta'
 
-const COLOR_PRIORIDAD: Record<Prioridad, string> = {
-  baja: 'bg-stone-100 text-stone-600',
-  media: 'bg-amber-100 text-amber-800',
-  alta: 'bg-red-100 text-red-700',
+const PRIORIDADES: Prioridad[] = ['alta', 'media', 'baja']
+const ESTADOS: EstadoM[] = ['pendiente', 'en_proceso', 'resuelta']
+
+const TONO_PRIORIDAD: Record<Prioridad, Tono> = {
+  baja: 'neutro',
+  media: 'alerta',
+  alta: 'peligro',
+}
+const ETIQUETA_PRIORIDAD: Record<Prioridad, string> = {
+  baja: 'Baja',
+  media: 'Media',
+  alta: 'Alta',
+}
+const TONO_ESTADO_M: Record<EstadoM, Tono> = {
+  pendiente: 'alerta',
+  en_proceso: 'lago',
+  resuelta: 'exito',
 }
 const ETIQUETA_ESTADO: Record<EstadoM, string> = {
   pendiente: 'Pendiente',
@@ -28,69 +58,186 @@ interface Orden {
   descripcion: string
   prioridad: Prioridad
   estado: EstadoM
+  creada_en: string
   unidad: { nombre: string } | null
 }
 
-export default async function MantenimientoPage() {
+export default async function MantenimientoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; estado?: string; prioridad?: string }>
+}) {
   await requerirAcceso('mantenimiento')
+  const sp = await searchParams
   const supabase = await crearClienteServidor()
-  const [{ data: ordenesData }, { data: unidadesData }] = await Promise.all([
-    supabase
-      .from('ordenes_mantenimiento')
-      .select('id, titulo, descripcion, prioridad, estado, unidad:unidades(nombre)')
-      .order('creada_en', { ascending: false }),
+
+  const estado = ESTADOS.includes(sp.estado as EstadoM) ? (sp.estado as EstadoM) : undefined
+  const prioridad = PRIORIDADES.includes(sp.prioridad as Prioridad)
+    ? (sp.prioridad as Prioridad)
+    : undefined
+
+  let consulta = supabase
+    .from('ordenes_mantenimiento')
+    .select('id, titulo, descripcion, prioridad, estado, creada_en, unidad:unidades(nombre)')
+    .order('creada_en', { ascending: false })
+
+  if (estado) consulta = consulta.eq('estado', estado)
+  if (prioridad) consulta = consulta.eq('prioridad', prioridad)
+  const termino = terminoBusqueda(sp.q)
+  if (termino) consulta = consulta.or(`titulo.ilike.%${termino}%,descripcion.ilike.%${termino}%`)
+
+  const [{ data: ordenesData }, { data: unidadesData }, { data: todasData }] = await Promise.all([
+    consulta,
     supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
+    // Sin filtrar: los indicadores deben reflejar el total, no la vista actual.
+    supabase.from('ordenes_mantenimiento').select('estado, prioridad'),
   ])
+
   const ordenes = (ordenesData ?? []) as unknown as Orden[]
   const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
+  const todas = (todasData ?? []) as { estado: EstadoM; prioridad: Prioridad }[]
+
+  const pendientes = todas.filter((o) => o.estado === 'pendiente').length
+  const enProceso = todas.filter((o) => o.estado === 'en_proceso').length
+  const urgentes = todas.filter((o) => o.prioridad === 'alta' && o.estado !== 'resuelta').length
+
+  const hoy = hoyISO()
+  const vigentes = { q: sp.q, estado, prioridad }
+  const hayFiltros = Boolean(sp.q || estado || prioridad)
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Mantenimiento</h1>
-      <p className="mt-1 text-sm text-stone-500">Órdenes de trabajo por unidad.</p>
+    <div className="mx-auto max-w-5xl">
+      <Encabezado
+        titulo="Mantenimiento"
+        descripcion="Órdenes de trabajo por unidad."
+        icono="mantenimiento"
+        acciones={<BotonExportar href="/panel/exportar/mantenimiento" />}
+      />
 
-      <div className="mt-5 rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-medium text-stone-700">Nueva orden</h2>
-        <FormularioOrden unidades={unidades} />
+      <div className="mb-4 grid grid-cols-3 gap-4">
+        <Kpi titulo="Pendientes" valor={String(pendientes)} icono="mantenimiento" tono="alerta" />
+        <Kpi titulo="En proceso" valor={String(enProceso)} icono="config" tono="lago" />
+        <Kpi
+          titulo="Prioridad alta"
+          valor={String(urgentes)}
+          detalle="sin resolver"
+          icono="alerta"
+          tono="peligro"
+        />
       </div>
 
-      <div className="mt-6 flex flex-col gap-2">
-        {ordenes.length === 0 && (
-          <p className="rounded-xl border border-stone-200 bg-white px-4 py-8 text-center text-sm text-stone-400">
-            Sin órdenes de mantenimiento.
-          </p>
-        )}
-        {ordenes.map((o) => {
-          const sig = SIGUIENTE[o.estado]
-          return (
-            <div
-              key={o.id}
-              className={`flex flex-wrap items-center gap-3 rounded-xl border border-stone-200 bg-white p-4 ${o.estado === 'resuelta' ? 'opacity-60' : ''}`}
+      <BarraHerramientas>
+        <Buscador
+          accion="/panel/mantenimiento"
+          valor={sp.q}
+          etiqueta="Buscar órdenes"
+          placeholder="Título o descripción…"
+          ocultos={{ estado, prioridad }}
+        />
+        <div className="flex flex-wrap gap-1.5">
+          <Chip href={`/panel/mantenimiento${construirQuery(vigentes, { estado: undefined })}`} activo={!estado}>
+            Todas
+          </Chip>
+          {ESTADOS.map((e) => (
+            <Chip
+              key={e}
+              href={`/panel/mantenimiento${construirQuery(vigentes, { estado: e })}`}
+              activo={estado === e}
             >
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COLOR_PRIORIDAD[o.prioridad]}`}>
-                {o.prioridad}
-              </span>
-              <div className="min-w-40 flex-1">
-                <p className="font-medium text-stone-800">{o.titulo}</p>
-                <p className="text-xs text-stone-400">
-                  {o.unidad?.nombre ?? 'General'}
-                  {o.descripcion ? ` · ${o.descripcion}` : ''}
-                </p>
-              </div>
-              <span className="text-xs text-stone-500">{ETIQUETA_ESTADO[o.estado]}</span>
-              {sig && (
-                <form action={cambiarEstadoOrden}>
-                  <input type="hidden" name="id" value={o.id} />
-                  <input type="hidden" name="estado" value={sig.estado} />
-                  <button className="rounded-lg bg-stone-800 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-stone-900">
-                    {sig.label}
-                  </button>
-                </form>
-              )}
-            </div>
-          )
-        })}
-      </div>
+              {ETIQUETA_ESTADO[e]}
+            </Chip>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PRIORIDADES.map((p) => (
+            <Chip
+              key={p}
+              href={`/panel/mantenimiento${construirQuery(vigentes, {
+                prioridad: prioridad === p ? undefined : p,
+              })}`}
+              activo={prioridad === p}
+            >
+              {ETIQUETA_PRIORIDAD[p]}
+            </Chip>
+          ))}
+        </div>
+        {hayFiltros && (
+          <Link href="/panel/mantenimiento" className={botonClases('fantasma')}>
+            Limpiar
+          </Link>
+        )}
+      </BarraHerramientas>
+
+      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
+          Crear una orden de trabajo
+        </summary>
+        <div className="border-t border-stone-100 p-5">
+          <FormularioOrden unidades={unidades} />
+        </div>
+      </details>
+
+      {ordenes.length === 0 ? (
+        <Tarjeta>
+          <EstadoVacio
+            titulo={hayFiltros ? 'Ninguna orden coincide' : 'No hay órdenes de mantenimiento'}
+            descripcion={
+              hayFiltros
+                ? 'Probá con otros filtros.'
+                : 'Cuando registres una avería o una tarea, aparece acá.'
+            }
+            icono="mantenimiento"
+          />
+        </Tarjeta>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {ordenes.map((o) => {
+            const sig = SIGUIENTE[o.estado]
+            const dias = o.creada_en ? diasEntre(o.creada_en.slice(0, 10), hoy) : 0
+            // Una orden abierta hace más de una semana merece destacarse.
+            const demorada = o.estado !== 'resuelta' && dias >= 7
+            return (
+              <li
+                key={o.id}
+                className={`flex flex-wrap items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm ${
+                  o.estado === 'resuelta' ? 'border-stone-200 opacity-60' : 'border-stone-200'
+                } ${demorada ? 'ring-1 ring-lenga-200' : ''}`}
+              >
+                <Etiqueta tono={TONO_PRIORIDAD[o.prioridad]}>
+                  {ETIQUETA_PRIORIDAD[o.prioridad]}
+                </Etiqueta>
+                <div className="min-w-40 flex-1">
+                  <p className="font-medium text-stone-800">{o.titulo}</p>
+                  <p className="text-xs text-stone-400">
+                    {o.unidad?.nombre ?? 'General'}
+                    {o.descripcion ? ` · ${o.descripcion}` : ''}
+                  </p>
+                </div>
+                {o.estado !== 'resuelta' && (
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs ${
+                      demorada ? 'font-medium text-lenga-700' : 'text-stone-400'
+                    }`}
+                  >
+                    {demorada && <Icono nombre="alerta" tam={13} />}
+                    {dias === 0 ? 'hoy' : `hace ${dias} día${dias === 1 ? '' : 's'}`}
+                  </span>
+                )}
+                <Etiqueta tono={TONO_ESTADO_M[o.estado]}>{ETIQUETA_ESTADO[o.estado]}</Etiqueta>
+                {sig && (
+                  <form action={cambiarEstadoOrden}>
+                    <input type="hidden" name="id" value={o.id} />
+                    <input type="hidden" name="estado" value={sig.estado} />
+                    <button className={botonClases('primario', 'px-3 py-1.5 text-xs')}>
+                      {sig.label}
+                    </button>
+                  </form>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }
