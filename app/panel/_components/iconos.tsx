@@ -20,6 +20,7 @@ export type NombreIcono =
   | 'contratos'
   | 'firma'
   | 'chat'
+  | 'auditoria'
   | 'reportes'
   | 'config'
   | 'usuarios'
@@ -74,6 +75,13 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     'M14 3.5v4h4',
     'M8.5 12h7',
     'M8.5 15.5h4',
+  ],
+  auditoria: [
+    'M6 3.5h9l4 4v13h-13z',
+    'M15 3.5v4h4',
+    'M9 11.5h6',
+    'M9 15h6',
+    'M9 18h3',
   ],
   firma: ['M4 17.5c3-1 4-8 6-8s1.5 6 3.5 6 2-2.5 3.5-2.5', 'M3.5 20.5h17'],
   chat: [

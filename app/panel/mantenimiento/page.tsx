@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { hoyISO, diasEntre } from '@/lib/fechas'
+import { hoyISO, diasEntre, formatoFechaCorta } from '@/lib/fechas'
 import { construirQuery, terminoBusqueda } from '@/lib/listados'
 import {
   BarraHerramientas,
@@ -17,8 +17,24 @@ import {
   type Tono,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
+import {
+  PERIODICIDADES,
+  planVencido,
+  esInminente,
+  diasParaProxima,
+} from '@/lib/domain/preventivo'
+import { Mensaje } from '../_components/ui'
 import { FormularioOrden } from './formulario'
-import { cambiarEstadoOrden } from './actions'
+import { cambiarEstadoOrden, crearPlanPreventivo, generarPreventivo } from './actions'
+
+interface PlanPreventivo {
+  id: string
+  titulo: string
+  cada_meses: number
+  proxima_ejecucion: string
+  activo: boolean
+  unidad: { nombre: string } | null
+}
 
 type Prioridad = 'baja' | 'media' | 'alta'
 type EstadoM = 'pendiente' | 'en_proceso' | 'resuelta'
@@ -65,7 +81,14 @@ interface Orden {
 export default async function MantenimientoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; estado?: string; prioridad?: string }>
+  searchParams: Promise<{
+    q?: string
+    estado?: string
+    prioridad?: string
+    ok?: string
+    error?: string
+    generadas?: string
+  }>
 }) {
   await requerirAcceso('mantenimiento')
   const sp = await searchParams
@@ -86,12 +109,18 @@ export default async function MantenimientoPage({
   const termino = terminoBusqueda(sp.q)
   if (termino) consulta = consulta.or(`titulo.ilike.%${termino}%,descripcion.ilike.%${termino}%`)
 
-  const [{ data: ordenesData }, { data: unidadesData }, { data: todasData }] = await Promise.all([
-    consulta,
-    supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
-    // Sin filtrar: los indicadores deben reflejar el total, no la vista actual.
-    supabase.from('ordenes_mantenimiento').select('estado, prioridad'),
-  ])
+  const [{ data: ordenesData }, { data: unidadesData }, { data: todasData }, { data: planesData }] =
+    await Promise.all([
+      consulta,
+      supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
+      // Sin filtrar: los indicadores deben reflejar el total, no la vista actual.
+      supabase.from('ordenes_mantenimiento').select('estado, prioridad'),
+      supabase
+        .from('planes_mantenimiento')
+        .select('id, titulo, cada_meses, proxima_ejecucion, activo, unidad:unidades(nombre)')
+        .eq('activo', true)
+        .order('proxima_ejecucion'),
+    ])
 
   const ordenes = (ordenesData ?? []) as unknown as Orden[]
   const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
@@ -102,6 +131,8 @@ export default async function MantenimientoPage({
   const urgentes = todas.filter((o) => o.prioridad === 'alta' && o.estado !== 'resuelta').length
 
   const hoy = hoyISO()
+  const planes = (planesData ?? []) as unknown as PlanPreventivo[]
+  const planesVencidos = planes.filter((p) => planVencido(p.proxima_ejecucion, hoy)).length
   const vigentes = { q: sp.q, estado, prioridad }
   const hayFiltros = Boolean(sp.q || estado || prioridad)
 
@@ -167,6 +198,105 @@ export default async function MantenimientoPage({
           </Link>
         )}
       </BarraHerramientas>
+
+      {sp.generadas && (
+        <Mensaje tono="ok">
+          Se generaron {sp.generadas} orden(es) a partir de los planes preventivos vencidos.
+        </Mensaje>
+      )}
+      {sp.ok === 'plan' && <Mensaje tono="ok">Plan preventivo creado.</Mensaje>}
+      {sp.error === 'plan' && (
+        <Mensaje tono="error">Revisá el título y la periodicidad del plan.</Mensaje>
+      )}
+
+      {/* Mantenimiento preventivo: lo planificado, que es lo que evita la avería. */}
+      <Tarjeta
+        titulo="Mantenimiento preventivo"
+        descripcion="Tareas recurrentes por unidad; generan la orden solas al vencer."
+        className="mb-4"
+        acciones={
+          planesVencidos > 0 ? (
+            <form action={generarPreventivo}>
+              <button className={botonClases('primario')}>
+                Generar órdenes ({planesVencidos})
+              </button>
+            </form>
+          ) : null
+        }
+      >
+        {planes.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-stone-500">
+            No hay planes cargados. Por ejemplo: revisar la calefacción de cada cabaña cada 6 meses.
+          </p>
+        ) : (
+          <ul>
+            {planes.map((p) => {
+              const vencido = planVencido(p.proxima_ejecucion, hoy)
+              const pronto = esInminente(p.proxima_ejecucion, hoy)
+              const dias = diasParaProxima(p.proxima_ejecucion, hoy)
+              return (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-5 py-2.5 first:border-0"
+                >
+                  <div className="min-w-40 flex-1">
+                    <p className="font-medium text-stone-800">{p.titulo}</p>
+                    <p className="text-xs text-stone-400">
+                      {p.unidad?.nombre ?? 'General'} · cada {p.cada_meses}{' '}
+                      {p.cada_meses === 1 ? 'mes' : 'meses'}
+                    </p>
+                  </div>
+                  <span className="tabular text-xs text-stone-500">
+                    {formatoFechaCorta(p.proxima_ejecucion)}
+                  </span>
+                  {vencido ? (
+                    <Etiqueta tono="peligro">Vencido</Etiqueta>
+                  ) : pronto ? (
+                    <Etiqueta tono="alerta">En {dias} días</Etiqueta>
+                  ) : (
+                    <Etiqueta tono="neutro">En {dias} días</Etiqueta>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        <form action={crearPlanPreventivo} className="grid gap-2 border-t border-stone-100 p-5 sm:grid-cols-4">
+          <input
+            name="titulo"
+            required
+            placeholder="Tarea (ej: revisión de calefacción)"
+            className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600 sm:col-span-2"
+          />
+          <select
+            name="unidad_id"
+            defaultValue=""
+            aria-label="Unidad del plan"
+            className="rounded-lg border border-stone-300 px-2 py-2 text-sm focus:border-lago-600 focus:outline-none"
+          >
+            <option value="">Todas / general</option>
+            {unidades.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+          <select
+            name="cada_meses"
+            defaultValue="6"
+            aria-label="Periodicidad"
+            className="rounded-lg border border-stone-300 px-2 py-2 text-sm focus:border-lago-600 focus:outline-none"
+          >
+            {PERIODICIDADES.map((p) => (
+              <option key={p.meses} value={p.meses}>
+                {p.etiqueta}
+              </option>
+            ))}
+          </select>
+          <button className={botonClases('secundario', 'sm:col-span-4')}>+ Agregar plan</button>
+        </form>
+      </Tarjeta>
 
       <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
         <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">

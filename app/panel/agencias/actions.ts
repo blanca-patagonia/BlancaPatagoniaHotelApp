@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
+import { puedeAvanzar, type EtapaComercial } from '@/lib/domain/comercial'
 import { TIPOS_CUENTA } from '@/lib/domain/cuentas'
 
 export interface EstadoAgencia {
@@ -52,4 +53,35 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
     concepto,
   })
   redirect(`/panel/agencias/${agenciaId}`)
+}
+
+/**
+ * Mueve una agencia de etapa en el embudo comercial.
+ *
+ * La transición se valida contra el dominio puro (`puedeAvanzar`), que es el
+ * mismo que testea Vitest: no se puede saltear de «contacto» a «activa».
+ */
+export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  const nueva = String(formData.get('etapa') ?? '') as EtapaComercial
+  if (!id) redirect('/panel/agencias')
+
+  const supabase = await crearClienteServidor()
+  const { data: agencia } = await supabase
+    .from('agencias')
+    .select('etapa')
+    .eq('id', id)
+    .single()
+
+  if (!agencia) redirect('/panel/agencias')
+  if (!puedeAvanzar(agencia.etapa as EtapaComercial, nueva)) {
+    redirect('/panel/agencias?error=etapa')
+  }
+
+  await supabase.from('agencias').update({ etapa: nueva }).eq('id', id)
+  revalidatePath('/panel/agencias')
+  redirect('/panel/agencias?ok=etapa')
 }

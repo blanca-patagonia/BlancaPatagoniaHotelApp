@@ -7,6 +7,16 @@ import {
   type TipoCuenta,
   type Movimiento,
 } from '@/lib/domain/cuentas'
+import {
+  ETAPAS_COMERCIALES,
+  ETIQUETAS_ETAPA,
+  conteoPorEtapa,
+  tasaConversion,
+  etapasPosibles,
+  esGanada,
+  esPerdida,
+  type EtapaComercial,
+} from '@/lib/domain/comercial'
 import { construirQuery, terminoBusqueda } from '@/lib/listados'
 import {
   BarraHerramientas,
@@ -25,6 +35,7 @@ import {
   botonClases,
 } from '../_components/ui'
 import { FormularioAgencia } from './formulario'
+import { cambiarEtapaAgencia } from './actions'
 
 interface Agencia {
   id: string
@@ -32,6 +43,16 @@ interface Agencia {
   tipo: TipoCuenta
   descuento_pct: number
   activo: boolean
+  etapa: EtapaComercial
+}
+
+/** Tono de la píldora de cada etapa del embudo. */
+const TONO_ETAPA: Record<EtapaComercial, 'neutro' | 'lago' | 'calafate' | 'exito' | 'peligro'> = {
+  contacto: 'neutro',
+  cotizacion_enviada: 'lago',
+  convenio_firmado: 'calafate',
+  activa: 'exito',
+  perdida: 'peligro',
 }
 
 export default async function AgenciasPage({
@@ -45,7 +66,7 @@ export default async function AgenciasPage({
 
   let consulta = supabase
     .from('agencias')
-    .select('id, nombre, tipo, descuento_pct, activo')
+    .select('id, nombre, tipo, descuento_pct, activo, etapa')
     .order('nombre')
   const termino = terminoBusqueda(q)
   if (termino) consulta = consulta.ilike('nombre', `%${termino}%`)
@@ -74,6 +95,9 @@ export default async function AgenciasPage({
 
   // Lo que las agencias le deben al hotel (cuentas por cobrar).
   const totalACobrar = conSaldo.reduce((acc, a) => acc + Math.max(0, a.saldo), 0)
+  // Embudo comercial: en qué etapa está cada negociación de convenio.
+  const embudo = conteoPorEtapa(conSaldo)
+  const conversion = tasaConversion(conSaldo)
   const puedeCrear = sesion.rol === 'admin' || sesion.rol === 'gerencia'
   const vigentes = { q, saldo: filtroSaldo }
 
@@ -103,6 +127,37 @@ export default async function AgenciasPage({
           tono="peligro"
         />
       </div>
+
+      {/* Embudo comercial: el trabajo previo a que la cuenta exista. */}
+      <Tarjeta
+        titulo="Embudo comercial"
+        descripcion={
+          conversion !== null
+            ? `Negociación de convenios · ${conversion}% de conversión sobre las cerradas`
+            : 'Negociación de convenios de tarifas netas'
+        }
+        className="mb-4"
+      >
+        <div className="grid grid-cols-2 gap-2 p-5 sm:grid-cols-5">
+          {ETAPAS_COMERCIALES.map((e) => (
+            <div
+              key={e}
+              className={`rounded-xl px-3 py-2.5 text-center ring-1 ${
+                esGanada(e)
+                  ? 'bg-emerald-50 ring-emerald-200'
+                  : esPerdida(e)
+                    ? 'bg-stone-50 ring-stone-200'
+                    : 'bg-lago-50/60 ring-lago-100'
+              }`}
+            >
+              <p className="tabular font-display text-2xl leading-none font-semibold text-stone-900">
+                {embudo[e]}
+              </p>
+              <p className="mt-1 text-xs text-stone-500">{ETIQUETAS_ETAPA[e]}</p>
+            </div>
+          ))}
+        </div>
+      </Tarjeta>
 
       <BarraHerramientas>
         <Buscador
@@ -158,7 +213,7 @@ export default async function AgenciasPage({
               <tr>
                 <th className={TH}>Nombre</th>
                 <th className={TH}>Tipo</th>
-                <th className={TH}>Estado</th>
+                <th className={TH}>Etapa comercial</th>
                 <th className={`${TH} text-right`}>Descuento</th>
                 <th className={`${TH} text-right`}>Saldo (USD)</th>
               </tr>
@@ -176,11 +231,22 @@ export default async function AgenciasPage({
                   </td>
                   <td className={`${TD} text-stone-600`}>{ETIQUETAS_TIPO_CUENTA[a.tipo]}</td>
                   <td className={TD}>
-                    {a.activo ? (
-                      <Etiqueta tono="exito">Activa</Etiqueta>
-                    ) : (
-                      <Etiqueta tono="neutro">Inactiva</Etiqueta>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Etiqueta tono={TONO_ETAPA[a.etapa]}>{ETIQUETAS_ETAPA[a.etapa]}</Etiqueta>
+                      {puedeCrear &&
+                        etapasPosibles(a.etapa).map((siguiente) => (
+                          <form key={siguiente} action={cambiarEtapaAgencia}>
+                            <input type="hidden" name="agencia_id" value={a.id} />
+                            <input type="hidden" name="etapa" value={siguiente} />
+                            <button
+                              className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 transition hover:bg-stone-200"
+                              title={`Pasar a ${ETIQUETAS_ETAPA[siguiente]}`}
+                            >
+                              → {ETIQUETAS_ETAPA[siguiente]}
+                            </button>
+                          </form>
+                        ))}
+                    </div>
                   </td>
                   <td className={`${TD} tabular text-right text-stone-600`}>{a.descuento_pct}%</td>
                   <td

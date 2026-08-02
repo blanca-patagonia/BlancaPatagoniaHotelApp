@@ -532,3 +532,70 @@ aquel es una cartelera unidireccional, esto es un chat bidireccional por área.
 **Verificación:** **150 tests en verde** (antes 96; se sumaron `contratos`,
 `asistente` y `conversaciones`), typecheck y lint limpios. Las pantallas nuevas
 del panel y el portal renderizan con contenido real.
+
+## Fase 11 — Alcance ERP: facturación fiscal, conciliación, CRM, NPS y auditoría
+
+Se comparó el sistema contra las funcionalidades de un ERP maduro (Odoo)
+aplicadas a hotelería y se priorizaron diez áreas no cubiertas. La evaluación
+completa —qué entró, qué quedó como trabajo futuro y por qué— está en el
+**ADR 0013**.
+
+### Implementado
+
+- **Facturación electrónica argentina (ADR 0012).** Migración 0021: enums
+  `condicion_iva` y `tipo_comprobante`, condición fiscal en agencias y huéspedes,
+  y desglose del impuesto en `facturas`. Dominio puro `lib/domain/facturacion.ts`
+  con la letra del comprobante según condición de emisor y receptor, la
+  discriminación del IVA, el **desglose que garantiza que neto + iva = total** y
+  la **validación de CUIT por módulo 11**. Cuarto adapter del proyecto
+  (`FacturacionElectronicaProvider`) con proveedor simulado que reproduce dos
+  comportamientos reales de AFIP: rechaza una factura A sin CUIT y devuelve el
+  CAE con vencimiento. **17 tests**.
+- **Auditoría de operaciones sensibles.** Migración 0020: tabla `auditoria`
+  *append-only* y un **trigger genérico** que sirve para cualquier tabla, puesto
+  sobre `pagos`, `tarifas` y los cambios de estado de `reservas`. Se revocó
+  INSERT/UPDATE/DELETE a `authenticated`: el staff solo puede leer. Pantalla
+  `/panel/auditoria` que muestra **solo los campos que cambiaron**
+  (`precio_rack: 270 → 999`) en lugar de volcar la fila entera.
+- **Conciliación de proveedores y antigüedad de saldos.** Migración 0022: estado,
+  vencimiento y número de comprobante en `movimientos_proveedor`, más la función
+  `vencer_comprobantes_proveedor()`. Dominio `lib/domain/antiguedad.ts` con los
+  tramos del *aging report* (por vencer, 1-30, 31-60, 61-90, +90) y el reporte
+  integrado al módulo Proveedores. **17 tests**.
+- **Pipeline comercial de agencias.** Misma migración: etapas
+  contacto → cotización enviada → convenio firmado → activa (más «perdida»).
+  Dominio `lib/domain/comercial.ts` con las transiciones válidas —no se puede
+  saltear de contacto a activa—, el embudo y la tasa de conversión sobre las
+  oportunidades **cerradas**. **13 tests**.
+- **Encuestas de satisfacción (NPS).** Migración 0023: `encuestas_satisfaccion`
+  con token público y un **trigger que la genera sola al pasar la reserva a
+  checkout**, idempotente. Encuesta pública `/encuesta/[token]` sin cuenta, con
+  los diez puntajes como radios y sin JavaScript. Dominio `lib/domain/encuestas.ts`
+  que **descarta las encuestas sin responder** en lugar de contarlas como cero,
+  que es el error clásico al implementar NPS. Índice y distribución en Reportes.
+  **18 tests**.
+- **Mantenimiento preventivo.** Misma migración: `planes_mantenimiento` y la
+  función `generar_mantenimiento_preventivo()` que crea las órdenes vencidas y
+  reprograma la siguiente. Dominio `lib/domain/preventivo.ts`, donde la suma de
+  meses **cae en el último día del mes** cuando el día no existe (31 de enero
+  + 1 mes = 28 de febrero). Sección en el módulo Mantenimiento. **17 tests**.
+- **Plantillas de comunicaciones.** `lib/domain/plantillas.ts` con las cuatro
+  plantillas pedidas (confirmación, recordatorio previo, encuesta y cambio de
+  nivel de fidelidad) y un render de marcadores que **deja visible** el marcador
+  sin valor en lugar de enviar «Hola ,». **11 tests**.
+
+### Diferido a trabajo futuro (ADR 0013)
+
+Gestión documental con Storage, seguridad granular por campo y multi-propiedad.
+Los tres quedan documentados con su diseño concreto y el motivo del diferimiento:
+Storage introduce un modelo de permisos paralelo a RLS; los permisos por columna
+exigen un rol de Postgres por cada rol de negocio (hoy los cuatro comparten
+`authenticated`); y multi-tenant sin un segundo hotel que lo valide es
+complejidad a ciegas.
+
+**Verificación:** **228 tests en verde** (antes 150), typecheck y lint limpios.
+Probado contra la base: un cambio de tarifa quedó auditado con su valor previo y
+nuevo; el check-out de una reserva **generó la encuesta automáticamente**; la
+encuesta se respondió desde la URL pública (puntaje 9, promotor) y quedó
+registrada. Las pantallas de auditoría, NPS en Reportes, antigüedad de saldos,
+embudo comercial y preventivo renderizan con datos reales.

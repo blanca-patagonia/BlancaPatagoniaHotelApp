@@ -2,6 +2,15 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { saldoCuenta, type Movimiento } from '@/lib/domain/cuentas'
+import {
+  resumenAntiguedad,
+  totalAdeudado,
+  totalVencido,
+  TRAMOS,
+  ETIQUETAS_TRAMO,
+  type ComprobanteDeuda,
+} from '@/lib/domain/antiguedad'
+import { hoyISO } from '@/lib/fechas'
 import { construirQuery, terminoBusqueda } from '@/lib/listados'
 import {
   BarraHerramientas,
@@ -43,14 +52,19 @@ export default async function ProveedoresPage({
 
   const [{ data: provData }, { data: movsData }] = await Promise.all([
     consulta,
-    supabase.from('movimientos_proveedor').select('proveedor_id, tipo, monto'),
+    supabase
+      .from('movimientos_proveedor')
+      .select('proveedor_id, tipo, monto, estado, vencimiento'),
   ])
   const proveedores = (provData ?? []) as Proveedor[]
-  const movs = (movsData ?? []) as {
-    proveedor_id: string
-    tipo: 'cargo' | 'pago'
-    monto: number | string
-  }[]
+  const movs = (movsData ?? []) as (ComprobanteDeuda & { proveedor_id: string })[]
+
+  // Reporte de antigüedad de saldos: cuánto se debe y desde hace cuánto.
+  const hoy = hoyISO()
+  const antiguedad = resumenAntiguedad(movs, hoy)
+  const adeudado = totalAdeudado(antiguedad)
+  const vencido = totalVencido(antiguedad)
+  const maxTramo = Math.max(1, ...TRAMOS.map((t) => antiguedad[t]))
 
   const porProveedor = new Map<string, Movimiento[]>()
   for (const m of movs) {
@@ -137,6 +151,57 @@ export default async function ProveedoresPage({
           <FormularioProveedor />
         </div>
       </details>
+
+      {/* Antigüedad de saldos: no es lo mismo deber a 5 días que a 100. */}
+      <Tarjeta
+        titulo="Antigüedad de saldos"
+        descripcion="Deuda pendiente según hace cuánto venció cada comprobante"
+        className="mb-4"
+      >
+        <div className="p-5">
+          {adeudado === 0 ? (
+            <p className="text-sm text-stone-500">
+              No hay comprobantes pendientes de pago.
+            </p>
+          ) : (
+            <>
+              <div className="mb-4 flex flex-wrap gap-6 text-sm">
+                <span>
+                  <span className="text-stone-500">Total adeudado: </span>
+                  <span className="tabular font-semibold text-stone-900">
+                    USD {adeudado.toLocaleString('es-AR')}
+                  </span>
+                </span>
+                <span>
+                  <span className="text-stone-500">Vencido: </span>
+                  <span
+                    className={`tabular font-semibold ${vencido > 0 ? 'text-red-600' : 'text-emerald-700'}`}
+                  >
+                    USD {vencido.toLocaleString('es-AR')}
+                  </span>
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {TRAMOS.map((t) => (
+                  <div key={t} className="flex items-center gap-3 text-sm">
+                    <span className="w-28 shrink-0 text-stone-500">{ETIQUETAS_TRAMO[t]}</span>
+                    <div className="h-3 flex-1 overflow-hidden rounded-full bg-stone-100">
+                      <div
+                        className={`h-full rounded-full ${t === 'corriente' ? 'bg-lago-400' : t === 'd90_mas' ? 'bg-red-500' : 'bg-lenga-400'}`}
+                        style={{ width: `${(antiguedad[t] / maxTramo) * 100}%` }}
+                      />
+                    </div>
+                    <span className="tabular w-24 text-right font-medium text-stone-700">
+                      {antiguedad[t].toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </Tarjeta>
 
       <Tarjeta className="overflow-hidden">
         {visibles.length === 0 ? (

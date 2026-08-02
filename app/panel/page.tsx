@@ -30,6 +30,7 @@ const MODULOS: Record<Area, { href: string; icono: NombreIcono }> = {
   agencias: { href: '/panel/agencias', icono: 'agencias' },
   proveedores: { href: '/panel/proveedores', icono: 'proveedores' },
   contratos: { href: '/panel/contratos', icono: 'contratos' },
+  auditoria: { href: '/panel/auditoria', icono: 'auditoria' },
   reportes: { href: '/panel/reportes', icono: 'reportes' },
   config: { href: '/panel/config', icono: 'config' },
   usuarios: { href: '/panel/usuarios', icono: 'usuarios' },

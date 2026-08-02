@@ -95,8 +95,15 @@ Tarifario 2025/2026 (Anexo A).
   componentes compartidos, búsqueda + paginación + export CSV en todos los
   listados, navegación móvil y más funciones por módulo · **Fase 10** contratos
   con firma electrónica por token (ADR 0010) y conversaciones internas en tiempo
-  real + asistente del portal basado en reglas (ADR 0011). **150 tests verdes**,
-  todo pusheado.
+  real + asistente del portal basado en reglas (ADR 0011) · **Fase 11** alcance
+  ERP: facturación fiscal argentina (ADR 0012), auditoría de operaciones
+  sensibles, conciliación y antigüedad de saldos, pipeline comercial, encuestas
+  NPS y mantenimiento preventivo. **228 tests verdes**, todo pusheado.
+- **Cuatro adapters** con el mismo patrón (interfaz + stub, se cambia por env):
+  `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider` y
+  `FacturacionElectronicaProvider`. Ningún borde externo es real.
+- **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
+  seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`. Paleta de marca: `lago` / `calafate` / `lenga` / `stone`
