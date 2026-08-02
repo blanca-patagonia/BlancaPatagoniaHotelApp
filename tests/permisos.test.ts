@@ -7,8 +7,14 @@ describe('permisos por rol', () => {
     for (const area of AREAS) expect(puedeAcceder('admin', area)).toBe(true)
   })
 
-  it('housekeeping ve inicio, housekeeping, mantenimiento y avisos', () => {
-    expect(areasDe('housekeeping')).toEqual(['dashboard', 'housekeeping', 'mantenimiento', 'avisos'])
+  it('housekeeping ve inicio, su área, mantenimiento, avisos y conversaciones', () => {
+    expect(areasDe('housekeeping')).toEqual([
+      'dashboard',
+      'housekeeping',
+      'mantenimiento',
+      'avisos',
+      'conversaciones',
+    ])
     expect(puedeAcceder('housekeeping', 'reservas')).toBe(false)
     expect(puedeAcceder('housekeeping', 'usuarios')).toBe(false)
   })
@@ -18,6 +24,13 @@ describe('permisos por rol', () => {
     expect(puedeAcceder('recepcion', 'ocupacion')).toBe(true)
     expect(puedeAcceder('recepcion', 'usuarios')).toBe(false)
     expect(puedeAcceder('recepcion', 'config')).toBe(false)
+  })
+
+  it('los contratos los ven solo admin y gerencia', () => {
+    expect(puedeAcceder('admin', 'contratos')).toBe(true)
+    expect(puedeAcceder('gerencia', 'contratos')).toBe(true)
+    expect(puedeAcceder('recepcion', 'contratos')).toBe(false)
+    expect(puedeAcceder('housekeeping', 'contratos')).toBe(false)
   })
 
   it('solo admin accede a la gestión de usuarios', () => {

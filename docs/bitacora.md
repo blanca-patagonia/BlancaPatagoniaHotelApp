@@ -470,3 +470,65 @@ en el límite de error. Probado contra la base: fijar un aviso se permite y
 **adulterar su mensaje se rechaza** (`Solo se puede fijar o desfijar un aviso`);
 la exportación de reportes devuelve 12 meses con las columnas correctas y un
 recurso inexistente responde 404.
+
+## Fase 10 — Contratos con firma y conversaciones (inspiradas en Odoo)
+
+### 10.1 — Contratos y firma electrónica
+
+Adaptación de la app **Firma (Sign)** de Odoo al dominio hotelero (ver **ADR 0010**).
+
+- **Migración 0018:** enums `tipo_contrato` y `estado_contrato`; tablas
+  `contratos` (con vigencia y referencia polimórfica a agencias, proveedores o
+  perfiles) y `firmas` (token, hash, IP, user-agent, fecha). RLS: todo el staff
+  lee, solo admin y gerencia gestionan.
+- **Integridad en la base:** como `entidad_id` es polimórfico y no admite clave
+  foránea, un trigger (`validar_entidad_contrato`) verifica que la entidad exista
+  en la tabla que corresponde al tipo.
+- **Dominio puro** (`lib/domain/contratos.ts`): máquina de estados y reglas de
+  firma («no se firma un contrato vencido», «no se reenvía uno ya firmado»),
+  **23 tests**. La misma función la consultan la vista pública, la acción y el panel.
+- **Adapter `FirmaElectronicaProvider`** con el patrón de `PaymentProvider`:
+  proveedor local que computa un **SHA-256 real** con Web Crypto y deja lista la
+  sustitución por un servicio externo vía variable de entorno.
+- **UI:** `/panel/contratos` (listado con KPIs, filtros y redacción) y su detalle
+  (envío, enlace de firma, constancia y verificación de integridad); vista pública
+  `/firmar/[token]` sin cuenta, resuelta con `service_role` como la confirmación
+  de reserva.
+- **Limitación documentada:** la constancia tiene trazabilidad pero **no es firma
+  digital con validez legal** (Ley 25.506); se aclara al pie de la vista pública.
+- **Verificado de punta a punta:** el trigger rechazó un contrato con entidad
+  inexistente; se firmó un convenio real desde la URL pública y quedaron
+  registrados firmante, IP (`::1`) y fecha; el **hash guardado coincide
+  exactamente** con el SHA-256 recalculado por fuera del sistema.
+
+### 10.2 — Conversaciones internas y asistente del portal
+
+Adaptación de **Conversaciones (Discuss)** de Odoo, diferenciada de Avisos:
+aquel es una cartelera unidireccional, esto es un chat bidireccional por área.
+
+- **Migración 0019:** `canales` (con los roles que participan), `mensajes` y
+  `consultas_bot`. Permiso encapsulado en la función `puede_ver_canal()`, que
+  usan las políticas de `mensajes`; el INSERT además exige que `autor_id` sea el
+  usuario de la sesión, para que nadie escriba en nombre de otro. Se habilitó
+  `supabase_realtime` sobre `mensajes` y se sembraron cuatro canales.
+- **Dominio puro** (`lib/domain/conversaciones.ts`): pertenencia a canales,
+  validación y normalización de mensajes y agrupación de mensajes consecutivos.
+  **12 tests**.
+- **Chat en vivo** (`/panel/conversaciones`): render inicial del servidor más
+  suscripción a Realtime, de modo que la conversación se ve aunque el WebSocket
+  no conecte. Es el único componente de cliente del panel.
+- **Asistente del portal público** (`/reservar`): motor **basado en reglas**
+  (ver **ADR 0011**) que responde horarios, política de cancelación, servicios,
+  ubicación y mascotas **con datos reales de la base** — la política se redacta a
+  partir de `politicas_cancelacion`, no de un texto fijo—, deriva las consultas
+  de precio y disponibilidad al buscador real, y registra en `consultas_bot` lo
+  que no supo responder. **18 tests**.
+- **Bandeja de consultas** en el panel para que recepción dé seguimiento y sepa
+  qué reglas conviene sumar.
+- **Por qué no un LLM:** costo recurrente, credenciales de terceros,
+  alucinaciones sobre datos del negocio y imposibilidad de testear. La interfaz
+  `AsistenteProvider` deja el reemplazo abierto sin reescribir el dominio.
+
+**Verificación:** **150 tests en verde** (antes 96; se sumaron `contratos`,
+`asistente` y `conversaciones`), typecheck y lint limpios. Las pantallas nuevas
+del panel y el portal renderizan con contenido real.

@@ -93,7 +93,9 @@ Tarifario 2025/2026 (Anexo A).
   pagar), reprogramación de reservas, asignación de mucamas y avisos internos ·
   **Fase 9** mejora integral del panel: identidad visual propia (ADR 0009),
   componentes compartidos, búsqueda + paginación + export CSV en todos los
-  listados, navegación móvil y más funciones por módulo. **96 tests verdes**,
+  listados, navegación móvil y más funciones por módulo · **Fase 10** contratos
+  con firma electrónica por token (ADR 0010) y conversaciones internas en tiempo
+  real + asistente del portal basado en reglas (ADR 0011). **150 tests verdes**,
   todo pusheado.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los

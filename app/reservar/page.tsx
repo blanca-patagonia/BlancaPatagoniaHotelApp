@@ -3,6 +3,7 @@ import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { hoyISO, sumarDias, diasEntre } from '@/lib/fechas'
 import { ETIQUETAS_CATEGORIA, type CategoriaUnidad } from '@/lib/domain/unidades'
+import { ChatAsistente } from './_asistente/chat'
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -153,6 +154,11 @@ export default async function ReservarPage({
             ))}
           </div>
         )}
+
+        {/* Asistente: resuelve las consultas frecuentes sin ocupar a recepción. */}
+        <div className="mt-10">
+          <ChatAsistente />
+        </div>
       </div>
     </main>
   )

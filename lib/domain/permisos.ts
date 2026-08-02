@@ -15,8 +15,10 @@ export const AREAS = [
   'mantenimiento',
   'objetos_perdidos',
   'avisos',
+  'conversaciones',
   'agencias',
   'proveedores',
+  'contratos',
   'reportes',
   'config',
   'usuarios',
@@ -33,8 +35,10 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   mantenimiento: 'Mantenimiento',
   objetos_perdidos: 'Objetos perdidos',
   avisos: 'Avisos',
+  conversaciones: 'Conversaciones',
   agencias: 'Agencias',
   proveedores: 'Proveedores',
+  contratos: 'Contratos',
   reportes: 'Reportes',
   config: 'Configuración',
   usuarios: 'Usuarios',
@@ -45,11 +49,14 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   admin: [...AREAS],
   gerencia: [
     'dashboard', 'ocupacion', 'reservas', 'huespedes', 'housekeeping',
-    'mantenimiento', 'objetos_perdidos', 'avisos', 'agencias', 'proveedores',
-    'reportes', 'config',
+    'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
+    'proveedores', 'contratos', 'reportes', 'config',
   ],
-  recepcion: ['dashboard', 'ocupacion', 'reservas', 'huespedes', 'objetos_perdidos', 'avisos', 'agencias'],
-  housekeeping: ['dashboard', 'housekeeping', 'mantenimiento', 'avisos'],
+  recepcion: [
+    'dashboard', 'ocupacion', 'reservas', 'huespedes', 'objetos_perdidos',
+    'avisos', 'conversaciones', 'agencias',
+  ],
+  housekeeping: ['dashboard', 'housekeeping', 'mantenimiento', 'avisos', 'conversaciones'],
 }
 
 export function areasDe(rol: Rol): readonly Area[] {

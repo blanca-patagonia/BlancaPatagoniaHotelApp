@@ -17,6 +17,9 @@ export type NombreIcono =
   | 'avisos'
   | 'agencias'
   | 'proveedores'
+  | 'contratos'
+  | 'firma'
+  | 'chat'
   | 'reportes'
   | 'config'
   | 'usuarios'
@@ -65,6 +68,16 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     'M13.5 9.5h3.8l3.2 3v3h-7z',
     'M7 18.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5z',
     'M17.5 18.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5z',
+  ],
+  contratos: [
+    'M6 3.5h8l4 4v13h-12z',
+    'M14 3.5v4h4',
+    'M8.5 12h7',
+    'M8.5 15.5h4',
+  ],
+  firma: ['M4 17.5c3-1 4-8 6-8s1.5 6 3.5 6 2-2.5 3.5-2.5', 'M3.5 20.5h17'],
+  chat: [
+    'M20.5 12.5c0 3.6-3.8 6.5-8.5 6.5-1 0-2-.1-2.9-.4l-5.1 1.4 1.5-4.2c-1.2-1-1.9-2.4-1.9-3.9C3.6 8.9 7.4 6 12 6s8.5 2.9 8.5 6.5z',
   ],
   reportes: ['M3.5 20.5h17', 'M7 20.5v-7', 'M12 20.5V5.5', 'M17 20.5v-10'],
   config: [
