@@ -108,6 +108,9 @@ Tarifario 2025/2026 (Anexo A).
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`. Paleta de marca: `lago` / `calafate` / `lenga` / `stone`
   (no usar `sky` ni `amber`). Títulos con `font-display`.
+- ⚠️ `next/font/google` descarga las tipografías en build. Si se borra `.next` y la
+  descarga falla, el error se cachea y **toda la app da 500** (incluido `/login`):
+  se arregla reiniciando el dev server.
 - ⚠️ El builder de PostgREST es **thenable**: una función `async` no debe devolverlo
   pelado o el `await` del llamador ejecuta la consulta (ver `reservas/consulta.ts`).
 - **Cara al cliente (diferido a la vista pública `app/reservar`):** web check-in y

@@ -14,7 +14,24 @@ import {
   Tarjeta,
   botonClases,
 } from '../_components/ui'
+import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
+import { obtenerProveedorEmail } from '@/lib/email'
 import { actualizarTarifa, reponerStock } from './actions'
+import { enviarPlantillaPrueba } from './plantillas-actions'
+
+/** Datos de muestra para previsualizar cada plantilla. */
+const MUESTRA = {
+  nombre: 'Ana',
+  codigo: 'BP-DEMO',
+  check_in: '10/09/2026',
+  check_out: '13/09/2026',
+  hora_check_in: '15:00',
+  hora_check_out: '10:00',
+  total: '642,51',
+  enlace: 'https://blancapatagonia.com/ejemplo',
+  nivel: 'Oro',
+  puntos: 2100,
+}
 
 interface ProductoStock {
   id: string
@@ -48,13 +65,14 @@ const MENSAJES_ERROR: Record<string, string> = {
 export default async function ConfigPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; ok?: string }>
+  searchParams: Promise<{ error?: string; ok?: string; detalle?: string }>
 }) {
   const sesion = await requerirAcceso('config')
   const sp = await searchParams
   const supabase = await crearClienteServidor()
 
   const puedeEditar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
+  const proveedorEmail = obtenerProveedorEmail()
 
   const [{ data }, { data: productosData }] = await Promise.all([
     supabase
@@ -114,8 +132,13 @@ export default async function ConfigPage({
         icono="config"
       />
 
-      {sp.error && <Mensaje tono="error">{MENSAJES_ERROR[sp.error] ?? 'Ocurrió un error.'}</Mensaje>}
+      {sp.error && (
+        <Mensaje tono="error">
+          {sp.detalle ?? MENSAJES_ERROR[sp.error] ?? 'Ocurrió un error.'}
+        </Mensaje>
+      )}
       {sp.ok === 'tarifa' && <Mensaje tono="ok">Tarifa actualizada.</Mensaje>}
+      {sp.ok === 'envio' && <Mensaje tono="ok">{sp.detalle ?? 'Correo procesado.'}</Mensaje>}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="Tipos de unidad" valor={String(filas.length)} detalle="en el tarifario" icono="ocupacion" />
@@ -223,6 +246,66 @@ export default async function ConfigPage({
           Tu rol puede consultar el tarifario, pero no modificarlo.
         </p>
       )}
+
+      {/* Plantillas de comunicaciones al huésped. */}
+      <Tarjeta
+        titulo="Plantillas de correo"
+        descripcion={
+          proveedorEmail.esReal()
+            ? 'Comunicaciones automáticas al huésped.'
+            : 'Comunicaciones al huésped · proveedor simulado: los correos NO se envían.'
+        }
+        className="mt-6"
+      >
+        <div className="flex flex-col gap-3 p-5">
+          {EVENTOS_EMAIL.map((evento) => {
+            const plantilla = PLANTILLAS[evento]
+            const vista = renderizar(evento, MUESTRA)
+            return (
+              <details
+                key={evento}
+                className="rounded-xl border border-stone-200 bg-stone-50/60 px-4 py-3"
+              >
+                <summary className="cursor-pointer text-sm font-medium text-stone-800 marker:text-lago-600">
+                  {plantilla.nombre}
+                  <span className="ml-2 text-xs font-normal text-stone-500">
+                    {plantilla.disparador}
+                  </span>
+                </summary>
+
+                <div className="mt-3 rounded-lg border border-stone-200 bg-white p-4">
+                  <p className="text-xs tracking-wide text-stone-400 uppercase">Asunto</p>
+                  <p className="text-sm font-medium text-stone-800">{vista.asunto}</p>
+                  <p className="mt-3 text-xs tracking-wide text-stone-400 uppercase">Cuerpo</p>
+                  <p className="mt-1 text-sm whitespace-pre-line text-stone-700">{vista.cuerpo}</p>
+                  <p className="mt-3 text-xs text-stone-400">
+                    Variables: {plantilla.variables.join(', ')}
+                  </p>
+                </div>
+
+                {puedeEditar && (
+                  <form
+                    action={enviarPlantillaPrueba}
+                    className="mt-3 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="evento" value={evento} />
+                    <input
+                      name="para"
+                      type="email"
+                      placeholder="Enviar prueba a… (tu email por defecto)"
+                      aria-label={`Email de prueba para ${plantilla.nombre}`}
+                      className="w-64 rounded-lg border border-stone-300 px-3 py-1.5 text-sm outline-none focus:border-lago-600"
+                    />
+                    <button className={botonClases('secundario', 'px-3 py-1.5 text-xs')}>
+                      Enviar prueba
+                    </button>
+                  </form>
+                )}
+              </details>
+            )
+          })}
+        </div>
+      </Tarjeta>
 
       <Tarjeta
         titulo="Inventario"

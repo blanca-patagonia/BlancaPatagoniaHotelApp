@@ -209,7 +209,11 @@ export default async function DetalleReservaPage({
                 ? 'No hay tarifa cargada para esas fechas.'
                 : errorParam === 'fechas'
                   ? 'Revisá las fechas de reprogramación.'
-                  : 'No se pudo completar la operación.'}
+                  : errorParam === 'cuit'
+                    ? 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped o de la agencia.'
+                    : errorParam === 'cae'
+                      ? 'El proveedor de facturación rechazó el comprobante. Revisá los importes.'
+                      : 'No se pudo completar la operación.'}
         </p>
       )}
 

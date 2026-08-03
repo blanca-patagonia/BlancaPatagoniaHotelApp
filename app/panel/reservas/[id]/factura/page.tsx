@@ -3,6 +3,15 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
+import {
+  ETIQUETAS_COMPROBANTE,
+  ETIQUETAS_CONDICION_IVA,
+  formatearCuit,
+  caeVigente,
+  type CondicionIva,
+  type TipoComprobante,
+} from '@/lib/domain/facturacion'
+import { hoyISO } from '@/lib/fechas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { BotonImprimir } from './boton-imprimir'
 
@@ -47,7 +56,13 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
       .select('cantidad, precio_unitario, producto:productos_servicios(nombre)')
       .eq('reserva_id', id)
       .order('creado_en'),
-    supabase.from('facturas').select('numero, emitida_en').eq('reserva_id', id).maybeSingle(),
+    supabase
+      .from('facturas')
+      .select(
+        'numero, emitida_en, tipo_comprobante, numero_fiscal, neto, iva, alicuota_iva, cae, cae_vto, cuit_receptor, condicion_iva_receptor',
+      )
+      .eq('reserva_id', id)
+      .maybeSingle(),
   ])
   const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
 
@@ -58,7 +73,22 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
     Number(reserva.total),
     consumos.map((c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }) as Consumo),
   )
-  const fac = factura as { numero: string; emitida_en: string } | null
+  const fac = factura as {
+    numero: string
+    emitida_en: string
+    tipo_comprobante: TipoComprobante | null
+    numero_fiscal: string | null
+    neto: number | string | null
+    iva: number | string | null
+    alicuota_iva: number | string | null
+    cae: string | null
+    cae_vto: string | null
+    cuit_receptor: string | null
+    condicion_iva_receptor: CondicionIva | null
+  } | null
+
+  // Un comprobante con CAE es fiscal; sin CAE, sigue siendo la proforma interna.
+  const esFiscal = Boolean(fac?.cae && fac?.tipo_comprobante)
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -78,8 +108,24 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
             </p>
           </div>
           <div className="text-right text-sm">
-            <p className="font-semibold text-stone-800">Comprobante interno</p>
-            <p className="text-stone-500">{fac?.numero ?? '(proforma)'}</p>
+            {esFiscal ? (
+              <>
+                <div className="flex items-center justify-end gap-2">
+                  <span className="flex size-8 items-center justify-center rounded border border-stone-400 font-display text-lg font-semibold text-stone-800">
+                    {fac!.tipo_comprobante}
+                  </span>
+                  <span className="font-semibold text-stone-800">
+                    {ETIQUETAS_COMPROBANTE[fac!.tipo_comprobante!]}
+                  </span>
+                </div>
+                <p className="tabular text-stone-600">{fac!.numero_fiscal}</p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-stone-800">Comprobante interno</p>
+                <p className="text-stone-500">{fac?.numero ?? '(proforma)'}</p>
+              </>
+            )}
             <p className="text-xs text-stone-400">Reserva {reserva.codigo}</p>
           </div>
         </div>
@@ -133,20 +179,79 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
             ))}
           </tbody>
           <tfoot>
+            {/* La factura A discrimina el IVA; la B y la C lo llevan incluido. */}
+            {esFiscal && fac!.tipo_comprobante === 'A' && (
+              <>
+                <tr className="border-t border-stone-200">
+                  <td className="py-1.5 text-stone-600">Neto gravado</td>
+                  <td className="tabular py-1.5 text-right text-stone-700">
+                    {Number(fac!.neto).toLocaleString('es-AR')}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 text-stone-600">
+                    IVA {Number(fac!.alicuota_iva)}%
+                  </td>
+                  <td className="tabular py-1.5 text-right text-stone-700">
+                    {Number(fac!.iva).toLocaleString('es-AR')}
+                  </td>
+                </tr>
+              </>
+            )}
             <tr className="border-t-2 border-stone-300">
               <td className="py-2 font-semibold text-stone-900">Total</td>
-              <td className="py-2 text-right text-lg font-bold text-stone-900">
+              <td className="tabular py-2 text-right text-lg font-bold text-stone-900">
                 USD {cuenta.total.toLocaleString('es-AR')}
               </td>
             </tr>
           </tfoot>
         </table>
 
-        <p className="mt-6 border-t border-stone-100 pt-3 text-xs text-stone-400">
-          Comprobante interno. No válido como factura fiscal. La facturación
-          electrónica (AFIP / CAE) se incorpora en una etapa posterior. Tarifas en
-          dólares; IVA incluido en el alojamiento.
-        </p>
+        {esFiscal ? (
+          <div className="mt-6 border-t border-stone-200 pt-3">
+            <div className="flex flex-wrap justify-between gap-2 text-sm">
+              <span>
+                <span className="text-stone-500">CAE: </span>
+                <span className="tabular font-medium text-stone-800">{fac!.cae}</span>
+              </span>
+              <span>
+                <span className="text-stone-500">Vencimiento del CAE: </span>
+                <span className="tabular font-medium text-stone-800">
+                  {fac!.cae_vto ? formatoFechaCorta(fac!.cae_vto) : '—'}
+                </span>
+              </span>
+            </div>
+            {fac!.cuit_receptor && (
+              <p className="mt-1 text-sm">
+                <span className="text-stone-500">CUIT del receptor: </span>
+                <span className="tabular text-stone-800">{formatearCuit(fac!.cuit_receptor)}</span>
+              </p>
+            )}
+            {fac!.condicion_iva_receptor && (
+              <p className="text-sm">
+                <span className="text-stone-500">Condición IVA: </span>
+                <span className="text-stone-800">
+                  {ETIQUETAS_CONDICION_IVA[fac!.condicion_iva_receptor]}
+                </span>
+              </p>
+            )}
+            {!caeVigente(fac!.cae_vto, hoyISO()) && (
+              <p className="mt-2 text-xs font-medium text-red-600">
+                El CAE está vencido: este comprobante ya no puede entregarse al cliente.
+              </p>
+            )}
+            <p className="mt-3 text-xs text-stone-400">
+              ⚠️ CAE emitido por un proveedor <strong>simulado</strong>: este comprobante NO tiene
+              validez fiscal. La integración con AFIP/ARCA queda documentada en el ADR 0012.
+              Tarifas en dólares.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-6 border-t border-stone-100 pt-3 text-xs text-stone-400">
+            Comprobante interno sin CAE. No válido como factura fiscal. Tarifas en dólares;
+            IVA incluido en el alojamiento.
+          </p>
+        )}
       </div>
     </div>
   )

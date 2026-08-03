@@ -599,3 +599,47 @@ nuevo; el check-out de una reserva **generó la encuesta automáticamente**; la
 encuesta se respondió desde la URL pública (puntaje 9, promotor) y quedó
 registrada. Las pantallas de auditoría, NPS en Reportes, antigüedad de saldos,
 embudo comercial y preventivo renderizan con datos reales.
+
+### 11.1 — Cableado de las capas que faltaban conectar
+
+Revisión de completitud: tres capas de la Fase 11 estaban implementadas y
+testeadas pero **sin usarse desde ninguna pantalla**, y el bot no consultaba los
+datos que debía. Se cerraron los cuatro huecos.
+
+- **Facturación fiscal conectada al check-out.** `emitirFactura` dejó de crear
+  una proforma sin datos: ahora resuelve la letra del comprobante según la
+  condición frente al IVA del receptor (la agencia si la reserva vino por
+  convenio, si no el huésped), desglosa el impuesto, valida el CUIT cuando
+  corresponde una factura A, asigna numeración correlativa por punto de venta y
+  pide el CAE al proveedor. El comprobante muestra la letra, el número oficial,
+  el neto y el IVA discriminado (solo en la A), el CAE con su vencimiento y el
+  aviso de que es simulado. **Verificado:** huésped consumidor final →
+  **factura B 0001-00000001**, neto 531,00 + IVA 111,51 = **642,51 exacto**,
+  CAE de 14 dígitos con vencimiento a 10 días.
+- **Vencimiento de comprobantes de proveedor.** El *aging report* existía pero
+  **ninguna pantalla cargaba la fecha de vencimiento**, así que todo caía en «por
+  vencer» y el informe era inerte. Se sumaron los campos de vencimiento y número
+  de comprobante al alta, el estado por movimiento con acción de saldar, y el
+  botón que dispara `vencer_comprobantes_proveedor()`. **Verificado:** una
+  factura de junio quedó marcada como vencida y el reporte la ubicó en el tramo
+  **31 a 60 días**.
+- **El bot consulta datos reales.** Antes derivaba toda consulta de precio o
+  disponibilidad al buscador. Ahora extrae las fechas de la pregunta
+  (`10/09`, `10/09/2026` o ISO), llama a **`disponibilidad_por_tipo`** —la misma
+  función SQL del motor anti-overbooking que usa el buscador— y responde con la
+  disponibilidad real por tipo de unidad; para las tarifas informa el rango
+  vigente leído del tarifario. **Verificado:** «¿tienen lugar del 10/09 al
+  13/09?» devolvió los diez tipos con sus plazas y capacidades.
+- **Plantillas de correo conectadas.** Se agregó `EmailProvider` (quinto adapter
+  del proyecto) y `enviarPlantilla()`, único punto por el que salen las
+  comunicaciones. El check-out ahora envía la encuesta con su token. En
+  Configuración hay previsualización de las cuatro plantillas con datos de
+  muestra y envío de prueba, avisando que el proveedor es simulado.
+
+**Verificación:** **239 tests en verde** (antes 228; se sumaron extracción de
+fechas y respuesta de disponibilidad), typecheck y lint limpios.
+
+**Nota de entorno:** borrar `.next` obliga a `next/font/google` a redescargar las
+tipografías; si esa descarga falla, el error queda cacheado y **toda la app
+devuelve 500**, incluido `/login`. Se resuelve reiniciando el servidor. Conviene
+tenerlo presente al desplegar sin red estable.

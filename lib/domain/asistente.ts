@@ -99,6 +99,67 @@ export function detectarIntencion(pregunta: string): Intencion {
   return 'desconocida'
 }
 
+/* ─────────────────────────────────────────── extracción de fechas ──────── */
+
+const RE_DDMM = /\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/g
+const RE_ISO = /\b(\d{4})-(\d{2})-(\d{2})\b/g
+
+function aISO(anio: number, mes: number, dia: number): string | null {
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null
+  const d = new Date(Date.UTC(anio, mes - 1, dia))
+  // Rechaza fechas imposibles (31 de febrero se normalizaría a marzo).
+  if (d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return null
+  return d.toISOString().slice(0, 10)
+}
+
+export interface RangoFechas {
+  desde: string
+  hasta: string
+}
+
+/**
+ * Busca un rango de fechas en una pregunta libre.
+ *
+ * Reconoce `10/09`, `10/09/2026` y `2026-09-10`. Necesita **dos** fechas para
+ * devolver un rango: con una sola no se puede consultar disponibilidad.
+ * `anioPorDefecto` completa el año cuando el huésped no lo escribe.
+ */
+export function extraerFechas(pregunta: string, anioPorDefecto: number): RangoFechas | null {
+  const encontradas: string[] = []
+
+  for (const m of pregunta.matchAll(RE_ISO)) {
+    const iso = aISO(Number(m[1]), Number(m[2]), Number(m[3]))
+    if (iso) encontradas.push(iso)
+  }
+
+  if (encontradas.length < 2) {
+    for (const m of pregunta.matchAll(RE_DDMM)) {
+      const crudoAnio = m[3]
+      const anio = crudoAnio
+        ? crudoAnio.length === 2
+          ? 2000 + Number(crudoAnio)
+          : Number(crudoAnio)
+        : anioPorDefecto
+      const iso = aISO(anio, Number(m[2]), Number(m[1]))
+      if (iso) encontradas.push(iso)
+    }
+  }
+
+  if (encontradas.length < 2) return null
+  const ordenadas = [...new Set(encontradas)].sort()
+  if (ordenadas.length < 2) return null
+  return { desde: ordenadas[0], hasta: ordenadas[ordenadas.length - 1] }
+}
+
+/* ───────────────────────────────────────────────────── datos y respuesta ── */
+
+/** Tipo de unidad con su disponibilidad y precio, tal como lo ve el huésped. */
+export interface TipoDisponible {
+  nombre: string
+  disponibles: number
+  capacidadMax: number
+}
+
 /** Datos reales del hotel con los que el asistente arma sus respuestas. */
 export interface DatosHotel {
   horaCheckIn: string
@@ -107,6 +168,8 @@ export interface DatosHotel {
   servicios: string[]
   direccion: string
   admiteMascotas: boolean
+  /** Rango de precios rack vigente, leído del tarifario. */
+  rangoTarifas: { min: number; max: number } | null
 }
 
 export interface AccionSugerida {
@@ -194,13 +257,25 @@ export function componerRespuesta(intencion: Intencion, datos: DatosHotel): Resp
       }
 
     case 'tarifas':
+      return {
+        intencion,
+        derivar: false,
+        texto: datos.rangoTarifas
+          ? `Según la temporada y el tipo de unidad, las tarifas van de USD ` +
+            `${datos.rangoTarifas.min} a USD ${datos.rangoTarifas.max} por noche (con IVA). ` +
+            `Decime tus fechas y te digo el precio exacto.`
+          : 'Las tarifas dependen de las fechas y del tipo de unidad. Decime cuándo venís y te ' +
+            'muestro el precio final.',
+        accion: { etiqueta: 'Consultar disponibilidad', href: '/reservar' },
+      }
+
     case 'disponibilidad':
       return {
         intencion,
         derivar: false,
         texto:
-          'Las tarifas dependen de las fechas y del tipo de unidad. Buscá tus fechas y te muestro ' +
-          'la disponibilidad real con el precio final.',
+          'Decime tus fechas (por ejemplo «del 10/09 al 13/09») y consulto la disponibilidad real, ' +
+          'o buscá directamente en el buscador.',
         accion: { etiqueta: 'Consultar disponibilidad', href: '/reservar' },
       }
 
@@ -212,6 +287,43 @@ export function componerRespuesta(intencion: Intencion, datos: DatosHotel): Resp
           'Esa no la sé responder todavía. Dejamos tu consulta registrada y el equipo del hotel ' +
           'te va a contactar a la brevedad.',
       }
+  }
+}
+
+/**
+ * Redacta la respuesta de disponibilidad con el resultado REAL de la consulta
+ * al motor anti-overbooking.
+ *
+ * Se mantiene acá (y no en el proveedor) para que el texto sea testeable sin
+ * tocar la base.
+ */
+export function componerDisponibilidad(
+  rango: RangoFechas,
+  tipos: readonly TipoDisponible[],
+): RespuestaAsistente {
+  const conLugar = tipos.filter((t) => t.disponibles > 0)
+  const enlace = `/reservar?check_in=${rango.desde}&check_out=${rango.hasta}`
+
+  if (conLugar.length === 0) {
+    return {
+      intencion: 'disponibilidad',
+      derivar: false,
+      texto:
+        `Del ${rango.desde} al ${rango.hasta} no nos queda disponibilidad. ` +
+        `Si podés mover las fechas, probá con otras y vemos.`,
+      accion: { etiqueta: 'Probar otras fechas', href: '/reservar' },
+    }
+  }
+
+  const detalle = conLugar
+    .map((t) => `· ${t.nombre}: ${t.disponibles} disponible(s), hasta ${t.capacidadMax} personas`)
+    .join('\n')
+
+  return {
+    intencion: 'disponibilidad',
+    derivar: false,
+    texto: `Del ${rango.desde} al ${rango.hasta} tenemos:\n${detalle}`,
+    accion: { etiqueta: 'Ver precios y reservar', href: enlace },
   }
 }
 

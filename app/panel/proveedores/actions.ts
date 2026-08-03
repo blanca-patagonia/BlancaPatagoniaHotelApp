@@ -35,17 +35,58 @@ export async function crearProveedor(
   return { ok: `Proveedor ${nombre} creado.` }
 }
 
+/**
+ * Registra una factura del proveedor (cargo) o un pago nuestro.
+ *
+ * El **vencimiento** solo tiene sentido en los cargos: es lo que alimenta el
+ * reporte de antigüedad de saldos. Un pago se marca como saldado en el acto.
+ */
 export async function registrarMovimientoProveedor(formData: FormData): Promise<void> {
   await exigirGestion()
   const proveedorId = String(formData.get('proveedor_id') ?? '')
   const tipo = String(formData.get('tipo') ?? '')
   const monto = Number(formData.get('monto') ?? 0)
   const concepto = String(formData.get('concepto') ?? '').trim()
+  const vencimiento = String(formData.get('vencimiento') ?? '')
+  const comprobante = String(formData.get('comprobante') ?? '').trim()
+
   if (proveedorId && ['cargo', 'pago'].includes(tipo) && monto > 0) {
+    const esCargo = tipo === 'cargo'
     const supabase = await crearClienteServidor()
-    await supabase
-      .from('movimientos_proveedor')
-      .insert({ proveedor_id: proveedorId, tipo, monto, concepto })
+    await supabase.from('movimientos_proveedor').insert({
+      proveedor_id: proveedorId,
+      tipo,
+      monto,
+      concepto,
+      comprobante: comprobante || null,
+      vencimiento: esCargo && vencimiento ? vencimiento : null,
+      estado: esCargo ? 'pendiente' : 'pagado',
+    })
   }
   redirect(`/panel/proveedores/${proveedorId}`)
+}
+
+/** Marca una factura del proveedor como saldada. */
+export async function marcarComprobantePagado(formData: FormData): Promise<void> {
+  await exigirGestion()
+  const id = String(formData.get('movimiento_id') ?? '')
+  const proveedorId = String(formData.get('proveedor_id') ?? '')
+  if (id) {
+    const supabase = await crearClienteServidor()
+    await supabase.from('movimientos_proveedor').update({ estado: 'pagado' }).eq('id', id)
+  }
+  redirect(`/panel/proveedores/${proveedorId}`)
+}
+
+/**
+ * Marca como vencidos los cargos impagos pasados de fecha.
+ *
+ * Delega en la función SQL `vencer_comprobantes_proveedor()`; hoy se dispara a
+ * mano, en producción iría por cron.
+ */
+export async function vencerComprobantes(): Promise<void> {
+  await exigirGestion()
+  const supabase = await crearClienteServidor()
+  const { data } = await supabase.rpc('vencer_comprobantes_proveedor')
+  redirect(`/panel/proveedores?vencidos=${data ?? 0}`)
 }

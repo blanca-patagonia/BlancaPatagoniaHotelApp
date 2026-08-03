@@ -22,6 +22,7 @@ import {
   Etiqueta,
   FILA,
   Kpi,
+  Mensaje,
   TD,
   TH,
   Tabla,
@@ -29,6 +30,7 @@ import {
   botonClases,
 } from '../_components/ui'
 import { FormularioProveedor } from './formulario'
+import { vencerComprobantes } from './actions'
 
 interface Proveedor {
   id: string
@@ -40,10 +42,11 @@ interface Proveedor {
 export default async function ProveedoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; saldo?: string }>
+  searchParams: Promise<{ q?: string; saldo?: string; vencidos?: string }>
 }) {
   await requerirAcceso('proveedores')
-  const { q, saldo: filtroSaldo } = await searchParams
+  const sp = await searchParams
+  const { q, saldo: filtroSaldo } = sp
   const supabase = await crearClienteServidor()
 
   let consulta = supabase.from('proveedores').select('id, nombre, rubro, activo').order('nombre')
@@ -90,8 +93,21 @@ export default async function ProveedoresPage({
         titulo="Proveedores"
         descripcion="Cuentas por pagar: facturas, pagos y saldo."
         icono="proveedores"
-        acciones={<BotonExportar href={`/panel/exportar/proveedores${construirQuery({ q })}`} />}
+        acciones={
+          <>
+            <form action={vencerComprobantes}>
+              <button className={botonClases('secundario')}>Actualizar vencidos</button>
+            </form>
+            <BotonExportar href={`/panel/exportar/proveedores${construirQuery({ q })}`} />
+          </>
+        }
       />
+
+      {sp.vencidos && (
+        <Mensaje tono="ok">
+          Se marcaron {sp.vencidos} comprobante(s) como vencidos.
+        </Mensaje>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi

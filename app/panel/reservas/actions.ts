@@ -10,6 +10,19 @@ import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 import { puntosPorEstadia } from '@/lib/domain/fidelidad'
+import { obtenerSesion } from '@/lib/auth/session'
+import { hoyISO } from '@/lib/fechas'
+import {
+  tipoComprobante,
+  desglosarIva,
+  numeroComprobante,
+  cuitValido,
+  normalizarCuit,
+  exigeCuitReceptor,
+  type CondicionIva,
+} from '@/lib/domain/facturacion'
+import { obtenerProveedorFacturacion } from '@/lib/facturacion'
+import { enviarPlantilla } from '@/lib/email'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -93,7 +106,9 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
   const supabase = await crearClienteServidor()
   const { data: reserva } = await supabase
     .from('reservas')
-    .select('estado, total, huesped_id')
+    .select(
+      'estado, total, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email)',
+    )
     .eq('id', id)
     .single()
   if (!reserva) redirect('/panel/reservas')
@@ -117,6 +132,22 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
         .from('huespedes')
         .update({ puntos: (h?.puntos ?? 0) + puntos })
         .eq('id', reserva.huesped_id)
+    }
+
+    // El trigger `reservas_generar_encuesta` ya creó la encuesta con su token:
+    // acá solo se le manda el enlace al huésped.
+    const huesped = reserva.huesped as unknown as { nombre: string; email: string | null } | null
+    const { data: encuesta } = await supabase
+      .from('encuestas_satisfaccion')
+      .select('token')
+      .eq('reserva_id', id)
+      .maybeSingle()
+
+    if (encuesta?.token && huesped?.email) {
+      await enviarPlantilla('encuesta_postcheckout', huesped.email, {
+        nombre: huesped.nombre,
+        enlace: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/encuesta/${encuesta.token}`,
+      })
     }
   }
 
@@ -196,35 +227,145 @@ export async function quitarConsumo(formData: FormData): Promise<void> {
   redirect(`/panel/reservas/${reservaId}`)
 }
 
-/** Emite la factura interna con la cuenta consolidada (alojamiento + consumos). */
+/**
+ * Condición del hotel frente al IVA y punto de venta habilitado.
+ *
+ * Son datos de configuración fiscal; viven acá hasta que exista una tabla de
+ * parámetros generales del establecimiento.
+ */
+const CONDICION_EMISOR: CondicionIva = 'responsable_inscripto'
+const PUNTO_VENTA = 1
+/** Alojamiento y servicios tributan al 21 % en Argentina. */
+const ALICUOTA = 21
+
+interface ReceptorFactura {
+  condicion: CondicionIva
+  cuit: string | null
+}
+
+/**
+ * Emite la factura de la reserva.
+ *
+ * Resuelve la letra del comprobante según la condición frente al IVA del
+ * receptor (la agencia si la reserva vino por convenio, si no el huésped),
+ * discrimina el impuesto y solicita el CAE al proveedor de facturación
+ * electrónica.
+ *
+ * ⚠️ El CAE lo emite un proveedor **simulado**: los comprobantes no tienen
+ * validez fiscal (ver ADR 0012).
+ */
 export async function emitirFactura(formData: FormData): Promise<void> {
   const reservaId = String(formData.get('reserva_id') ?? '')
   if (!reservaId) redirect('/panel/reservas')
 
+  const sesion = await obtenerSesion()
   const supabase = await crearClienteServidor()
+
   const { data: existente } = await supabase
     .from('facturas')
     .select('id')
     .eq('reserva_id', reservaId)
     .maybeSingle()
 
-  if (!existente) {
-    const { data: reserva } = await supabase
-      .from('reservas')
-      .select('total')
-      .eq('id', reservaId)
+  // Una reserva se factura una sola vez: si ya existe, se muestra la emitida.
+  if (existente) redirect(`/panel/reservas/${reservaId}/factura`)
+
+  const { data: reserva } = await supabase
+    .from('reservas')
+    .select(
+      'total, agencia_id, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero)',
+    )
+    .eq('id', reservaId)
+    .single()
+
+  if (!reserva) redirect('/panel/reservas')
+
+  const { data: consumosData } = await supabase
+    .from('consumos')
+    .select('cantidad, precio_unitario')
+    .eq('reserva_id', reservaId)
+
+  const consumos: Consumo[] = (consumosData ?? []).map((c) => ({
+    cantidad: c.cantidad as number,
+    precioUnitario: Number(c.precio_unitario),
+  }))
+  const cuenta = cuentaConsolidada(Number(reserva.total ?? 0), consumos)
+
+  // El receptor es la agencia cuando la reserva entró por convenio; si no, el
+  // huésped. De ahí sale la letra del comprobante.
+  let receptor: ReceptorFactura
+  if (reserva.agencia_id) {
+    const { data: agencia } = await supabase
+      .from('agencias')
+      .select('condicion_iva, cuit')
+      .eq('id', reserva.agencia_id)
       .single()
-    const { data: consumosData } = await supabase
-      .from('consumos')
-      .select('cantidad, precio_unitario')
-      .eq('reserva_id', reservaId)
-    const consumos: Consumo[] = (consumosData ?? []).map((c) => ({
-      cantidad: c.cantidad as number,
-      precioUnitario: Number(c.precio_unitario),
-    }))
-    const cuenta = cuentaConsolidada(Number(reserva?.total ?? 0), consumos)
-    await supabase.from('facturas').insert({ reserva_id: reservaId, total: cuenta.total })
+    receptor = {
+      condicion: (agencia?.condicion_iva ?? 'responsable_inscripto') as CondicionIva,
+      cuit: (agencia?.cuit as string) ?? null,
+    }
+  } else {
+    const h = reserva.huesped as unknown as {
+      condicion_iva: CondicionIva
+      doc_tipo: string | null
+      doc_numero: string | null
+    } | null
+    // Solo se toma el documento como CUIT si efectivamente lo es.
+    const posibleCuit = h?.doc_tipo?.toUpperCase() === 'CUIT' ? h.doc_numero : null
+    receptor = {
+      condicion: h?.condicion_iva ?? 'consumidor_final',
+      cuit: posibleCuit,
+    }
   }
+
+  const tipo = tipoComprobante(CONDICION_EMISOR, receptor.condicion)
+  const cuitLimpio = receptor.cuit ? normalizarCuit(receptor.cuit) : null
+
+  // Un comprobante A sin CUIT válido lo rechazaría AFIP: se corta antes.
+  if (exigeCuitReceptor(tipo) && (!cuitLimpio || !cuitValido(cuitLimpio))) {
+    redirect(`/panel/reservas/${reservaId}?error=cuit`)
+  }
+
+  const desglose = desglosarIva(cuenta.total, ALICUOTA)
+
+  // Numeración correlativa por punto de venta. Es un contador simple, no
+  // transaccional: con AFIP real hay que revisarlo (ver ADR 0012).
+  const { count } = await supabase
+    .from('facturas')
+    .select('*', { count: 'exact', head: true })
+    .eq('punto_venta', PUNTO_VENTA)
+  const siguiente = (count ?? 0) + 1
+
+  const proveedor = obtenerProveedorFacturacion()
+  const resultado = await proveedor.solicitarCae({
+    tipo,
+    puntoVenta: PUNTO_VENTA,
+    total: desglose.total,
+    neto: desglose.neto,
+    iva: desglose.iva,
+    condicionReceptor: receptor.condicion,
+    cuitReceptor: cuitLimpio,
+    fecha: hoyISO(),
+  })
+
+  if (!resultado.ok) redirect(`/panel/reservas/${reservaId}?error=cae`)
+
+  await supabase.from('facturas').insert({
+    reserva_id: reservaId,
+    total: desglose.total,
+    neto: desglose.neto,
+    iva: desglose.iva,
+    alicuota_iva: ALICUOTA,
+    tipo_comprobante: tipo,
+    condicion_iva_receptor: receptor.condicion,
+    cuit_receptor: cuitLimpio,
+    punto_venta: PUNTO_VENTA,
+    numero_fiscal: numeroComprobante(PUNTO_VENTA, siguiente),
+    cae: resultado.cae,
+    cae_vto: resultado.caeVto,
+    cae_solicitado_en: new Date().toISOString(),
+    emitida_por: sesion?.userId ?? null,
+  })
 
   redirect(`/panel/reservas/${reservaId}/factura`)
 }
