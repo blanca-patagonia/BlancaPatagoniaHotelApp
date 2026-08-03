@@ -21,6 +21,7 @@ import {
   EstadoVacio,
   Etiqueta,
   FILA,
+  Mensaje,
   Paginacion,
   TD,
   TH,
@@ -29,6 +30,7 @@ import {
   botonClases,
 } from '../_components/ui'
 import { consultaReservas, filtroTermino } from './consulta'
+import { enviarRecordatoriosLlegada } from './actions'
 
 interface Row {
   id: string
@@ -49,6 +51,7 @@ interface Params {
   hasta?: string
   grupo?: string
   pagina?: string
+  recordatorios?: string
 }
 
 export default async function ReservasPage({
@@ -100,6 +103,9 @@ export default async function ReservasPage({
         icono="reservas"
         acciones={
           <>
+            <form action={enviarRecordatoriosLlegada}>
+              <button className={botonClases('secundario')}>Recordar llegadas de mañana</button>
+            </form>
             <BotonExportar href={`/panel/exportar/reservas${construirQuery(vigentes)}`} />
             <Link href="/panel/reservas/nueva-grupo" className={botonClases('secundario')}>
               + Grupo
@@ -110,6 +116,12 @@ export default async function ReservasPage({
           </>
         }
       />
+
+      {sp.recordatorios && (
+        <Mensaje tono="ok">
+          Se enviaron {sp.recordatorios} recordatorio(s) a los huéspedes que llegan mañana.
+        </Mensaje>
+      )}
 
       {sp.grupo && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-calafate-50 px-4 py-3 text-sm ring-1 ring-calafate-200">

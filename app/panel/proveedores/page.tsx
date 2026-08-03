@@ -8,9 +8,11 @@ import {
   totalVencido,
   TRAMOS,
   ETIQUETAS_TRAMO,
+  porVencer,
+  esDeudaViva,
   type ComprobanteDeuda,
 } from '@/lib/domain/antiguedad'
-import { hoyISO } from '@/lib/fechas'
+import { hoyISO, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { construirQuery, terminoBusqueda } from '@/lib/listados'
 import {
   BarraHerramientas,
@@ -57,10 +59,14 @@ export default async function ProveedoresPage({
     consulta,
     supabase
       .from('movimientos_proveedor')
-      .select('proveedor_id, tipo, monto, estado, vencimiento'),
+      .select('proveedor_id, tipo, monto, estado, vencimiento, concepto, comprobante'),
   ])
   const proveedores = (provData ?? []) as Proveedor[]
-  const movs = (movsData ?? []) as (ComprobanteDeuda & { proveedor_id: string })[]
+  const movs = (movsData ?? []) as (ComprobanteDeuda & {
+    proveedor_id: string
+    concepto: string
+    comprobante: string | null
+  })[]
 
   // Reporte de antigüedad de saldos: cuánto se debe y desde hace cuánto.
   const hoy = hoyISO()
@@ -69,6 +75,14 @@ export default async function ProveedoresPage({
   const vencido = totalVencido(antiguedad)
   const maxTramo = Math.max(1, ...TRAMOS.map((t) => antiguedad[t]))
 
+  // Recordatorio: facturas impagas que vencen dentro de la semana. Es lo que
+  // evita enterarse del vencimiento cuando ya pasó.
+  const DIAS_AVISO = 7
+  const proximosVencimientos = porVencer(movs.filter(esDeudaViva), hoy, DIAS_AVISO).sort((a, b) =>
+    (a.vencimiento ?? '').localeCompare(b.vencimiento ?? ''),
+  )
+
+  const nombrePorProveedor = new Map(proveedores.map((p) => [p.id, p.nombre]))
   const porProveedor = new Map<string, Movimiento[]>()
   for (const m of movs) {
     const arr = porProveedor.get(m.proveedor_id) ?? []
@@ -167,6 +181,45 @@ export default async function ProveedoresPage({
           <FormularioProveedor />
         </div>
       </details>
+
+      {/* Recordatorio de vencimientos: solo aparece cuando hay algo que pagar. */}
+      {proximosVencimientos.length > 0 && (
+        <Tarjeta
+          titulo={`Vencen en los próximos ${DIAS_AVISO} días`}
+          descripcion="Facturas impagas con vencimiento cercano."
+          className="mb-4"
+        >
+          <ul>
+            {proximosVencimientos.map((m, i) => {
+              const dias = diasEntre(hoy, m.vencimiento!)
+              const nombre = nombrePorProveedor.get(m.proveedor_id) ?? 'Proveedor'
+              return (
+                <li
+                  key={i}
+                  className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-5 py-2.5 first:border-0"
+                >
+                  <div className="min-w-40 flex-1">
+                    <p className="font-medium text-stone-800">{nombre}</p>
+                    <p className="text-xs text-stone-400">
+                      {m.concepto || 'Factura'}
+                      {m.comprobante && ` · ${m.comprobante}`}
+                    </p>
+                  </div>
+                  <Etiqueta tono={dias <= 2 ? 'peligro' : 'alerta'}>
+                    {dias === 0 ? 'vence hoy' : dias === 1 ? 'vence mañana' : `en ${dias} días`}
+                  </Etiqueta>
+                  <span className="tabular text-sm text-stone-500">
+                    {formatoFechaCorta(m.vencimiento!)}
+                  </span>
+                  <span className="tabular w-24 text-right font-medium text-stone-800">
+                    USD {Number(m.monto).toLocaleString('es-AR')}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </Tarjeta>
+      )}
 
       {/* Antigüedad de saldos: no es lo mismo deber a 5 días que a 100. */}
       <Tarjeta

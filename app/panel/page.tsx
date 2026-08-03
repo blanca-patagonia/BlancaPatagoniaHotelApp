@@ -4,6 +4,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { ESTADOS_ACTIVOS, ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
 import { hoyISO, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
+import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { areasDe, ETIQUETAS_AREA, type Area } from '@/lib/domain/permisos'
 import { PUNTO_HK, TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
@@ -83,6 +84,7 @@ export default async function DashboardPage() {
     { count: mantPendiente },
     { count: objetosGuardados },
     { data: stockBajo },
+    { data: comprobantes },
   ] = await Promise.all([
     supabase.from('unidades').select('estado').eq('activo', true),
     supabase
@@ -98,6 +100,11 @@ export default async function DashboardPage() {
       .in('estado', ['pendiente', 'en_proceso']),
     supabase.from('objetos_perdidos').select('*', { count: 'exact', head: true }).eq('estado', 'guardado'),
     supabase.from('productos_servicios').select('nombre, stock, stock_minimo').eq('activo', true),
+    supabase
+      .from('movimientos_proveedor')
+      .select('tipo, monto, estado, vencimiento')
+      .eq('tipo', 'cargo')
+      .in('estado', ['pendiente', 'vencido']),
   ])
 
   const totalUnidades = unidades?.length ?? 0
@@ -122,6 +129,11 @@ export default async function DashboardPage() {
   const faltantes = (stockBajo ?? []).filter(
     (p) => Number(p.stock ?? 0) <= Number(p.stock_minimo ?? 0),
   )
+
+  // Facturas de proveedores que vencen esta semana (o ya vencieron).
+  const comprobantesVivos = (comprobantes ?? []) as ComprobanteDeuda[]
+  const vencenPronto = porVencer(comprobantesVivos, hoy, 7).length
+  const yaVencidos = comprobantesVivos.filter((c) => c.estado === 'vencido').length
 
   const areas = areasDe(sesion.rol)
   const puede = (a: Area) => areas.includes(a)
@@ -178,8 +190,23 @@ export default async function DashboardPage() {
       </div>
 
       {/* Alertas: solo aparecen cuando hay algo que atender. */}
-      {((mantPendiente ?? 0) > 0 || (objetosGuardados ?? 0) > 0 || faltantes.length > 0) && (
+      {((mantPendiente ?? 0) > 0 ||
+        (objetosGuardados ?? 0) > 0 ||
+        faltantes.length > 0 ||
+        vencenPronto > 0 ||
+        yaVencidos > 0) && (
         <div className="mt-4 flex flex-wrap gap-2">
+          {(vencenPronto > 0 || yaVencidos > 0) && puede('proveedores') && (
+            <Link
+              href="/panel/proveedores"
+              className="inline-flex items-center gap-2 rounded-xl bg-lenga-50 px-3 py-2 text-sm text-lenga-900 ring-1 ring-lenga-200 transition hover:bg-lenga-100"
+            >
+              <Icono nombre="proveedores" tam={16} />
+              {yaVencidos > 0 && `${yaVencidos} factura(s) vencida(s)`}
+              {yaVencidos > 0 && vencenPronto > 0 && ' · '}
+              {vencenPronto > 0 && `${vencenPronto} vence(n) esta semana`}
+            </Link>
+          )}
           {(mantPendiente ?? 0) > 0 && puede('mantenimiento') && (
             <Link
               href="/panel/mantenimiento"

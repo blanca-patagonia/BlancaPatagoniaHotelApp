@@ -672,3 +672,47 @@ de la panadería **cero** con los de la lavandería, viendo cada uno lo suyo. Un
 contrato en borrador **no aparece** en el portal de su propia contraparte, y el
 firmado sí. Token inexistente → 404. **244 tests en verde**, typecheck y lint
 limpios.
+
+### 11.3 — Cierre de los últimos huecos de cableado
+
+Segunda revisión de completitud contra los prompts originales. Aparecieron tres
+huecos del mismo tipo que la 11.1: **código escrito y testeado que nadie usaba**.
+
+- **Recordatorio de vencimientos.** `porVencer()` estaba en el dominio con sus
+  tests desde la Fase 11, pero **ninguna pantalla la llamaba**: el punto pedía
+  «recordatorios automáticos de vencimientos» y solo existía el *aging report*.
+  Ahora hay una tarjeta «Vencen en los próximos 7 días» en Proveedores —con los
+  días restantes y el número de comprobante— y una alerta en Inicio que combina
+  las facturas ya vencidas con las que vencen esta semana.
+- **Las tres plantillas que no se disparaban.** De las cuatro, solo salía la
+  encuesta post-checkout. Se conectaron: la **confirmación de reserva** (el
+  checkout público dejó de usar el stub suelto de la Fase 4 y ahora usa la
+  plantilla del catálogo), el **aviso de cambio de nivel de fidelidad** —que se
+  envía solo si la estadía hizo **cruzar el umbral**, no cada vez que suma
+  puntos— y el **recordatorio previo a la llegada**, como tarea programada con
+  el mismo patrón que `expirar_reservas_pendientes`: botón en Reservas ahora,
+  cron en producción.
+- **El bot y las temporadas.** Consultaba políticas y tarifas, pero no el
+  calendario. Se sumó la intención `temporadas`, que se resuelve leyendo
+  `temporadas` + `temporada_rangos` de la base: si el hotel cambia las fechas, el
+  asistente responde las nuevas sin tocar código. La intención se evalúa **antes**
+  que tarifas, porque «¿la temporada alta tiene otro precio?» pregunta por el
+  calendario.
+
+Dos defectos de redacción detectados al probarlo en el navegador y corregidos
+con test: el texto decía «Temporada temporada alta» (el nombre de la base ya
+trae la palabra) y encadenaba «del A al B y del C al D y del E al F» en lugar de
+enumerar con comas y una sola conjunción.
+
+**Nota sobre una desviación deliberada:** el prompt pedía que el bot reutilizara
+la RPC `unidades_disponibles`. Se usa `disponibilidad_por_tipo` en su lugar,
+porque la primera devuelve las unidades concretas con nombre e id —expondría el
+inventario interno al público— y la segunda está documentada en el propio código
+como «apta para el portal público». Ambas se apoyan en el mismo motor
+anti-overbooking.
+
+**Verificación:** **253 tests en verde** (antes 244), typecheck y lint limpios.
+En el navegador: el bot respondió el calendario real de las tres temporadas; la
+tarjeta de vencimientos mostró «Lavado semana 31 · 0001-00000052 · en 3 días ·
+USD 220»; Inicio avisó «1 factura vencida · 1 vence esta semana»; y el disparador
+de recordatorios de llegada corrió y devolvió su resultado.

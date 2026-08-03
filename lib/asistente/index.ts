@@ -2,7 +2,7 @@ import 'server-only'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import type { ReglaCancelacion } from '@/lib/domain/cancelacion'
 import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
-import { hoyISO } from '@/lib/fechas'
+import { hoyISO, parsearPeriodo } from '@/lib/fechas'
 import {
   detectarIntencion,
   componerRespuesta,
@@ -50,10 +50,15 @@ const ADMITE_MASCOTAS = false
 async function cargarDatosHotel(): Promise<DatosHotel> {
   const supabase = await crearClienteServidor()
 
-  const [{ data: politica }, { data: tarifas }] = await Promise.all([
+  const [{ data: politica }, { data: tarifas }, { data: temporadasData }] = await Promise.all([
     supabase.from('politicas_cancelacion').select('reglas').eq('codigo', 'estandar').maybeSingle(),
     // El rango de precios sale del tarifario real, no de un texto fijo.
     supabase.from('tarifas').select('precio_rack'),
+    // Temporadas con sus rangos: el calendario también sale de la base.
+    supabase
+      .from('temporadas')
+      .select('nombre, orden, rangos:temporada_rangos(rango)')
+      .order('orden'),
   ])
 
   const precios = (tarifas ?? [])
@@ -70,6 +75,17 @@ async function cargarDatosHotel(): Promise<DatosHotel> {
     rangoTarifas: precios.length
       ? { min: Math.round(Math.min(...precios)), max: Math.round(Math.max(...precios)) }
       : null,
+    temporadas: (
+      (temporadasData ?? []) as unknown as { nombre: string; rangos: { rango: string }[] }[]
+    ).map((t) => ({
+      nombre: t.nombre,
+      // `daterange` llega como `[2026-11-15,2027-03-16)`: se reutiliza el
+      // parser de períodos del dominio de fechas.
+      rangos: (t.rangos ?? []).map((r) => {
+        const p = parsearPeriodo(r.rango)
+        return { desde: p.desde, hasta: p.hasta }
+      }),
+    })),
   }
 }
 

@@ -6,12 +6,12 @@ import type { TarifaTipo } from '@/lib/domain/precios'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { diasEntre } from '@/lib/fechas'
-import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
+import { puedeTransicionar, ESTADOS_ACTIVOS, type EstadoReserva } from '@/lib/domain/reservas'
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
-import { puntosPorEstadia } from '@/lib/domain/fidelidad'
+import { puntosPorEstadia, nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 import { obtenerSesion } from '@/lib/auth/session'
-import { hoyISO } from '@/lib/fechas'
+import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import {
   tipoComprobante,
   desglosarIva,
@@ -23,6 +23,9 @@ import {
 } from '@/lib/domain/facturacion'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
 import { enviarPlantilla } from '@/lib/email'
+
+/** Horario de llegada del hotel (ver nota en `lib/asistente`). */
+const HORA_CHECK_IN = '15:00'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -128,10 +131,27 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
         .select('puntos')
         .eq('id', reserva.huesped_id)
         .single()
-      await supabase
-        .from('huespedes')
-        .update({ puntos: (h?.puntos ?? 0) + puntos })
-        .eq('id', reserva.huesped_id)
+
+      const previos = h?.puntos ?? 0
+      const totales = previos + puntos
+      await supabase.from('huespedes').update({ puntos: totales }).eq('id', reserva.huesped_id)
+
+      // Solo se avisa si la estadía lo hizo CAMBIAR de nivel; sumar puntos sin
+      // cruzar el umbral no amerita un correo.
+      const nivelPrevio = nivelFidelidad(previos)
+      const nivelNuevo = nivelFidelidad(totales)
+      const huespedFid = reserva.huesped as unknown as {
+        nombre: string
+        email: string | null
+      } | null
+
+      if (nivelNuevo !== nivelPrevio && huespedFid?.email) {
+        await enviarPlantilla('cambio_nivel_fidelidad', huespedFid.email, {
+          nombre: huespedFid.nombre,
+          nivel: ETIQUETAS_NIVEL[nivelNuevo],
+          puntos: totales,
+        })
+      }
     }
 
     // El trigger `reservas_generar_encuesta` ya creó la encuesta con su token:
@@ -492,4 +512,53 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   }
   await supabase.from('reservas').update({ total: cot.resumen.total }).eq('id', id)
   redirect(`/panel/reservas/${id}`)
+}
+
+/**
+ * Envía el recordatorio a los huéspedes que llegan mañana.
+ *
+ * Es una tarea programada, como `expirar_reservas_pendientes` o
+ * `generar_mantenimiento_preventivo`: hoy se dispara a mano desde el panel y en
+ * producción iría por cron. Se limita a las reservas activas con email cargado.
+ */
+export async function enviarRecordatoriosLlegada(): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion) redirect('/login')
+
+  const manana = sumarDias(hoyISO(), 1)
+  const supabase = await crearClienteServidor()
+
+  const { data } = await supabase
+    .from('estadias')
+    .select(
+      'periodo, reserva:reservas(codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(nombre, email))',
+    )
+    .in('estado', [...ESTADOS_ACTIVOS])
+
+  const filas = (data ?? []) as unknown as {
+    periodo: string
+    reserva: {
+      codigo: string
+      estado: EstadoReserva
+      huesped: { nombre: string; email: string | null } | null
+    } | null
+  }[]
+
+  let enviados = 0
+  for (const fila of filas) {
+    // El check-in es el inicio del período de la estadía.
+    if (parsearPeriodo(fila.periodo).desde !== manana) continue
+    const h = fila.reserva?.huesped
+    if (!h?.email) continue
+
+    const r = await enviarPlantilla('recordatorio_checkin', h.email, {
+      nombre: h.nombre,
+      codigo: fila.reserva!.codigo,
+      check_in: formatoFechaCorta(manana),
+      hora_check_in: HORA_CHECK_IN,
+    })
+    if (r.ok) enviados++
+  }
+
+  redirect(`/panel/reservas?recordatorios=${enviados}`)
 }

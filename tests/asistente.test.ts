@@ -3,6 +3,7 @@ import {
   normalizar,
   detectarIntencion,
   describirPoliticaCancelacion,
+  describirTemporadas,
   componerRespuesta,
   componerDisponibilidad,
   extraerFechas,
@@ -25,6 +26,16 @@ const DATOS: DatosHotel = {
   direccion: 'El Calafate, Santa Cruz',
   admiteMascotas: false,
   rangoTarifas: { min: 120, max: 480 },
+  temporadas: [
+    { nombre: 'Alta', rangos: [{ desde: '2026-11-15', hasta: '2027-03-16' }] },
+    {
+      nombre: 'Media',
+      rangos: [
+        { desde: '2026-09-01', hasta: '2026-11-15' },
+        { desde: '2027-03-16', hasta: '2027-05-01' },
+      ],
+    },
+  ],
 }
 
 describe('normalización del texto', () => {
@@ -138,6 +149,75 @@ describe('respuestas del asistente', () => {
   it('toda respuesta tiene texto no vacío', () => {
     const r = responder('cualquier cosa rarísima', DATOS)
     expect(r.texto.length).toBeGreaterThan(0)
+  })
+})
+
+describe('temporadas', () => {
+  it('reconoce la intención', () => {
+    expect(detectarIntencion('¿cuándo es temporada alta?')).toBe('temporadas')
+    expect(detectarIntencion('¿en qué época conviene ir?')).toBe('temporadas')
+  })
+
+  it('prioriza temporada sobre precio cuando aparecen juntas', () => {
+    // «¿la temporada alta tiene otro precio?» pregunta por el calendario.
+    expect(detectarIntencion('¿la temporada alta tiene otro precio?')).toBe('temporadas')
+  })
+
+  it('describe el calendario con las fechas cargadas en la base', () => {
+    const texto = describirTemporadas(DATOS.temporadas)
+    // El nombre se respeta tal como está cargado en la base.
+    expect(texto).toMatch(/alta/i)
+    expect(texto).toContain('15/11')
+    expect(texto).toContain('16/03')
+  })
+
+  it('junta los varios períodos de una misma temporada', () => {
+    const texto = describirTemporadas(DATOS.temporadas)
+    expect(texto).toContain('01/09')
+    expect(texto).toContain('01/05')
+  })
+
+  it('NO repite la palabra «temporada» si el nombre ya la trae', () => {
+    const texto = describirTemporadas([
+      { nombre: 'Temporada alta', rangos: [{ desde: '2026-11-15', hasta: '2027-03-16' }] },
+    ])
+    expect(texto).not.toMatch(/temporada temporada/i)
+    expect(texto).toContain('Temporada alta')
+  })
+
+  it('agrega la palabra si el nombre no la trae', () => {
+    const texto = describirTemporadas([
+      { nombre: 'Alta', rangos: [{ desde: '2026-11-15', hasta: '2027-03-16' }] },
+    ])
+    expect(texto).toContain('Temporada Alta')
+  })
+
+  it('enumera tres o más períodos con comas y una sola «y»', () => {
+    const texto = describirTemporadas([
+      {
+        nombre: 'Alta',
+        rangos: [
+          { desde: '2026-03-29', hasta: '2026-04-05' },
+          { desde: '2026-12-20', hasta: '2027-03-01' },
+          { desde: '2026-11-01', hasta: '2026-12-01' },
+        ],
+      },
+    ])
+    expect(texto).toContain(', ')
+    // Una sola conjunción, no «y del … y del …».
+    expect(texto.match(/ y del /g)).toHaveLength(1)
+  })
+
+  it('sin calendario cargado no inventa fechas', () => {
+    const texto = describirTemporadas([{ nombre: 'Alta', rangos: [] }])
+    expect(texto).not.toMatch(/\d{2}\/\d{2}/)
+    expect(texto).toMatch(/escribinos/i)
+  })
+
+  it('la respuesta usa el calendario real', () => {
+    const r = componerRespuesta('temporadas', DATOS)
+    expect(r.texto).toContain('15/11')
+    expect(r.derivar).toBe(false)
   })
 })
 

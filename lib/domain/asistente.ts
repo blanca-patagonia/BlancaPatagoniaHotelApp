@@ -17,6 +17,7 @@ export const INTENCIONES = [
   'cancelacion',
   'disponibilidad',
   'tarifas',
+  'temporadas',
   'servicios',
   'ubicacion',
   'mascotas',
@@ -78,6 +79,12 @@ const REGLAS: { intencion: Intencion; palabras: string[] }[] = [
       'check in', 'checkin', 'check out', 'checkout', 'horario', 'que hora',
       'ingreso', 'entrada', 'entrar', 'salida', 'salir', 'llegada', 'llegar',
     ],
+  },
+  // Va antes que tarifas: «¿cuándo es temporada alta?» pregunta por el
+  // calendario, no por el precio.
+  {
+    intencion: 'temporadas',
+    palabras: ['temporada', 'temporada alta', 'temporada baja', 'epoca', 'cuando conviene'],
   },
   {
     intencion: 'tarifas',
@@ -170,6 +177,50 @@ export interface DatosHotel {
   admiteMascotas: boolean
   /** Rango de precios rack vigente, leído del tarifario. */
   rangoTarifas: { min: number; max: number } | null
+  /** Temporadas con sus rangos de fecha, leídas de la base. */
+  temporadas: TemporadaInfo[]
+}
+
+/** Una temporada con los períodos del año en que rige. */
+export interface TemporadaInfo {
+  nombre: string
+  rangos: { desde: string; hasta: string }[]
+}
+
+/**
+ * Redacta el calendario de temporadas a partir de lo cargado en la base.
+ *
+ * Igual que la política de cancelación: si el hotel cambia las fechas, el
+ * asistente responde las nuevas sin tocar código.
+ */
+export function describirTemporadas(temporadas: readonly TemporadaInfo[]): string {
+  const conRangos = temporadas.filter((t) => t.rangos.length > 0)
+  if (conRangos.length === 0) {
+    return 'Todavía no tenemos publicado el calendario de temporadas. Escribinos y te contamos.'
+  }
+
+  return conRangos
+    .map((t) => {
+      const periodos = t.rangos.map(
+        (r) => `del ${formatoDiaMes(r.desde)} al ${formatoDiaMes(r.hasta)}`,
+      )
+      // «A, B y C» en lugar de «A y B y C».
+      const texto =
+        periodos.length > 1
+          ? `${periodos.slice(0, -1).join(', ')} y ${periodos.at(-1)}`
+          : periodos[0]
+      // El nombre que viene de la base ya suele decir «Temporada alta»: no se
+      // le antepone la palabra de nuevo.
+      const nombre = /^temporada/i.test(t.nombre) ? t.nombre : `Temporada ${t.nombre}`
+      return `· ${nombre}: ${texto}.`
+    })
+    .join('\n')
+}
+
+/** `2026-11-15` → `15/11`. Para el huésped el año no aporta. */
+function formatoDiaMes(iso: string): string {
+  const [, mes, dia] = iso.split('-')
+  return `${dia}/${mes}`
 }
 
 export interface AccionSugerida {
@@ -254,6 +305,14 @@ export function componerRespuesta(intencion: Intencion, datos: DatosHotel): Resp
         texto: datos.admiteMascotas
           ? 'Sí, aceptamos mascotas. Avisanos al reservar para asignarte una unidad adecuada.'
           : 'Por el momento no podemos recibir mascotas en las habitaciones ni en las cabañas.',
+      }
+
+    case 'temporadas':
+      return {
+        intencion,
+        derivar: false,
+        texto: `Nuestras temporadas son:\n${describirTemporadas(datos.temporadas)}`,
+        accion: { etiqueta: 'Ver precios por fecha', href: '/reservar' },
       }
 
     case 'tarifas':

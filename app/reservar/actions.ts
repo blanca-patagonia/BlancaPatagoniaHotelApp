@@ -2,7 +2,12 @@
 
 import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { enviarEmailConfirmacion } from '@/lib/email/confirmacion'
+import { enviarPlantilla } from '@/lib/email'
+import { formatoFechaCorta } from '@/lib/fechas'
+
+/** Horarios del hotel; se replican en `lib/asistente` hasta que exista config. */
+const HORA_CHECK_IN = '15:00'
+const HORA_CHECK_OUT = '10:00'
 import { diasEntre } from '@/lib/fechas'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 
@@ -72,13 +77,17 @@ export async function crearReservaPublica(
     .single()
   const token = (full as { token: string } | null)?.token ?? nueva.id
 
-  await enviarEmailConfirmacion({
-    email,
-    nombre: apellido,
+  // La confirmación sale del catálogo de plantillas, no de un texto suelto:
+  // así el mismo correo se puede previsualizar y probar desde Configuración.
+  await enviarPlantilla('confirmacion_reserva', email, {
+    nombre: nombre || apellido,
     codigo: nueva.codigo,
-    checkIn,
-    checkOut,
-    total: Number(nueva.total),
+    check_in: formatoFechaCorta(checkIn),
+    check_out: formatoFechaCorta(checkOut),
+    hora_check_in: HORA_CHECK_IN,
+    hora_check_out: HORA_CHECK_OUT,
+    total: Number(nueva.total).toLocaleString('es-AR'),
+    enlace: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/reservar/confirmacion/${token}`,
   })
 
   redirect(`/reservar/confirmacion/${token}`)
