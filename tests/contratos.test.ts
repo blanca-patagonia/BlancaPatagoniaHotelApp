@@ -10,6 +10,7 @@ import {
   puedeFirmar,
   puedeEnviar,
   estaVigente,
+  contratosDeEntidad,
   type EstadoContrato,
 } from '@/lib/domain/contratos'
 
@@ -110,6 +111,43 @@ describe('reglas de firma', () => {
     for (const estado of noFirmables) {
       expect(motivoNoFirmable({ estado }, HOY)).not.toBeNull()
     }
+  })
+})
+
+describe('aislamiento del portal del socio', () => {
+  const CONTRATOS = [
+    { tipo: 'agencia' as const, entidad_id: 'ag-1', estado: 'firmado' as const, titulo: 'Convenio A' },
+    { tipo: 'agencia' as const, entidad_id: 'ag-1', estado: 'enviado' as const, titulo: 'Addenda' },
+    { tipo: 'agencia' as const, entidad_id: 'ag-2', estado: 'firmado' as const, titulo: 'Otra agencia' },
+    { tipo: 'proveedor' as const, entidad_id: 'ag-1', estado: 'firmado' as const, titulo: 'Mismo id, otro tipo' },
+    { tipo: 'agencia' as const, entidad_id: 'ag-1', estado: 'borrador' as const, titulo: 'Sin enviar' },
+  ]
+
+  it('devuelve solo los contratos de esa entidad', () => {
+    const r = contratosDeEntidad('agencia', 'ag-1', CONTRATOS)
+    expect(r.map((c) => c.titulo)).toEqual(['Convenio A', 'Addenda'])
+  })
+
+  it('NO filtra los de otra agencia', () => {
+    const r = contratosDeEntidad('agencia', 'ag-1', CONTRATOS)
+    expect(r.some((c) => c.titulo === 'Otra agencia')).toBe(false)
+  })
+
+  it('distingue el tipo aunque el id coincida', () => {
+    // Un id de agencia y uno de proveedor podrían ser iguales por casualidad.
+    expect(contratosDeEntidad('agencia', 'ag-1', CONTRATOS).some((c) => c.tipo === 'proveedor')).toBe(
+      false,
+    )
+    expect(contratosDeEntidad('proveedor', 'ag-1', CONTRATOS)).toHaveLength(1)
+  })
+
+  it('oculta los borradores que el hotel todavía está redactando', () => {
+    const r = contratosDeEntidad('agencia', 'ag-1', CONTRATOS)
+    expect(r.some((c) => c.estado === 'borrador')).toBe(false)
+  })
+
+  it('una entidad sin contratos no ve nada', () => {
+    expect(contratosDeEntidad('agencia', 'ag-999', CONTRATOS)).toEqual([])
   })
 })
 

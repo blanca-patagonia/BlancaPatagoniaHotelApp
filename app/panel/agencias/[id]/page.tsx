@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
@@ -19,6 +20,7 @@ interface Agencia {
   cuit: string | null
   email: string | null
   descuento_pct: number
+  token: string
 }
 interface MovRow {
   id: string
@@ -39,7 +41,7 @@ export default async function AgenciaDetallePage({
   const supabase = await crearClienteServidor()
 
   const [{ data: agenciaData }, { data: movsData }] = await Promise.all([
-    supabase.from('agencias').select('id, nombre, tipo, cuit, email, descuento_pct').eq('id', id).single(),
+    supabase.from('agencias').select('id, nombre, tipo, cuit, email, descuento_pct, token').eq('id', id).single(),
     supabase
       .from('movimientos_cuenta')
       .select('id, tipo, monto, concepto, fecha, reserva:reservas(codigo)')
@@ -49,6 +51,8 @@ export default async function AgenciaDetallePage({
   ])
   if (!agenciaData) notFound()
   const agencia = agenciaData as Agencia
+  const cabeceras = await headers()
+  const origen = `${cabeceras.get('x-forwarded-proto') ?? 'http'}://${cabeceras.get('host') ?? 'localhost:3000'}`
   const movs = (movsData ?? []) as unknown as MovRow[]
   const saldo = saldoCuenta(movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento))
 
@@ -107,6 +111,27 @@ export default async function AgenciaDetallePage({
           </button>
         </form>
       </div>
+
+
+      {/* Enlace del portal: el socio ve sus contratos y su cuenta sin cuenta de usuario. */}
+      <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+        <h2 className="font-display text-base font-semibold text-stone-900">Portal del socio</h2>
+        <p className="mt-1 text-sm text-stone-500">
+          Enlace personal para que consulte sus contratos y su cuenta corriente. Quien lo tenga
+          accede: mandalo solo al contacto de la empresa.
+        </p>
+        <code className="mt-3 block rounded-lg bg-stone-50 px-3 py-2 font-mono text-xs break-all text-stone-700 ring-1 ring-stone-200">
+          {origen}/portal/{agencia.token}
+        </code>
+        <a
+          href={`/portal/${agencia.token}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-block rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+        >
+          Abrir el portal
+        </a>
+      </section>
 
       <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Movimientos</h2>
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">

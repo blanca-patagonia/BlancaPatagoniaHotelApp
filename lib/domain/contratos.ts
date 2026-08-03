@@ -131,6 +131,24 @@ export function puedeEnviar(estado: EstadoContrato): boolean {
 }
 
 /**
+ * Contratos que le pertenecen a una entidad (agencia, proveedor o empleado).
+ *
+ * Es la regla de aislamiento del portal: un socio solo puede ver **sus** propios
+ * contratos. Se resuelve en el dominio, y no con un `.eq()` suelto en la
+ * pantalla, para que quede testeada y no se pueda olvidar en otra consulta.
+ *
+ * Además se ocultan los borradores: un contrato que el hotel todavía está
+ * redactando no debe aparecerle a la contraparte.
+ */
+export function contratosDeEntidad<
+  T extends { tipo: TipoContrato; entidad_id: string; estado: EstadoContrato },
+>(tipo: TipoContrato, entidadId: string, contratos: readonly T[]): T[] {
+  return contratos.filter(
+    (c) => c.tipo === tipo && c.entidad_id === entidadId && c.estado !== 'borrador',
+  )
+}
+
+/**
  * Contratos vigentes hoy: firmados y dentro de su ventana de vigencia.
  *
  * Es lo que necesita recepción para saber si una agencia tiene convenio activo.

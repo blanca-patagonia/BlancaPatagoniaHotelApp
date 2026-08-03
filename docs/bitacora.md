@@ -643,3 +643,32 @@ fechas y respuesta de disponibilidad), typecheck y lint limpios.
 tipografías; si esa descarga falla, el error queda cacheado y **toda la app
 devuelve 500**, incluido `/login`. Se resuelve reiniciando el servidor. Conviene
 tenerlo presente al desplegar sin red estable.
+
+### 11.2 — Portal de agencias y proveedores
+
+Último punto pendiente del requisito original de la Fase 10: «cada agencia o
+proveedor ve solo sus propios contratos desde el portal» (ver **ADR 0014**).
+
+- **Migración 0024:** `token` único en `agencias` y `proveedores`. Se optó por
+  un portal **por token** y no por cuentas de usuario: montar autenticación
+  pública para una decena de socios agrega superficie de ataque sin resolver un
+  problema real, y el token es el mismo mecanismo que ya usan la confirmación de
+  reserva, la firma y la encuesta.
+- **`/portal/[token]`**: cuenta corriente con movimientos y saldo (para
+  proveedores, además vencimiento y estado de cada comprobante) y listado de
+  contratos con su estado y vigencia, incluyendo el botón para firmar los
+  pendientes. Server Component puro, resuelto con `service_role`; `anon` no
+  recibe ninguna política de lectura nueva.
+- **La regla de aislamiento vive en el dominio:** `contratosDeEntidad()` filtra
+  por tipo **y** por id, y oculta los borradores que el hotel todavía está
+  redactando. Se aplica aunque la consulta SQL ya filtre, para que el
+  aislamiento sea una función testeada y no dependa de recordar el `.eq()`.
+- El enlace se muestra en el detalle de la agencia y del proveedor, para que el
+  staff se lo haga llegar al contacto.
+
+**Verificado con dos proveedores distintos:** el portal de la lavandería
+devolvió **cero** coincidencias con el contrato y la deuda de la panadería, y el
+de la panadería **cero** con los de la lavandería, viendo cada uno lo suyo. Un
+contrato en borrador **no aparece** en el portal de su propia contraparte, y el
+firmado sí. Token inexistente → 404. **244 tests en verde**, typecheck y lint
+limpios.
