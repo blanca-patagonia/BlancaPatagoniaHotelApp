@@ -18,6 +18,7 @@ import {
   Tarjeta,
   botonClases,
 } from '../_components/ui'
+import { FormularioHuesped } from './formulario'
 
 interface Huesped {
   id: string
@@ -69,6 +70,15 @@ export default async function HuespedesPage({
         icono="huespedes"
         acciones={<BotonExportar href={`/panel/exportar/huespedes${construirQuery({ q })}`} />}
       />
+
+      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
+          Registrar un huésped nuevo
+        </summary>
+        <div className="border-t border-stone-100 p-5">
+          <FormularioHuesped />
+        </div>
+      </details>
 
       <BarraHerramientas>
         <Buscador

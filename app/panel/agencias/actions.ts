@@ -85,3 +85,47 @@ export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
   revalidatePath('/panel/agencias')
   redirect('/panel/agencias?ok=etapa')
 }
+
+/** Actualiza los datos de la agencia (incluida su condición frente al IVA). */
+export async function actualizarAgencia(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  const descuento = Number(formData.get('descuento_pct'))
+  if (!id) redirect('/panel/agencias')
+
+  const supabase = await crearClienteServidor()
+  await supabase
+    .from('agencias')
+    .update({
+      nombre: String(formData.get('nombre') ?? '').trim(),
+      cuit: String(formData.get('cuit') ?? '').trim() || null,
+      email: String(formData.get('email') ?? '').trim() || null,
+      telefono: String(formData.get('telefono') ?? '').trim() || null,
+      condicion_iva: String(formData.get('condicion_iva') ?? 'responsable_inscripto'),
+      descuento_pct: Number.isFinite(descuento) ? Math.min(100, Math.max(0, descuento)) : 0,
+    })
+    .eq('id', id)
+
+  revalidatePath(`/panel/agencias/${id}`)
+  redirect(`/panel/agencias/${id}?ok=datos`)
+}
+
+/**
+ * Activa o desactiva la cuenta. No se borra: los movimientos y las reservas
+ * históricas siguen apuntando a ella.
+ */
+export async function alternarActivoAgencia(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  const activo = String(formData.get('activo') ?? '') === 'true'
+  if (id) {
+    const supabase = await crearClienteServidor()
+    await supabase.from('agencias').update({ activo: !activo }).eq('id', id)
+  }
+  revalidatePath('/panel/agencias')
+  redirect(`/panel/agencias/${id}`)
+}

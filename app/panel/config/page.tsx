@@ -16,7 +16,8 @@ import {
 } from '../_components/ui'
 import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
 import { obtenerProveedorEmail } from '@/lib/email'
-import { actualizarTarifa, reponerStock } from './actions'
+import { actualizarTarifa, reponerStock, crearProducto, alternarProducto } from './actions'
+import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
 import { enviarPlantillaPrueba } from './plantillas-actions'
 
 /** Datos de muestra para previsualizar cada plantilla. */
@@ -37,8 +38,10 @@ interface ProductoStock {
   id: string
   nombre: string
   categoria: string
-  stock: number
-  stock_minimo: number
+  precio: number | string
+  stock: number | null
+  stock_minimo: number | null
+  activo: boolean
 }
 
 interface TarifaRow {
@@ -58,6 +61,7 @@ const ORDEN_TEMP = ['baja', 'media', 'alta']
 
 const MENSAJES_ERROR: Record<string, string> = {
   importes: 'Los importes tienen que ser números positivos.',
+  producto: 'Revisá el nombre y el precio del producto.',
   neto_mayor: 'El precio neto (agencia) no puede superar al rack (mostrador).',
   guardar: 'No se pudo guardar la tarifa. Probá de nuevo.',
 }
@@ -82,9 +86,9 @@ export default async function ConfigPage({
       ),
     supabase
       .from('productos_servicios')
-      .select('id, nombre, categoria, stock, stock_minimo')
-      .not('stock', 'is', null)
-      .order('categoria'),
+      .select('id, nombre, categoria, precio, stock, stock_minimo, activo')
+      .order('categoria')
+      .order('nombre'),
   ])
 
   const tarifas = (data ?? []) as unknown as TarifaRow[]
@@ -122,7 +126,9 @@ export default async function ConfigPage({
       : a.nombre.localeCompare(b.nombre),
   )
 
-  const bajos = inventario.filter((p) => p.stock <= p.stock_minimo)
+  // Solo alerta lo que efectivamente lleva control de stock.
+  const conStock = inventario.filter((p) => p.stock !== null)
+  const bajos = conStock.filter((p) => Number(p.stock) <= Number(p.stock_minimo ?? 0))
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -138,11 +144,12 @@ export default async function ConfigPage({
         </Mensaje>
       )}
       {sp.ok === 'tarifa' && <Mensaje tono="ok">Tarifa actualizada.</Mensaje>}
+      {sp.ok === 'producto' && <Mensaje tono="ok">Producto agregado al catálogo.</Mensaje>}
       {sp.ok === 'envio' && <Mensaje tono="ok">{sp.detalle ?? 'Correo procesado.'}</Mensaje>}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="Tipos de unidad" valor={String(filas.length)} detalle="en el tarifario" icono="ocupacion" />
-        <Kpi titulo="Productos" valor={String(inventario.length)} detalle="con control de stock" icono="objetos" />
+        <Kpi titulo="Productos" valor={String(conStock.length)} detalle="con control de stock" icono="objetos" />
         <Kpi
           titulo="Stock bajo"
           valor={String(bajos.length)}
@@ -320,45 +327,79 @@ export default async function ConfigPage({
               <tr>
                 <th className={TH}>Producto</th>
                 <th className={TH}>Categoría</th>
+                <th className={`${TH} text-right`}>Precio</th>
                 <th className={`${TH} text-right`}>Stock</th>
-                <th className={`${TH} text-right`}>Mínimo</th>
-                {puedeEditar && <th className={TH}>Reponer</th>}
+                <th className={TH}>Estado</th>
+                {puedeEditar && <th className={TH}>Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {inventario.map((p) => {
-                const bajo = p.stock <= p.stock_minimo
+                // Un servicio (late check-out) no lleva stock: la columna es null.
+                const llevaStock = p.stock !== null
+                const bajo = llevaStock && Number(p.stock) <= Number(p.stock_minimo ?? 0)
                 return (
-                  <tr key={p.id} className={FILA}>
+                  <tr key={p.id} className={`${FILA} ${p.activo ? '' : 'opacity-50'}`}>
                     <td className={`${TD} font-medium text-stone-800`}>{p.nombre}</td>
                     <td className={`${TD} text-stone-500 capitalize`}>{p.categoria}</td>
+                    <td className={`${TD} tabular text-right text-stone-700`}>
+                      {Number(p.precio).toLocaleString('es-AR')}
+                    </td>
                     <td className={`${TD} tabular text-right`}>
-                      <span className={bajo ? 'font-semibold text-red-600' : 'text-stone-800'}>
-                        {p.stock}
-                      </span>
-                      {bajo && (
-                        <span className="ml-2">
-                          <Etiqueta tono="peligro">bajo</Etiqueta>
-                        </span>
+                      {llevaStock ? (
+                        <>
+                          <span className={bajo ? 'font-semibold text-red-600' : 'text-stone-800'}>
+                            {p.stock}
+                          </span>
+                          <span className="ml-1 text-xs text-stone-400">
+                            / mín. {p.stock_minimo ?? 0}
+                          </span>
+                          {bajo && (
+                            <span className="ml-2">
+                              <Etiqueta tono="peligro">bajo</Etiqueta>
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-stone-400">servicio</span>
                       )}
                     </td>
-                    <td className={`${TD} tabular text-right text-stone-500`}>{p.stock_minimo}</td>
+                    <td className={TD}>
+                      {p.activo ? (
+                        <Etiqueta tono="exito">Activo</Etiqueta>
+                      ) : (
+                        <Etiqueta tono="neutro">Inactivo</Etiqueta>
+                      )}
+                    </td>
                     {puedeEditar && (
                       <td className={TD}>
-                        <form action={reponerStock} className="flex items-center gap-1">
-                          <input type="hidden" name="producto_id" value={p.id} />
-                          <input
-                            name="cantidad"
-                            type="number"
-                            min="1"
-                            defaultValue={12}
-                            aria-label={`Unidades a reponer de ${p.nombre}`}
-                            className="tabular w-16 rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
-                          />
-                          <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
-                            + Reponer
-                          </button>
-                        </form>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {llevaStock && (
+                            <form action={reponerStock} className="flex items-center gap-1">
+                              <input type="hidden" name="producto_id" value={p.id} />
+                              <input
+                                name="cantidad"
+                                type="number"
+                                min="1"
+                                defaultValue={12}
+                                aria-label={`Unidades a reponer de ${p.nombre}`}
+                                className="tabular w-16 rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
+                              />
+                              <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
+                                + Reponer
+                              </button>
+                            </form>
+                          )}
+                          {/* Se desactiva en lugar de borrar: los consumos ya
+                              cargados siguen apuntando al producto. */}
+                          <form action={alternarProducto}>
+                            <input type="hidden" name="producto_id" value={p.id} />
+                            <input type="hidden" name="activo" value={String(p.activo)} />
+                            <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
+                              {p.activo ? 'Desactivar' : 'Activar'}
+                            </button>
+                          </form>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -366,6 +407,73 @@ export default async function ConfigPage({
               })}
             </tbody>
           </Tabla>
+        )}
+
+        {puedeEditar && (
+          <form
+            action={crearProducto}
+            className="grid gap-2 border-t border-stone-100 p-5 sm:grid-cols-6"
+          >
+            <input
+              name="nombre"
+              required
+              placeholder="Nombre del producto"
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600 sm:col-span-2"
+            />
+            <select
+              name="categoria"
+              defaultValue="frigobar"
+              aria-label="Categoría del producto"
+              className="rounded-lg border border-stone-300 px-2 py-2 text-sm focus:border-lago-600 focus:outline-none"
+            >
+              {CATEGORIAS_PRODUCTO.map((c) => (
+                <option key={c} value={c}>
+                  {ETIQUETAS_CATEGORIA_PRODUCTO[c]}
+                </option>
+              ))}
+            </select>
+            <input
+              name="precio"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+              placeholder="Precio USD"
+              aria-label="Precio en dólares"
+              className="tabular rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
+            />
+            <input
+              name="stock"
+              type="number"
+              min="0"
+              defaultValue={0}
+              aria-label="Stock inicial"
+              placeholder="Stock"
+              className="tabular rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
+            />
+            <input
+              name="stock_minimo"
+              type="number"
+              min="0"
+              defaultValue={0}
+              aria-label="Stock mínimo"
+              placeholder="Mínimo"
+              className="tabular rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
+            />
+            <label className="flex items-center gap-2 text-xs text-stone-600 sm:col-span-3">
+              <input
+                type="checkbox"
+                name="controla_stock"
+                value="1"
+                defaultChecked
+                className="accent-lago-600"
+              />
+              Lleva control de stock (desmarcá si es un servicio)
+            </label>
+            <button className={botonClases('secundario', 'sm:col-span-3')}>
+              + Agregar al catálogo
+            </button>
+          </form>
         )}
       </Tarjeta>
     </div>

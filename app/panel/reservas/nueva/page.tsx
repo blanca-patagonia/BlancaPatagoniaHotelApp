@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
+import { crearClienteServidor } from '@/lib/supabase/server'
 import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { hoyISO, sumarDias, diasEntre } from '@/lib/fechas'
-import { FormularioReserva, type OpcionTipo } from './formulario'
+import { FormularioReserva, type OpcionTipo, type OpcionAgencia } from './formulario'
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -20,6 +21,16 @@ export default async function NuevaReservaPage({
   const huespedes = Math.max(1, Number(sp.huespedes ?? 1) || 1)
   const buscado = Boolean(checkIn && checkOut && checkOut > checkIn)
   const noches = buscado ? diasEntre(checkIn, checkOut) : 0
+
+  // Agencias activas con convenio: si la reserva entra por una, de ella salen
+  // la tarifa neta y la letra del comprobante al facturar.
+  const supabase = await crearClienteServidor()
+  const { data: agenciasData } = await supabase
+    .from('agencias')
+    .select('id, nombre, descuento_pct')
+    .eq('activo', true)
+    .order('nombre')
+  const agencias = (agenciasData ?? []) as OpcionAgencia[]
 
   let opciones: OpcionTipo[] = []
   if (buscado) {
@@ -104,6 +115,7 @@ export default async function NuevaReservaPage({
           </p>
         ) : (
           <FormularioReserva
+            agencias={agencias}
             opciones={opciones}
             checkIn={checkIn}
             checkOut={checkOut}

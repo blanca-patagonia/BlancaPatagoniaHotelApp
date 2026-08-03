@@ -11,7 +11,8 @@ import {
   type TipoMovimiento,
   type Movimiento,
 } from '@/lib/domain/cuentas'
-import { registrarMovimiento } from '../actions'
+import { registrarMovimiento, actualizarAgencia, alternarActivoAgencia } from '../actions'
+import { CONDICIONES_IVA, ETIQUETAS_CONDICION_IVA, type CondicionIva } from '@/lib/domain/facturacion'
 
 interface Agencia {
   id: string
@@ -21,6 +22,9 @@ interface Agencia {
   email: string | null
   descuento_pct: number
   token: string
+  telefono: string | null
+  activo: boolean
+  condicion_iva: CondicionIva
 }
 interface MovRow {
   id: string
@@ -41,7 +45,7 @@ export default async function AgenciaDetallePage({
   const supabase = await crearClienteServidor()
 
   const [{ data: agenciaData }, { data: movsData }] = await Promise.all([
-    supabase.from('agencias').select('id, nombre, tipo, cuit, email, descuento_pct, token').eq('id', id).single(),
+    supabase.from('agencias').select('id, nombre, tipo, cuit, email, telefono, descuento_pct, token, activo, condicion_iva').eq('id', id).single(),
     supabase
       .from('movimientos_cuenta')
       .select('id, tipo, monto, concepto, fecha, reserva:reservas(codigo)')
@@ -112,6 +116,42 @@ export default async function AgenciaDetallePage({
         </form>
       </div>
 
+
+      {/* Edición de los datos: sin esto había que tocar la base a mano. */}
+      <details className="mt-5 rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
+          Editar datos
+        </summary>
+        <form action={actualizarAgencia} className="grid gap-3 border-t border-stone-100 p-5 sm:grid-cols-3">
+          <input type="hidden" name="agencia_id" value={agencia.id} />
+          <input name="nombre" defaultValue={agencia.nombre} placeholder="Nombre" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+          <input name="descuento_pct" type="number" min="0" max="100" step="0.01" defaultValue={agencia.descuento_pct} aria-label="Descuento %" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+          <input name="cuit" defaultValue={agencia.cuit ?? ''} placeholder="CUIT" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+          <input name="email" type="email" defaultValue={agencia.email ?? ''} placeholder="Email" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+          <input name="telefono" defaultValue={agencia.telefono ?? ''} placeholder="Teléfono" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+          <label className="flex flex-col gap-1 text-xs text-stone-500">
+            Condición IVA
+            <select name="condicion_iva" defaultValue={agencia.condicion_iva} className="rounded-md border border-stone-300 px-2 py-1.5 text-sm">
+              {CONDICIONES_IVA.map((c) => (
+                <option key={c} value={c}>
+                  {ETIQUETAS_CONDICION_IVA[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 sm:col-span-3">
+            Guardar cambios
+          </button>
+        </form>
+        <form action={alternarActivoAgencia} className="border-t border-stone-100 px-5 py-3">
+          <input type="hidden" name="agencia_id" value={agencia.id} />
+          <input type="hidden" name="activo" value={String(agencia.activo)} />
+          <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-600 transition hover:bg-stone-50">
+            {agencia.activo ? 'Desactivar' : 'Activar'}
+          </button>
+        </form>
+      </details>
 
       {/* Enlace del portal: el socio ve sus contratos y su cuenta sin cuenta de usuario. */}
       <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">

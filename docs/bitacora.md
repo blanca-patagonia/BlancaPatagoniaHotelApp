@@ -716,3 +716,37 @@ En el navegador: el bot respondió el calendario real de las tres temporadas; la
 tarjeta de vencimientos mostró «Lavado semana 31 · 0001-00000052 · en 3 días ·
 USD 220»; Inicio avisó «1 factura vencida · 1 vence esta semana»; y el disparador
 de recordatorios de llegada corrió y devolvió su resultado.
+
+### 11.4 — Auditoría de completitud funcional por apartado
+
+Se recorrieron los 15 apartados preguntando lo mismo en cada uno: **¿se puede
+crear, editar y dar de baja lo que el módulo administra?** Aparecieron cinco
+huecos, dos de ellos graves.
+
+- **Huéspedes no tenía `actions.ts`.** No se podía crear ni editar un huésped
+  desde el panel: solo nacían como efecto secundario de una reserva. Grave
+  porque la **condición frente al IVA** —que define la letra del comprobante—
+  no había forma de cargarla ni corregirla. Ahora hay alta en el listado y
+  edición en la ficha, con validación: un responsable inscripto exige CUIT y se
+  verifica su **dígito verificador** antes de guardar.
+- **La reserva no permitía elegir agencia.** `emitirFactura` decide la letra del
+  comprobante mirando `reserva.agencia_id`, pero **ningún formulario lo cargaba
+  nunca**: el circuito agencia → tarifa neta → factura A era inalcanzable desde
+  la interfaz. Se agregó el selector de agencia al alta, y con convenio se aplica
+  tarifa **neta** cualquiera sea el canal, que es lo que define el acuerdo.
+- **El catálogo de consumos estaba congelado.** Se podía reponer stock y editar
+  tarifas, pero no dar de alta un producto: el hotel no podía sumar una bebida
+  nueva al frigobar. Ahora se crean desde Configuración, con código derivado del
+  nombre, y se pueden activar o desactivar (no borrar: los consumos ya cargados
+  siguen apuntando al producto). La tabla distingue lo que lleva stock de los
+  servicios, que no.
+- **Agencias y proveedores no se podían editar ni desactivar**, aunque la
+  columna `activo` existía y la interfaz la mostraba. Se agregó la edición de
+  datos —incluida la condición frente al IVA de la agencia— y el alta/baja
+  lógica.
+
+**Verificado creando de verdad:** se dio de alta el huésped «Gutiérrez, Rodrigo»
+con todos sus campos; el intento de crear un responsable inscripto con DNI
+**fue rechazado** y no se guardó; y se creó el producto «Vino Malbec Patagónico»
+con código `vino-malbec-patagonico`, precio 18,50 y stock 24/6. Las 20 rutas del
+panel y del portal responden 200. **253 tests en verde**, typecheck y lint limpios.

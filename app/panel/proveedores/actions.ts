@@ -90,3 +90,38 @@ export async function vencerComprobantes(): Promise<void> {
   const { data } = await supabase.rpc('vencer_comprobantes_proveedor')
   redirect(`/panel/proveedores?vencidos=${data ?? 0}`)
 }
+
+/** Actualiza los datos del proveedor. */
+export async function actualizarProveedor(formData: FormData): Promise<void> {
+  await exigirGestion()
+  const id = String(formData.get('proveedor_id') ?? '')
+  if (!id) redirect('/panel/proveedores')
+
+  const supabase = await crearClienteServidor()
+  await supabase
+    .from('proveedores')
+    .update({
+      nombre: String(formData.get('nombre') ?? '').trim(),
+      rubro: String(formData.get('rubro') ?? '').trim() || null,
+      cuit: String(formData.get('cuit') ?? '').trim() || null,
+      email: String(formData.get('email') ?? '').trim() || null,
+      telefono: String(formData.get('telefono') ?? '').trim() || null,
+    })
+    .eq('id', id)
+
+  revalidatePath(`/panel/proveedores/${id}`)
+  redirect(`/panel/proveedores/${id}?ok=datos`)
+}
+
+/** Activa o desactiva el proveedor conservando su historial de movimientos. */
+export async function alternarActivoProveedor(formData: FormData): Promise<void> {
+  await exigirGestion()
+  const id = String(formData.get('proveedor_id') ?? '')
+  const activo = String(formData.get('activo') ?? '') === 'true'
+  if (id) {
+    const supabase = await crearClienteServidor()
+    await supabase.from('proveedores').update({ activo: !activo }).eq('id', id)
+  }
+  revalidatePath('/panel/proveedores')
+  redirect(`/panel/proveedores/${id}`)
+}

@@ -57,7 +57,11 @@ export async function crearReservaAction(
   if (!apellido) return { error: 'Ingresá al menos el apellido del huésped.' }
 
   const supabase = await crearClienteServidor()
-  const tarifaTipo = CANAL_TARIFA[canal] ?? 'rack'
+  const agenciaId = String(formData.get('agencia_id') ?? '')
+
+  // Con convenio siempre corresponde tarifa NETA, sea cual sea el canal por el
+  // que entró la reserva: es lo que define el acuerdo con la agencia.
+  const tarifaTipo: TarifaTipo = agenciaId ? 'neto' : (CANAL_TARIFA[canal] ?? 'rack')
 
   // Reusar el huésped por email o crearlo.
   let huespedId: string | null = null
@@ -93,6 +97,12 @@ export async function crearReservaAction(
     estado: 'confirmada',
   })
   if (!res.ok) return { error: res.error }
+
+  // El vínculo con la agencia se guarda aparte: el helper de alta atómica es
+  // compartido con el portal público, donde no existe el concepto de convenio.
+  if (agenciaId) {
+    await supabase.from('reservas').update({ agencia_id: agenciaId }).eq('id', res.reserva.id)
+  }
 
   redirect(`/panel/reservas/${res.reserva.id}`)
 }

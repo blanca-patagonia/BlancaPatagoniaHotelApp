@@ -7,6 +7,8 @@ import { TONO_ESTADO } from '../../_components/estilos'
 import { Etiqueta } from '../../_components/ui'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
+import { ETIQUETAS_CONDICION_IVA, type CondicionIva } from '@/lib/domain/facturacion'
+import { FormularioHuesped } from '../formulario'
 
 interface Huesped {
   id: string
@@ -18,6 +20,8 @@ interface Huesped {
   doc_numero: string
   nacionalidad: string | null
   puntos: number
+  condicion_iva: CondicionIva
+  notas: string
 }
 interface ReservaHist {
   id: string
@@ -39,7 +43,7 @@ export default async function DetalleHuespedPage({
   const [{ data: huespedData }, { data: reservasData }] = await Promise.all([
     supabase
       .from('huespedes')
-      .select('id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos')
+      .select('id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos, condicion_iva, notas')
       .eq('id', id)
       .single(),
     supabase
@@ -67,6 +71,7 @@ export default async function DetalleHuespedPage({
         <span>{huesped.doc_tipo} {huesped.doc_numero || '—'}</span>
         <span>{huesped.email || 'sin email'}</span>
         <span>{huesped.nacionalidad || 'nacionalidad n/d'}</span>
+        <span>{ETIQUETAS_CONDICION_IVA[huesped.condicion_iva]}</span>
       </div>
 
       <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-lenga-50 px-3 py-1.5 text-sm">
@@ -75,6 +80,16 @@ export default async function DetalleHuespedPage({
         </span>
         <span className="text-lenga-700">· {huesped.puntos} puntos</span>
       </div>
+
+      {/* La condición frente al IVA define la letra del comprobante: se corrige acá. */}
+      <details className="mt-5 rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
+          Editar los datos del huésped
+        </summary>
+        <div className="border-t border-stone-100 p-5">
+          <FormularioHuesped huesped={huesped} />
+        </div>
+      </details>
 
       <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Historial de reservas</h2>
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">

@@ -3,6 +3,12 @@
 import { useActionState } from 'react'
 import { crearReservaAction, type EstadoNuevaReserva } from '../actions'
 
+export interface OpcionAgencia {
+  id: string
+  nombre: string
+  descuento_pct: number
+}
+
 export interface OpcionTipo {
   tipoUnidadId: string
   nombre: string
@@ -17,12 +23,14 @@ const ESTADO_INICIAL: EstadoNuevaReserva = {}
 
 export function FormularioReserva({
   opciones,
+  agencias,
   checkIn,
   checkOut,
   huespedes,
   noches,
 }: {
   opciones: OpcionTipo[]
+  agencias: OpcionAgencia[]
   checkIn: string
   checkOut: string
   huespedes: number
@@ -85,6 +93,25 @@ export function FormularioReserva({
             <option value="web">Web (rack)</option>
             <option value="booking">Booking (neto)</option>
             <option value="expedia">Expedia (neto)</option>
+          </select>
+        </label>
+
+        {/* Si la reserva entra por convenio, la agencia es la que factura: de
+            ella salen la tarifa neta y la letra del comprobante (ADR 0012). */}
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-stone-700">Agencia / empresa</span>
+          <select
+            name="agencia_id"
+            defaultValue=""
+            className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none focus:border-lago-600"
+          >
+            <option value="">Sin convenio (huésped directo)</option>
+            {agencias.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nombre}
+                {a.descuento_pct > 0 ? ` · ${a.descuento_pct}% dto.` : ''}
+              </option>
+            ))}
           </select>
         </label>
       </div>
