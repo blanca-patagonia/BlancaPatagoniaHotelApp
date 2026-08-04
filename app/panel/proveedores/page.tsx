@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { saldoCuenta, type Movimiento } from '@/lib/domain/cuentas'
 import {
   resumenAntiguedad,
   totalAdeudado,
@@ -55,11 +54,17 @@ export default async function ProveedoresPage({
   const termino = terminoBusqueda(q)
   if (termino) consulta = consulta.or(`nombre.ilike.%${termino}%,rubro.ilike.%${termino}%`)
 
-  const [{ data: provData }, { data: movsData }] = await Promise.all([
+  const [{ data: provData }, { data: movsData }, { data: saldosData }] = await Promise.all([
     consulta,
+    // Para el aging alcanza con la deuda VIVA: los pagos y lo ya saldado no
+    // aportan al informe y son la mayor parte del historial.
     supabase
       .from('movimientos_proveedor')
-      .select('proveedor_id, tipo, monto, estado, vencimiento, concepto, comprobante'),
+      .select('proveedor_id, tipo, monto, estado, vencimiento, concepto, comprobante')
+      .eq('tipo', 'cargo')
+      .in('estado', ['pendiente', 'vencido']),
+    // El saldo por proveedor lo agrega la base.
+    supabase.from('saldos_proveedores').select('proveedor_id, saldo'),
   ])
   const proveedores = (provData ?? []) as Proveedor[]
   const movs = (movsData ?? []) as (ComprobanteDeuda & {
@@ -83,17 +88,14 @@ export default async function ProveedoresPage({
   )
 
   const nombrePorProveedor = new Map(proveedores.map((p) => [p.id, p.nombre]))
-  const porProveedor = new Map<string, Movimiento[]>()
-  for (const m of movs) {
-    const arr = porProveedor.get(m.proveedor_id) ?? []
-    arr.push({ tipo: m.tipo, monto: Number(m.monto) })
-    porProveedor.set(m.proveedor_id, arr)
-  }
+  const saldos = new Map(
+    ((saldosData ?? []) as { proveedor_id: string; saldo: number | string }[]).map((s) => [
+      s.proveedor_id,
+      Number(s.saldo),
+    ]),
+  )
 
-  const conSaldo = proveedores.map((p) => ({
-    ...p,
-    saldo: saldoCuenta(porProveedor.get(p.id) ?? []),
-  }))
+  const conSaldo = proveedores.map((p) => ({ ...p, saldo: saldos.get(p.id) ?? 0 }))
   const soloPendientes = filtroSaldo === 'pendiente'
   const visibles = soloPendientes ? conSaldo.filter((p) => p.saldo > 0) : conSaldo
 

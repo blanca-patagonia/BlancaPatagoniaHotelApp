@@ -1,16 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { hayDB, clienteDePrueba, sufijoUnico } from './db'
 
 /**
  * Test de integración de `expirar_reservas_pendientes`: cancela reservas pendientes
  * sin seña con antigüedad > N días, y respeta las que tienen seña. Requiere DB local.
  */
 
-const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const hayDB = Boolean(url && serviceKey && !url.includes('placeholder'))
 
-const sufijo = Math.random().toString(36).slice(2, 8)
+const sufijo = sufijoUnico()
 const HACE_10_DIAS = '2010-01-01T00:00:00Z' // muy antigua → siempre expira con p_dias=5
 
 describe.skipIf(!hayDB)('expirar_reservas_pendientes', () => {
@@ -34,7 +32,7 @@ describe.skipIf(!hayDB)('expirar_reservas_pendientes', () => {
   }
 
   beforeAll(async () => {
-    db = createClient(url!, serviceKey!, { auth: { persistSession: false } })
+    db = clienteDePrueba()
     const { data: tipo } = await db
       .from('tipos_unidad')
       .insert({ codigo: `TEST-EXP-${sufijo}`, nombre: 'Test Exp', categoria: 'hosteria', capacidad_max: 2 })

@@ -1,5 +1,6 @@
 import 'server-only'
 import { createClient } from '@supabase/supabase-js'
+import { envServidor } from '@/lib/env'
 
 /**
  * Cliente privilegiado de Supabase (service role). SOLO debe usarse en código
@@ -11,9 +12,12 @@ import { createClient } from '@supabase/supabase-js'
  * build si alguien lo intenta.
  */
 export function crearClienteAdmin() {
+  // Se validan acá y no con `!`: si falta la clave, el error dice cuál falta
+  // en vez de fallar más adelante como un problema de red.
+  const env = envServidor()
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY,
     {
       auth: {
         autoRefreshToken: false,

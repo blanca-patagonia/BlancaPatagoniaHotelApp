@@ -1,12 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import {
-  saldoCuenta,
-  ETIQUETAS_TIPO_CUENTA,
-  type TipoCuenta,
-  type Movimiento,
-} from '@/lib/domain/cuentas'
+import { ETIQUETAS_TIPO_CUENTA, type TipoCuenta } from '@/lib/domain/cuentas'
 import {
   ETAPAS_COMERCIALES,
   ETIQUETAS_ETAPA,
@@ -73,23 +68,19 @@ export default async function AgenciasPage({
 
   const [{ data: agenciasData }, { data: movsData }] = await Promise.all([
     consulta,
-    supabase.from('movimientos_cuenta').select('agencia_id, tipo, monto'),
+    // El saldo lo agrega la base (vista `saldos_agencias`): antes se traían
+    // TODOS los movimientos para sumarlos en memoria.
+    supabase.from('saldos_agencias').select('agencia_id, saldo'),
   ])
   const agencias = (agenciasData ?? []) as Agencia[]
-  const movs = (movsData ?? []) as {
-    agencia_id: string
-    tipo: 'cargo' | 'pago'
-    monto: number | string
-  }[]
+  const saldos = new Map(
+    ((movsData ?? []) as { agencia_id: string; saldo: number | string }[]).map((s) => [
+      s.agencia_id,
+      Number(s.saldo),
+    ]),
+  )
 
-  const porAgencia = new Map<string, Movimiento[]>()
-  for (const m of movs) {
-    const arr = porAgencia.get(m.agencia_id) ?? []
-    arr.push({ tipo: m.tipo, monto: Number(m.monto) })
-    porAgencia.set(m.agencia_id, arr)
-  }
-
-  const conSaldo = agencias.map((a) => ({ ...a, saldo: saldoCuenta(porAgencia.get(a.id) ?? []) }))
+  const conSaldo = agencias.map((a) => ({ ...a, saldo: saldos.get(a.id) ?? 0 }))
   const soloPendientes = filtroSaldo === 'pendiente'
   const visibles = soloPendientes ? conSaldo.filter((a) => a.saldo > 0) : conSaldo
 

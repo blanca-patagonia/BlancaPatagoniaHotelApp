@@ -750,3 +750,63 @@ con todos sus campos; el intento de crear un responsable inscripto con DNI
 **fue rechazado** y no se guardó; y se creó el producto «Vino Malbec Patagónico»
 con código `vino-malbec-patagonico`, precio 18,50 y stock 24/6. Las 20 rutas del
 panel y del portal responden 200. **253 tests en verde**, typecheck y lint limpios.
+
+## Fase 12 — Endurecimiento: CI real, reglas faltantes y concurrencia
+
+Revisión crítica del sistema completo. Los hallazgos y su prioridad quedaron en
+el **ADR 0015**.
+
+### El CI no probaba la garantía central del sistema
+
+El workflow corría `npm test` **sin credenciales de base**, así que los cuatro
+tests de integración —anti-overbooking, cotización, expiración y alta atómica—
+**se salteaban en silencio** y el badge quedaba verde. Tampoco corría
+`typecheck`.
+
+- El CI ahora **levanta Supabase** con el CLI (el runner ya trae Docker) y corre
+  typecheck, lint, tests y build contra una base real.
+- Se agregó `tests/db.ts` con la variable **`EXIGIR_DB`**: cuando vale `1` —como
+  en CI— la falta de base es un **error**, no un salto. Si `supabase start`
+  falla, la suite falla y se ve. Verificado en las dos direcciones: sin la
+  variable saltea y pasa; con la variable falla con un mensaje explícito.
+
+### Reglas de negocio que faltaban
+
+- **No se validaba el estado al facturar.** Se podía emitir el comprobante de
+  una reserva **pendiente o cancelada**; con un CAE real eso deja un documento
+  fiscal que hay que anular con nota de crédito. Se agregó
+  `motivoNoFacturable()` al dominio (solo se factura `pagada`, `in_house` o
+  `checkout`, y nunca dos veces), se aplica en la acción y **el botón ya no se
+  ofrece** cuando no corresponde: se explica por qué.
+
+### Concurrencia y volumen
+
+- **Numeración de comprobantes.** Se emitía con `count(*) + 1`, que ante dos
+  emisiones simultáneas genera el **mismo número**. La migración 0025 agrega
+  `puntos_venta` y `siguiente_numero_comprobante()`, que reserva el correlativo
+  con bloqueo de fila. Se eligió un contador en tabla y no una `sequence`
+  porque las secuencias **no se revierten en un rollback** y dejarían huecos,
+  que AFIP también observa. **Verificado con 10 llamadas concurrentes: números
+  2 a 11, sin un solo repetido.**
+- **Saldos calculados en la base.** Los listados de Agencias y Proveedores
+  traían **todos** los movimientos a memoria para sumarlos en JavaScript. La
+  migración 0026 agrega las vistas `saldos_agencias` y `saldos_proveedores` con
+  `security_invoker = true`, de modo que **RLS sigue aplicando**. El aging
+  ahora consulta solo la deuda viva en lugar del historial completo.
+
+### Operación
+
+- **Tareas programadas** (migración 0027): expiración de reservas, vencimiento
+  de comprobantes y de contratos, y mantenimiento preventivo pasan a `pg_cron`.
+  Si la extensión no está disponible, la migración no rompe y las funciones
+  siguen disponibles a mano. El recordatorio de llegadas queda manual porque
+  envía correos desde la aplicación, no desde la base.
+- **Límite de escrituras públicas.** El asistente registraba consultas sin tope.
+  Ahora se acota a 5 por IP y por minuto: pasado el límite **sigue respondiendo**
+  —no se corta el servicio— pero deja de escribir.
+- **Validación de variables de entorno** (`lib/env.ts`, con zod). Antes una
+  variable faltante se manifestaba como un error de red incomprensible en medio
+  de una pantalla; ahora falla al construir el cliente y dice cuál falta.
+
+**Verificación:** **258 tests en verde** corriendo con `EXIGIR_DB=1`, es decir
+**con los de integración incluidos**, más typecheck y lint limpios.

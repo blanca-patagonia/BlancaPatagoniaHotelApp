@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { hayDB, clienteDePrueba } from './db'
 
 /**
  * Test de integración de `cotizar_estadia`: verifica que el precio de cada noche
@@ -10,16 +11,13 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
  * Temporadas: Alta = 1–30 nov 2025 · Media = 1–19 dic 2025.
  */
 
-const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const hayDB = Boolean(url && serviceKey && !url.includes('placeholder'))
 
 describe.skipIf(!hayDB)('cotizar_estadia (precio por temporada)', () => {
   let db: SupabaseClient
   let tipoId: string
 
   beforeAll(async () => {
-    db = createClient(url!, serviceKey!, { auth: { persistSession: false } })
+    db = clienteDePrueba()
     const { data } = await db.from('tipos_unidad').select('id').eq('codigo', 'HOST-DBL-STD').single()
     tipoId = data!.id as string
   })

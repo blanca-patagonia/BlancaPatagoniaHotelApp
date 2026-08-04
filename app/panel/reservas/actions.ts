@@ -19,10 +19,12 @@ import {
   cuitValido,
   normalizarCuit,
   exigeCuitReceptor,
+  motivoNoFacturable,
   type CondicionIva,
 } from '@/lib/domain/facturacion'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
 import { enviarPlantilla } from '@/lib/email'
+import { urlDelSitio } from '@/lib/env'
 
 /** Horario de llegada del hotel (ver nota en `lib/asistente`). */
 const HORA_CHECK_IN = '15:00'
@@ -176,7 +178,7 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
     if (encuesta?.token && huesped?.email) {
       await enviarPlantilla('encuesta_postcheckout', huesped.email, {
         nombre: huesped.nombre,
-        enlace: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/encuesta/${encuesta.token}`,
+        enlace: `${urlDelSitio()}/encuesta/${encuesta.token}`,
       })
     }
   }
@@ -303,12 +305,18 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const { data: reserva } = await supabase
     .from('reservas')
     .select(
-      'total, agencia_id, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero)',
+      'estado, total, agencia_id, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero)',
     )
     .eq('id', reservaId)
     .single()
 
   if (!reserva) redirect('/panel/reservas')
+
+  // Solo se factura una estadía consumida: emitir el comprobante de una reserva
+  // pendiente o cancelada dejaría, con CAE real, un documento fiscal que después
+  // hay que anular con nota de crédito.
+  const motivo = motivoNoFacturable(String(reserva.estado), false)
+  if (motivo) redirect(`/panel/reservas/${reservaId}?error=${motivo}`)
 
   const { data: consumosData } = await supabase
     .from('consumos')
@@ -358,13 +366,16 @@ export async function emitirFactura(formData: FormData): Promise<void> {
 
   const desglose = desglosarIva(cuenta.total, ALICUOTA)
 
-  // Numeración correlativa por punto de venta. Es un contador simple, no
-  // transaccional: con AFIP real hay que revisarlo (ver ADR 0012).
-  const { count } = await supabase
-    .from('facturas')
-    .select('*', { count: 'exact', head: true })
-    .eq('punto_venta', PUNTO_VENTA)
-  const siguiente = (count ?? 0) + 1
+  // Numeración correlativa: la reserva el contador de la base con bloqueo de
+  // fila (migración 0025). Antes se hacía con `count(*) + 1`, que ante dos
+  // emisiones simultáneas generaba el mismo número.
+  const { data: siguiente, error: eNumero } = await supabase.rpc(
+    'siguiente_numero_comprobante',
+    { p_punto_venta: PUNTO_VENTA },
+  )
+  if (eNumero || typeof siguiente !== 'number') {
+    redirect(`/panel/reservas/${reservaId}?error=numeracion`)
+  }
 
   const proveedor = obtenerProveedorFacturacion()
   const resultado = await proveedor.solicitarCae({

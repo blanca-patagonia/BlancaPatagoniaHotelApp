@@ -8,6 +8,7 @@ on:
 jobs:
   verificar:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -20,15 +21,44 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      # ── Supabase local ────────────────────────────────────────────────────
+      # Sin base, los tests de integración (anti-overbooking, cotización,
+      # expiración y alta atómica) se saltean en silencio y el CI queda verde
+      # sin haber verificado la garantía central del sistema (ADR 0002).
+      # El runner de GitHub ya trae Docker, y el CLI es una devDependency.
+      - name: Levantar Supabase local
+        run: npx supabase start
+
+      - name: Exportar credenciales de la base
+        run: |
+          estado=$(npx supabase status -o env)
+          api=$(echo "$estado" | grep '^API_URL=' | cut -d= -f2- | tr -d '"')
+          key=$(echo "$estado" | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '"')
+          anon=$(echo "$estado" | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          {
+            echo "SUPABASE_URL=$api"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$key"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$api"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon"
+          } >> "$GITHUB_ENV"
+
+      # ── Verificación ──────────────────────────────────────────────────────
+      - name: Typecheck (TypeScript)
+        run: npm run typecheck
+
       - name: Lint (ESLint)
         run: npm run lint
 
-      - name: Tests (Vitest)
+      # EXIGIR_DB=1 convierte la ausencia de base en un ERROR: si `supabase
+      # start` falló, la suite no puede pasar salteando los tests que importan.
+      - name: Tests (Vitest, incluidos los de integración)
         run: npm test
+        env:
+          EXIGIR_DB: '1'
 
       - name: Build (Next.js)
         run: npm run build
-        env:
-          # Valores ficticios: el build no se conecta a Supabase, solo compila.
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+
+      - name: Apagar Supabase
+        if: always()
+        run: npx supabase stop

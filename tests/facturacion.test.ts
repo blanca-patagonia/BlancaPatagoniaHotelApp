@@ -11,7 +11,10 @@ import {
   numeroComprobante,
   caeVigente,
   tieneCae,
+  motivoNoFacturable,
+  puedeFacturarse,
 } from '@/lib/domain/facturacion'
+import { ESTADOS_RESERVA } from '@/lib/domain/reservas'
 
 describe('letra del comprobante', () => {
   it('entre responsables inscriptos es A', () => {
@@ -96,6 +99,38 @@ describe('validación de CUIT', () => {
 
   it('deja intacto lo que no puede formatear', () => {
     expect(formatearCuit('123')).toBe('123')
+  })
+})
+
+describe('cuándo corresponde facturar', () => {
+  it('se factura lo que el huésped consumió o pagó', () => {
+    expect(puedeFacturarse('in_house')).toBe(true)
+    expect(puedeFacturarse('pagada')).toBe(true)
+    expect(puedeFacturarse('checkout')).toBe(true)
+  })
+
+  it('NO se factura una reserva que todavía no se consumió', () => {
+    // Con un CAE real esto dejaría un comprobante fiscal que hay que anular.
+    expect(motivoNoFacturable('pendiente', false)).toBe('sin_consumir')
+    expect(motivoNoFacturable('confirmada', false)).toBe('sin_consumir')
+  })
+
+  it('NO se factura una reserva anulada', () => {
+    expect(motivoNoFacturable('cancelada', false)).toBe('anulada')
+    expect(motivoNoFacturable('no_show', false)).toBe('anulada')
+  })
+
+  it('NO se factura dos veces', () => {
+    expect(motivoNoFacturable('checkout', true)).toBe('ya_facturada')
+    // Tener factura pesa más que el estado: no se emite un duplicado.
+    expect(puedeFacturarse('checkout', true)).toBe(false)
+  })
+
+  it('cada estado de reserva tiene una respuesta definida', () => {
+    for (const estado of ESTADOS_RESERVA) {
+      const motivo = motivoNoFacturable(estado, false)
+      expect(motivo === null || typeof motivo === 'string').toBe(true)
+    }
   })
 })
 

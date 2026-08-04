@@ -171,3 +171,49 @@ export function caeVigente(caeVto: string | null | undefined, hoy: string): bool
 export function tieneCae(factura: { cae?: string | null; cae_vto?: string | null }): boolean {
   return Boolean(factura.cae && factura.cae_vto)
 }
+
+/* ──────────────────────────────────────────── cuándo se puede facturar ── */
+
+/**
+ * Estados de reserva que admiten emitir el comprobante.
+ *
+ * Se factura lo que el huésped **consumió o se comprometió a pagar**:
+ * · `in_house` — está alojado, se le puede cerrar la cuenta;
+ * · `pagada`   — abonó por adelantado;
+ * · `checkout` — cerró su estadía.
+ *
+ * Debe mantenerse en sincronía con `EstadoReserva` (`lib/domain/reservas.ts`).
+ */
+export const ESTADOS_FACTURABLES = ['pagada', 'in_house', 'checkout'] as const
+
+/** Motivo por el que una reserva no se puede facturar; `null` si sí se puede. */
+export type MotivoNoFacturable = 'sin_consumir' | 'anulada' | 'ya_facturada'
+
+export const MENSAJES_NO_FACTURABLE: Record<MotivoNoFacturable, string> = {
+  sin_consumir:
+    'La reserva todavía no se consumió: se factura recién cuando el huésped ingresa, paga o hace el check-out.',
+  anulada: 'La reserva está cancelada o marcada como no-show: no corresponde emitir comprobante.',
+  ya_facturada: 'Esta reserva ya tiene su comprobante emitido.',
+}
+
+/**
+ * Determina si corresponde emitir el comprobante de una reserva.
+ *
+ * Sin esta regla se podía facturar una reserva **pendiente o cancelada**: con un
+ * CAE real eso deja un comprobante fiscal emitido que después hay que anular con
+ * una nota de crédito. La validación vive acá, y no en la pantalla, para que sea
+ * la misma sin importar desde dónde se dispare.
+ */
+export function motivoNoFacturable(
+  estado: string,
+  yaTieneFactura: boolean,
+): MotivoNoFacturable | null {
+  if (yaTieneFactura) return 'ya_facturada'
+  if (estado === 'cancelada' || estado === 'no_show') return 'anulada'
+  if (!(ESTADOS_FACTURABLES as readonly string[]).includes(estado)) return 'sin_consumir'
+  return null
+}
+
+export function puedeFacturarse(estado: string, yaTieneFactura = false): boolean {
+  return motivoNoFacturable(estado, yaTieneFactura) === null
+}

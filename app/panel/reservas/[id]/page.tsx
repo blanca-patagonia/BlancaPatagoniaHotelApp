@@ -21,6 +21,7 @@ import {
   emitirFactura,
   reprogramarReserva,
 } from '../actions'
+import { motivoNoFacturable, MENSAJES_NO_FACTURABLE } from '@/lib/domain/facturacion'
 import { TONO_ESTADO } from '../../_components/estilos'
 import { Etiqueta } from '../../_components/ui'
 import {
@@ -177,6 +178,9 @@ export default async function DetalleReservaPage({
   const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
   const productos = (productosData ?? []) as unknown as ProductoRow[]
   const factura = facturaData as { numero: string } | null
+  // Misma regla que usa la acción: la pantalla no puede ofrecer algo que
+  // el servidor va a rechazar.
+  const motivoFactura = motivoNoFacturable(reserva.estado, Boolean(factura))
   const cuenta = cuentaConsolidada(
     Number(reserva.total),
     consumos.map((c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }) as Consumo),
@@ -209,7 +213,9 @@ export default async function DetalleReservaPage({
                 ? 'No hay tarifa cargada para esas fechas.'
                 : errorParam === 'fechas'
                   ? 'Revisá las fechas de reprogramación.'
-                  : errorParam === 'cuit'
+                  : errorParam === 'sin_consumir' || errorParam === 'anulada'
+                    ? MENSAJES_NO_FACTURABLE[errorParam]
+                    : errorParam === 'cuit'
                     ? 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped o de la agencia.'
                     : errorParam === 'cae'
                       ? 'El proveedor de facturación rechazó el comprobante. Revisá los importes.'
@@ -417,6 +423,12 @@ export default async function DetalleReservaPage({
             >
               Ver factura {factura.numero}
             </Link>
+          ) : motivoFactura ? (
+            /* El botón no se ofrece si no corresponde: es más claro explicar por
+               qué que dejar apretar y devolver un error. */
+            <span className="max-w-sm text-right text-xs text-stone-400">
+              {MENSAJES_NO_FACTURABLE[motivoFactura]}
+            </span>
           ) : (
             <form action={emitirFactura}>
               <input type="hidden" name="reserva_id" value={reserva.id} />

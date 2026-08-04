@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { hayDB, clienteDePrueba, sufijoUnico } from './db'
 
 /**
  * Test de integración del alta atómica `crear_reserva` (Fase 2).
@@ -9,18 +10,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
  * Requiere Supabase local. Se salta si no hay credenciales en el entorno.
  */
 
-const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const hayDB = Boolean(url && serviceKey && !url.includes('placeholder'))
 
-const sufijo = Math.random().toString(36).slice(2, 8)
+const sufijo = sufijoUnico()
 
 describe.skipIf(!hayDB)('crear_reserva (alta atómica anti-overbooking)', () => {
   let db: SupabaseClient
   const ids: { tipo?: string; unidad?: string; huesped?: string } = {}
 
   beforeAll(async () => {
-    db = createClient(url!, serviceKey!, { auth: { persistSession: false } })
+    db = clienteDePrueba()
 
     const { data: tipo } = await db
       .from('tipos_unidad')

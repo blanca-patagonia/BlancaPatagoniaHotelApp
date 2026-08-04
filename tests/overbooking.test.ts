@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { hayDB, clienteDePrueba, sufijoUnico } from './db'
 
 /**
  * Test de integración del motor anti-overbooking (ADR 0002).
@@ -14,11 +15,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
  * (los valores los imprime `supabase status`).
  */
 
-const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const hayDB = Boolean(url && serviceKey && !url.includes('placeholder'))
 
-const sufijo = Math.random().toString(36).slice(2, 8)
+const sufijo = sufijoUnico()
 const PERIODO = (a: string, b: string) => `[${a},${b})`
 
 describe.skipIf(!hayDB)('anti-overbooking (restricción de exclusión)', () => {
@@ -26,7 +24,7 @@ describe.skipIf(!hayDB)('anti-overbooking (restricción de exclusión)', () => {
   const ids: { tipo?: string; unidad?: string; huesped?: string; reserva?: string } = {}
 
   beforeAll(async () => {
-    db = createClient(url!, serviceKey!, { auth: { persistSession: false } })
+    db = clienteDePrueba()
 
     const { data: tipo } = await db
       .from('tipos_unidad')
