@@ -810,3 +810,39 @@ tests de integración —anti-overbooking, cotización, expiración y alta atóm
 
 **Verificación:** **258 tests en verde** corriendo con `EXIGIR_DB=1`, es decir
 **con los de integración incluidos**, más typecheck y lint limpios.
+
+### 12.1 — Tests sobre las Server Actions
+
+Última deuda de la revisión (ADR 0015). Hasta acá la suite probaba `lib/domain`
+—lógica pura— y las funciones SQL, pero **nada verificaba la capa del medio**:
+la que lee el `FormData`, aplica las reglas y escribe. Ese hueco dejó pasar tres
+veces el mismo error en este proyecto: dominio construido y testeado que
+**ninguna pantalla llamaba**.
+
+- **`tests/acciones/entorno.ts`** monta el andamiaje. Se falsea solo el borde de
+  Next (`redirect`, `revalidatePath`) y la sesión, porque dependen del contexto
+  de una petición HTTP. **La base, el dominio y el código de la acción corren de
+  verdad.** `destinoDe()` captura el `redirect` —que lanza— para poder afirmar
+  a dónde fue la acción, y `limpiar()` borra en orden inverso al de registro
+  para no chocar con las claves foráneas.
+- **20 tests nuevos** sobre reservas, huéspedes y proveedores. Verifican
+  exactamente la clase de error que se repetía: *el formulario manda X, ¿la
+  acción lo persiste?* Entre otros: que el vínculo con la agencia se guarde y
+  aplique tarifa neta, que no se facture una reserva sin consumir ni dos veces,
+  que los comprobantes reciban números distintos, que el vencimiento del
+  comprobante llegue a la base, y que un responsable inscripto con DNI o con un
+  CUIT mal formado **se rechace sin escribir nada**.
+- Se agregó el alias de `server-only` en Vitest: el paquete lo provee Next y sin
+  él los módulos de servidor no se pueden ni cargar en los tests. La protección
+  que aporta sigue intacta en el build de la aplicación.
+
+**Prueba de que los tests tienen filo:** se reintrodujo a propósito el bug
+original —quitar el `update` que guarda `agencia_id`— y la suite **lo detectó**:
+`expected null to be 'd5de2085-…'`. Restaurado el código, vuelve a verde.
+
+También se corrigieron dos defectos de la propia limpieza: se borraba en el
+orden equivocado y una factura se intentaba borrar por el id de la reserva. Tras
+una corrida completa la base queda **sin residuo**.
+
+**Verificación:** **278 tests en verde** con `EXIGIR_DB=1` (29 archivos),
+typecheck y lint limpios.
