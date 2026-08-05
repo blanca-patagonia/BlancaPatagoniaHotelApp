@@ -23,6 +23,11 @@ capa de pagos ya construidos.
 - **Confirmación** por `codigo` (actúa como token), consultada con `service_role`.
 - **Email de confirmación**: `lib/email/confirmacion.ts` (stub, ver ADR 0006 para el
   mismo criterio de "preparado, no enviado").
+  > **Actualización (Fase 13):** ese stub quedó **superado** por el adapter
+  > `EmailProvider` de la Fase 11 (`lib/email/index.ts`), que centraliza todos los
+  > envíos por plantilla. El portal usa `enviarPlantilla('confirmacion_reserva', …)`.
+  > El archivo original se eliminó: nadie lo llamaba y convivían dos sistemas de
+  > correo, uno de ellos muerto.
 
 ## Justificación
 

@@ -71,6 +71,8 @@ Tarifario 2025/2026 (Anexo A).
 - Supabase local con **Docker**. CLI vía devDependency: `npx supabase`.
 - Levantar: `npx supabase start` · aplicar migraciones+seed: `npx supabase db reset`
   · ver claves: `npx supabase status`.
+- ⚠️ `db reset` **borra los usuarios de auth**: hay que correr `npm run seed:usuarios`
+  después, o los tests de facturación fallan (hay FK contra `perfiles`).
 - Studio http://127.0.0.1:54323 · API http://127.0.0.1:54321 · claves con nuevo
   formato `sb_publishable_…` / `sb_secret_…`. `.env.local` (gitignored) apunta al
   stack local.
@@ -98,10 +100,13 @@ Tarifario 2025/2026 (Anexo A).
   real + asistente del portal basado en reglas (ADR 0011) · **Fase 11** alcance
   ERP: facturación fiscal argentina (ADR 0012), auditoría de operaciones
   sensibles, conciliación y antigüedad de saldos, pipeline comercial, encuestas
-  NPS y mantenimiento preventivo. **228 tests verdes**, todo pusheado.
-- **Cuatro adapters** con el mismo patrón (interfaz + stub, se cambia por env):
-  `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider` y
-  `FacturacionElectronicaProvider`. Ningún borde externo es real.
+  NPS y mantenimiento preventivo · **Fase 12** endurecimiento del CI y tests
+  sobre las Server Actions · **Fase 13** limpieza de código muerto y **cambio de
+  unidad** (mudanza de habitación, migración 0028). **297 tests verdes.**
+- **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
+  `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
+  `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
+  único camino para mandar correo). Ningún borde externo es real.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`

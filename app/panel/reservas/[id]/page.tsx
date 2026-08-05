@@ -20,8 +20,11 @@ import {
   quitarConsumo,
   emitirFactura,
   reprogramarReserva,
+  cambiarUnidadReserva,
 } from '../actions'
 import { motivoNoFacturable, MENSAJES_NO_FACTURABLE } from '@/lib/domain/facturacion'
+import { puedeCambiarUnidad, MENSAJES_RECHAZO_MUDANZA } from '@/lib/domain/mudanzas'
+import { unidadesDisponibles } from '@/lib/availability/disponibilidad'
 import { TONO_ESTADO } from '../../_components/estilos'
 import { Etiqueta } from '../../_components/ui'
 import {
@@ -67,6 +70,35 @@ interface ProductoRow {
   precio: number | string
 }
 
+/**
+ * Mensajes de error que puede devolver cualquier acción de esta pantalla.
+ *
+ * Antes era una cadena de ternarios anidados: cada error nuevo agregaba un
+ * nivel de indentación y el último quedaba a diez niveles de profundidad. Como
+ * mapa, sumar un caso es una línea.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  transicion: 'Esa transición de estado no es válida.',
+  overlap: 'No se pudo reprogramar: la unidad ya está ocupada en esas fechas.',
+  tarifa: 'No hay tarifa cargada para esas fechas.',
+  fechas: 'Revisá las fechas de reprogramación.',
+  sin_consumir: MENSAJES_NO_FACTURABLE.sin_consumir,
+  anulada: MENSAJES_NO_FACTURABLE.anulada,
+  ya_facturada: MENSAJES_NO_FACTURABLE.ya_facturada,
+  cuit: 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped o de la agencia.',
+  cae: 'El proveedor de facturación rechazó el comprobante. Revisá los importes.',
+  // Cambio de unidad.
+  ...MENSAJES_RECHAZO_MUDANZA,
+  ocupada: 'Esa unidad ya está ocupada en las fechas de la reserva.',
+  sin_destino: 'Elegí la unidad de destino.',
+  sin_estadia: 'La reserva no tiene una estadía asociada.',
+  destino_inexistente: 'La unidad de destino no existe.',
+  destino_inactivo: 'La unidad de destino está dada de baja.',
+  tarifa_destino:
+    'La mudanza se hizo, pero no hay tarifa cargada para el tipo de destino: el total quedó sin recotizar.',
+  mudanza: 'No se pudo cambiar la unidad.',
+}
+
 const ACCION_ESTADO: Record<EstadoReserva, { verbo: string; color: string }> = {
   pendiente: { verbo: 'Marcar pendiente', color: 'bg-stone-600 hover:bg-stone-700' },
   confirmada: { verbo: 'Confirmar', color: 'bg-lago-700 hover:bg-lago-800' },
@@ -108,11 +140,11 @@ export default async function DetalleReservaPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; ok?: string }>
 }) {
   await requerirAcceso('reservas')
   const { id } = await params
-  const { error: errorParam } = await searchParams
+  const { error: errorParam, ok: okParam } = await searchParams
   const supabase = await crearClienteServidor()
 
   const { data } = await supabase
@@ -186,6 +218,21 @@ export default async function DetalleReservaPage({
     consumos.map((c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }) as Consumo),
   )
 
+  // Unidades a las que se puede mudar la reserva. Solo se consulta si el estado
+  // lo permite: para un check-out o una cancelación la lista no tendría sentido.
+  // La unidad actual no aparece —está ocupada por esta misma reserva—, que es
+  // justo lo que se quiere.
+  const puedeMudarse = Boolean(periodo) && puedeCambiarUnidad(reserva.estado)
+  const [libres, tiposData] = puedeMudarse && periodo
+    ? await Promise.all([
+        unidadesDisponibles(periodo.desde, periodo.hasta),
+        supabase.from('tipos_unidad').select('id, nombre'),
+      ])
+    : [[], { data: [] }]
+  const nombreTipo = new Map(
+    ((tiposData.data ?? []) as { id: string; nombre: string }[]).map((t) => [t.id, t.nombre]),
+  )
+
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex items-center gap-3">
@@ -205,21 +252,14 @@ export default async function DetalleReservaPage({
 
       {errorParam && (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {errorParam === 'transicion'
-            ? 'Esa transición de estado no es válida.'
-            : errorParam === 'overlap'
-              ? 'No se pudo reprogramar: la unidad ya está ocupada en esas fechas.'
-              : errorParam === 'tarifa'
-                ? 'No hay tarifa cargada para esas fechas.'
-                : errorParam === 'fechas'
-                  ? 'Revisá las fechas de reprogramación.'
-                  : errorParam === 'sin_consumir' || errorParam === 'anulada'
-                    ? MENSAJES_NO_FACTURABLE[errorParam]
-                    : errorParam === 'cuit'
-                    ? 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped o de la agencia.'
-                    : errorParam === 'cae'
-                      ? 'El proveedor de facturación rechazó el comprobante. Revisá los importes.'
-                      : 'No se pudo completar la operación.'}
+          {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+        </p>
+      )}
+
+      {okParam === 'mudanza' && (
+        <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          Unidad cambiada. La habitación liberada quedó marcada para limpieza si el huésped ya
+          estaba alojado.
         </p>
       )}
 
@@ -318,6 +358,68 @@ export default async function DetalleReservaPage({
           </form>
           <p className="mt-2 text-xs text-stone-400">
             Recotiza el total; se rechaza si la unidad ya está ocupada en esas fechas.
+          </p>
+        </div>
+      )}
+
+      {puedeMudarse && (
+        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+          <h2 className="mb-1 text-sm font-medium text-stone-700">Cambiar de unidad</h2>
+          <p className="mb-3 text-xs text-stone-400">
+            Para averías, pedidos del huésped o para liberar la habitación. Solo se listan las
+            unidades libres en {formatoFechaCorta(periodo!.desde)} – {formatoFechaCorta(periodo!.hasta)}.
+          </p>
+
+          {libres.length === 0 ? (
+            <p className="text-sm text-stone-400">
+              No hay otra unidad libre en esas fechas. Se puede liberar una reprogramando o
+              cancelando otra reserva.
+            </p>
+          ) : (
+            <form action={cambiarUnidadReserva} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="reserva_id" value={reserva.id} />
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Nueva unidad</span>
+                <select
+                  name="unidad_destino"
+                  required
+                  className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Elegir…</option>
+                  {libres.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre} · {nombreTipo.get(u.tipo_unidad_id) ?? 'sin tipo'}
+                      {u.estado === 'sucia' ? ' (sucia)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Motivo</span>
+                <input
+                  name="motivo"
+                  placeholder="Calefactor roto"
+                  className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Si cambia el tipo</span>
+                <select
+                  name="politica_tarifa"
+                  className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="mantener">Mantener la tarifa pactada</option>
+                  <option value="recotizar">Recotizar según el nuevo tipo</option>
+                </select>
+              </label>
+              <button className="rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-900">
+                Mudar
+              </button>
+            </form>
+          )}
+          <p className="mt-2 text-xs text-stone-400">
+            Dentro del mismo tipo el precio no cambia. La unidad que se libera queda sucia solo si
+            el huésped ya había hecho el check-in.
           </p>
         </div>
       )}

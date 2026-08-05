@@ -6,10 +6,7 @@ import { enviarPlantilla } from '@/lib/email'
 import { urlDelSitio } from '@/lib/env'
 import { formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
-
-/** Horarios del hotel; se replican en `lib/asistente` hasta que exista config. */
-const HORA_CHECK_IN = '15:00'
-const HORA_CHECK_OUT = '10:00'
+import { HORA_CHECK_IN, HORA_CHECK_OUT } from '@/lib/domain/hotel'
 
 export interface EstadoReservaPublica {
   error?: string

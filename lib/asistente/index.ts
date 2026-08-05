@@ -11,6 +11,13 @@ import {
   type DatosHotel,
   type RespuestaAsistente,
 } from '@/lib/domain/asistente'
+import {
+  HORA_CHECK_IN,
+  HORA_CHECK_OUT,
+  DIRECCION,
+  ADMITE_MASCOTAS,
+  SERVICIOS,
+} from '@/lib/domain/hotel'
 
 /**
  * Abstracción del asistente del portal público (`AsistenteProvider`).
@@ -26,25 +33,9 @@ export interface AsistenteProvider {
   responder(pregunta: string): Promise<RespuestaAsistente>
 }
 
-/**
- * Datos del hotel que no están modelados en la base.
- *
- * Los horarios y servicios son política del hotel y hoy no tienen tabla propia;
- * viven acá, en un solo lugar, hasta que exista una de configuración general.
- * La política de cancelación **sí** se lee de la base.
- */
-const HORA_CHECK_IN = '15:00'
-const HORA_CHECK_OUT = '10:00'
-const SERVICIOS = [
-  'desayuno',
-  'wifi',
-  'estacionamiento',
-  'calefacción central',
-  'habitaciones con vista al lago e hidromasaje',
-  'cabañas con hogar a leña y parrilla',
-]
-const DIRECCION = 'El Calafate, Santa Cruz'
-const ADMITE_MASCOTAS = false
+// Los datos fijos del hotel (horarios, dirección, servicios) viven en
+// `lib/domain/hotel.ts`. La política de cancelación, las tarifas y las
+// temporadas **sí** se leen de la base, más abajo.
 
 /** Reúne los datos con los que el motor de reglas arma sus respuestas. */
 async function cargarDatosHotel(): Promise<DatosHotel> {

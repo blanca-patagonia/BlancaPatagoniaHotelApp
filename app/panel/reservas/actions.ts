@@ -7,6 +7,11 @@ import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { diasEntre } from '@/lib/fechas'
 import { puedeTransicionar, ESTADOS_ACTIVOS, type EstadoReserva } from '@/lib/domain/reservas'
+import {
+  motivoRechazoMudanza,
+  debeRecotizar,
+  type PoliticaTarifa,
+} from '@/lib/domain/mudanzas'
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 import { puntosPorEstadia, nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
@@ -26,8 +31,7 @@ import { obtenerProveedorFacturacion } from '@/lib/facturacion'
 import { enviarPlantilla } from '@/lib/email'
 import { urlDelSitio } from '@/lib/env'
 
-/** Horario de llegada del hotel (ver nota en `lib/asistente`). */
-const HORA_CHECK_IN = '15:00'
+import { HORA_CHECK_IN } from '@/lib/domain/hotel'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -533,6 +537,92 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   }
   await supabase.from('reservas').update({ total: cot.resumen.total }).eq('id', id)
   redirect(`/panel/reservas/${id}`)
+}
+
+/**
+ * Muda una reserva a otra unidad.
+ *
+ * Recepción lo necesita cuando se rompe algo, cuando el huésped pide cambio o
+ * cuando hay que liberar una habitación para un grupo. El trabajo pesado lo hace
+ * la función `cambiar_unidad_reserva`, que mueve la estadía y ensucia la unidad
+ * liberada en una sola transacción; si el destino está ocupado, la restricción
+ * de exclusión lo rechaza con 23P01.
+ */
+export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
+  const id = String(formData.get('reserva_id') ?? '')
+  const unidadDestino = String(formData.get('unidad_destino') ?? '')
+  const motivo = String(formData.get('motivo') ?? '')
+  const politica: PoliticaTarifa =
+    formData.get('politica_tarifa') === 'recotizar' ? 'recotizar' : 'mantener'
+
+  if (!id) redirect('/panel/reservas')
+  if (!unidadDestino) redirect(`/panel/reservas/${id}?error=sin_destino`)
+
+  const supabase = await crearClienteServidor()
+  const { data: estadia } = await supabase
+    .from('estadias')
+    .select('unidad_id, estado, periodo')
+    .eq('reserva_id', id)
+    .maybeSingle()
+  if (!estadia) redirect(`/panel/reservas/${id}?error=sin_estadia`)
+
+  // Se valida en el dominio ANTES de ir a la base: da un mensaje claro y evita
+  // una llamada inútil. La función SQL vuelve a comprobarlo porque la
+  // aplicación no es la única puerta a los datos.
+  const rechazo = motivoRechazoMudanza(
+    estadia.estado as EstadoReserva,
+    estadia.unidad_id as string,
+    unidadDestino,
+  )
+  if (rechazo) redirect(`/panel/reservas/${id}?error=${rechazo}`)
+
+  const { data, error } = await supabase.rpc('cambiar_unidad_reserva', {
+    p_reserva_id: id,
+    p_unidad_destino: unidadDestino,
+    p_motivo: motivo,
+  })
+  if (error) {
+    redirect(`/panel/reservas/${id}?error=${error.code === '23P01' ? 'ocupada' : 'mudanza'}`)
+  }
+
+  const resultado = data as {
+    ok: boolean
+    motivo?: string
+    tipo_destino?: string
+    cambio_de_tipo?: boolean
+  }
+  if (!resultado.ok) redirect(`/panel/reservas/${id}?error=${resultado.motivo ?? 'mudanza'}`)
+
+  // La recotización va aparte y DESPUÉS de la mudanza, no dentro de la
+  // transacción: si fallara, el huésped ya está mudado —que es lo urgente— y el
+  // precio se corrige a mano. Al revés (revertir la mudanza por un problema de
+  // tarifa) sería peor.
+  if (debeRecotizar(politica, Boolean(resultado.cambio_de_tipo)) && resultado.tipo_destino) {
+    const { data: reserva } = await supabase
+      .from('reservas')
+      .select('tarifa_tipo')
+      .eq('id', id)
+      .single()
+
+    const { desde, hasta } = parsearPeriodo(estadia.periodo as string)
+    const cot = await cotizarEstadia({
+      tipoUnidadId: resultado.tipo_destino,
+      checkIn: desde,
+      checkOut: hasta,
+      tarifaTipo: reserva?.tarifa_tipo === 'neto' ? 'neto' : 'rack',
+    })
+
+    if (!cot.faltanTarifas) {
+      const noches = diasEntre(desde, hasta)
+      const precioNoche = noches > 0 ? Number((cot.resumen.totalNeto / noches).toFixed(2)) : 0
+      await supabase.from('estadias').update({ precio_noche: precioNoche }).eq('reserva_id', id)
+      await supabase.from('reservas').update({ total: cot.resumen.total }).eq('id', id)
+    } else {
+      redirect(`/panel/reservas/${id}?error=tarifa_destino`)
+    }
+  }
+
+  redirect(`/panel/reservas/${id}?ok=mudanza`)
 }
 
 /**

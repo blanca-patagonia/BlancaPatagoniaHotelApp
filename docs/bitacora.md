@@ -846,3 +846,81 @@ una corrida completa la base queda **sin residuo**.
 
 **Verificación:** **278 tests en verde** con `EXIGIR_DB=1` (29 archivos),
 typecheck y lint limpios.
+
+---
+
+## 2026-08-04 · Fase 13 — Limpieza de código muerto y cambio de unidad
+
+Revisión del sistema buscando funciones sin uso, duplicación y huecos
+funcionales, con el código en la mano en lugar de la memoria. Aparecieron tres
+cosas.
+
+### 13.1 · Una reserva no podía cambiar de habitación
+
+El hueco más serio, y el que explicaba por qué había código huérfano. La unidad
+se asignaba al crear la reserva y **después no había forma de cambiarla**. En un
+hotel eso pasa todos los días: se rompe el calefactor, el huésped pide otra
+habitación, o hay que liberar una unidad para acomodar un grupo. Winpax lo
+resuelve; nosotros no.
+
+- **Migración `0028`** con la función `cambiar_unidad_reserva`. Es una función y
+  no un `update` desde la aplicación porque son **dos escrituras que van
+  juntas**: mover la estadía y dejar sucia la unidad liberada. Si la segunda
+  fallara por separado, la habitación quedaría marcada como limpia con las
+  sábanas usadas. La fila se toma con `for update`, así dos recepcionistas
+  mudando la misma reserva se serializan en lugar de pisarse.
+- **La garantía de que el destino esté libre no se programó**: ya la daba la
+  restricción de exclusión del ADR 0002. Si la unidad destino está ocupada, el
+  `update` levanta `23P01` y la función entera se revierte. Es el mismo motor
+  anti-overbooking protegiendo un caso para el que no fue escrito.
+- **`lib/domain/mudanzas.ts`** decide lo que la base no puede: si la mudanza
+  corresponde según el estado, si la unidad liberada queda sucia y qué pasa con
+  la tarifa. `puedeCambiarUnidad` se apoya en `ocupaInventario` en vez de
+  repetir la lista de estados: si la reserva no bloquea una unidad, no hay nada
+  que mudar.
+- **La tarifa la decide quien opera.** No hay una respuesta única: si la mudanza
+  la decide el hotel (una avería, una cortesía) el huésped no paga la
+  diferencia; si la pide él para mejorar, sí. Dentro del mismo tipo nunca se
+  recotiza, porque la tarifa se carga por tipo y recotizar solo arriesgaría
+  mover el total por un redondeo.
+- **La recotización va después de la mudanza, fuera de la transacción**: si
+  fallara, el huésped ya está mudado —que es lo urgente— y el precio se corrige
+  a mano. Al revés sería peor.
+- Se auditan solo los cambios de `unidad_id`, no todo `update` sobre estadías:
+  auditar también las reprogramaciones de fecha llenaría la tabla de ruido.
+- Esto le devolvió su razón de ser a `unidadesDisponibles`, que estaba escrita y
+  no la llamaba nadie. De paso se descubrió que la función SQL devuelve
+  `setof unidades` y la interfaz de TypeScript **descartaba el estado de
+  housekeeping**: ahora el listado avisa si la unidad libre está sucia, que es
+  justo lo que recepción necesita saber antes de mudar a alguien.
+
+### 13.2 · Dos sistemas de correo, uno muerto
+
+`lib/email/confirmacion.ts` (Fase 4) quedó superado por el adapter
+`EmailProvider` (Fase 11) y **no lo llamaba nadie**. Se eliminó. La bitácora no
+se reescribe, pero el ADR 0007 apuntaba a un archivo inexistente: se le agregó
+la nota de reemplazo.
+
+### 13.3 · Los horarios del hotel, en tres lugares
+
+`HORA_CHECK_IN`, `HORA_CHECK_OUT`, `DIRECCION` y `ADMITE_MASCOTAS` estaban
+copiados en `lib/asistente`, el alta del panel y la del portal —con un
+comentario que afirmaba que vivían "en un solo lugar"—. El riesgo no era el
+duplicado sino la divergencia: que el hotel cambie el horario y queden dos
+respuestas conviviendo, el asistente diciendo una hora y el email otra. Ahora
+están en `lib/domain/hotel.ts`.
+
+### Otras mejoras
+
+- La pantalla de detalle de reserva resolvía los mensajes de error con una
+  cadena de **ternarios anidados de diez niveles**. Pasó a ser un mapa: sumar un
+  error es una línea.
+- Los tests de facturación fallaban con `expected [] to have a length of 2`
+  cuando faltaba correr `seed:usuarios` después de un `db reset`. Ahora cortan
+  con el motivo real. Es el mismo criterio que `EXIGIR_DB`: un fallo que no
+  explica nada cuesta más que el que falla fuerte.
+
+**Verificación:** **297 tests en verde** con `EXIGIR_DB=1` (31 archivos),
+typecheck y lint limpios. Además se probó **la mudanza en el navegador**, de
+punta a punta: la estadía quedó en la unidad nueva con el tipo actualizado, la
+liberada pasó a `sucia`, la nueva siguió `limpia` y la operación quedó auditada.

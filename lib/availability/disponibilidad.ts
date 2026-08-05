@@ -21,7 +21,16 @@ export interface UnidadDisponible {
   id: string
   tipo_unidad_id: string
   nombre: string
+  /**
+   * Estado de housekeeping. La función SQL devuelve `setof unidades`, así que
+   * este dato ya venía en la respuesta y se descartaba. Importa al mudar a un
+   * huésped: una unidad libre puede estar sucia.
+   */
+  estado: EstadoHousekeeping
 }
+
+/** Estados posibles de una unidad libre (`bloqueada` la excluye la función SQL). */
+export type EstadoHousekeeping = 'limpia' | 'sucia' | 'inspeccionada'
 
 /**
  * Disponibilidad agregada por tipo de unidad para el rango `[desde, hasta)`.

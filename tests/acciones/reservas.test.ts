@@ -54,8 +54,18 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
 
     // El usuario de la sesión falsa tiene que existir: `emitirFactura` guarda
     // quién emitió, y hay una FK contra `perfiles`.
-    const { data: perfil } = await ctx.db.from('perfiles').select('id').limit(1).single()
-    if (perfil) sesionActual().userId = (perfil as { id: string }).id
+    //
+    // Se corta acá con un mensaje explícito en lugar de seguir: sin perfil, la
+    // emisión falla en silencio y los tests reportan "expected [] to have
+    // length 2", que no dice nada sobre la causa real.
+    const { data: perfil } = await ctx.db.from('perfiles').select('id').limit(1).maybeSingle()
+    if (!perfil) {
+      throw new Error(
+        'No hay ningún perfil en la base. `npx supabase db reset` borra los usuarios ' +
+          'de auth: hay que correr `npm run seed:usuarios` después.',
+      )
+    }
+    sesionActual().userId = (perfil as { id: string }).id
   })
 
   afterAll(async () => {
