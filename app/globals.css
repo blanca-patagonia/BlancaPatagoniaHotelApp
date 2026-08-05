@@ -89,6 +89,42 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+  Ajustes para pantallas táctiles
+  --------------------------------
+  Se aplican con `pointer: coarse` —el dedo— y no con un ancho de pantalla,
+  porque el problema es el dispositivo de entrada, no el tamaño: una tablet
+  ancha se usa con el dedo igual que un teléfono. Así el escritorio no engorda.
+*/
+@media (pointer: coarse) {
+  /*
+    Safari en iOS hace ZOOM automático al enfocar un campo cuya letra mide
+    menos de 16px, y después deja la página desplazada y con el layout corrido.
+    Toda la interfaz usa `text-sm` (14px), así que cada campo del panel
+    disparaba ese zoom. Se fuerza 16px solo al dedo: en escritorio el tamaño
+    del diseño no cambia.
+  */
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /*
+    Área mínima de toque. La referencia habitual es ~44px: por debajo, los
+    errores de pulsación crecen mucho. Los botones del panel medían unos 36px
+    y los chips de filtro, 28px.
+  */
+  button,
+  select,
+  [role='button'],
+  input[type='submit'],
+  input[type='date'],
+  .toque {
+    min-height: 2.75rem;
+  }
+}
+
 @media print {
   .no-print {
     display: none !important;

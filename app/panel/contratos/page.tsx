@@ -22,6 +22,7 @@ import {
   FILA,
   Kpi,
   Mensaje,
+  COL_SECUNDARIA,
   TD,
   TH,
   Tabla,
@@ -218,8 +219,8 @@ export default async function ContratosPage({
               <tr>
                 <th className={TH}>Título</th>
                 <th className={TH}>Contraparte</th>
-                <th className={TH}>Tipo</th>
-                <th className={TH}>Vigencia</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Tipo</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Vigencia</th>
                 <th className={TH}>Estado</th>
               </tr>
             </thead>
@@ -237,8 +238,10 @@ export default async function ContratosPage({
                   <td className={`${TD} text-stone-700`}>
                     {nombres.get(c.entidad_id) ?? '—'}
                   </td>
-                  <td className={`${TD} text-stone-500`}>{ETIQUETAS_TIPO_CONTRATO[c.tipo]}</td>
-                  <td className={`${TD} text-stone-600`}>
+                  <td className={`${TD} ${COL_SECUNDARIA} text-stone-500`}>
+                    {ETIQUETAS_TIPO_CONTRATO[c.tipo]}
+                  </td>
+                  <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
                     {c.vigencia_desde || c.vigencia_hasta ? (
                       <>
                         {c.vigencia_desde ? formatoFechaCorta(c.vigencia_desde) : '—'}

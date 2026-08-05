@@ -130,7 +130,9 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 py-4 text-sm">
+        {/* En papel el comprobante siempre lleva las dos columnas; en un
+            teléfono se apilan para que los datos no queden partidos. */}
+        <div className="grid grid-cols-1 gap-4 py-4 text-sm sm:grid-cols-2 print:grid-cols-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-stone-400">Huésped</p>
             <p className="text-stone-800">
@@ -151,7 +153,8 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        <table className="w-full border-t border-stone-200 text-sm">
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full border-t border-stone-200 text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-stone-400">
               <th className="py-2">Detalle</th>
@@ -204,8 +207,9 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
                 USD {cuenta.total.toLocaleString('es-AR')}
               </td>
             </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
 
         {esFiscal ? (
           <div className="mt-6 border-t border-stone-200 pt-3">

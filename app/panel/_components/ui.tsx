@@ -35,9 +35,15 @@ const BOTON: Record<VarianteBoton, string> = {
   peligro: 'border border-red-200 bg-white text-red-700 hover:bg-red-50',
 }
 
-/** Clases de botón, para reutilizar en `<button>`, `<Link>` o `<a>`. */
+/**
+ * Clases de botón, para reutilizar en `<button>`, `<Link>` o `<a>`.
+ *
+ * Lleva `toque` porque un `<Link>` se renderiza como `<a>` y la regla de altura
+ * mínima táctil de `globals.css` solo alcanza a `button`: sin esta clase, los
+ * botones que en realidad son enlaces quedaban por debajo del área mínima.
+ */
 export function botonClases(variante: VarianteBoton = 'secundario', extra = ''): string {
-  return `inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed ${BOTON[variante]} ${extra}`.trim()
+  return `toque inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed ${BOTON[variante]} ${extra}`.trim()
 }
 
 /* ------------------------------------------------------------ encabezado -- */
@@ -210,6 +216,20 @@ export const TH = 'px-4 py-2.5 text-left text-xs font-semibold tracking-wide tex
 export const TD = 'px-4 py-2.5 align-middle'
 export const FILA = 'border-t border-stone-100 transition hover:bg-lago-50/40'
 
+/**
+ * Columna secundaria: se oculta en pantallas chicas.
+ *
+ * Un listado de siete columnas en un teléfono obliga a arrastrar la tabla de
+ * lado para leer una fila, y así no se puede trabajar. En vez de eso, en el
+ * móvil se muestran solo las columnas que identifican y deciden (quién, cuándo,
+ * en qué estado) y el resto aparece a partir de `sm`. El dato completo sigue
+ * estando en el detalle de cada fila, a un toque.
+ *
+ * Se aplica al `<th>` **y** al `<td>` de la misma columna: si se olvida uno, la
+ * tabla se desalinea.
+ */
+export const COL_SECUNDARIA = 'hidden sm:table-cell'
+
 /* ------------------------------------------------------------- buscador -- */
 
 interface BuscadorProps {
@@ -228,11 +248,18 @@ interface BuscadorProps {
  */
 export function Buscador({ accion, valor, etiqueta, placeholder, ocultos = {} }: BuscadorProps) {
   return (
-    <form method="get" action={accion} className="flex items-center gap-2" role="search">
+    <form
+      method="get"
+      action={accion}
+      className="flex w-full items-center gap-2 sm:w-auto"
+      role="search"
+    >
       {Object.entries(ocultos).map(([clave, val]) =>
         val ? <input key={clave} type="hidden" name={clave} value={val} /> : null,
       )}
-      <div className="relative">
+      {/* En el teléfono el campo ocupa lo que sobra; en escritorio vuelve a su
+          ancho fijo, que era lo único contemplado antes. */}
+      <div className="relative min-w-0 flex-1 sm:flex-none">
         <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-stone-400">
           <Icono nombre="buscar" tam={16} />
         </span>
@@ -242,7 +269,7 @@ export function Buscador({ accion, valor, etiqueta, placeholder, ocultos = {} }:
           defaultValue={valor ?? ''}
           placeholder={placeholder}
           aria-label={etiqueta}
-          className="w-56 rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-8 text-sm text-stone-800 placeholder:text-stone-400 focus:border-lago-500 focus:outline-none"
+          className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-8 text-sm text-stone-800 placeholder:text-stone-400 focus:border-lago-500 focus:outline-none sm:w-56"
         />
       </div>
       <button type="submit" className={botonClases('secundario')}>
@@ -326,7 +353,7 @@ export function Chip({
     <Link
       href={href}
       aria-current={activo ? 'page' : undefined}
-      className={`rounded-full px-3 py-1 text-sm font-medium transition ${
+      className={`toque inline-flex items-center rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
         activo
           ? 'bg-lago-700 text-white shadow-sm'
           : 'bg-white text-stone-600 ring-1 ring-stone-200 hover:bg-stone-50 hover:text-stone-900'

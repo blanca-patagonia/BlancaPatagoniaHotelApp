@@ -174,7 +174,7 @@ export default async function AgenciaDetallePage({
       </section>
 
       <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Movimientos</h2>
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">

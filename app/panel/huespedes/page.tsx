@@ -12,6 +12,7 @@ import {
   Etiqueta,
   FILA,
   Paginacion,
+  COL_SECUNDARIA,
   TD,
   TH,
   Tabla,
@@ -111,10 +112,10 @@ export default async function HuespedesPage({
               <thead>
                 <tr>
                   <th className={TH}>Apellido y nombre</th>
-                  <th className={TH}>Documento</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Documento</th>
                   <th className={TH}>Contacto</th>
-                  <th className={TH}>Nacionalidad</th>
-                  <th className={TH}>Fidelidad</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Nacionalidad</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Fidelidad</th>
                 </tr>
               </thead>
               <tbody>
@@ -131,21 +132,38 @@ export default async function HuespedesPage({
                           {h.apellido}, {h.nombre}
                         </Link>
                       </td>
-                      <td className={`${TD} tabular text-stone-600`}>{h.doc_numero || '—'}</td>
+                      <td className={`${TD} ${COL_SECUNDARIA} tabular text-stone-600`}>
+                        {h.doc_numero || '—'}
+                      </td>
                       <td className={`${TD} text-stone-600`}>
                         {h.email || h.telefono ? (
                           <div className="leading-tight">
-                            {h.email && <p>{h.email}</p>}
+                            {/* En móvil se prioriza el teléfono: desde el
+                                teléfono se llama, no se copia un correo. */}
                             {h.telefono && (
-                              <p className="text-xs text-stone-400">{h.telefono}</p>
+                              <a
+                                href={`tel:${h.telefono.replace(/\s/g, '')}`}
+                                className="text-lago-700 sm:hidden"
+                              >
+                                {h.telefono}
+                              </a>
+                            )}
+                            {h.email && <p className="hidden sm:block">{h.email}</p>}
+                            {h.telefono && (
+                              <p className="hidden text-xs text-stone-400 sm:block">{h.telefono}</p>
+                            )}
+                            {!h.telefono && h.email && (
+                              <p className="truncate sm:hidden">{h.email}</p>
                             )}
                           </div>
                         ) : (
                           '—'
                         )}
                       </td>
-                      <td className={`${TD} text-stone-600`}>{h.nacionalidad || '—'}</td>
-                      <td className={TD}>
+                      <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
+                        {h.nacionalidad || '—'}
+                      </td>
+                      <td className={`${TD} ${COL_SECUNDARIA}`}>
                         {puntos > 0 ? (
                           <Etiqueta tono="calafate">
                             {ETIQUETAS_NIVEL[nivel]} · {puntos} pts

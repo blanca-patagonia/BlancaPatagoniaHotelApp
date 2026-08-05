@@ -924,3 +924,77 @@ están en `lib/domain/hotel.ts`.
 typecheck y lint limpios. Además se probó **la mudanza en el navegador**, de
 punta a punta: la estadía quedó en la unidad nueva con el tipo actualizado, la
 liberada pasó a `sucia`, la nueva siguió `limpia` y la operación quedó auditada.
+
+---
+
+## 2026-08-04 · Fase 14 — Experiencia de uso e interacción táctil
+
+El panel se veía bien en un monitor, pero recepción y mucamas trabajan de pie y
+con el teléfono. Revisión enfocada en eso.
+
+**Método, y una hipótesis descartada.** El panel de vista previa no propaga el
+cambio de tamaño al layout (`innerWidth` seguía en 981 con el viewport en 375) y
+tampoco expone `document.head` ni las hojas de estilo. Eso hizo aparecer una
+pista falsa: cero etiquetas `<meta>` y un ancho de 980px, que es justo lo que
+usa un móvil **cuando falta el meta viewport**. Antes de anotarlo como defecto
+se revisó el código de Next: `lib/metadata/default-metadata.js` inyecta
+`width=device-width, initial-scale=1` por defecto en el App Router. No había tal
+bug. La verificación terminó haciéndose sobre el **CSS compilado del build**,
+que sí es comprobable.
+
+### 14.1 · Base táctil
+
+Se agregaron reglas en `globals.css` bajo `@media (pointer: coarse)` —el dedo—
+en lugar de por ancho de pantalla, porque el problema es el dispositivo de
+entrada: una tablet ancha se usa con el dedo igual que un teléfono. Así el
+escritorio no engorda.
+
+- **Campos a 16px.** Safari en iOS hace **zoom automático** al enfocar un campo
+  con letra menor a 16px y deja la página corrida. Toda la interfaz usa `text-sm`
+  (14px), así que **cada campo del panel** disparaba ese zoom.
+- **Área mínima de toque de 44px** en botones, selects y chips. Los botones
+  medían unos 36px y los chips de filtro, 28px. `botonClases` lleva ahora la
+  clase `toque` porque un `<Link>` se renderiza como `<a>` y la regla de
+  `button` no lo alcanzaba.
+
+### 14.2 · Listados legibles en un teléfono
+
+Un listado de cinco o seis columnas obliga a arrastrar la tabla de lado para
+leer una fila. Se agregó `COL_SECUNDARIA` (`hidden sm:table-cell`) y se
+marcaron las columnas que no identifican ni deciden.
+
+Pero ocultar y ya sería perder datos, así que en cada listado **lo importante se
+pliega bajo la columna principal** en móvil: las fechas y el total bajo el
+huésped en reservas, el email bajo el nombre en usuarios, la fecha y el lugar
+bajo la descripción en objetos perdidos. En huéspedes se prioriza el **teléfono
+como enlace `tel:`**: desde un teléfono se llama, no se copia un correo.
+
+El buscador tenía ancho fijo `w-56`; ahora ocupa lo que sobra en móvil y vuelve
+a su ancho en escritorio.
+
+### 14.3 · Desbordes que recortaban datos
+
+Tres pantallas de detalle (agencias, huéspedes, proveedores) envolvían su tabla
+en `overflow-hidden`, que **recorta** las columnas en lugar de dejarlas
+desplazar: en un teléfono el dato quedaba inaccesible, que es peor que
+desbordar. Pasaron a `overflow-x-auto`. Tres grillas de KPIs e importes estaban
+fijas en `grid-cols-3` / `grid-cols-2`: en 375px daban columnas de ~110px que
+partían los números. En la factura se conservan las dos columnas al imprimir
+(`print:grid-cols-2`), porque ahí el ancho no es el de un teléfono.
+
+### 14.4 · Formularios usables con el pulgar
+
+Los cuatro formularios del detalle de reserva (pago, consumo, reprogramar,
+mudanza) usaban `flex-wrap` con campos de ancho automático: en móvil quedaban
+cuatro controles diminutos en una fila. Ahora los campos y el botón ocupan el
+ancho completo y se apilan, y desde `sm` vuelven a la fila de siempre.
+
+**Verificación:** **297 tests en verde**, typecheck, lint y `build` limpios. Las
+reglas nuevas se comprobaron en el CSS compilado: el bloque
+`@media (pointer:coarse)` con los 16px y los 2.75rem, y `.sm\:table-cell` /
+`.sm\:hidden` dentro de `@media (min-width:40rem)` —o sea, que por debajo de
+640px las columnas secundarias efectivamente desaparecen—.
+
+**Pendiente de comprobar en un teléfono real:** el entorno de trabajo no permite
+renderizar a 375px, así que el comportamiento se verificó por las reglas CSS y
+no viendo la pantalla. Conviene abrirlo en un celular antes de la entrega.

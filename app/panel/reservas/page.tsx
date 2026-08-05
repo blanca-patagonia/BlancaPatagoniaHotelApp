@@ -16,6 +16,7 @@ import {
   BarraHerramientas,
   BotonExportar,
   Buscador,
+  COL_SECUNDARIA,
   Chip,
   Encabezado,
   EstadoVacio,
@@ -234,9 +235,9 @@ export default async function ReservasPage({
                 <tr>
                   <th className={TH}>Código</th>
                   <th className={TH}>Huésped</th>
-                  <th className={TH}>Estadía</th>
-                  <th className={TH}>Canal</th>
-                  <th className={`${TH} text-right`}>Total</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Estadía</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Canal</th>
+                  <th className={`${TH} ${COL_SECUNDARIA} text-right`}>Total</th>
                   <th className={TH}>Estado</th>
                 </tr>
               </thead>
@@ -256,8 +257,18 @@ export default async function ReservasPage({
                       </td>
                       <td className={`${TD} text-stone-700`}>
                         {r.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : '—'}
+                        {/* En el teléfono las columnas de fechas y total se
+                            ocultan, pero las fechas son justo lo que recepción
+                            necesita ver de un vistazo: se pliegan acá abajo. */}
+                        {periodo && (
+                          <span className="tabular block text-xs text-stone-500 sm:hidden">
+                            {formatoFechaCorta(periodo.desde)} → {formatoFechaCorta(periodo.hasta)}
+                            {' · USD '}
+                            {Number(r.total).toLocaleString('es-AR')}
+                          </span>
+                        )}
                       </td>
-                      <td className={`${TD} text-stone-600`}>
+                      <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
                         {periodo ? (
                           <>
                             {formatoFechaCorta(periodo.desde)} → {formatoFechaCorta(periodo.hasta)}
@@ -269,10 +280,12 @@ export default async function ReservasPage({
                           '—'
                         )}
                       </td>
-                      <td className={`${TD} text-stone-600`}>
+                      <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
                         {ETIQUETAS_CANAL[r.canal as Canal] ?? r.canal}
                       </td>
-                      <td className={`${TD} tabular text-right font-medium text-stone-800`}>
+                      <td
+                        className={`${TD} ${COL_SECUNDARIA} tabular text-right font-medium text-stone-800`}
+                      >
                         USD {Number(r.total).toLocaleString('es-AR')}
                       </td>
                       <td className={TD}>

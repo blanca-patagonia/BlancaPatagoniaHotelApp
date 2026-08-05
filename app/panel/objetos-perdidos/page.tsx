@@ -13,6 +13,7 @@ import {
   Etiqueta,
   FILA,
   Kpi,
+  COL_SECUNDARIA,
   TD,
   TH,
   Tabla,
@@ -137,20 +138,28 @@ export default async function ObjetosPerdidosPage({
           <Tabla resumen="Objetos perdidos con fecha de hallazgo, ubicación y estado">
             <thead>
               <tr>
-                <th className={TH}>Hallazgo</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Hallazgo</th>
                 <th className={TH}>Objeto</th>
-                <th className={TH}>Ubicación</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Ubicación</th>
                 <th className={TH}>Estado</th>
               </tr>
             </thead>
             <tbody>
               {objetos.map((o) => (
                 <tr key={o.id} className={FILA}>
-                  <td className={`${TD} tabular text-stone-500`}>
+                  <td className={`${TD} ${COL_SECUNDARIA} tabular text-stone-500`}>
                     {formatoFechaCorta(o.fecha_hallazgo)}
                   </td>
-                  <td className={`${TD} font-medium text-stone-800`}>{o.descripcion}</td>
-                  <td className={`${TD} text-stone-600`}>{o.ubicacion || '—'}</td>
+                  <td className={`${TD} font-medium text-stone-800`}>
+                    {o.descripcion}
+                    {/* Fecha y lugar del hallazgo son lo que permite reconocer
+                        el objeto: en móvil se pliegan bajo la descripción. */}
+                    <span className="block text-xs font-normal text-stone-500 sm:hidden">
+                      {formatoFechaCorta(o.fecha_hallazgo)}
+                      {o.ubicacion ? ` · ${o.ubicacion}` : ''}
+                    </span>
+                  </td>
+                  <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>{o.ubicacion || '—'}</td>
                   <td className={TD}>
                     {o.estado === 'devuelto' ? (
                       <Etiqueta tono="exito">Devuelto</Etiqueta>

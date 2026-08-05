@@ -10,6 +10,7 @@ import {
   Etiqueta,
   FILA,
   Kpi,
+  COL_SECUNDARIA,
   TD,
   TH,
   Tabla,
@@ -127,8 +128,8 @@ export default async function UsuariosPage({
             <thead>
               <tr>
                 <th className={TH}>Nombre</th>
-                <th className={TH}>Email</th>
-                <th className={TH}>Último acceso</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Email</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Último acceso</th>
                 <th className={TH}>Rol</th>
                 <th className={TH}>Estado</th>
               </tr>
@@ -141,9 +142,18 @@ export default async function UsuariosPage({
                     <td className={`${TD} font-medium text-stone-800`}>
                       {p.nombre}
                       {esYo && <span className="ml-2 text-xs text-stone-400">(vos)</span>}
+                      {/* El email identifica al usuario tanto como el nombre:
+                          si se oculta la columna, se pliega debajo. */}
+                      <span className="block truncate text-xs font-normal text-stone-500 sm:hidden">
+                        {emailPorId.get(p.id)}
+                      </span>
                     </td>
-                    <td className={`${TD} text-stone-600`}>{emailPorId.get(p.id)}</td>
-                    <td className={`${TD} text-stone-500`}>{ultimoAcceso(accesoPorId.get(p.id))}</td>
+                    <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
+                      {emailPorId.get(p.id)}
+                    </td>
+                    <td className={`${TD} ${COL_SECUNDARIA} text-stone-500`}>
+                      {ultimoAcceso(accesoPorId.get(p.id))}
+                    </td>
                     <td className={TD}>
                       <form action={cambiarRolUsuario} className="flex items-center gap-2">
                         <input type="hidden" name="user_id" value={p.id} />

@@ -344,15 +344,15 @@ export default async function DetalleReservaPage({
           <h2 className="mb-3 text-sm font-medium text-stone-700">Reprogramar</h2>
           <form action={reprogramarReserva} className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="reserva_id" value={reserva.id} />
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Nuevo check-in</span>
-              <input type="date" name="check_in" defaultValue={periodo.desde} className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+              <input type="date" name="check_in" defaultValue={periodo.desde} className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
             </label>
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Nuevo check-out</span>
-              <input type="date" name="check_out" defaultValue={periodo.hasta} className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+              <input type="date" name="check_out" defaultValue={periodo.hasta} className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
             </label>
-            <button className="rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-900">
+            <button className="w-full rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-stone-900">
               Reprogramar
             </button>
           </form>
@@ -378,12 +378,12 @@ export default async function DetalleReservaPage({
           ) : (
             <form action={cambiarUnidadReserva} className="flex flex-wrap items-end gap-2">
               <input type="hidden" name="reserva_id" value={reserva.id} />
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
                 <span className="text-stone-500">Nueva unidad</span>
                 <select
                   name="unidad_destino"
                   required
-                  className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
                 >
                   <option value="">Elegir…</option>
                   {libres.map((u) => (
@@ -394,25 +394,25 @@ export default async function DetalleReservaPage({
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
                 <span className="text-stone-500">Motivo</span>
                 <input
                   name="motivo"
                   placeholder="Calefactor roto"
-                  className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
                 />
               </label>
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
                 <span className="text-stone-500">Si cambia el tipo</span>
                 <select
                   name="politica_tarifa"
-                  className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
                 >
                   <option value="mantener">Mantener la tarifa pactada</option>
                   <option value="recotizar">Recotizar según el nuevo tipo</option>
                 </select>
               </label>
-              <button className="rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-900">
+              <button className="w-full rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-stone-900">
                 Mudar
               </button>
             </form>
@@ -426,7 +426,9 @@ export default async function DetalleReservaPage({
 
       <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium text-stone-700">Pagos</h2>
-        <div className="grid grid-cols-3 gap-3">
+        {/* Total / pagado / saldo son importes en USD: en tres columnas de
+            110px se cortaban. En móvil van de a uno. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-lg bg-stone-50 px-4 py-3">
             <p className="text-xs text-stone-400">Total</p>
             <p className="text-lg font-semibold text-stone-900">
@@ -469,9 +471,9 @@ export default async function DetalleReservaPage({
         ) : (
           <form action={registrarPago} className="mt-4 flex flex-wrap items-end gap-2">
             <input type="hidden" name="reserva_id" value={reserva.id} />
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Medio</span>
-              <select name="medio" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm">
+              <select name="medio" className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm">
                 {MEDIOS_MANUALES.map((m) => (
                   <option key={m} value={m}>
                     {ETIQUETAS_MEDIO[m]}
@@ -479,12 +481,12 @@ export default async function DetalleReservaPage({
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Tipo</span>
               <select
                 name="tipo"
                 defaultValue={resumen.tieneSenia ? 'saldo' : 'senia'}
-                className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
               >
                 {TIPOS_PAGO.map((t) => (
                   <option key={t} value={t}>
@@ -493,7 +495,7 @@ export default async function DetalleReservaPage({
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Monto (USD)</span>
               <input
                 name="monto"
@@ -501,10 +503,10 @@ export default async function DetalleReservaPage({
                 step="0.01"
                 min="0"
                 defaultValue={resumen.tieneSenia ? resumen.saldo : senia}
-                className="w-32 rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-32"
               />
             </label>
-            <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700">
+            <button className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-emerald-700">
               Registrar pago
             </button>
           </form>
@@ -570,12 +572,12 @@ export default async function DetalleReservaPage({
 
         <form action={agregarConsumo} className="mt-3 flex flex-wrap items-end gap-2">
           <input type="hidden" name="reserva_id" value={reserva.id} />
-          <label className="flex flex-col gap-1 text-xs">
+          <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
             <span className="text-stone-500">Producto / servicio</span>
             <select
               name="producto_id"
               required
-              className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+              className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
             >
               {productos.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -584,7 +586,7 @@ export default async function DetalleReservaPage({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-xs">
+          <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
             <span className="text-stone-500">Cant.</span>
             <input
               name="cantidad"
@@ -594,7 +596,7 @@ export default async function DetalleReservaPage({
               className="w-20 rounded-md border border-stone-300 px-2 py-1.5 text-sm"
             />
           </label>
-          <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800">
+          <button className="w-full rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-lago-800">
             Cargar
           </button>
         </form>

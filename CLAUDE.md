@@ -102,7 +102,8 @@ Tarifario 2025/2026 (Anexo A).
   sensibles, conciliación y antigüedad de saldos, pipeline comercial, encuestas
   NPS y mantenimiento preventivo · **Fase 12** endurecimiento del CI y tests
   sobre las Server Actions · **Fase 13** limpieza de código muerto y **cambio de
-  unidad** (mudanza de habitación, migración 0028). **297 tests verdes.**
+  unidad** (mudanza de habitación, migración 0028) · **Fase 14** experiencia de
+  uso e interacción táctil. **297 tests verdes.**
 - **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
@@ -111,7 +112,13 @@ Tarifario 2025/2026 (Anexo A).
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
-  iconos de `iconos.tsx`. Paleta de marca: `lago` / `calafate` / `lenga` / `stone`
+  iconos de `iconos.tsx`.
+- **Móvil (Fase 14):** columnas de tabla no esenciales con `COL_SECUNDARIA`
+  (`hidden sm:table-cell`), aplicado al `<th>` **y** al `<td>`; si el dato importa,
+  plegarlo bajo la columna principal con `sm:hidden` en vez de perderlo. Campos y
+  botones de formulario `w-full sm:w-auto`. Nunca `overflow-hidden` sobre una tabla
+  (recorta datos): va `overflow-x-auto`. `globals.css` ya da 16px a los campos y
+  44px de área de toque bajo `@media (pointer: coarse)`; no hace falta repetirlo. Paleta de marca: `lago` / `calafate` / `lenga` / `stone`
   (no usar `sky` ni `amber`). Títulos con `font-display`.
 - ⚠️ `next/font/google` descarga las tipografías en build. Si se borra `.next` y la
   descarga falla, el error se cachea y **toda la app da 500** (incluido `/login`):

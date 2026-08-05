@@ -145,7 +145,9 @@ export default async function MantenimientoPage({
         acciones={<BotonExportar href="/panel/exportar/mantenimiento" />}
       />
 
-      <div className="mb-4 grid grid-cols-3 gap-4">
+      {/* Tres KPIs en 375px daban columnas de ~110px: el número quedaba
+          partido. Se apilan de a uno y recién en `sm` van los tres. */}
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Kpi titulo="Pendientes" valor={String(pendientes)} icono="mantenimiento" tono="alerta" />
         <Kpi titulo="En proceso" valor={String(enProceso)} icono="config" tono="lago" />
         <Kpi
