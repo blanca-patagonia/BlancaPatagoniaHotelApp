@@ -27,7 +27,7 @@ import { puedeCambiarUnidad, MENSAJES_RECHAZO_MUDANZA } from '@/lib/domain/mudan
 import { unidadesDisponibles } from '@/lib/availability/disponibilidad'
 import { BotonEnvio } from '../../_components/boton-envio'
 import { TONO_ESTADO } from '../../_components/estilos'
-import { Etiqueta } from '../../_components/ui'
+import { Encabezado, Etiqueta, Mensaje, Pagina } from '../../_components/ui'
 import {
   cuentaConsolidada,
   ETIQUETAS_CATEGORIA_PRODUCTO,
@@ -235,36 +235,50 @@ export default async function DetalleReservaPage({
   )
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center gap-3">
-        <Link href="/panel/reservas" className="text-sm text-stone-500 hover:text-stone-800">
-          ‹ Reservas
-        </Link>
-      </div>
+    <Pagina>
+      <Link
+        href="/panel/reservas"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a reservas
+      </Link>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-stone-900">
-          {reserva.codigo}
-        </h1>
-        <Etiqueta tono={TONO_ESTADO[reserva.estado]}>
-          {ETIQUETAS_ESTADO_RESERVA[reserva.estado]}
-        </Etiqueta>
-      </div>
+      <Encabezado
+        titulo={reserva.codigo}
+        descripcion={
+          reserva.huesped
+            ? `${reserva.huesped.apellido}, ${reserva.huesped.nombre}`
+            : 'Sin huésped asociado'
+        }
+        icono="reservas"
+        acciones={
+          <Etiqueta tono={TONO_ESTADO[reserva.estado]}>
+            {ETIQUETAS_ESTADO_RESERVA[reserva.estado]}
+          </Etiqueta>
+        }
+      />
 
       {errorParam && (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <Mensaje tono="error">
           {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
-        </p>
+        </Mensaje>
       )}
 
       {okParam === 'mudanza' && (
-        <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <Mensaje tono="ok">
           Unidad cambiada. La habitación liberada quedó marcada para limpieza si el huésped ya
           estaba alojado.
-        </p>
+        </Mensaje>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/*
+        Dos columnas en escritorio, con TODO a la vista al mismo tiempo: nada de
+        pestañas ni bloques plegados. A la izquierda la reserva y qué hacer con
+        ella; a la derecha la plata. En el teléfono se apila en ese mismo orden.
+      */}
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
         <div className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Huésped</h2>
           <dl className="flex flex-col gap-3">
@@ -306,7 +320,7 @@ export default async function DetalleReservaPage({
         </div>
       </div>
 
-      <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium text-stone-700">Acciones</h2>
         {transiciones.length === 0 ? (
           <p className="text-sm text-stone-400">La reserva está en un estado final.</p>
@@ -354,7 +368,7 @@ export default async function DetalleReservaPage({
       </div>
 
       {periodo && !['cancelada', 'no_show', 'checkout'].includes(reserva.estado) && (
-        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+        <div className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Reprogramar</h2>
           <form action={reprogramarReserva} className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="reserva_id" value={reserva.id} />
@@ -377,7 +391,7 @@ export default async function DetalleReservaPage({
       )}
 
       {puedeMudarse && (
-        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+        <div className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-1 text-sm font-medium text-stone-700">Cambiar de unidad</h2>
           <p className="mb-3 text-xs text-stone-400">
             Para averías, pedidos del huésped o para liberar la habitación. Solo se listan las
@@ -437,8 +451,11 @@ export default async function DetalleReservaPage({
           </p>
         </div>
       )}
+        </div>
 
-      <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+        {/* Columna de la cuenta: lo que se cobró y lo que se consumió. */}
+        <div className="flex min-w-0 flex-col gap-4">
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium text-stone-700">Pagos</h2>
         {/* Total / pagado / saldo son importes en USD: en tres columnas de
             110px se cortaban. En móvil van de a uno. */}
@@ -536,7 +553,7 @@ export default async function DetalleReservaPage({
         </p>
       </div>
 
-      <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-stone-700">Consumos y cuenta</h2>
           {factura ? (
@@ -638,6 +655,8 @@ export default async function DetalleReservaPage({
           </div>
         </dl>
       </div>
-    </div>
+        </div>
+      </div>
+    </Pagina>
   )
 }

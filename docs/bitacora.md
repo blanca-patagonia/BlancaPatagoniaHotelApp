@@ -1093,3 +1093,65 @@ repetía a mano.
 **Verificación:** **307 tests en verde** (32 archivos), typecheck y lint
 limpios. Las 16 rutas nuevas y modificadas responden 200 y se comprobó en el
 navegador que ya no queda ningún `<details>` escondiendo un alta.
+
+---
+
+## 2026-08-06 · Fase 15.6 — Detalle de reserva, esqueletos y pantalla de "no encontrado"
+
+Cierre de los puntos que quedaban del rediseño.
+
+### Detalle de reserva a dos columnas
+
+Eran **ocho bloques apilados** en una sola columna: para facturar había que
+recorrer toda la pantalla. Siguiendo el principio fijado —nada oculto— no se
+usaron pestañas ni acordeones: ahora son **dos columnas con todo a la vista al
+mismo tiempo**, y en el teléfono se apilan en el mismo orden.
+
+El corte quedó por tema, no por tamaño: **a la izquierda la reserva y qué hacer
+con ella** (huésped, estadía, acciones de estado, reprogramar, cambiar de
+unidad); **a la derecha la plata** (pagos, consumos y factura). Los bloques ya
+estaban agrupados así en el archivo, con lo cual no hubo que reordenar nada:
+solo insertar los límites de columna.
+
+De paso la pantalla adoptó `Pagina`, `Encabezado` y `Mensaje` en lugar del
+markup propio que arrastraba.
+
+### Esqueletos de carga por sección
+
+Había **uno solo**, con forma de tablero —encabezado, cuatro KPIs y un bloque
+grande—, y se usaba para todas las secciones. Un esqueleto que no se parece a lo
+que después aparece es peor que uno neutro: la pantalla "salta" al reemplazarse
+y da sensación de error.
+
+`_components/esqueletos.tsx` define cuatro formas —listado, detalle a dos
+columnas, tablero y formulario— y **25 archivos `loading.tsx`** las conectan a
+la sección que corresponde.
+
+### Pantalla de "no encontramos eso"
+
+Antes caía la genérica de Next, en inglés y sin salida: quien llegaba por un
+enlace viejo quedaba varado. Ahora explica qué pudo haber pasado y ofrece tres
+salidas (inicio, buscar en reservas, ayuda).
+
+Nota honesta: en desarrollo la respuesta llega con estado 200 en lugar de 404
+porque el streaming de Next ya envió la cabecera antes de llamar a `notFound()`.
+La pantalla que ve el usuario es la correcta; el código de estado conviene
+verificarlo en producción.
+
+### Alta de reserva
+
+Pasó al sistema de diseño y el primer paso quedó **numerado** ("1 · ¿Para
+cuándo?"): quien no usa mucho la computadora necesita saber cuántos pasos
+faltan, no descubrirlo. Cuando no hay disponibilidad, en lugar de una línea de
+texto aparece un estado vacío con un enlace a la grilla de ocupación.
+
+**Un tropiezo del entorno, no del código:** a mitad de la verificación todas las
+subrutas empezaron a dar 404, incluidas las que funcionaban minutos antes. Es el
+manifiesto de rutas viejo de Turbopack, ya anotado en `CLAUDE.md`; se resolvió
+borrando `.next` y reiniciando. Conviene recordarlo antes de salir a buscar un
+bug inexistente.
+
+**Verificación:** **307 tests en verde**, typecheck y lint limpios. En el
+navegador se comprobó que el detalle muestra los siete bloques a la vez, que las
+siete acciones bloquean el botón mientras procesan y que cancelar y no-show
+piden confirmación nombrando la reserva.

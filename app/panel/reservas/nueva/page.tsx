@@ -5,6 +5,16 @@ import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { hoyISO, sumarDias, diasEntre } from '@/lib/fechas'
 import { FormularioReserva, type OpcionTipo, type OpcionAgencia } from './formulario'
+import {
+  CAMPO,
+  Campo,
+  Encabezado,
+  EstadoVacio,
+  Pagina,
+  Tarjeta,
+  botonClases,
+} from '../../_components/ui'
+import { Icono } from '../../_components/iconos'
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -59,70 +69,86 @@ export default async function NuevaReservaPage({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center gap-3">
-        <Link href="/panel/reservas" className="text-sm text-stone-500 hover:text-stone-800">
-          ‹ Reservas
-        </Link>
-      </div>
-      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Nueva reserva</h1>
-
-      <form
-        method="get"
-        className="mt-5 flex flex-wrap items-end gap-3 rounded-xl border border-stone-200 bg-white p-4"
+    <Pagina ancho="angosto">
+      <Link
+        href="/panel/reservas"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
       >
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-stone-600">Check-in</span>
-          <input
-            type="date"
-            name="check_in"
-            defaultValue={checkIn || hoyISO()}
-            className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-stone-600">Check-out</span>
-          <input
-            type="date"
-            name="check_out"
-            defaultValue={checkOut || sumarDias(hoyISO(), 1)}
-            className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-stone-600">Huéspedes</span>
-          <input
-            type="number"
-            name="huespedes"
-            min={1}
-            max={7}
-            defaultValue={huespedes}
-            className="w-24 rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600"
-          />
-        </label>
-        <button
-          type="submit"
-          className="rounded-lg bg-stone-800 px-4 py-2 font-medium text-white transition hover:bg-stone-900"
-        >
-          Buscar disponibilidad
-        </button>
-      </form>
+        ‹ Volver a reservas
+      </Link>
 
-      {buscado &&
-        (opciones.length === 0 ? (
-          <p className="mt-6 rounded-lg bg-lenga-50 px-4 py-3 text-sm text-lenga-800">
-            No hay unidades disponibles para esas fechas y {huespedes} huésped(es).
-          </p>
-        ) : (
-          <FormularioReserva
-            agencias={agencias}
-            opciones={opciones}
-            checkIn={checkIn}
-            checkOut={checkOut}
-            huespedes={huespedes}
-            noches={noches}
-          />
-        ))}
-    </div>
+      <Encabezado
+        titulo="Nueva reserva"
+        descripcion="Primero buscá qué hay libre; después elegís la unidad y cargás al huésped."
+        icono="reservas"
+      />
+
+      {/* Paso 1. Numerado a la vista: quien no usa mucho la computadora
+          necesita saber cuántos pasos faltan, no descubrirlo. */}
+      <Tarjeta titulo="1 · ¿Para cuándo?" descripcion="Se muestran solo las unidades libres.">
+        <form method="get" className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-3">
+          <Campo etiqueta="Check-in">
+            <input
+              type="date"
+              name="check_in"
+              defaultValue={checkIn || hoyISO()}
+              className={CAMPO}
+            />
+          </Campo>
+          <Campo etiqueta="Check-out">
+            <input
+              type="date"
+              name="check_out"
+              defaultValue={checkOut || sumarDias(hoyISO(), 1)}
+              className={CAMPO}
+            />
+          </Campo>
+          <Campo etiqueta="Huéspedes">
+            <input
+              type="number"
+              name="huespedes"
+              min={1}
+              max={7}
+              defaultValue={huespedes}
+              className={CAMPO}
+            />
+          </Campo>
+          <div className="sm:col-span-3">
+            <button type="submit" className={botonClases('secundario', 'w-full sm:w-auto')}>
+              <Icono nombre="buscar" tam={16} />
+              Buscar disponibilidad
+            </button>
+          </div>
+        </form>
+      </Tarjeta>
+
+      {buscado && (
+        <div className="mt-4">
+          {opciones.length === 0 ? (
+            <Tarjeta>
+              <EstadoVacio
+                titulo="No hay unidades libres para esas fechas"
+                descripcion={`Ninguna unidad entra ${huespedes} huésped(es) en ese período. Probá con otras fechas o revisá la grilla de ocupación.`}
+                icono="ocupacion"
+                accion={
+                  <Link href="/panel/ocupacion" className={botonClases('secundario')}>
+                    Ver la ocupación
+                  </Link>
+                }
+              />
+            </Tarjeta>
+          ) : (
+            <FormularioReserva
+              agencias={agencias}
+              opciones={opciones}
+              checkIn={checkIn}
+              checkOut={checkOut}
+              huespedes={huespedes}
+              noches={noches}
+            />
+          )}
+        </div>
+      )}
+    </Pagina>
   )
 }
