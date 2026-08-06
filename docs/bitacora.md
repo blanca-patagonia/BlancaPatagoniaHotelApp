@@ -1204,3 +1204,77 @@ buscar un bug en el código.
 **Verificación:** **307 tests en verde**, typecheck y lint limpios. Las **19
 rutas del panel** responden 200 y se comprobó en el navegador que las etiquetas
 nuevas y los pasos numerados aparecen.
+
+---
+
+## 2026-08-06 · Fase 16 — Portal público
+
+El panel quedó consistente, pero el portal —lo que ve el huésped— no había
+recibido nada de ese trabajo. Y ahí cambia quién está del otro lado: no es staff
+entrenado con sesión iniciada, sino alguien que llegó por un enlace de un email,
+muchas veces desde el teléfono y a veces con apuro.
+
+### Un hallazgo que costaba reservas
+
+Buscando disponibilidad para septiembre de 2026 el portal contestaba **"sin
+disponibilidad"** en todas las opciones. Había lugar: lo que faltaba era la
+**tarifa** de ese período (el tarifario cargado es 2025/2026).
+
+El código mezclaba las dos cosas en un solo campo:
+
+```ts
+disponible: t.disponibles > 0 && !cot.faltanTarifas
+```
+
+Con lo cual un olvido administrativo —no cargar precios de un período— se le
+comunicaba al huésped como *"el hotel está lleno"*. La persona se iba a buscar
+a otro lado y **nadie en el hotel se enteraba de que había perdido esa venta**.
+
+Ahora son dos campos separados, `hayLugar` y `hayPrecio`, y cada combinación
+dice la verdad: si hay lugar y precio, se reserva; si no hay lugar, se avisa; y
+si hay lugar pero falta la tarifa, se ofrece **consultar** con un correo
+prearmado en vez de cerrar la puerta. Las opciones reservables se ordenan
+primero.
+
+No es un problema de interfaz: es una regla de negocio que estaba mal expresada
+y que solo se veía usando el portal como lo usaría un huésped.
+
+### Una marca sola en todo el recorrido
+
+Buscar, reservar y confirmar se veían como **tres sitios distintos**: cada
+pantalla se dibujaba su propio encabezado, con anchos distintos. `_publico/ui.tsx`
+define ahora el marco común —cabecera con la marca, contenido y pie con los
+horarios—, además de tarjeta, campo con etiqueta, botón y avisos.
+
+Son componentes **distintos de los del panel**, a propósito: tipografía más
+grande, menos densidad y áreas de toque mayores. El staff usa el sistema todos
+los días; el huésped, una vez.
+
+### Otras mejoras
+
+- **Confirmación de reserva:** el código pasó a ser el elemento principal de la
+  pantalla —es el único dato que la persona necesita después de cerrarla— y se
+  aclara que la reserva **todavía no está confirmada** hasta la seña, algo que
+  antes se leía al pasar en letra chica.
+- **Checkout:** el resumen va arriba del formulario. Quien está por dar sus
+  datos quiere confirmar primero qué reserva y cuánto sale. Se explica que no se
+  cobra nada en ese momento.
+- **Pantalla de enlace vencido** (`app/not-found.tsx`): el caso frecuente no es
+  alguien escribiendo mal una dirección, sino un enlace que ya no sirve
+  —encuesta respondida, reserva cancelada, o un correo que cortó la URL en dos
+  líneas—. Esas personas no se equivocaron en nada, así que el texto no las
+  trata como si lo hubieran hecho.
+- **Contrato a firmar:** el texto pasó de `text-sm` a tamaño de lectura con
+  `max-w-prose`. Es un documento que hay que leer entero antes de aceptarlo;
+  achicarlo empuja a firmar sin leer.
+- **Portada:** los servicios salen de `lib/domain/hotel.ts`, el mismo lugar del
+  que los toma el asistente, para que no queden dos respuestas conviviendo.
+
+Firma y encuesta se dejaron con su tratamiento propio: son pantallas de una sola
+tarea a las que se llega desde un correo, y ahí el foco sin distracciones es
+mejor que la navegación completa. Entre ellas ya eran coherentes.
+
+**Verificación:** **307 tests en verde**, typecheck y lint limpios. En el
+navegador se comprobó el recorrido completo con dos rangos de fechas: con tarifa
+cargada permite reservar y muestra el precio; sin tarifa ofrece consultar y
+explica el motivo, en lugar de decir que está lleno.

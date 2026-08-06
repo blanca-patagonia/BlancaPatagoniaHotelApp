@@ -105,8 +105,14 @@ export default async function FirmarPage({
           </p>
         )}
 
-        <article className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-          <p className="text-sm leading-relaxed whitespace-pre-line text-stone-700">
+        {/*
+          El texto se muestra a tamaño de lectura y no en `text-sm`: es un
+          documento que la persona tiene que leer entero antes de aceptarlo, y
+          achicarlo empuja a firmar sin leer. `max-w-prose` limita el largo de
+          línea, que es lo que más cansa en un texto corrido.
+        */}
+        <article className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
+          <p className="max-w-prose text-base leading-relaxed whitespace-pre-line text-stone-800">
             {contrato.contenido}
           </p>
         </article>
