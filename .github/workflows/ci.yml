@@ -5,9 +5,18 @@ on:
     branches: [main]
   pull_request:
 
+# Varios push seguidos generaban corridas apiladas que competían por el runner.
+# Solo interesa la última: las anteriores se cancelan.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verificar:
     runs-on: ubuntu-latest
+    # Si `supabase start` se cuelga esperando a Docker, sin esto la corrida se
+    # queda tomada hasta el límite por defecto de 6 horas.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -35,12 +44,32 @@ jobs:
           api=$(echo "$estado" | grep '^API_URL=' | cut -d= -f2- | tr -d '"')
           key=$(echo "$estado" | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '"')
           anon=$(echo "$estado" | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+
+          # Si el CLI cambia el formato de `status -o env`, estas variables
+          # quedarían vacías y la falla aparecería más tarde y disfrazada:
+          # los tests dirían "falta la base" y el build, "URL inválida". Se
+          # corta acá, donde el mensaje señala la causa real.
+          if [ -z "$api" ] || [ -z "$key" ] || [ -z "$anon" ]; then
+            echo "::error::No se pudieron leer las credenciales de 'supabase status -o env'."
+            echo "Salida recibida:"
+            echo "$estado"
+            exit 1
+          fi
+
           {
             echo "SUPABASE_URL=$api"
             echo "SUPABASE_SERVICE_ROLE_KEY=$key"
             echo "NEXT_PUBLIC_SUPABASE_URL=$api"
             echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon"
           } >> "$GITHUB_ENV"
+
+      # `supabase start` aplica migraciones y seed, pero el seed NO crea
+      # perfiles: se crean con la API de auth, que necesita el service_role.
+      # Sin este paso la tabla `perfiles` queda vacía y los tests de
+      # facturación fallan por la clave foránea de "quién emitió". Era la causa
+      # de que este workflow nunca haya terminado en verde.
+      - name: Crear el usuario administrador
+        run: npm run seed:usuarios
 
       # ── Verificación ──────────────────────────────────────────────────────
       - name: Typecheck (TypeScript)
@@ -58,6 +87,12 @@ jobs:
 
       - name: Build (Next.js)
         run: npm run build
+
+      # Diagnóstico: si algo falló, los registros de los contenedores suelen
+      # explicar por qué mucho mejor que el error de la aplicación.
+      - name: Registros de Supabase (si algo falló)
+        if: failure()
+        run: npx supabase status || true
 
       - name: Apagar Supabase
         if: always()

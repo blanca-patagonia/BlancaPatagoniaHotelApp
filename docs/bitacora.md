@@ -1278,3 +1278,67 @@ mejor que la navegación completa. Entre ellas ya eran coherentes.
 navegador se comprobó el recorrido completo con dos rangos de fechas: con tarifa
 cargada permite reservar y muestra el precio; sin tarifa ofrece consultar y
 explica el motivo, en lugar de decir que está lleno.
+
+---
+
+## 2026-08-06 · Fase 17 — Por qué el CI nunca terminó en verde
+
+El workflow escrito en la Fase 12 nunca se había ejecutado en un runner real.
+En lugar de esperar a que fallara y leer el log, se **reprodujo la condición del
+CI en la máquina local**: `supabase db reset` deja la base como la deja
+`supabase start` en el runner, y desde ahí se corrió la suite.
+
+### La causa
+
+`supabase start` aplica migraciones y seed, pero **el seed no crea perfiles**:
+los usuarios se crean con la API de auth, que necesita el `service_role`. Eso lo
+hace `scripts/seed-usuarios.mjs`, y el workflow nunca lo llamaba.
+
+Sin ningún perfil, los tests de facturación fallan por la clave foránea de
+"quién emitió el comprobante". Reproducido:
+
+```
+FAIL tests/acciones/reservas.test.ts
+Error: No hay ningún perfil en la base. `npx supabase db reset` borra los
+usuarios de auth: hay que correr `npm run seed:usuarios` después.
+```
+
+Es decir: **el CI falla desde la Fase 12.1**, cuando se agregaron los tests de
+Server Actions. El mensaje explícito que se había puesto ese mismo día —en lugar
+del `expected [] to have a length of 2` original— fue lo que permitió
+identificarlo de una sola lectura.
+
+### El segundo problema, escondido detrás del primero
+
+Agregar el paso no alcanzaba: el script se invoca con
+`node --env-file=.env.local`, y **ese archivo no existe en el runner** porque
+está en `.gitignore`. Con `--env-file` Node aborta si el archivo falta:
+
+```
+node: .env.local: not found
+```
+
+Se cambió a `--env-file-if-exists`, que continúa sin él. En local no cambia
+nada —el archivo existe y se sigue leyendo—; en CI las credenciales llegan por
+`GITHUB_ENV`.
+
+### Otros ajustes preventivos
+
+- **Guarda sobre las credenciales.** Si el CLI cambiara el formato de
+  `status -o env`, las variables quedarían vacías y la falla aparecería después
+  y disfrazada: los tests dirían "falta la base" y el build, "URL inválida".
+  Ahora se corta en el paso que las lee, mostrando la salida recibida.
+- **`concurrency` con `cancel-in-progress`:** varios push seguidos apilaban
+  corridas que competían por el runner.
+- **`timeout-minutes: 25`:** si `supabase start` se cuelga esperando a Docker,
+  sin esto la corrida queda tomada hasta el límite por defecto de 6 horas.
+- **`supabase status` cuando algo falla**, para tener diagnóstico en el log.
+
+**Verificación:** se corrieron los seis pasos del workflow localmente, con la
+base recién reseteada y **sin `.env.local`**, que es exactamente la situación
+del runner: credenciales exportadas y validadas, administrador creado,
+typecheck, lint, **307 tests en verde** y build. El YAML se parseó para
+confirmar que los 12 pasos quedan bien declarados.
+
+Queda una sola cosa fuera de alcance: que esto corra de verdad en GitHub. Todo
+lo verificable desde acá está verificado.

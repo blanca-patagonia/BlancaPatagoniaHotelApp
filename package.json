@@ -10,7 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed:usuarios": "node --env-file=.env.local scripts/seed-usuarios.mjs"
+    "seed:usuarios": "node --env-file-if-exists=.env.local scripts/seed-usuarios.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
