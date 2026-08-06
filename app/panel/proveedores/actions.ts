@@ -8,6 +8,8 @@ import { obtenerSesion } from '@/lib/auth/session'
 export interface EstadoProveedor {
   error?: string
   ok?: string
+  /** Id del proveedor recién creado, para ofrecer el enlace a su cuenta. */
+  id?: string
 }
 
 async function exigirGestion() {
@@ -27,12 +29,14 @@ export async function crearProveedor(
   if (!nombre) return { error: 'Ingresá el nombre.' }
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('proveedores')
     .insert({ nombre, rubro: rubro || null, cuit: cuit || null, email: email || null })
+    .select('id')
+    .single()
   if (error) return { error: `No se pudo crear: ${error.message}` }
   revalidatePath('/panel/proveedores')
-  return { ok: `Proveedor ${nombre} creado.` }
+  return { ok: `Se registró ${nombre}.`, id: (data as { id: string } | null)?.id }
 }
 
 /**

@@ -19,8 +19,9 @@ import {
   Tabla,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
-import { FormularioObjeto } from './formulario'
+import { Icono } from '../_components/iconos'
 import { marcarDevuelto } from './actions'
 
 interface Objeto {
@@ -65,12 +66,21 @@ export default async function ObjetosPerdidosPage({
   const hayFiltros = Boolean(sp.q || estado)
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Objetos perdidos"
         descripcion="Registro y devolución de objetos olvidados por los huéspedes."
         icono="objetos"
-        acciones={<BotonExportar href="/panel/exportar/objetos-perdidos" />}
+        acciones={
+          <>
+            <BotonExportar href="/panel/exportar/objetos-perdidos" />
+            {/* La acción principal del módulo, visible desde el primer vistazo. */}
+            <Link href="/panel/objetos-perdidos/nuevo" className={botonClases('primario')}>
+              <Icono nombre="mas" tam={16} />
+              Registrar objeto
+            </Link>
+          </>
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -113,15 +123,6 @@ export default async function ObjetosPerdidosPage({
           </Link>
         )}
       </BarraHerramientas>
-
-      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Registrar un objeto encontrado
-        </summary>
-        <div className="border-t border-stone-100 p-5">
-          <FormularioObjeto />
-        </div>
-      </details>
 
       <Tarjeta className="overflow-hidden">
         {objetos.length === 0 ? (
@@ -179,6 +180,6 @@ export default async function ObjetosPerdidosPage({
           </Tabla>
         )}
       </Tarjeta>
-    </div>
+    </Pagina>
   )
 }

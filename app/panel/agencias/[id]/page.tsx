@@ -11,8 +11,11 @@ import {
   type TipoMovimiento,
   type Movimiento,
 } from '@/lib/domain/cuentas'
-import { registrarMovimiento, actualizarAgencia, alternarActivoAgencia } from '../actions'
-import { CONDICIONES_IVA, ETIQUETAS_CONDICION_IVA, type CondicionIva } from '@/lib/domain/facturacion'
+import { registrarMovimiento } from '../actions'
+import { type CondicionIva } from '@/lib/domain/facturacion'
+import { Encabezado, Mensaje, Pagina, botonClases } from '../../_components/ui'
+import { Icono } from '../../_components/iconos'
+import { BotonEnvio } from '../../_components/boton-envio'
 
 interface Agencia {
   id: string
@@ -61,23 +64,32 @@ export default async function AgenciaDetallePage({
   const saldo = saldoCuenta(movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento))
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-4">
-        <Link href="/panel/agencias" className="text-sm text-stone-500 hover:text-stone-800">
-          ‹ Agencias
-        </Link>
-      </div>
+    <Pagina>
+      <Link
+        href="/panel/agencias"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a agencias
+      </Link>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-stone-900">{agencia.nombre}</h1>
-        <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-600">
-          {ETIQUETAS_TIPO_CUENTA[agencia.tipo]}
-        </span>
-      </div>
-      <p className="mt-1 text-sm text-stone-500">
-        {agencia.cuit ? `CUIT ${agencia.cuit} · ` : ''}
-        {agencia.email || 'sin email'} · descuento {agencia.descuento_pct}%
-      </p>
+      <Encabezado
+        titulo={agencia.nombre}
+        descripcion={`${ETIQUETAS_TIPO_CUENTA[agencia.tipo]}${agencia.cuit ? ` · CUIT ${agencia.cuit}` : ''} · ${agencia.email || 'sin email'} · descuento ${agencia.descuento_pct}%`}
+        icono="agencias"
+        acciones={
+          <Link href={`/panel/agencias/${agencia.id}/editar`} className={botonClases('secundario')}>
+            <Icono nombre="config" tam={16} />
+            Editar datos
+          </Link>
+        }
+      />
+      {!agencia.activo && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            Esta cuenta está dada de baja: no aparece al cargar reservas nuevas.
+          </Mensaje>
+        </div>
+      )}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5">
         <div>
@@ -110,48 +122,12 @@ export default async function AgenciaDetallePage({
             <span className="text-stone-500">Concepto</span>
             <input name="concepto" className="w-40 rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
           </label>
-          <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800">
-            Registrar
-          </button>
+          {/* Mueve dinero: el botón se bloquea mientras viaja al servidor para
+              que un segundo clic no duplique el movimiento. */}
+          <BotonEnvio cargando="Registrando…">Registrar</BotonEnvio>
         </form>
       </div>
 
-
-      {/* Edición de los datos: sin esto había que tocar la base a mano. */}
-      <details className="mt-5 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Editar datos
-        </summary>
-        <form action={actualizarAgencia} className="grid gap-3 border-t border-stone-100 p-5 sm:grid-cols-3">
-          <input type="hidden" name="agencia_id" value={agencia.id} />
-          <input name="nombre" defaultValue={agencia.nombre} placeholder="Nombre" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
-          <input name="descuento_pct" type="number" min="0" max="100" step="0.01" defaultValue={agencia.descuento_pct} aria-label="Descuento %" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
-          <input name="cuit" defaultValue={agencia.cuit ?? ''} placeholder="CUIT" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
-          <input name="email" type="email" defaultValue={agencia.email ?? ''} placeholder="Email" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
-          <input name="telefono" defaultValue={agencia.telefono ?? ''} placeholder="Teléfono" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
-          <label className="flex flex-col gap-1 text-xs text-stone-500">
-            Condición IVA
-            <select name="condicion_iva" defaultValue={agencia.condicion_iva} className="rounded-md border border-stone-300 px-2 py-1.5 text-sm">
-              {CONDICIONES_IVA.map((c) => (
-                <option key={c} value={c}>
-                  {ETIQUETAS_CONDICION_IVA[c]}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 sm:col-span-3">
-            Guardar cambios
-          </button>
-        </form>
-        <form action={alternarActivoAgencia} className="border-t border-stone-100 px-5 py-3">
-          <input type="hidden" name="agencia_id" value={agencia.id} />
-          <input type="hidden" name="activo" value={String(agencia.activo)} />
-          <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-600 transition hover:bg-stone-50">
-            {agencia.activo ? 'Desactivar' : 'Activar'}
-          </button>
-        </form>
-      </details>
 
       {/* Enlace del portal: el socio ve sus contratos y su cuenta sin cuenta de usuario. */}
       <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
@@ -210,6 +186,6 @@ export default async function AgenciaDetallePage({
           </tbody>
         </table>
       </div>
-    </div>
+    </Pagina>
   )
 }

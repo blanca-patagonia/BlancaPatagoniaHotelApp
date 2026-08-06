@@ -1,16 +1,23 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import {
   CONDICIONES_IVA,
   ETIQUETAS_CONDICION_IVA,
   type CondicionIva,
 } from '@/lib/domain/facturacion'
+import {
+  CAMPO,
+  Campo,
+  ExitoConPasos,
+  Mensaje,
+  PieDeFormulario,
+  botonClases,
+} from '../_components/ui'
 import { crearHuesped, actualizarHuesped, type EstadoHuesped } from './actions'
 
 const ESTADO_INICIAL: EstadoHuesped = {}
-const CAMPO =
-  'rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600'
 
 const DOCS = ['DNI', 'Pasaporte', 'CUIT', 'CUIL', 'LC', 'LE']
 
@@ -30,9 +37,12 @@ export interface DatosHuesped {
 /**
  * Formulario de huésped, para alta y edición.
  *
- * La condición frente al IVA no es un dato administrativo más: define la letra
- * del comprobante que se emite al facturar (ver ADR 0012), por eso se pide acá
- * y no en el momento de facturar, cuando ya sería tarde.
+ * Cada campo lleva **etiqueta visible**: antes se identificaban por el
+ * `placeholder`, que desaparece al escribir. Y los datos que tienen
+ * consecuencias más adelante llevan una línea de ayuda, porque el momento de
+ * entenderlos es este y no cuando ya se produjo el problema: la condición
+ * frente al IVA define la letra del comprobante que se emite al facturar
+ * (ADR 0012), y para una factura A hace falta CUIT.
  */
 export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
   const esEdicion = Boolean(huesped?.id)
@@ -42,26 +52,17 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
   )
 
   return (
-    <form action={accion} className="grid gap-3 sm:grid-cols-2">
+    <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       {esEdicion && <input type="hidden" name="huesped_id" value={huesped!.id} />}
 
-      <input
-        name="apellido"
-        required
-        placeholder="Apellido"
-        defaultValue={huesped?.apellido ?? ''}
-        className={CAMPO}
-      />
-      <input
-        name="nombre"
-        required
-        placeholder="Nombre"
-        defaultValue={huesped?.nombre ?? ''}
-        className={CAMPO}
-      />
+      <Campo etiqueta="Apellido" requerido>
+        <input name="apellido" required defaultValue={huesped?.apellido ?? ''} className={CAMPO} />
+      </Campo>
+      <Campo etiqueta="Nombre" requerido>
+        <input name="nombre" required defaultValue={huesped?.nombre ?? ''} className={CAMPO} />
+      </Campo>
 
-      <label className="flex flex-col gap-1 text-xs text-stone-500">
-        Tipo de documento
+      <Campo etiqueta="Tipo de documento">
         <select name="doc_tipo" defaultValue={huesped?.doc_tipo ?? 'DNI'} className={CAMPO}>
           {DOCS.map((d) => (
             <option key={d} value={d}>
@@ -69,34 +70,31 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
             </option>
           ))}
         </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-stone-500">
-        Número de documento
+      </Campo>
+      <Campo etiqueta="Número de documento" ayuda="Sin puntos ni guiones.">
         <input name="doc_numero" defaultValue={huesped?.doc_numero ?? ''} className={CAMPO} />
-      </label>
+      </Campo>
 
-      <input
-        name="email"
-        type="email"
-        placeholder="Email"
-        defaultValue={huesped?.email ?? ''}
-        className={CAMPO}
-      />
-      <input
-        name="telefono"
-        placeholder="Teléfono"
-        defaultValue={huesped?.telefono ?? ''}
-        className={CAMPO}
-      />
-      <input
-        name="nacionalidad"
-        placeholder="Nacionalidad"
-        defaultValue={huesped?.nacionalidad ?? ''}
-        className={CAMPO}
-      />
+      <Campo etiqueta="Email" ayuda="Acá se envían la confirmación y la encuesta de la estadía.">
+        <input name="email" type="email" defaultValue={huesped?.email ?? ''} className={CAMPO} />
+      </Campo>
+      <Campo etiqueta="Teléfono">
+        <input
+          name="telefono"
+          type="tel"
+          defaultValue={huesped?.telefono ?? ''}
+          className={CAMPO}
+        />
+      </Campo>
 
-      <label className="flex flex-col gap-1 text-xs text-stone-500">
-        Condición frente al IVA
+      <Campo etiqueta="Nacionalidad">
+        <input name="nacionalidad" defaultValue={huesped?.nacionalidad ?? ''} className={CAMPO} />
+      </Campo>
+
+      <Campo
+        etiqueta="Condición frente al IVA"
+        ayuda="Define la letra de la factura. Si es responsable inscripto o monotributista, cargá el CUIT arriba."
+      >
         <select
           name="condicion_iva"
           defaultValue={huesped?.condicion_iva ?? 'consumidor_final'}
@@ -108,34 +106,56 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
             </option>
           ))}
         </select>
-      </label>
+      </Campo>
 
-      <textarea
-        name="notas"
-        rows={2}
-        placeholder="Notas internas (preferencias, alergias, observaciones)"
-        defaultValue={huesped?.notas ?? ''}
-        className={`${CAMPO} sm:col-span-2`}
-      />
+      <Campo
+        etiqueta="Notas internas"
+        ayuda="Preferencias, alergias u observaciones. El huésped no las ve."
+        anchoCompleto
+      >
+        <textarea name="notas" rows={3} defaultValue={huesped?.notas ?? ''} className={CAMPO} />
+      </Campo>
 
       {estado.error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">
-          {estado.error}
-        </p>
-      )}
-      {estado.ok && (
-        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 sm:col-span-2">
-          {estado.ok}
-        </p>
+        <div className="sm:col-span-2">
+          <Mensaje tono="error">{estado.error}</Mensaje>
+        </div>
       )}
 
-      <button
-        type="submit"
-        disabled={pendiente}
-        className="self-start rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60 sm:col-span-2"
-      >
-        {pendiente ? 'Guardando…' : esEdicion ? 'Guardar cambios' : 'Crear huésped'}
-      </button>
+      {estado.ok && (
+        <div className="sm:col-span-2">
+          <ExitoConPasos
+            mensaje={estado.ok}
+            pasos={
+              esEdicion
+                ? []
+                : [
+                    ...(estado.id
+                      ? [{ href: `/panel/huespedes/${estado.id}`, texto: 'Ver su ficha' }]
+                      : []),
+                    { href: '/panel/huespedes/nuevo', texto: 'Registrar otro' },
+                    { href: '/panel/huespedes', texto: 'Volver al listado' },
+                  ]
+            }
+          />
+        </div>
+      )}
+
+      <PieDeFormulario>
+        <button
+          type="submit"
+          disabled={pendiente}
+          className={botonClases('primario', 'w-full disabled:cursor-wait sm:w-auto')}
+        >
+          {pendiente ? 'Guardando…' : esEdicion ? 'Guardar cambios' : 'Registrar huésped'}
+        </button>
+        <Link
+          href={esEdicion ? `/panel/huespedes/${huesped!.id}` : '/panel/huespedes'}
+          className={botonClases('secundario', 'w-full sm:w-auto')}
+        >
+          Cancelar
+        </Link>
+      </PieDeFormulario>
     </form>
   )
 }

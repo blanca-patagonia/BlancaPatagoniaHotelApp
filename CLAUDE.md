@@ -103,7 +103,9 @@ Tarifario 2025/2026 (Anexo A).
   NPS y mantenimiento preventivo · **Fase 12** endurecimiento del CI y tests
   sobre las Server Actions · **Fase 13** limpieza de código muerto y **cambio de
   unidad** (mudanza de habitación, migración 0028) · **Fase 14** experiencia de
-  uso e interacción táctil. **297 tests verdes.**
+  uso e interacción táctil · **Fase 15** rediseño de la interfaz (se eliminaron
+  los 11 formularios plegados, altas en pantalla propia) y **sección de Ayuda**.
+  **307 tests verdes.**
 - **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
@@ -113,6 +115,17 @@ Tarifario 2025/2026 (Anexo A).
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.
+- **Interfaz (Fase 15) — principio fijado por el usuario:** *nada oculto, nada
+  manejado por URL, pensado para gente que no usa mucho la computadora.* En
+  concreto: **prohibido `<details>` para esconder una acción o un formulario**
+  (se eliminaron los 11 que había); el alta y la edición van en **pantalla
+  propia** con un botón primario visible en el `Encabezado` del listado; todo
+  campo lleva **etiqueta visible** (`Campo`), nunca solo `placeholder`; al
+  guardar no se redirige solo, se usa `ExitoConPasos`; los `<form action={…}>`
+  de servidor usan `BotonEnvio` (bloquea el doble clic) y `confirmar` si la
+  acción no tiene vuelta atrás. Envolver cada pantalla en `Pagina`.
+- **Ayuda:** el contenido vive en `lib/domain/ayuda.ts` y se filtra por rol con
+  `puedeAcceder`. Al agregar un módulo, sumarle su capítulo ahí.
 - **Móvil (Fase 14):** columnas de tabla no esenciales con `COL_SECUNDARIA`
   (`hidden sm:table-cell`), aplicado al `<th>` **y** al `<td>`; si el dato importa,
   plegarlo bajo la columna principal con `sm:hidden` en vez de perderlo. Campos y

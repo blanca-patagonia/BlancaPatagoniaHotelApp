@@ -35,6 +35,7 @@ const MODULOS: Record<Area, { href: string; icono: NombreIcono }> = {
   reportes: { href: '/panel/reportes', icono: 'reportes' },
   config: { href: '/panel/config', icono: 'config' },
   usuarios: { href: '/panel/usuarios', icono: 'usuarios' },
+  ayuda: { href: '/panel/ayuda', icono: 'ayuda' },
 }
 
 interface EstadiaDia {

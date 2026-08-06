@@ -29,8 +29,10 @@ import {
   Tarjeta,
   botonClases,
   type Tono,
+  Pagina,
 } from '../_components/ui'
-import { FormularioContrato, type OpcionEntidad } from './formulario'
+import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
 import { vencerContratos } from './actions'
 
 /** Tono de la etiqueta de cada estado del contrato. */
@@ -58,7 +60,10 @@ export default async function ContratosPage({
 }: {
   searchParams: Promise<{ q?: string; estado?: string; tipo?: string; ok?: string }>
 }) {
-  await requerirAcceso('contratos')
+  const sesion = await requerirAcceso('contratos')
+  // Redactar lo restringe la acción a admin y gerencia: la pantalla no ofrece
+  // un botón que el servidor va a rechazar.
+  const puedeRedactar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
   const sp = await searchParams
   const supabase = await crearClienteServidor()
 
@@ -95,12 +100,6 @@ export default async function ContratosPage({
   for (const p of proveedores ?? []) nombres.set(p.id as string, p.nombre as string)
   for (const e of empleados ?? []) nombres.set(e.id as string, e.nombre as string)
 
-  const opciones = (
-    filas: { id: string; nombre: string }[] | null,
-    t: TipoContrato,
-  ): OpcionEntidad[] =>
-    (filas ?? []).map((f) => ({ valor: `${t}:${f.id}`, nombre: f.nombre }))
-
   const hoy = hoyISO()
   const vigentes = contratos.filter((c) => estaVigente(c, hoy)).length
   const pendientesFirma = contratos.filter((c) => c.estado === 'enviado').length
@@ -112,17 +111,28 @@ export default async function ContratosPage({
   const hayFiltros = Boolean(sp.q || estado || tipo)
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <Pagina>
       <Encabezado
         titulo="Contratos"
         descripcion="Convenios con agencias, proveedores y empleados, con firma electrónica."
         icono="contratos"
         acciones={
-          porVencer > 0 ? (
-            <form action={vencerContratos}>
-              <button className={botonClases('secundario')}>Marcar vencidos ({porVencer})</button>
-            </form>
-          ) : null
+          <>
+            {porVencer > 0 && (
+              <form action={vencerContratos}>
+                <BotonEnvio variante="secundario" cargando="Marcando…">
+                  Marcar vencidos ({porVencer})
+                </BotonEnvio>
+              </form>
+            )}
+            {/* La acción principal del módulo, visible desde el primer vistazo. */}
+            {puedeRedactar && (
+              <Link href="/panel/contratos/nuevo" className={botonClases('primario')}>
+                <Icono nombre="mas" tam={16} />
+                Redactar contrato
+              </Link>
+            )}
+          </>
         }
       />
 
@@ -189,18 +199,6 @@ export default async function ContratosPage({
         )}
       </BarraHerramientas>
 
-      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Redactar un contrato nuevo
-        </summary>
-        <div className="border-t border-stone-100 p-5">
-          <FormularioContrato
-            agencias={opciones(agencias as { id: string; nombre: string }[], 'agencia')}
-            proveedores={opciones(proveedores as { id: string; nombre: string }[], 'proveedor')}
-            empleados={opciones(empleados as { id: string; nombre: string }[], 'empleado')}
-          />
-        </div>
-      </details>
 
       <Tarjeta className="overflow-hidden">
         {contratos.length === 0 ? (
@@ -263,6 +261,6 @@ export default async function ContratosPage({
           </Tabla>
         )}
       </Tarjeta>
-    </div>
+    </Pagina>
   )
 }

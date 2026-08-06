@@ -1,22 +1,75 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import { crearObjeto, type EstadoObjeto } from './actions'
+import {
+  CAMPO,
+  Campo,
+  ExitoConPasos,
+  Mensaje,
+  PieDeFormulario,
+  botonClases,
+} from '../_components/ui'
 
 const ESTADO_INICIAL: EstadoObjeto = {}
 
+/**
+ * Alta de un objeto olvidado por un huésped.
+ *
+ * Lo carga quien lo encuentra —normalmente mucamas, desde el teléfono, mientras
+ * limpia—, así que el formulario es corto a propósito: descripción y lugar. La
+ * fecha la pone la base.
+ */
 export function FormularioObjeto() {
   const [estado, accion, pendiente] = useActionState(crearObjeto, ESTADO_INICIAL)
 
   return (
-    <form action={accion} className="flex flex-wrap items-end gap-2">
-      <input name="descripcion" placeholder="Objeto (ej: campera azul)" required className="min-w-56 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
-      <input name="ubicacion" placeholder="Dónde se encontró" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
-      <button type="submit" disabled={pendiente} className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60">
-        {pendiente ? 'Registrando…' : 'Registrar'}
-      </button>
-      {estado.error && <p className="w-full rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{estado.error}</p>}
-      {estado.ok && <p className="w-full rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{estado.ok}</p>}
+    <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+      <Campo
+        etiqueta="¿Qué se encontró?"
+        requerido
+        ayuda="Describilo como para reconocerlo si alguien lo reclama."
+      >
+        <input name="descripcion" required className={CAMPO} placeholder="Campera azul de abrigo" />
+      </Campo>
+
+      <Campo etiqueta="¿Dónde estaba?">
+        <input name="ubicacion" className={CAMPO} placeholder="Habitación 203, comedor…" />
+      </Campo>
+
+      {estado.error && (
+        <div className="sm:col-span-2">
+          <Mensaje tono="error">{estado.error}</Mensaje>
+        </div>
+      )}
+      {estado.ok && (
+        <div className="sm:col-span-2">
+          <ExitoConPasos
+            mensaje={estado.ok}
+            pasos={[
+              { href: '/panel/objetos-perdidos/nuevo', texto: 'Registrar otro' },
+              { href: '/panel/objetos-perdidos', texto: 'Volver al listado' },
+            ]}
+          />
+        </div>
+      )}
+
+      <PieDeFormulario>
+        <button
+          type="submit"
+          disabled={pendiente}
+          className={botonClases('primario', 'w-full disabled:cursor-wait sm:w-auto')}
+        >
+          {pendiente ? 'Guardando…' : 'Registrar objeto'}
+        </button>
+        <Link
+          href="/panel/objetos-perdidos"
+          className={botonClases('secundario', 'w-full sm:w-auto')}
+        >
+          Cancelar
+        </Link>
+      </PieDeFormulario>
     </form>
   )
 }

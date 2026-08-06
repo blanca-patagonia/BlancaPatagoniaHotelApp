@@ -4,11 +4,23 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { TONO_ESTADO } from '../../_components/estilos'
-import { Etiqueta } from '../../_components/ui'
+import {
+  COL_SECUNDARIA,
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  FILA,
+  Pagina,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+} from '../../_components/ui'
+import { Icono } from '../../_components/iconos'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 import { ETIQUETAS_CONDICION_IVA, type CondicionIva } from '@/lib/domain/facturacion'
-import { FormularioHuesped } from '../formulario'
 
 interface Huesped {
   id: string
@@ -31,6 +43,16 @@ interface ReservaHist {
   estadias: { periodo: string }[]
 }
 
+/** Fila de la ficha: etiqueta arriba, valor abajo. */
+function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium tracking-wide text-stone-500 uppercase">{etiqueta}</dt>
+      <dd className="mt-0.5 text-stone-800">{children}</dd>
+    </div>
+  )
+}
+
 export default async function DetalleHuespedPage({
   params,
 }: {
@@ -43,7 +65,9 @@ export default async function DetalleHuespedPage({
   const [{ data: huespedData }, { data: reservasData }] = await Promise.all([
     supabase
       .from('huespedes')
-      .select('id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos, condicion_iva, notas')
+      .select(
+        'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos, condicion_iva, notas',
+      )
       .eq('id', id)
       .single(),
     supabase
@@ -56,86 +80,145 @@ export default async function DetalleHuespedPage({
   if (!huespedData) notFound()
   const huesped = huespedData as Huesped
   const reservas = (reservasData ?? []) as unknown as ReservaHist[]
+  const nivel = nivelFidelidad(huesped.puntos)
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-4">
-        <Link href="/panel/huespedes" className="text-sm text-stone-500 hover:text-stone-800">
-          ‹ Huéspedes
-        </Link>
-      </div>
-      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">
-        {huesped.apellido}, {huesped.nombre}
-      </h1>
-      <div className="mt-1 flex flex-wrap gap-x-4 text-sm text-stone-500">
-        <span>{huesped.doc_tipo} {huesped.doc_numero || '—'}</span>
-        <span>{huesped.email || 'sin email'}</span>
-        <span>{huesped.nacionalidad || 'nacionalidad n/d'}</span>
-        <span>{ETIQUETAS_CONDICION_IVA[huesped.condicion_iva]}</span>
-      </div>
+    <Pagina>
+      <Link
+        href="/panel/huespedes"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a huéspedes
+      </Link>
 
-      <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-lenga-50 px-3 py-1.5 text-sm">
-        <span className="font-semibold text-lenga-800">
-          Fidelidad {ETIQUETAS_NIVEL[nivelFidelidad(huesped.puntos)]}
-        </span>
-        <span className="text-lenga-700">· {huesped.puntos} puntos</span>
-      </div>
+      <Encabezado
+        titulo={`${huesped.apellido}, ${huesped.nombre}`}
+        descripcion={`${huesped.doc_tipo} ${huesped.doc_numero || 'sin documento'}`}
+        icono="huespedes"
+        acciones={
+          <Link href={`/panel/huespedes/${huesped.id}/editar`} className={botonClases('secundario')}>
+            <Icono nombre="config" tam={16} />
+            Editar datos
+          </Link>
+        }
+      />
 
-      {/* La condición frente al IVA define la letra del comprobante: se corrige acá. */}
-      <details className="mt-5 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Editar los datos del huésped
-        </summary>
-        <div className="border-t border-stone-100 p-5">
-          <FormularioHuesped huesped={huesped} />
-        </div>
-      </details>
-
-      <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Historial de reservas</h2>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="px-4 py-2.5">Código</th>
-              <th className="px-4 py-2.5">Estadía</th>
-              <th className="px-4 py-2.5 text-right">Total</th>
-              <th className="px-4 py-2.5">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reservas.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-stone-400">
-                  Sin reservas.
-                </td>
-              </tr>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Tarjeta titulo="Datos de contacto" className="lg:col-span-2">
+          <dl className="grid gap-4 p-5 sm:grid-cols-2">
+            <Dato etiqueta="Email">
+              {huesped.email ? (
+                <a href={`mailto:${huesped.email}`} className="text-lago-700 hover:underline">
+                  {huesped.email}
+                </a>
+              ) : (
+                <span className="text-stone-400">Sin cargar</span>
+              )}
+            </Dato>
+            <Dato etiqueta="Teléfono">
+              {huesped.telefono ? (
+                // Enlace `tel:`: desde un teléfono se llama con un toque.
+                <a
+                  href={`tel:${huesped.telefono.replace(/\s/g, '')}`}
+                  className="text-lago-700 hover:underline"
+                >
+                  {huesped.telefono}
+                </a>
+              ) : (
+                <span className="text-stone-400">Sin cargar</span>
+              )}
+            </Dato>
+            <Dato etiqueta="Nacionalidad">
+              {huesped.nacionalidad || <span className="text-stone-400">Sin cargar</span>}
+            </Dato>
+            <Dato etiqueta="Condición frente al IVA">
+              {ETIQUETAS_CONDICION_IVA[huesped.condicion_iva]}
+              <span className="mt-0.5 block text-xs text-stone-500">
+                Define la letra de la factura.
+              </span>
+            </Dato>
+            {huesped.notas && (
+              <div className="sm:col-span-2">
+                <Dato etiqueta="Notas internas">
+                  <span className="whitespace-pre-line">{huesped.notas}</span>
+                </Dato>
+              </div>
             )}
-            {reservas.map((r) => {
-              const p = r.estadias?.[0] ? parsearPeriodo(r.estadias[0].periodo) : null
-              return (
-                <tr key={r.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
-                  <td className="px-4 py-2.5">
-                    <Link href={`/panel/reservas/${r.id}`} className="font-medium text-lago-700 hover:underline">
-                      {r.codigo}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5 text-stone-600">
-                    {p ? `${formatoFechaCorta(p.desde)} → ${formatoFechaCorta(p.hasta)}` : '—'}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-stone-800">
-                    USD {Number(r.total).toLocaleString('es-AR')}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Etiqueta tono={TONO_ESTADO[r.estado]}>
-                      {ETIQUETAS_ESTADO_RESERVA[r.estado]}
-                    </Etiqueta>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+          </dl>
+        </Tarjeta>
+
+        <Tarjeta titulo="Fidelidad">
+          <div className="p-5">
+            <p className="font-display text-3xl leading-none font-semibold text-stone-900">
+              {huesped.puntos.toLocaleString('es-AR')}
+            </p>
+            <p className="mt-1 text-sm text-stone-500">puntos acumulados</p>
+            <p className="mt-3">
+              <Etiqueta tono="calafate">Nivel {ETIQUETAS_NIVEL[nivel]}</Etiqueta>
+            </p>
+            <p className="mt-3 text-xs leading-snug text-stone-500">
+              Se suma 1 punto por cada USD 10 al hacer el check-out.
+            </p>
+          </div>
+        </Tarjeta>
       </div>
-    </div>
+
+      <div className="mt-4">
+        <Tarjeta titulo="Historial de reservas" descripcion={`${reservas.length} en total`}>
+          {reservas.length === 0 ? (
+            <EstadoVacio
+              titulo="Todavía no tiene reservas"
+              descripcion="Cuando se le cargue una, va a aparecer acá."
+              icono="reservas"
+            />
+          ) : (
+            <Tabla resumen="Reservas del huésped con fechas, importe y estado">
+              <thead>
+                <tr>
+                  <th className={TH}>Código</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Estadía</th>
+                  <th className={`${TH} ${COL_SECUNDARIA} text-right`}>Total</th>
+                  <th className={TH}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reservas.map((r) => {
+                  const p = r.estadias?.[0] ? parsearPeriodo(r.estadias[0].periodo) : null
+                  return (
+                    <tr key={r.id} className={FILA}>
+                      <td className={TD}>
+                        <Link
+                          href={`/panel/reservas/${r.id}`}
+                          className="font-medium text-lago-700 hover:underline"
+                        >
+                          {r.codigo}
+                        </Link>
+                        <span className="tabular block text-xs text-stone-500 sm:hidden">
+                          {p ? `${formatoFechaCorta(p.desde)} → ${formatoFechaCorta(p.hasta)}` : '—'}
+                          {` · USD ${Number(r.total).toLocaleString('es-AR')}`}
+                        </span>
+                      </td>
+                      <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
+                        {p ? `${formatoFechaCorta(p.desde)} → ${formatoFechaCorta(p.hasta)}` : '—'}
+                      </td>
+                      <td
+                        className={`${TD} ${COL_SECUNDARIA} tabular text-right font-medium text-stone-800`}
+                      >
+                        USD {Number(r.total).toLocaleString('es-AR')}
+                      </td>
+                      <td className={TD}>
+                        <Etiqueta tono={TONO_ESTADO[r.estado]}>
+                          {ETIQUETAS_ESTADO_RESERVA[r.estado]}
+                        </Etiqueta>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </Tabla>
+          )}
+        </Tarjeta>
+      </div>
+    </Pagina>
   )
 }

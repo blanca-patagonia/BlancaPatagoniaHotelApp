@@ -16,8 +16,9 @@ import {
   Tabla,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
-import { FormularioUsuario } from './formulario'
+import { Icono } from '../_components/iconos'
 import { cambiarRolUsuario, alternarActivoUsuario } from './actions'
 
 interface Perfil {
@@ -67,11 +68,18 @@ export default async function UsuariosPage({
   const activos = perfiles.filter((p) => p.activo).length
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Usuarios"
         descripcion="Staff del hotel y su nivel de acceso al sistema."
         icono="usuarios"
+        acciones={
+          /* La acción principal del módulo, visible desde el primer vistazo. */
+          <Link href="/panel/usuarios/nuevo" className={botonClases('primario')}>
+            <Icono nombre="mas" tam={16} />
+            Dar de alta
+          </Link>
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -106,15 +114,6 @@ export default async function UsuariosPage({
           </Link>
         )}
       </BarraHerramientas>
-
-      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Dar de alta un usuario
-        </summary>
-        <div className="border-t border-stone-100 p-5">
-          <FormularioUsuario />
-        </div>
-      </details>
 
       <Tarjeta className="overflow-hidden">
         {visibles.length === 0 ? (
@@ -204,6 +203,6 @@ export default async function UsuariosPage({
           </Tabla>
         )}
       </Tarjeta>
-    </div>
+    </Pagina>
   )
 }

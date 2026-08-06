@@ -12,6 +12,7 @@ import {
   botonClases,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
 import { FormularioAviso } from './formulario'
 import { borrarAviso, alternarFijado } from './actions'
 
@@ -137,9 +138,15 @@ export default async function AvisosPage({
                     {puedeBorrar && (
                       <form action={borrarAviso}>
                         <input type="hidden" name="id" value={a.id} />
-                        <button className="text-stone-400 transition hover:text-red-600">
+                        {/* Borrar no tiene deshacer: se pregunta antes. */}
+                        <BotonEnvio
+                          variante="fantasma"
+                          extra="text-stone-400 hover:text-red-600"
+                          cargando="Borrando…"
+                          confirmar={`¿Borrar el aviso «${a.mensaje.slice(0, 60)}${a.mensaje.length > 60 ? '…' : ''}»? No se puede recuperar.`}
+                        >
                           Borrar
-                        </button>
+                        </BotonEnvio>
                       </form>
                     )}
                   </span>

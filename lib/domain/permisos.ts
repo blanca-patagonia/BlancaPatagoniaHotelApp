@@ -23,6 +23,7 @@ export const AREAS = [
   'reportes',
   'config',
   'usuarios',
+  'ayuda',
 ] as const
 
 export type Area = (typeof AREAS)[number]
@@ -44,21 +45,30 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   reportes: 'Reportes',
   config: 'Configuración',
   usuarios: 'Usuarios',
+  ayuda: 'Ayuda',
 }
 
-/** Áreas accesibles por rol. */
+/**
+ * Áreas accesibles por rol.
+ *
+ * `ayuda` la tienen **todos**: es la guía de uso del sistema, y quien más la
+ * necesita es justamente quien menos permisos tiene. La guía se filtra por
+ * dentro para mostrarle a cada uno solo lo que puede hacer.
+ */
 export const PERMISOS: Record<Rol, readonly Area[]> = {
   admin: [...AREAS],
   gerencia: [
     'dashboard', 'ocupacion', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
-    'proveedores', 'contratos', 'reportes', 'config',
+    'proveedores', 'contratos', 'reportes', 'config', 'ayuda',
   ],
   recepcion: [
     'dashboard', 'ocupacion', 'reservas', 'huespedes', 'objetos_perdidos',
-    'avisos', 'conversaciones', 'agencias',
+    'avisos', 'conversaciones', 'agencias', 'ayuda',
   ],
-  housekeeping: ['dashboard', 'housekeeping', 'mantenimiento', 'avisos', 'conversaciones'],
+  housekeeping: [
+    'dashboard', 'housekeeping', 'mantenimiento', 'avisos', 'conversaciones', 'ayuda',
+  ],
 }
 
 export function areasDe(rol: Rol): readonly Area[] {

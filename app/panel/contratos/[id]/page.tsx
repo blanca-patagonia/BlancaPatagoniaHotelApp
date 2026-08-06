@@ -15,6 +15,8 @@ import {
   type TipoContrato,
 } from '@/lib/domain/contratos'
 import {
+  CAMPO,
+  Campo,
   Encabezado,
   Etiqueta,
   Mensaje,
@@ -22,6 +24,7 @@ import {
   botonClases,
   type Tono,
 } from '../../_components/ui'
+import { BotonEnvio } from '../../_components/boton-envio'
 import { cambiarEstadoContrato, enviarAFirmar, verificarIntegridad } from '../actions'
 
 const TONO_CONTRATO: Record<EstadoContrato, Tono> = {
@@ -211,26 +214,32 @@ export default async function DetalleContratoPage({
       {/* Envío a firmar */}
       {puedeEnviar(contrato.estado) && (
         <Tarjeta titulo="Enviar a firmar" className="mt-4">
-          <form action={enviarAFirmar} className="grid gap-3 p-5 sm:grid-cols-2">
+          <form action={enviarAFirmar} className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
             <input type="hidden" name="contrato_id" value={contrato.id} />
-            <input
-              name="firmante_nombre"
-              placeholder="Nombre de quien firma"
-              className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
-            />
-            <input
-              name="firmante_email"
-              type="email"
-              placeholder="Email de contacto"
-              className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
-            />
-            <p className="text-xs text-stone-400 sm:col-span-2">
+
+            <Campo etiqueta="Nombre de quien firma">
+              <input name="firmante_nombre" className={CAMPO} />
+            </Campo>
+            <Campo etiqueta="Email de contacto">
+              <input name="firmante_email" type="email" className={CAMPO} />
+            </Campo>
+
+            <p className="text-xs leading-relaxed text-stone-500 sm:col-span-2">
               Se genera un enlace con un token único. No se envía ningún correo: el proyecto no
               integra un proveedor de email real, así que el enlace se copia y se manda a mano.
             </p>
-            <button className={botonClases('primario', 'sm:col-span-2')}>
-              Generar enlace de firma
-            </button>
+
+            <div className="sm:col-span-2">
+              {/* Al enviar a firmar se congela el texto y se calcula su hash:
+                  desde ese momento no se puede corregir sin invalidar la firma.
+                  Por eso se pregunta antes. */}
+              <BotonEnvio
+                cargando="Generando…"
+                confirmar="Al generar el enlace, el texto del contrato queda congelado y ya no se puede corregir. ¿Seguimos?"
+              >
+                Generar enlace de firma
+              </BotonEnvio>
+            </div>
           </form>
         </Tarjeta>
       )}

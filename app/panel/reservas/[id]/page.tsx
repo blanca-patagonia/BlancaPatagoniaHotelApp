@@ -25,6 +25,7 @@ import {
 import { motivoNoFacturable, MENSAJES_NO_FACTURABLE } from '@/lib/domain/facturacion'
 import { puedeCambiarUnidad, MENSAJES_RECHAZO_MUDANZA } from '@/lib/domain/mudanzas'
 import { unidadesDisponibles } from '@/lib/availability/disponibilidad'
+import { BotonEnvio } from '../../_components/boton-envio'
 import { TONO_ESTADO } from '../../_components/estilos'
 import { Etiqueta } from '../../_components/ui'
 import {
@@ -315,11 +316,24 @@ export default async function DetalleReservaPage({
               <form key={t} action={cambiarEstadoReserva}>
                 <input type="hidden" name="reserva_id" value={reserva.id} />
                 <input type="hidden" name="nuevo_estado" value={t} />
-                <button
-                  className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition ${ACCION_ESTADO[t].color}`}
+                {/* `BotonEnvio` bloquea el botón mientras la acción viaja al
+                    servidor: sin eso, un segundo clic impaciente repetía la
+                    operación. Cancelar y no-show piden confirmación porque no
+                    tienen vuelta atrás: son estados terminales. */}
+                <BotonEnvio
+                  variante="primario"
+                  extra={`text-white ${ACCION_ESTADO[t].color}`}
+                  cargando="Aplicando…"
+                  confirmar={
+                    t === 'cancelada'
+                      ? `¿Cancelar la reserva ${reserva.codigo}?${cargo && cargo.monto > 0 ? ` Corresponde un cargo de USD ${cargo.monto.toLocaleString('es-AR')}.` : ''} No se puede deshacer.`
+                      : t === 'no_show'
+                        ? `¿Marcar ${reserva.codigo} como no-show? Se cobra la estadía completa y no se puede deshacer.`
+                        : undefined
+                  }
                 >
                   {ACCION_ESTADO[t].verbo}
-                </button>
+                </BotonEnvio>
               </form>
             ))}
           </div>
@@ -352,9 +366,9 @@ export default async function DetalleReservaPage({
               <span className="text-stone-500">Nuevo check-out</span>
               <input type="date" name="check_out" defaultValue={periodo.hasta} className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
             </label>
-            <button className="w-full rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-stone-900">
+            <BotonEnvio extra="w-full sm:w-auto" cargando="Reprogramando…">
               Reprogramar
-            </button>
+            </BotonEnvio>
           </form>
           <p className="mt-2 text-xs text-stone-400">
             Recotiza el total; se rechaza si la unidad ya está ocupada en esas fechas.
@@ -412,9 +426,9 @@ export default async function DetalleReservaPage({
                   <option value="recotizar">Recotizar según el nuevo tipo</option>
                 </select>
               </label>
-              <button className="w-full rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-stone-900">
+              <BotonEnvio extra="w-full sm:w-auto" cargando="Mudando…">
                 Mudar
-              </button>
+              </BotonEnvio>
             </form>
           )}
           <p className="mt-2 text-xs text-stone-400">
@@ -506,9 +520,14 @@ export default async function DetalleReservaPage({
                 className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-32"
               />
             </label>
-            <button className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-emerald-700">
+            {/* El caso que más importa: sin bloqueo, un segundo clic
+                registraba el pago dos veces. */}
+            <BotonEnvio
+              extra="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 sm:w-auto"
+              cargando="Registrando…"
+            >
               Registrar pago
-            </button>
+            </BotonEnvio>
           </form>
         )}
         <p className="mt-3 text-xs text-stone-400">
@@ -536,9 +555,12 @@ export default async function DetalleReservaPage({
           ) : (
             <form action={emitirFactura}>
               <input type="hidden" name="reserva_id" value={reserva.id} />
-              <button className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-stone-900">
+              <BotonEnvio
+                cargando="Emitiendo…"
+                confirmar={`¿Emitir la factura de ${reserva.codigo}? Una vez emitida no se puede anular desde el sistema.`}
+              >
                 Emitir factura
-              </button>
+              </BotonEnvio>
             </form>
           )}
         </div>
@@ -596,9 +618,9 @@ export default async function DetalleReservaPage({
               className="w-20 rounded-md border border-stone-300 px-2 py-1.5 text-sm"
             />
           </label>
-          <button className="w-full rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white sm:w-auto transition hover:bg-lago-800">
+          <BotonEnvio extra="w-full sm:w-auto" cargando="Cargando…">
             Cargar
-          </button>
+          </BotonEnvio>
         </form>
 
         <dl className="mt-4 border-t border-stone-100 pt-3 text-sm">

@@ -17,6 +17,8 @@ import { obtenerProveedorFirma } from '@/lib/firma'
 export interface EstadoContratoForm {
   error?: string
   ok?: string
+  /** Id del borrador recién creado, para ofrecer el enlace directo. */
+  id?: string
 }
 
 /** Los contratos los gestionan solo admin y gerencia (RLS lo repite en la base). */
@@ -52,19 +54,26 @@ export async function crearContrato(
   }
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase.from('contratos').insert({
-    tipo,
-    entidad_id: entidadId,
-    titulo,
-    contenido,
-    vigencia_desde: vigenciaDesde || null,
-    vigencia_hasta: vigenciaHasta || null,
-    creado_por: sesion.userId,
-  })
+  const { data, error } = await supabase
+    .from('contratos')
+    .insert({
+      tipo,
+      entidad_id: entidadId,
+      titulo,
+      contenido,
+      vigencia_desde: vigenciaDesde || null,
+      vigencia_hasta: vigenciaHasta || null,
+      creado_por: sesion.userId,
+    })
+    .select('id')
+    .single()
   if (error) return { error: `No se pudo crear: ${error.message}` }
 
   revalidatePath('/panel/contratos')
-  return { ok: `Contrato «${titulo}» creado como borrador.` }
+  return {
+    ok: `Se guardó «${titulo}» como borrador.`,
+    id: (data as { id: string } | null)?.id,
+  }
 }
 
 /**

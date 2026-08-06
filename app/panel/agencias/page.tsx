@@ -28,8 +28,9 @@ import {
   Tabla,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
-import { FormularioAgencia } from './formulario'
+import { Icono } from '../_components/iconos'
 import { cambiarEtapaAgencia } from './actions'
 
 interface Agencia {
@@ -93,12 +94,23 @@ export default async function AgenciasPage({
   const vigentes = { q, saldo: filtroSaldo }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Agencias y empresas"
         descripcion="Cuentas corrientes: cargos, pagos y saldo."
         icono="agencias"
-        acciones={<BotonExportar href={`/panel/exportar/agencias${construirQuery({ q })}`} />}
+        acciones={
+          <>
+            <BotonExportar href={`/panel/exportar/agencias${construirQuery({ q })}`} />
+            {/* La acción principal del módulo, visible desde el primer vistazo. */}
+            {puedeCrear && (
+              <Link href="/panel/agencias/nueva" className={botonClases('primario')}>
+                <Icono nombre="mas" tam={16} />
+                Registrar cuenta
+              </Link>
+            )}
+          </>
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -176,17 +188,6 @@ export default async function AgenciasPage({
         )}
       </BarraHerramientas>
 
-      {puedeCrear && (
-        <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
-          <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-            Registrar una agencia o empresa
-          </summary>
-          <div className="border-t border-stone-100 p-5">
-            <FormularioAgencia />
-          </div>
-        </details>
-      )}
-
       <Tarjeta className="overflow-hidden">
         {visibles.length === 0 ? (
           <EstadoVacio
@@ -253,6 +254,6 @@ export default async function AgenciasPage({
           </Tabla>
         )}
       </Tarjeta>
-    </div>
+    </Pagina>
   )
 }

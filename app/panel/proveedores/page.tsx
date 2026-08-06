@@ -29,8 +29,10 @@ import {
   Tabla,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
-import { FormularioProveedor } from './formulario'
+import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
 import { vencerComprobantes } from './actions'
 
 interface Proveedor {
@@ -45,7 +47,10 @@ export default async function ProveedoresPage({
 }: {
   searchParams: Promise<{ q?: string; saldo?: string; vencidos?: string }>
 }) {
-  await requerirAcceso('proveedores')
+  const sesion = await requerirAcceso('proveedores')
+  // Solo admin y gerencia dan de alta: la acción lo exige, así que la pantalla
+  // no ofrece un botón que el servidor va a rechazar.
+  const puedeGestionar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
   const sp = await searchParams
   const { q, saldo: filtroSaldo } = sp
   const supabase = await crearClienteServidor()
@@ -104,7 +109,7 @@ export default async function ProveedoresPage({
   const vigentes = { q, saldo: filtroSaldo }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Proveedores"
         descripcion="Cuentas por pagar: facturas, pagos y saldo."
@@ -112,9 +117,18 @@ export default async function ProveedoresPage({
         acciones={
           <>
             <form action={vencerComprobantes}>
-              <button className={botonClases('secundario')}>Actualizar vencidos</button>
+              <BotonEnvio variante="secundario" cargando="Actualizando…">
+                Actualizar vencidos
+              </BotonEnvio>
             </form>
             <BotonExportar href={`/panel/exportar/proveedores${construirQuery({ q })}`} />
+            {/* La acción principal del módulo, visible desde el primer vistazo. */}
+            {puedeGestionar && (
+              <Link href="/panel/proveedores/nuevo" className={botonClases('primario')}>
+                <Icono nombre="mas" tam={16} />
+                Registrar proveedor
+              </Link>
+            )}
           </>
         }
       />
@@ -173,16 +187,6 @@ export default async function ProveedoresPage({
           </Link>
         )}
       </BarraHerramientas>
-
-      {/* El alta queda plegada para que la lista sea lo primero que se ve. */}
-      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Registrar un proveedor nuevo
-        </summary>
-        <div className="border-t border-stone-100 p-5">
-          <FormularioProveedor />
-        </div>
-      </details>
 
       {/* Recordatorio de vencimientos: solo aparece cuando hay algo que pagar. */}
       {proximosVencimientos.length > 0 && (
@@ -329,6 +333,6 @@ export default async function ProveedoresPage({
           </Tabla>
         )}
       </Tarjeta>
-    </div>
+    </Pagina>
   )
 }

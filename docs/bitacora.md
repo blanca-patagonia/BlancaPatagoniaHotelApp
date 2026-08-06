@@ -998,3 +998,98 @@ reglas nuevas se comprobaron en el CSS compilado: el bloque
 **Pendiente de comprobar en un teléfono real:** el entorno de trabajo no permite
 renderizar a 375px, así que el comportamiento se verificó por las reglas CSS y
 no viendo la pantalla. Conviene abrirlo en un celular antes de la entrega.
+
+---
+
+## 2026-08-06 · Fase 15 — Rediseño de la interfaz y sección de Ayuda
+
+Pedido: llevar la interfaz y la experiencia de uso al nivel siguiente, y sumar
+una guía de uso. Al presentar el plan, el usuario fijó un principio que terminó
+reorganizándolo entero: **«no quiero que ocultes ninguna info ni manejarme por
+urls; el sistema tiene que estar pensado para gente que por lo general no usa
+mucho la PC»**.
+
+Eso descartó dos propuestas que ya estaban escritas —pestañas en el detalle de
+reserva y acordeones de preguntas frecuentes en la Ayuda— y obligó a mirar
+cuánto del sistema actual contradecía ese principio. Bastante.
+
+### 15.1 · La acción principal de cada módulo estaba escondida
+
+El hallazgo que justificó reordenar el plan: había **11 bloques `<details>`
+plegados**, y lo que escondían era exactamente esto:
+
+> Registrar un huésped nuevo · Registrar una agencia o empresa · Registrar un
+> proveedor nuevo · Dar de alta un usuario · Crear una orden de trabajo ·
+> Redactar un contrato nuevo · Registrar un objeto encontrado · Editar datos…
+
+Es decir: quien entraba a Huéspedes veía una lista y **no encontraba cómo
+agregar uno**, porque "Registrar un huésped nuevo" parecía un título.
+
+Los once se eliminaron. Cada módulo tiene ahora un **botón primario visible en
+el encabezado** que lleva a una pantalla propia de alta o edición: una sola
+tarea a la vez, campos anchos y un botón de guardar imposible de no ver. Ocho
+pantallas nuevas entre altas y ediciones.
+
+### 15.2 · Formularios para quien no vive frente a una pantalla
+
+- **Etiquetas visibles en todos los campos.** Varios se identificaban solo por
+  el `placeholder`, que desaparece al escribir: quien se distrae ya no sabe qué
+  estaba cargando, y el lector de pantalla no siempre lo anuncia.
+- **Ayuda donde el dato tiene consecuencias.** La condición frente al IVA define
+  la letra de la factura y hoy explota recién al facturar; ahora se explica
+  debajo del campo. Lo mismo con el descuento de una agencia, que define la
+  tarifa neta.
+- **Botón Cancelar** junto a Guardar: antes no había forma de salir sin usar el
+  navegador.
+- **Al terminar, la aplicación no salta sola a otra pantalla.** Confirma qué
+  pasó y ofrece las continuaciones como botones —«Ver su ficha», «Registrar
+  otro», «Volver al listado»—. Que la vista cambie sin aviso desorienta.
+
+### 15.3 · El doble clic que duplicaba operaciones
+
+Corrección de una medición propia: se había reportado que «solo 1 de 20
+formularios avisa que está procesando». Falso —12 usan `useActionState` y sí
+avisan—; el escaneo buscaba `useFormStatus` y no lo detectaba. El problema real
+estaba en los `<form action={…}>` de componentes de **servidor**, que no pueden
+usar ese hook: ahí el botón quedaba igual después de apretarlo y un segundo clic
+impaciente **repetía la operación**.
+
+`app/panel/_components/boton-envio.tsx` resuelve eso con `useFormStatus` en la
+pieza mínima de cliente: se bloquea, muestra un girador y cambia el texto. Se
+aplicó a lo que mueve dinero o no tiene vuelta atrás —registrar pago, facturar,
+cambiar de estado, mudar de unidad, movimientos de cuenta corriente— y de paso
+pide **confirmación** antes de cancelar una reserva, marcar un no-show, borrar
+un aviso o congelar un contrato al enviarlo a firmar.
+
+Es una red de seguridad de interfaz, no la garantía: las reglas que impiden
+facturar dos veces siguen en el dominio y en la base.
+
+### 15.4 · Sección de Ayuda
+
+Nueva área `/panel/ayuda`, visible para **todos los roles** —quien más necesita
+el manual es justamente quien menos permisos tiene—. Contiene primeros pasos,
+una guía por módulo y un glosario de los términos que el sistema usa sin
+explicar (rack, neto, no-show, in house, CAE, ADR, RevPAR).
+
+El contenido vive en `lib/domain/ayuda.ts`, no dentro de la pantalla, por dos
+razones. La primera es la de siempre: se puede testear. La segunda es concreta
+—**una guía que miente es peor que no tener guía**—: si a alguien de
+housekeeping se le explica cómo facturar, va a buscar un botón que no existe y
+va a concluir que el sistema está roto. Por eso `guiaPara(rol)` filtra con los
+**mismos permisos** que arman el menú, en lugar de mantener dos listas que se
+desincronizan, y hay un test que lo verifica para los cuatro roles.
+
+Todo el contenido está a la vista, sin acordeones: obligar a descubrir dónde
+hacer clic para leer una explicación es agregarle un problema a quien ya tenía
+uno.
+
+### 15.5 · Base compartida
+
+`Pagina` fija un ancho único: las pantallas usaban cinco anchos distintos
+(`max-w-2xl` a `7xl`) y el contenido saltaba de lugar al navegar. `Campo`,
+`CAMPO`, `PieDeFormulario` y `ExitoConPasos` centralizan lo que cada formulario
+repetía a mano.
+
+**Verificación:** **307 tests en verde** (32 archivos), typecheck y lint
+limpios. Las 16 rutas nuevas y modificadas responden 200 y se comprobó en el
+navegador que ya no queda ningún `<details>` escondiendo un alta.

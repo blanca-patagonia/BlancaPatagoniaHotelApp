@@ -11,6 +11,7 @@ import {
   EstadoVacio,
   Etiqueta,
   FILA,
+  Pagina,
   Paginacion,
   COL_SECUNDARIA,
   TD,
@@ -19,7 +20,7 @@ import {
   Tarjeta,
   botonClases,
 } from '../_components/ui'
-import { FormularioHuesped } from './formulario'
+import { Icono } from '../_components/iconos'
 
 interface Huesped {
   id: string
@@ -64,22 +65,23 @@ export default async function HuespedesPage({
   const total = count ?? 0
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Huéspedes"
         descripcion="Base de huéspedes, historial y programa de fidelidad."
         icono="huespedes"
-        acciones={<BotonExportar href={`/panel/exportar/huespedes${construirQuery({ q })}`} />}
+        acciones={
+          <>
+            <BotonExportar href={`/panel/exportar/huespedes${construirQuery({ q })}`} />
+            {/* La acción principal del módulo, visible desde el primer vistazo.
+                Antes vivía plegada en un `<details>` que parecía un título. */}
+            <Link href="/panel/huespedes/nuevo" className={botonClases('primario')}>
+              <Icono nombre="mas" tam={16} />
+              Registrar huésped
+            </Link>
+          </>
+        }
       />
-
-      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Registrar un huésped nuevo
-        </summary>
-        <div className="border-t border-stone-100 p-5">
-          <FormularioHuesped />
-        </div>
-      </details>
 
       <BarraHerramientas>
         <Buscador
@@ -181,6 +183,6 @@ export default async function HuespedesPage({
           </>
         )}
       </Tarjeta>
-    </div>
+    </Pagina>
   )
 }

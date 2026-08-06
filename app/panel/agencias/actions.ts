@@ -10,6 +10,8 @@ import { TIPOS_CUENTA } from '@/lib/domain/cuentas'
 export interface EstadoAgencia {
   error?: string
   ok?: string
+  /** Id de la cuenta recién creada, para ofrecer el enlace a su ficha. */
+  id?: string
 }
 
 export async function crearAgencia(
@@ -29,12 +31,14 @@ export async function crearAgencia(
   if (!(TIPOS_CUENTA as readonly string[]).includes(tipo)) return { error: 'Tipo inválido.' }
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('agencias')
     .insert({ nombre, tipo, cuit: cuit || null, email: email || null, descuento_pct: descuento })
+    .select('id')
+    .single()
   if (error) return { error: `No se pudo crear: ${error.message}` }
   revalidatePath('/panel/agencias')
-  return { ok: `Agencia ${nombre} creada.` }
+  return { ok: `Se registró ${nombre}.`, id: (data as { id: string } | null)?.id }
 }
 
 export async function registrarMovimiento(formData: FormData): Promise<void> {

@@ -46,6 +46,33 @@ export function botonClases(variante: VarianteBoton = 'secundario', extra = ''):
   return `toque inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed ${BOTON[variante]} ${extra}`.trim()
 }
 
+/* ----------------------------------------------------------- contenedor -- */
+
+/**
+ * Contenedor de una pantalla del panel.
+ *
+ * Cada pantalla elegía su propio ancho (`max-w-2xl`, `3xl`, `5xl`, `6xl`,
+ * `7xl`): al navegar, el contenido saltaba de lugar y la aplicación se sentía
+ * inestable. Un único ancho hace que el encabezado, la barra de herramientas y
+ * las tarjetas queden siempre alineados en el mismo eje.
+ *
+ * `ancho="angosto"` queda para los formularios de una sola columna, donde una
+ * línea de texto demasiado larga cansa la lectura.
+ */
+export function Pagina({
+  children,
+  ancho = 'normal',
+}: {
+  children: ReactNode
+  ancho?: 'normal' | 'angosto'
+}) {
+  return (
+    <div className={`mx-auto w-full ${ancho === 'angosto' ? 'max-w-3xl' : 'max-w-6xl'}`}>
+      {children}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------ encabezado -- */
 
 interface EncabezadoProps {
@@ -385,7 +412,109 @@ export function BotonExportar({ href, titulo = 'Exportar CSV' }: { href: string;
   )
 }
 
+/* ----------------------------------------------------------- formulario -- */
+
+/** Clases de un campo de formulario. Una sola definición para todo el panel. */
+export const CAMPO =
+  'w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-lago-600 disabled:bg-stone-100'
+
+/**
+ * Campo con etiqueta **visible** y ayuda opcional.
+ *
+ * Antes varios campos se identificaban solo por su `placeholder`, que
+ * desaparece apenas se empieza a escribir: quien se distrae ya no sabe qué
+ * estaba cargando, y el lector de pantalla no siempre lo anuncia. La etiqueta
+ * visible resuelve las dos cosas.
+ *
+ * `ayuda` es para explicar el porqué de un dato cuando no es evidente —por
+ * ejemplo que la condición frente al IVA define la letra de la factura—, que es
+ * justo lo que necesita quien no usa la computadora todos los días.
+ */
+export function Campo({
+  etiqueta,
+  ayuda,
+  requerido,
+  anchoCompleto,
+  children,
+}: {
+  etiqueta: string
+  ayuda?: string
+  requerido?: boolean
+  anchoCompleto?: boolean
+  children: ReactNode
+}) {
+  return (
+    <label className={`flex flex-col gap-1.5 ${anchoCompleto ? 'sm:col-span-2' : ''}`}>
+      <span className="text-sm font-medium text-stone-700">
+        {etiqueta}
+        {requerido && (
+          <span className="ml-1 text-red-600" aria-hidden="true" title="Obligatorio">
+            *
+          </span>
+        )}
+      </span>
+      {children}
+      {ayuda && <span className="text-xs leading-snug text-stone-500">{ayuda}</span>}
+    </label>
+  )
+}
+
 /* ---------------------------------------------------------------- avisos -- */
+
+/**
+ * Confirmación de que algo salió bien, con los pasos siguientes a la vista.
+ *
+ * Después de dar de alta algo, la aplicación **no** salta sola a otra pantalla:
+ * que la vista cambie sin aviso desorienta a quien no usa la computadora todos
+ * los días. Se confirma qué pasó y se ofrecen las continuaciones como botones,
+ * para que elija la persona.
+ */
+export function ExitoConPasos({
+  mensaje,
+  pasos,
+}: {
+  mensaje: string
+  pasos: { href: string; texto: string }[]
+}) {
+  return (
+    <Mensaje tono="ok">
+      <span className="block font-medium">{mensaje}</span>
+      {pasos.length > 0 && (
+        <span className="mt-2 flex flex-wrap gap-2">
+          {pasos.map((p) => (
+            <Link key={p.href} href={p.href} className={botonClases('secundario')}>
+              {p.texto}
+            </Link>
+          ))}
+        </span>
+      )}
+    </Mensaje>
+  )
+}
+
+/**
+ * Barra de acciones al pie de un formulario: guardar, cancelar y la nota de
+ * campos obligatorios. Una sola definición para que todos los formularios
+ * terminen igual.
+ */
+export function PieDeFormulario({
+  children,
+  hayObligatorios = true,
+}: {
+  children: ReactNode
+  hayObligatorios?: boolean
+}) {
+  return (
+    <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:items-center">
+      {children}
+      {hayObligatorios && (
+        <p className="text-xs text-stone-500 sm:ml-auto">
+          Los campos con <span className="text-red-600">*</span> son obligatorios.
+        </p>
+      )}
+    </div>
+  )
+}
 
 /** Banner de error o de confirmación por encima del contenido. */
 export function Mensaje({ tono, children }: { tono: 'error' | 'ok'; children: ReactNode }) {

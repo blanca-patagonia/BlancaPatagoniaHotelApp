@@ -1,11 +1,18 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import { crearContrato, type EstadoContratoForm } from './actions'
+import {
+  CAMPO,
+  Campo,
+  ExitoConPasos,
+  Mensaje,
+  PieDeFormulario,
+  botonClases,
+} from '../_components/ui'
 
 const ESTADO_INICIAL: EstadoContratoForm = {}
-
-const CAMPO = 'rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600'
 
 export interface OpcionEntidad {
   /** Valor combinado `tipo:id` (ver `crearContrato`). */
@@ -19,77 +26,97 @@ interface Props {
   empleados: OpcionEntidad[]
 }
 
+/**
+ * Redacción de un contrato. Nace como **borrador**: recién cuando se lo envía a
+ * firmar se congela el texto y se calcula su hash, así que acá todavía se puede
+ * escribir con tranquilidad (ADR 0010).
+ */
 export function FormularioContrato({ agencias, proveedores, empleados }: Props) {
   const [estado, accion, pendiente] = useActionState(crearContrato, ESTADO_INICIAL)
 
   return (
-    <form action={accion} className="grid gap-3 sm:grid-cols-2">
-      <input name="titulo" placeholder="Título del contrato" required className={CAMPO} />
+    <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+      <Campo etiqueta="Título del contrato" requerido>
+        <input name="titulo" required className={CAMPO} placeholder="Convenio de tarifas 2026" />
+      </Campo>
 
       {/* Un único selector con el tipo codificado en el valor: así el formulario
           funciona sin JavaScript, sin selects encadenados. */}
-      <select name="entidad" required defaultValue="" className={CAMPO}>
-        <option value="" disabled>
-          ¿Con quién se firma?
-        </option>
-        <optgroup label="Agencias">
-          {agencias.map((o) => (
-            <option key={o.valor} value={o.valor}>
-              {o.nombre}
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label="Proveedores">
-          {proveedores.map((o) => (
-            <option key={o.valor} value={o.valor}>
-              {o.nombre}
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label="Empleados">
-          {empleados.map((o) => (
-            <option key={o.valor} value={o.valor}>
-              {o.nombre}
-            </option>
-          ))}
-        </optgroup>
-      </select>
+      <Campo etiqueta="¿Con quién se firma?" requerido>
+        <select name="entidad" required defaultValue="" className={CAMPO}>
+          <option value="" disabled>
+            Elegí la contraparte…
+          </option>
+          <optgroup label="Agencias">
+            {agencias.map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {o.nombre}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Proveedores">
+            {proveedores.map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {o.nombre}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Empleados">
+            {empleados.map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {o.nombre}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+      </Campo>
 
-      <label className="flex flex-col gap-1 text-xs text-stone-500">
-        Vigencia desde
+      <Campo etiqueta="Vigencia desde">
         <input name="vigencia_desde" type="date" className={CAMPO} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-stone-500">
-        Vigencia hasta
+      </Campo>
+      <Campo etiqueta="Vigencia hasta" ayuda="Dejalo vacío si no tiene fecha de fin.">
         <input name="vigencia_hasta" type="date" className={CAMPO} />
-      </label>
+      </Campo>
 
-      <textarea
-        name="contenido"
-        rows={6}
-        required
-        placeholder="Texto del contrato. Es lo que va a leer y aceptar la otra parte."
-        className={`${CAMPO} sm:col-span-2`}
-      />
+      <Campo
+        etiqueta="Texto del contrato"
+        requerido
+        ayuda="Es lo que va a leer y aceptar la otra parte. Se guarda como borrador: podés seguir editándolo hasta enviarlo a firmar."
+        anchoCompleto
+      >
+        <textarea name="contenido" rows={10} required className={CAMPO} />
+      </Campo>
 
       {estado.error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">
-          {estado.error}
-        </p>
+        <div className="sm:col-span-2">
+          <Mensaje tono="error">{estado.error}</Mensaje>
+        </div>
       )}
       {estado.ok && (
-        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 sm:col-span-2">
-          {estado.ok}
-        </p>
+        <div className="sm:col-span-2">
+          <ExitoConPasos
+            mensaje={estado.ok}
+            pasos={[
+              ...(estado.id ? [{ href: `/panel/contratos/${estado.id}`, texto: 'Abrir el borrador' }] : []),
+              { href: '/panel/contratos/nuevo', texto: 'Redactar otro' },
+              { href: '/panel/contratos', texto: 'Volver al listado' },
+            ]}
+          />
+        </div>
       )}
 
-      <button
-        type="submit"
-        disabled={pendiente}
-        className="self-start rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60 sm:col-span-2"
-      >
-        {pendiente ? 'Creando…' : 'Crear borrador'}
-      </button>
+      <PieDeFormulario>
+        <button
+          type="submit"
+          disabled={pendiente}
+          className={botonClases('primario', 'w-full disabled:cursor-wait sm:w-auto')}
+        >
+          {pendiente ? 'Guardando…' : 'Guardar borrador'}
+        </button>
+        <Link href="/panel/contratos" className={botonClases('secundario', 'w-full sm:w-auto')}>
+          Cancelar
+        </Link>
+      </PieDeFormulario>
     </form>
   )
 }

@@ -7,16 +7,22 @@ describe('permisos por rol', () => {
     for (const area of AREAS) expect(puedeAcceder('admin', area)).toBe(true)
   })
 
-  it('housekeeping ve inicio, su área, mantenimiento, avisos y conversaciones', () => {
+  it('housekeeping ve inicio, su área, mantenimiento, avisos, conversaciones y ayuda', () => {
     expect(areasDe('housekeeping')).toEqual([
       'dashboard',
       'housekeeping',
       'mantenimiento',
       'avisos',
       'conversaciones',
+      'ayuda',
     ])
     expect(puedeAcceder('housekeeping', 'reservas')).toBe(false)
     expect(puedeAcceder('housekeeping', 'usuarios')).toBe(false)
+  })
+
+  it('la ayuda la ven todos los roles', () => {
+    // Quien más necesita el manual es justamente quien menos permisos tiene.
+    for (const rol of ROLES) expect(puedeAcceder(rol, 'ayuda')).toBe(true)
   })
 
   it('recepción gestiona reservas pero no usuarios ni configuración', () => {

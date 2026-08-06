@@ -12,6 +12,7 @@ import {
   EstadoVacio,
   Etiqueta,
   Kpi,
+  Pagina,
   Tarjeta,
   botonClases,
   type Tono,
@@ -24,7 +25,6 @@ import {
   diasParaProxima,
 } from '@/lib/domain/preventivo'
 import { Mensaje } from '../_components/ui'
-import { FormularioOrden } from './formulario'
 import { cambiarEstadoOrden, crearPlanPreventivo, generarPreventivo } from './actions'
 
 interface PlanPreventivo {
@@ -137,12 +137,21 @@ export default async function MantenimientoPage({
   const hayFiltros = Boolean(sp.q || estado || prioridad)
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Mantenimiento"
         descripcion="Órdenes de trabajo por unidad."
         icono="mantenimiento"
-        acciones={<BotonExportar href="/panel/exportar/mantenimiento" />}
+        acciones={
+          <>
+            <BotonExportar href="/panel/exportar/mantenimiento" />
+            {/* La acción principal del módulo, visible desde el primer vistazo. */}
+            <Link href="/panel/mantenimiento/nueva" className={botonClases('primario')}>
+              <Icono nombre="mas" tam={16} />
+              Crear orden
+            </Link>
+          </>
+        }
       />
 
       {/* Tres KPIs en 375px daban columnas de ~110px: el número quedaba
@@ -300,15 +309,6 @@ export default async function MantenimientoPage({
         </form>
       </Tarjeta>
 
-      <details className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-700 marker:text-lago-600">
-          Crear una orden de trabajo
-        </summary>
-        <div className="border-t border-stone-100 p-5">
-          <FormularioOrden unidades={unidades} />
-        </div>
-      </details>
-
       {ordenes.length === 0 ? (
         <Tarjeta>
           <EstadoVacio
@@ -370,6 +370,6 @@ export default async function MantenimientoPage({
           })}
         </ul>
       )}
-    </div>
+    </Pagina>
   )
 }

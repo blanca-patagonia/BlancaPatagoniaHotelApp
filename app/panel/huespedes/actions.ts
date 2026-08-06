@@ -9,6 +9,16 @@ import { CONDICIONES_IVA, cuitValido, type CondicionIva } from '@/lib/domain/fac
 export interface EstadoHuesped {
   error?: string
   ok?: string
+  /**
+   * Id del huésped recién creado.
+   *
+   * No se hace `redirect()` a propósito: mandar a alguien a otra pantalla sin
+   * avisar es desorientador, sobre todo para quien no usa la computadora todos
+   * los días. Se le confirma qué pasó y se le ofrecen los siguientes pasos
+   * —ver la ficha, cargar otro— como botones visibles. Este id es el que
+   * permite armar ese enlace.
+   */
+  id?: string
 }
 
 const DOCS = ['DNI', 'Pasaporte', 'CUIT', 'CUIL', 'LC', 'LE']
@@ -76,11 +86,14 @@ export async function crearHuesped(
     if (existente) return { error: 'Ya hay un huésped con ese email.' }
   }
 
-  const { error: e } = await supabase.from('huespedes').insert(campos)
+  const { data, error: e } = await supabase.from('huespedes').insert(campos).select('id').single()
   if (e) return { error: `No se pudo crear: ${e.message}` }
 
   revalidatePath('/panel/huespedes')
-  return { ok: `Huésped ${campos.apellido}, ${campos.nombre} creado.` }
+  return {
+    ok: `Se registró a ${campos.apellido}, ${campos.nombre}.`,
+    id: (data as { id: string } | null)?.id,
+  }
 }
 
 export async function actualizarHuesped(
