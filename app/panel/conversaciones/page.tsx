@@ -10,6 +10,7 @@ import {
   Kpi,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
 import { Chat, type MensajeVista } from './chat'
 import { marcarConsultaRespondida } from './actions'
@@ -85,7 +86,7 @@ export default async function ConversacionesPage({
   const sinResponder = consultas.filter((c) => !c.respondida).length
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Conversaciones"
         descripcion="Chat interno del equipo por área, en tiempo real."
@@ -218,6 +219,6 @@ export default async function ConversacionesPage({
           </Tarjeta>
         </div>
       )}
-    </div>
+    </Pagina>
   )
 }

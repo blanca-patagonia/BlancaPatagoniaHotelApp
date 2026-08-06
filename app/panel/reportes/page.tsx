@@ -37,6 +37,7 @@ import {
   Tabla,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
 
 const RE_MES = /^\d{4}-\d{2}$/
@@ -136,7 +137,7 @@ export default async function ReportesPage({
   const maxNps = Math.max(1, nps.promotores, nps.pasivos, nps.detractores)
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <Pagina>
       <Encabezado
         titulo="Reportes"
         descripcion="Indicadores de gestión del hotel."
@@ -355,6 +356,6 @@ export default async function ReportesPage({
           </div>
         </Tarjeta>
       </div>
-    </div>
+    </Pagina>
   )
 }

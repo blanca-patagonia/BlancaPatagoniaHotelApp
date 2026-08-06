@@ -1155,3 +1155,52 @@ bug inexistente.
 navegador se comprobó que el detalle muestra los siete bloques a la vez, que las
 siete acciones bloquean el botón mientras procesan y que cancelar y no-show
 piden confirmación nombrando la reserva.
+
+---
+
+## 2026-08-06 · Fase 15.7 — Consistencia: ancho único, etiquetas y últimas vistas
+
+Pasada final de coherencia sobre lo que quedaba disparejo. Se midió primero, en
+lugar de suponer.
+
+### Un solo ancho de página
+
+Diez pantallas todavía elegían el suyo (`max-w-2xl` … `7xl`), con lo cual el
+contenido se corría de lugar al navegar. Todas pasaron a `Pagina`.
+
+`Pagina` ganó una tercera variante, `ancho`, **con motivo**: la grilla de
+ocupación es un calendario y necesita mostrar la mayor cantidad de días posible.
+Que sea la excepción declarada en el componente, y no un `max-w-7xl` suelto en
+la pantalla, es lo que evita que la excepción se propague por copiar y pegar.
+
+### Los últimos campos sin etiqueta
+
+Quedaban tres formularios donde el campo se identificaba **solo por el
+placeholder**: el alta de productos en Configuración ("Precio USD", "Stock",
+"Mínimo"), el plan de mantenimiento preventivo y el titular de la reserva
+grupal. Los tres pasaron a `Campo` con etiqueta visible, y donde el dato tiene
+consecuencias se agregó la explicación —el stock mínimo es lo que dispara el
+aviso de reposición en el tablero—.
+
+### Reserva grupal
+
+Última vista con markup propio. Pasó al sistema de diseño y los pasos quedaron
+numerados —1 fechas, 2 unidades, 3 titular—, igual que en el alta individual.
+Cuando no hay disponibilidad, en lugar de una línea de texto aparece un estado
+vacío con enlace a la grilla.
+
+La **factura** se dejó a propósito con su markup propio: es un documento pensado
+para imprimir, con su propio ancho y sus reglas `print:`. Meterla en el sistema
+de diseño del panel no la mejoraría.
+
+### El mismo tropiezo, dos veces
+
+Durante la verificación `/panel/ocupacion` empezó a dar 404 mientras las otras
+18 rutas respondían bien, con los archivos correctos y el typecheck en verde. Es
+otra vez el manifiesto de rutas de Turbopack; se resolvió reiniciando el
+servidor. **Es la segunda vez en el día**: conviene reiniciar antes de salir a
+buscar un bug en el código.
+
+**Verificación:** **307 tests en verde**, typecheck y lint limpios. Las **19
+rutas del panel** responden 200 y se comprobó en el navegador que las etiquetas
+nuevas y los pasos numerados aparecen.

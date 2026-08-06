@@ -11,6 +11,8 @@ import {
   Encabezado,
   EstadoVacio,
   Etiqueta,
+  CAMPO,
+  Campo,
   Kpi,
   Pagina,
   Tarjeta,
@@ -18,6 +20,7 @@ import {
   type Tono,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
 import {
   PERIODICIDADES,
   planVencido,
@@ -273,39 +276,49 @@ export default async function MantenimientoPage({
           </ul>
         )}
 
-        <form action={crearPlanPreventivo} className="grid gap-2 border-t border-stone-100 p-5 sm:grid-cols-4">
-          <input
-            name="titulo"
-            required
-            placeholder="Tarea (ej: revisión de calefacción)"
-            className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600 sm:col-span-2"
-          />
-          <select
-            name="unidad_id"
-            defaultValue=""
-            aria-label="Unidad del plan"
-            className="rounded-lg border border-stone-300 px-2 py-2 text-sm focus:border-lago-600 focus:outline-none"
-          >
-            <option value="">Todas / general</option>
-            {unidades.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nombre}
-              </option>
-            ))}
-          </select>
-          <select
-            name="cada_meses"
-            defaultValue="6"
-            aria-label="Periodicidad"
-            className="rounded-lg border border-stone-300 px-2 py-2 text-sm focus:border-lago-600 focus:outline-none"
-          >
-            {PERIODICIDADES.map((p) => (
-              <option key={p.meses} value={p.meses}>
-                {p.etiqueta}
-              </option>
-            ))}
-          </select>
-          <button className={botonClases('secundario', 'sm:col-span-4')}>+ Agregar plan</button>
+        <form
+          action={crearPlanPreventivo}
+          className="grid gap-x-4 gap-y-4 border-t border-stone-100 p-5 sm:grid-cols-4"
+        >
+          <div className="sm:col-span-2">
+            <Campo
+              etiqueta="Tarea a repetir"
+              requerido
+              ayuda="Se va a generar sola una orden cada tanto."
+            >
+              <input
+                name="titulo"
+                required
+                className={CAMPO}
+                placeholder="Revisión de calefacción"
+              />
+            </Campo>
+          </div>
+          <Campo etiqueta="Unidad">
+            <select name="unidad_id" defaultValue="" className={CAMPO}>
+              <option value="">Todas / general</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nombre}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <Campo etiqueta="Cada cuánto">
+            <select name="cada_meses" defaultValue="6" className={CAMPO}>
+              {PERIODICIDADES.map((p) => (
+                <option key={p.meses} value={p.meses}>
+                  {p.etiqueta}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <div className="sm:col-span-4">
+            <BotonEnvio variante="secundario" cargando="Agregando…">
+              <Icono nombre="mas" tam={16} />
+              Agregar plan
+            </BotonEnvio>
+          </div>
         </form>
       </Tarjeta>
 

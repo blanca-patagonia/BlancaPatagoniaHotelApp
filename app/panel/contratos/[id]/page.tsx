@@ -20,6 +20,7 @@ import {
   Encabezado,
   Etiqueta,
   Mensaje,
+  Pagina,
   Tarjeta,
   botonClases,
   type Tono,
@@ -123,7 +124,7 @@ export default async function DetalleContratoPage({
   const enlaceFirma = firma ? `${origen}/firmar/${firma.token}` : null
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <Pagina ancho="angosto">
       <div className="mb-4">
         <Link href="/panel/contratos" className="text-sm text-stone-500 hover:text-stone-800">
           ‹ Contratos
@@ -292,6 +293,6 @@ export default async function DetalleContratoPage({
           </div>
         </Tarjeta>
       )}
-    </div>
+    </Pagina>
   )
 }

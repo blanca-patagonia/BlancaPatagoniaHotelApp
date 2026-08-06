@@ -3,6 +3,16 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
 import { hoyISO, sumarDias } from '@/lib/fechas'
 import { FormularioGrupo, type OpcionGrupo } from './formulario'
+import {
+  CAMPO,
+  Campo,
+  Encabezado,
+  EstadoVacio,
+  Pagina,
+  Tarjeta,
+  botonClases,
+} from '../../_components/ui'
+import { Icono } from '../../_components/iconos'
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -30,42 +40,69 @@ export default async function NuevaGrupoPage({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center gap-3">
-        <Link href="/panel/reservas" className="text-sm text-stone-500 hover:text-stone-800">
-          ‹ Reservas
-        </Link>
-      </div>
-      <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Reserva grupal</h1>
-      <p className="mt-1 text-sm text-stone-500">
-        Varias unidades para un mismo grupo o familia (una reserva por unidad, agrupadas).
-      </p>
-
-      <form
-        method="get"
-        className="mt-5 flex flex-wrap items-end gap-3 rounded-xl border border-stone-200 bg-white p-4"
+    <Pagina ancho="angosto">
+      <Link
+        href="/panel/reservas"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
       >
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-stone-600">Check-in</span>
-          <input type="date" name="check_in" defaultValue={checkIn || hoyISO()} className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600" />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-stone-600">Check-out</span>
-          <input type="date" name="check_out" defaultValue={checkOut || sumarDias(hoyISO(), 2)} className="rounded-lg border border-stone-300 px-3 py-2 outline-none focus:border-lago-600" />
-        </label>
-        <button type="submit" className="rounded-lg bg-stone-800 px-4 py-2 font-medium text-white transition hover:bg-stone-900">
-          Buscar disponibilidad
-        </button>
-      </form>
+        ‹ Volver a reservas
+      </Link>
 
-      {buscado &&
-        (opciones.length === 0 ? (
-          <p className="mt-6 rounded-lg bg-lenga-50 px-4 py-3 text-sm text-lenga-800">
-            No hay unidades disponibles para esas fechas.
-          </p>
-        ) : (
-          <FormularioGrupo opciones={opciones} checkIn={checkIn} checkOut={checkOut} />
-        ))}
-    </div>
+      <Encabezado
+        titulo="Reserva grupal"
+        descripcion="Varias unidades para un mismo grupo o familia. Se crea una reserva por unidad, todas agrupadas."
+        icono="reservas"
+      />
+
+      {/* Los pasos van numerados —acá el 1, en el formulario el 2 y el 3— para
+          que se vea cuánto falta en lugar de tener que descubrirlo. */}
+      <Tarjeta titulo="1 · ¿Para cuándo?" descripcion="Todo el grupo comparte las mismas fechas.">
+        <form method="get" className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
+          <Campo etiqueta="Check-in">
+            <input
+              type="date"
+              name="check_in"
+              defaultValue={checkIn || hoyISO()}
+              className={CAMPO}
+            />
+          </Campo>
+          <Campo etiqueta="Check-out">
+            <input
+              type="date"
+              name="check_out"
+              defaultValue={checkOut || sumarDias(hoyISO(), 2)}
+              className={CAMPO}
+            />
+          </Campo>
+          <div className="sm:col-span-2">
+            <button type="submit" className={botonClases('secundario', 'w-full sm:w-auto')}>
+              <Icono nombre="buscar" tam={16} />
+              Buscar disponibilidad
+            </button>
+          </div>
+        </form>
+      </Tarjeta>
+
+      {buscado && (
+        <div className="mt-4">
+          {opciones.length === 0 ? (
+            <Tarjeta>
+              <EstadoVacio
+                titulo="No hay unidades libres para esas fechas"
+                descripcion="Probá con otras fechas, o mirá la grilla para ver qué se libera."
+                icono="ocupacion"
+                accion={
+                  <Link href="/panel/ocupacion" className={botonClases('secundario')}>
+                    Ver la ocupación
+                  </Link>
+                }
+              />
+            </Tarjeta>
+          ) : (
+            <FormularioGrupo opciones={opciones} checkIn={checkIn} checkOut={checkOut} />
+          )}
+        </div>
+      )}
+    </Pagina>
   )
 }

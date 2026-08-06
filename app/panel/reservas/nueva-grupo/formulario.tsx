@@ -1,7 +1,16 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import { crearReservaGrupal, type EstadoReservaGrupal } from '../actions'
+import {
+  CAMPO,
+  Campo,
+  Mensaje,
+  PieDeFormulario,
+  Tarjeta,
+  botonClases,
+} from '../../_components/ui'
 
 export interface OpcionGrupo {
   tipoUnidadId: string
@@ -11,6 +20,11 @@ export interface OpcionGrupo {
 
 const ESTADO_INICIAL: EstadoReservaGrupal = {}
 
+/**
+ * Alta de una reserva grupal: varias unidades que comparten un `grupo_id` y un
+ * titular. Cada unidad se crea con el mismo alta atómica de siempre, así que el
+ * anti-overbooking sigue valiendo para el grupo entero.
+ */
 export function FormularioGrupo({
   opciones,
   checkIn,
@@ -23,21 +37,25 @@ export function FormularioGrupo({
   const [estado, accion, pendiente] = useActionState(crearReservaGrupal, ESTADO_INICIAL)
 
   return (
-    <form action={accion} className="mt-6 flex flex-col gap-5">
+    <form action={accion} className="flex flex-col gap-4">
       <input type="hidden" name="check_in" value={checkIn} />
       <input type="hidden" name="check_out" value={checkOut} />
 
-      <div>
-        <h2 className="mb-2 text-sm font-medium text-stone-700">Unidades por tipo</h2>
-        <div className="flex flex-col gap-2">
+      <Tarjeta
+        titulo="2 · ¿Cuántas unidades de cada tipo?"
+        descripcion="Solo se ofrecen las que están libres en esas fechas."
+      >
+        <div className="flex flex-col gap-2 p-5">
           {opciones.map((o) => (
             <label
               key={o.tipoUnidadId}
-              className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm"
+              className="flex items-center justify-between gap-4 rounded-xl border border-stone-200 px-4 py-3 transition hover:border-lago-300"
             >
-              <span className="text-stone-800">
+              <span className="min-w-0 text-stone-800">
                 {o.nombre}
-                <span className="ml-2 text-xs text-stone-400">{o.disponibles} libre(s)</span>
+                <span className="mt-0.5 block text-xs text-stone-500">
+                  {o.disponibles} libre{o.disponibles === 1 ? '' : 's'}
+                </span>
               </span>
               <input
                 type="number"
@@ -45,41 +63,56 @@ export function FormularioGrupo({
                 min={0}
                 max={o.disponibles}
                 defaultValue={0}
-                className="w-20 rounded-md border border-stone-300 px-2 py-1 text-sm"
+                aria-label={`Cantidad de ${o.nombre}`}
+                className="toque w-20 shrink-0 rounded-lg border border-stone-300 px-3 py-2 text-center outline-none focus:border-lago-600"
               />
             </label>
           ))}
         </div>
-      </div>
+      </Tarjeta>
 
-      <div>
-        <h2 className="mb-2 text-sm font-medium text-stone-700">Titular del grupo</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input name="apellido" placeholder="Apellido *" required className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
-          <input name="nombre" placeholder="Nombre" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
-          <input name="email" type="email" placeholder="Email" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600" />
-          <select name="canal" defaultValue="directo" className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600">
-            <option value="directo">Directo (rack)</option>
-            <option value="web">Web (rack)</option>
-            <option value="booking">Booking (neto)</option>
-            <option value="expedia">Expedia (neto)</option>
-          </select>
-        </div>
-      </div>
-
-      {estado.error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-          {estado.error}
-        </p>
-      )}
-
-      <button
-        type="submit"
-        disabled={pendiente}
-        className="self-start rounded-lg bg-lago-700 px-5 py-2.5 font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
+      <Tarjeta
+        titulo="3 · ¿A nombre de quién?"
+        descripcion="El titular responde por el grupo. Las reservas quedan asociadas a esta persona."
       >
-        {pendiente ? 'Creando grupo…' : 'Crear reserva grupal'}
-      </button>
+        <div className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
+          <Campo etiqueta="Apellido" requerido>
+            <input name="apellido" required className={CAMPO} />
+          </Campo>
+          <Campo etiqueta="Nombre">
+            <input name="nombre" className={CAMPO} />
+          </Campo>
+          <Campo etiqueta="Email" ayuda="Ahí llega la confirmación del grupo.">
+            <input name="email" type="email" className={CAMPO} />
+          </Campo>
+          <Campo
+            etiqueta="Canal de venta"
+            ayuda="Define si se cotiza con tarifa de mostrador (rack) o neta."
+          >
+            <select name="canal" defaultValue="directo" className={CAMPO}>
+              <option value="directo">Directo (rack)</option>
+              <option value="web">Web (rack)</option>
+              <option value="booking">Booking (neto)</option>
+              <option value="expedia">Expedia (neto)</option>
+            </select>
+          </Campo>
+        </div>
+      </Tarjeta>
+
+      {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
+
+      <PieDeFormulario>
+        <button
+          type="submit"
+          disabled={pendiente}
+          className={botonClases('primario', 'w-full disabled:cursor-wait sm:w-auto')}
+        >
+          {pendiente ? 'Creando el grupo…' : 'Crear la reserva grupal'}
+        </button>
+        <Link href="/panel/reservas" className={botonClases('secundario', 'w-full sm:w-auto')}>
+          Cancelar
+        </Link>
+      </PieDeFormulario>
     </form>
   )
 }

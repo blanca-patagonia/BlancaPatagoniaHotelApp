@@ -19,7 +19,15 @@ import {
 import { construirQuery } from '@/lib/listados'
 import { PUNTO_HK } from '../_components/estilos'
 import { Icono } from '../_components/iconos'
-import { BarraHerramientas, Chip, Encabezado, Kpi, Tarjeta, botonClases } from '../_components/ui'
+import {
+  BarraHerramientas,
+  Chip,
+  Encabezado,
+  Kpi,
+  Pagina,
+  Tarjeta,
+  botonClases,
+} from '../_components/ui'
 
 const LETRA_DIA = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
 /** Ventanas de días que se pueden mostrar en la grilla. */
@@ -132,7 +140,7 @@ export default async function OcupacionPage({
   const vigentes = { desde: sp.desde, dias: sp.dias, cat: sp.cat }
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <Pagina ancho="ancho">
       <Encabezado
         titulo="Ocupación"
         descripcion={`${formatoFechaCorta(desde)} — ${formatoFechaCorta(sumarDias(hasta, -1))} · ${unidades.length} unidades`}
@@ -350,6 +358,6 @@ export default async function OcupacionPage({
         </span>
         <span className="text-stone-400">· Clic en una celda libre para crear la reserva</span>
       </div>
-    </div>
+    </Pagina>
   )
 }

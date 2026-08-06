@@ -10,6 +10,7 @@ import {
   Etiqueta,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
@@ -60,7 +61,7 @@ export default async function AvisosPage({
   const fijados = avisos.filter((a) => a.fijado).length
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <Pagina ancho="angosto">
       <Encabezado
         titulo="Avisos"
         descripcion="Tablón interno del equipo: novedades, pedidos y recordatorios."
@@ -156,6 +157,6 @@ export default async function AvisosPage({
           })}
         </ul>
       )}
-    </div>
+    </Pagina>
   )
 }

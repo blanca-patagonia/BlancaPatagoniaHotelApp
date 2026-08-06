@@ -56,21 +56,23 @@ export function botonClases(variante: VarianteBoton = 'secundario', extra = ''):
  * inestable. Un único ancho hace que el encabezado, la barra de herramientas y
  * las tarjetas queden siempre alineados en el mismo eje.
  *
- * `ancho="angosto"` queda para los formularios de una sola columna, donde una
- * línea de texto demasiado larga cansa la lectura.
+ * Hay tres anchos y cada uno responde a una razón, no al gusto de cada
+ * pantalla:
+ * · `angosto` para formularios de una columna, donde una línea de texto
+ *   demasiado larga cansa la lectura.
+ * · `normal` para todo lo demás.
+ * · `ancho` solo para la grilla de ocupación, que es un calendario y necesita
+ *   mostrar la mayor cantidad de días posible.
  */
 export function Pagina({
   children,
   ancho = 'normal',
 }: {
   children: ReactNode
-  ancho?: 'normal' | 'angosto'
+  ancho?: 'normal' | 'angosto' | 'ancho'
 }) {
-  return (
-    <div className={`mx-auto w-full ${ancho === 'angosto' ? 'max-w-3xl' : 'max-w-6xl'}`}>
-      {children}
-    </div>
-  )
+  const MAX = { angosto: 'max-w-3xl', normal: 'max-w-6xl', ancho: 'max-w-7xl' } as const
+  return <div className={`mx-auto w-full ${MAX[ancho]}`}>{children}</div>
 }
 
 /* ------------------------------------------------------------ encabezado -- */

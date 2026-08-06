@@ -15,6 +15,7 @@ import {
   Kpi,
   Tarjeta,
   botonClases,
+  Pagina,
 } from './_components/ui'
 
 /** Ruta e icono de cada módulo, para la grilla de accesos rápidos. */
@@ -140,7 +141,7 @@ export default async function DashboardPage() {
   const puede = (a: Area) => areas.includes(a)
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <Pagina>
       <Encabezado
         titulo={`Buen día, ${sesion.nombre.split(' ')[0]}`}
         descripcion={`Panorama del hotel · ${formatoFechaCorta(hoy)}`}
@@ -314,6 +315,6 @@ export default async function DashboardPage() {
           </div>
         </Tarjeta>
       </div>
-    </div>
+    </Pagina>
   )
 }

@@ -13,7 +13,12 @@ import {
   Tabla,
   Tarjeta,
   botonClases,
+  CAMPO,
+  Campo,
+  Pagina,
 } from '../_components/ui'
+import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
 import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
 import { obtenerProveedorEmail } from '@/lib/email'
 import { actualizarTarifa, reponerStock, crearProducto, alternarProducto } from './actions'
@@ -131,7 +136,7 @@ export default async function ConfigPage({
   const bajos = conStock.filter((p) => Number(p.stock) <= Number(p.stock_minimo ?? 0))
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <Pagina>
       <Encabezado
         titulo="Configuración"
         descripcion="Tarifario por tipo de unidad y temporada, e inventario de consumos."
@@ -293,19 +298,20 @@ export default async function ConfigPage({
                 {puedeEditar && (
                   <form
                     action={enviarPlantillaPrueba}
-                    className="mt-3 flex flex-wrap items-center gap-2"
+                    className="mt-4 flex flex-wrap items-end gap-2"
                   >
                     <input type="hidden" name="evento" value={evento} />
-                    <input
-                      name="para"
-                      type="email"
-                      placeholder="Enviar prueba a… (tu email por defecto)"
-                      aria-label={`Email de prueba para ${plantilla.nombre}`}
-                      className="w-64 rounded-lg border border-stone-300 px-3 py-1.5 text-sm outline-none focus:border-lago-600"
-                    />
-                    <button className={botonClases('secundario', 'px-3 py-1.5 text-xs')}>
+                    <div className="min-w-0 flex-1 sm:max-w-xs">
+                      <Campo
+                        etiqueta="Mandarme una prueba"
+                        ayuda="Si lo dejás vacío, va a tu propio email."
+                      >
+                        <input name="para" type="email" className={CAMPO} />
+                      </Campo>
+                    </div>
+                    <BotonEnvio variante="secundario" cargando="Enviando…">
                       Enviar prueba
-                    </button>
+                    </BotonEnvio>
                   </form>
                 )}
               </details>
@@ -412,70 +418,83 @@ export default async function ConfigPage({
         {puedeEditar && (
           <form
             action={crearProducto}
-            className="grid gap-2 border-t border-stone-100 p-5 sm:grid-cols-6"
+            className="grid gap-x-4 gap-y-4 border-t border-stone-100 p-5 sm:grid-cols-6"
           >
-            <input
-              name="nombre"
-              required
-              placeholder="Nombre del producto"
-              className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600 sm:col-span-2"
-            />
-            <select
-              name="categoria"
-              defaultValue="frigobar"
-              aria-label="Categoría del producto"
-              className="rounded-lg border border-stone-300 px-2 py-2 text-sm focus:border-lago-600 focus:outline-none"
-            >
-              {CATEGORIAS_PRODUCTO.map((c) => (
-                <option key={c} value={c}>
-                  {ETIQUETAS_CATEGORIA_PRODUCTO[c]}
-                </option>
-              ))}
-            </select>
-            <input
-              name="precio"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              placeholder="Precio USD"
-              aria-label="Precio en dólares"
-              className="tabular rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
-            />
-            <input
-              name="stock"
-              type="number"
-              min="0"
-              defaultValue={0}
-              aria-label="Stock inicial"
-              placeholder="Stock"
-              className="tabular rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
-            />
-            <input
-              name="stock_minimo"
-              type="number"
-              min="0"
-              defaultValue={0}
-              aria-label="Stock mínimo"
-              placeholder="Mínimo"
-              className="tabular rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
-            />
-            <label className="flex items-center gap-2 text-xs text-stone-600 sm:col-span-3">
+            {/* Antes los cinco campos se identificaban solo por su placeholder
+                —"Precio USD", "Stock", "Mínimo"—, que desaparece al escribir. */}
+            <div className="sm:col-span-3">
+              <Campo etiqueta="Nombre del producto" requerido>
+                <input name="nombre" required className={CAMPO} />
+              </Campo>
+            </div>
+            <div className="sm:col-span-3">
+              <Campo etiqueta="Categoría">
+                <select name="categoria" defaultValue="frigobar" className={CAMPO}>
+                  {CATEGORIAS_PRODUCTO.map((c) => (
+                    <option key={c} value={c}>
+                      {ETIQUETAS_CATEGORIA_PRODUCTO[c]}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+            </div>
+            <div className="sm:col-span-2">
+              <Campo etiqueta="Precio (USD)" requerido>
+                <input
+                  name="precio"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  className={`tabular ${CAMPO}`}
+                />
+              </Campo>
+            </div>
+            <div className="sm:col-span-2">
+              <Campo etiqueta="Stock inicial">
+                <input
+                  name="stock"
+                  type="number"
+                  min="0"
+                  defaultValue={0}
+                  className={`tabular ${CAMPO}`}
+                />
+              </Campo>
+            </div>
+            <div className="sm:col-span-2">
+              <Campo
+                etiqueta="Stock mínimo"
+                ayuda="Por debajo de esto, el tablero avisa que hay que reponer."
+              >
+                <input
+                  name="stock_minimo"
+                  type="number"
+                  min="0"
+                  defaultValue={0}
+                  className={`tabular ${CAMPO}`}
+                />
+              </Campo>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-stone-700 sm:col-span-6">
               <input
                 type="checkbox"
                 name="controla_stock"
                 value="1"
                 defaultChecked
-                className="accent-lago-600"
+                className="size-4 accent-lago-600"
               />
-              Lleva control de stock (desmarcá si es un servicio)
+              Lleva control de stock
+              <span className="text-stone-500">(desmarcá si es un servicio)</span>
             </label>
-            <button className={botonClases('secundario', 'sm:col-span-3')}>
-              + Agregar al catálogo
-            </button>
+            <div className="sm:col-span-6">
+              <BotonEnvio variante="secundario" cargando="Agregando…">
+                <Icono nombre="mas" tam={16} />
+                Agregar al catálogo
+              </BotonEnvio>
+            </div>
           </form>
         )}
       </Tarjeta>
-    </div>
+    </Pagina>
   )
 }

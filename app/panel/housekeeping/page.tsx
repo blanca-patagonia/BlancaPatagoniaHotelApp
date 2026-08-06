@@ -16,6 +16,7 @@ import {
   Kpi,
   Tarjeta,
   botonClases,
+  Pagina,
 } from '../_components/ui'
 import { cambiarEstadoUnidad, asignarMucama } from './actions'
 
@@ -141,7 +142,7 @@ export default async function HousekeepingPage({
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Pagina>
       <Encabezado
         titulo="Housekeeping"
         descripcion="Estado de limpieza y responsable de cada unidad."
@@ -260,6 +261,6 @@ export default async function HousekeepingPage({
           </ul>
         </Tarjeta>
       )}
-    </div>
+    </Pagina>
   )
 }
