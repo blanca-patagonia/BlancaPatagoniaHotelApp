@@ -79,6 +79,13 @@ Tarifario 2025/2026 (Anexo A).
 
 ## Comandos
 - Dev `npm run dev` · Tests `npm test` · Typecheck `npm run typecheck` · Lint `npm run lint`.
+- **CI (`.github/workflows/ci.yml`): verde y verificado en GitHub** desde la
+  corrida #31. Levanta Supabase con Docker, crea el admin y corre typecheck,
+  lint, los 307 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
+  toca: el paso del seed invoca `node scripts/seed-usuarios.mjs` **directo** y no
+  `npm run seed:usuarios` (ese script usa `--env-file-if-exists`, que necesita
+  Node ≥ 20.12 y no hay `.env.local` en el runner); y sin ese paso la tabla
+  `perfiles` queda vacía y los tests de facturación fallan por la FK.
 - El test de integración anti-overbooking necesita DB local + env
   (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`); sin ellos se saltea.
 - **Gate de cada fase:** typecheck + lint + tests en verde.

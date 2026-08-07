@@ -1342,3 +1342,48 @@ confirmar que los 12 pasos quedan bien declarados.
 
 Queda una sola cosa fuera de alcance: que esto corra de verdad en GitHub. Todo
 lo verificable desde acá está verificado.
+
+---
+
+## 2026-08-07 · Fase 17.1 — El CI en verde, por fin
+
+Cierre de la Fase 17. La corrida **#31 terminó en verde**: la primera de 31.
+
+### Cómo se llegó, sin poder leer los logs
+
+Los logs de Actions piden autenticación y desde este entorno devuelven 403, así
+que el diagnóstico se hizo con la **API pública**, que sí expone el estado de
+cada paso. Eso alcanzó, y de hecho fue más rápido que leer un log entero.
+
+**Corrida #28** (antes de tocar nada) — el detalle paso a paso mostró algo
+valioso: `Levantar Supabase local` y `Exportar credenciales` **en verde**. Las
+dos cosas que se habían marcado como "sin verificar" desde la Fase 12 —que
+Docker levantara el stack en el runner y que el parseo de `status -o env`
+funcionara— andaban bien. El único paso roto era `Tests`, exactamente el que
+rompe la falta del perfil.
+
+**Corrida #30** (con el paso del seed agregado) — falló en el paso nuevo, en
+**menos de un segundo**. Ese dato fue el que resolvió el caso: una falla de red
+o de servicio no listo habría tardado más, y las credenciales ya estaban
+probadas por la #28. Una falla instantánea solo se explicaba porque Node
+rechazaba la línea de comandos: el paso usaba `npm run seed:usuarios`, que lleva
+`--env-file-if-exists`, opción que existe desde Node 20.12, y el workflow pedía
+`node-version: 20`.
+
+**Corrida #31** — con el seed invocado como `node scripts/seed-usuarios.mjs`,
+sin depender de la versión de Node, los 12 pasos pasaron en 3 min 40 s.
+
+### Lección para el proyecto
+
+El CI estuvo roto **desde la Fase 12.1** sin que nadie lo notara, porque nunca se
+miró. Un workflow que no se verifica no es una red de seguridad: es una etiqueta
+verde que da falsa tranquilidad —o, en este caso, una roja que se ignora—.
+
+Lo que finalmente permitió identificarlo de una lectura fue el mensaje explícito
+que se había puesto en `tests/acciones/reservas.test.ts` el mismo día que el
+problema apareció en local, en reemplazo del `expected [] to have a length of 2`
+original. **El costo de un error que no explica nada se paga más tarde y con
+intereses.**
+
+**Estado:** CI verde y verificado en GitHub. Los 307 tests, incluidos los de
+integración con `EXIGIR_DB=1`, corren de verdad en cada push.
