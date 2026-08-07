@@ -24,8 +24,17 @@ jobs:
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22 es la LTS vigente. Con 20 el runner podía traer una versión
+          # anterior a la 20.12, que es desde donde existe
+          # `--env-file-if-exists`, y eso hacía fallar el paso del seed.
+          node-version: 22
           cache: npm
+
+      - name: Versiones (para diagnosticar)
+        run: |
+          echo "node   $(node -v)"
+          echo "npm    $(npm -v)"
+          echo "docker $(docker --version)"
 
       - name: Instalar dependencias
         run: npm ci
@@ -68,8 +77,30 @@ jobs:
       # Sin este paso la tabla `perfiles` queda vacía y los tests de
       # facturación fallan por la clave foránea de "quién emitió". Era la causa
       # de que este workflow nunca haya terminado en verde.
+      #
+      # Se invoca `node` directo y NO `npm run seed:usuarios`. El script de npm
+      # lleva `--env-file-if-exists=.env.local`, una opción que solo existe
+      # desde Node 20.12: acá las credenciales llegan por `GITHUB_ENV`, no hace
+      # falta leer ningún archivo, y así el paso no depende de la versión de
+      # Node que traiga el runner.
       - name: Crear el usuario administrador
-        run: npm run seed:usuarios
+        run: |
+          # `supabase start` vuelve cuando los contenedores están arriba, pero
+          # la API de auth puede tardar un instante más en responder. Se espera
+          # a que conteste antes de crear el usuario.
+          for i in $(seq 1 30); do
+            if curl -sf "$SUPABASE_URL/auth/v1/health" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" > /dev/null; then
+              echo "auth respondió en el intento $i"
+              break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "::error::La API de auth no respondió tras 30 intentos."
+              exit 1
+            fi
+            sleep 2
+          done
+
+          node scripts/seed-usuarios.mjs
 
       # ── Verificación ──────────────────────────────────────────────────────
       - name: Typecheck (TypeScript)
