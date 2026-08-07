@@ -1387,3 +1387,78 @@ intereses.**
 
 **Estado:** CI verde y verificado en GitHub. Los 307 tests, incluidos los de
 integración con `EXIGIR_DB=1`, corren de verdad en cada push.
+
+---
+
+## 2026-08-07 · Fase 18 — Bugs encontrados usando el sistema
+
+Un recorrido manual completo del panel encontró cinco problemas que **307 tests
+en verde no veían**. Vale registrarlo como está: los tests cubren reglas de
+dominio y Server Actions, pero nadie había recorrido el sistema como lo recorre
+alguien que trabaja con él.
+
+### El más caro: «USD 0» al reservar
+
+El buscador mostraba **USD 0** para las diez unidades y recién al confirmar
+avisaba «No hay tarifa cargada para esas fechas», aunque el tarifario tuviera
+todos los precios.
+
+La causa no era la que parecía. El mapeo fecha → temporada **sí existe**
+(`temporada_rangos`), pero los rangos cargados llegaban hasta el **2026-06-01**
+y el sistema corre en agosto de 2026: ninguna temporada cubre la fecha actual,
+así que no hay tarifa aplicable. Y **no había pantalla** para verlo ni
+corregirlo: el dato vivía solo en la base.
+
+Tres arreglos, en capas distintas:
+
+1. **La interfaz deja de mentir.** El dato `faltanTarifas` ya llegaba al
+   formulario y se ignoraba. Ahora la unidad sin tarifa dice «Sin tarifa
+   cargada», queda deshabilitada, y si ninguna cotiza se avisa arriba con el
+   enlace a dónde corregirlo. El mismo arreglo se había hecho en el portal
+   público en la Fase 16 y **quedó sin replicar en el panel**.
+2. **Pantalla de temporadas** (`/panel/config/temporadas`), con lo que faltaba.
+3. **`lib/domain/temporadas.ts`**, con `huecosDeCobertura`: la función que
+   responde *«¿desde cuándo el sistema no va a poder cotizar?»*. Es lo que
+   convierte el problema en algo que se ve antes, y no cuando lo descubre un
+   huésped.
+
+La pantalla muestra primero **hasta cuándo se puede vender** y los tramos sin
+temporada, y recién después la lista de períodos. El solape lo impide la base
+—restricción de exclusión GiST, igual que el anti-overbooking— y su rechazo
+(`23P01`) se traduce a una explicación.
+
+### Huésped huérfano
+
+Si la reserva fallaba, el huésped quedaba creado sin reserva asociada. Se
+cotiza ahora **antes** de tocar la tabla, con lo cual el caso más común se
+rechaza sin escribir nada; y si aun así falla —la unidad se ocupó entre la
+búsqueda y el alta— se revierte, pero **solo si lo creó esa misma llamada**:
+borrar uno preexistente destruiría la ficha de alguien que ya se alojó.
+
+### El formulario se vaciaba
+
+React limpia el formulario después de una Server Action, así que un error en un
+campo obligaba a reescribir todo. La acción devuelve los valores y se reponen.
+
+### Stock bajo con dos verdades
+
+El tablero decía «4 productos con stock bajo» y Configuración decía 0. Los
+cuatro eran **servicios** —excursiones, traslados— con `stock` en `null`: el
+tablero comparaba `Number(null ?? 0) <= 0`, verdadero para todos ellos. Cada
+pantalla escribía su propia condición. La regla pasó a
+`lib/domain/inventario.ts`.
+
+### Lo que no se pudo reproducir
+
+La pestaña «Consultas del sitio» funciona: autenticado,
+`?vista=consultas` cambia el contenido. Lo más probable es que la sesión se
+hubiera vencido durante el recorrido —un `db reset` previo las invalidó— y el
+clic rebotara al login.
+
+**Prueba de que los tests tienen filo:** se desactivaron las dos defensas del
+huésped huérfano y el test falló con «quedó un huésped sin reserva asociada».
+
+**Verificación:** **334 tests en verde** (34 archivos), typecheck y lint
+limpios. El circuito se probó de punta a punta en el navegador: se cargó el
+período faltante desde la pantalla nueva y el buscador pasó de «USD 0» a
+mostrar precios reales (435,60 · 471,90 · 504,57) en las nueve unidades.

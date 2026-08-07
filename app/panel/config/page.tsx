@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ETIQUETAS_CATEGORIA, type CategoriaUnidad } from '@/lib/domain/unidades'
@@ -170,6 +171,14 @@ export default async function ConfigPage({
         titulo="Tarifario"
         descripcion="Precios en USD sin IVA · Neto = agencia · Rack = mostrador"
         className="overflow-hidden"
+        acciones={
+          /* Tener precios no alcanza: si la fecha de la reserva no cae en
+             ninguna temporada, no hay tarifa que aplicar. Esa pantalla estaba
+             ausente y el sistema fallaba sin explicar por qué. */
+          <Link href="/panel/config/temporadas" className={botonClases('secundario')}>
+            Fechas de cada temporada
+          </Link>
+        }
       >
         {filas.length === 0 ? (
           <EstadoVacio titulo="No hay tarifas cargadas" icono="config" />
