@@ -5,6 +5,7 @@ import { ESTADOS_ACTIVOS, ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@
 import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
 import { hoyISO, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
+import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { areasDe, ETIQUETAS_AREA, type Area } from '@/lib/domain/permisos'
 import { PUNTO_HK, TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
@@ -128,8 +129,11 @@ export default async function DashboardPage() {
   }
   const ocupacionPct = totalUnidades ? Math.round((ocupadasHoy / totalUnidades) * 100) : 0
 
-  const faltantes = (stockBajo ?? []).filter(
-    (p) => Number(p.stock ?? 0) <= Number(p.stock_minimo ?? 0),
+  // La condición vive en el dominio: acá estaba escrita a mano y contaba como
+  // faltantes a los servicios (stock null), que no llevan inventario. Por eso
+  // el tablero avisaba «4 productos con stock bajo» y Configuración mostraba 0.
+  const faltantes = articulosFaltantes(
+    (stockBajo ?? []) as { stock: number | null; stock_minimo: number | null; nombre: string }[],
   )
 
   // Facturas de proveedores que vencen esta semana (o ya vencieron).

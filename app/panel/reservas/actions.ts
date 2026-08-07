@@ -35,6 +35,20 @@ import { HORA_CHECK_IN } from '@/lib/domain/hotel'
 
 export interface EstadoNuevaReserva {
   error?: string
+  /**
+   * Lo que se había cargado, para reponerlo si hubo error.
+   *
+   * React limpia el formulario después de una Server Action, así que sin esto
+   * un error en un solo campo obligaba a escribir todo de nuevo.
+   */
+  valores?: {
+    apellido?: string
+    nombre?: string
+    email?: string
+    doc_numero?: string
+    canal?: string
+    agencia_id?: string
+  }
 }
 
 const CANAL_TARIFA: Record<string, TarifaTipo> = {
@@ -58,16 +72,47 @@ export async function crearReservaAction(
   const email = String(formData.get('email') ?? '').trim()
   const docNumero = String(formData.get('doc_numero') ?? '').trim()
 
-  if (!tipoUnidadId || !checkIn || !checkOut) return { error: 'Elegí fechas y un tipo de unidad.' }
-  if (checkOut <= checkIn) return { error: 'El check-out debe ser posterior al check-in.' }
-  if (!apellido) return { error: 'Ingresá al menos el apellido del huésped.' }
+  const agenciaId = String(formData.get('agencia_id') ?? '')
+  // Se devuelve tal cual vino para reponer el formulario ante cualquier error.
+  const valores = {
+    apellido,
+    nombre,
+    email,
+    doc_numero: docNumero,
+    canal,
+    agencia_id: agenciaId,
+  }
+
+  if (!tipoUnidadId || !checkIn || !checkOut) {
+    return { error: 'Elegí fechas y un tipo de unidad.', valores }
+  }
+  if (checkOut <= checkIn) {
+    return { error: 'El check-out debe ser posterior al check-in.', valores }
+  }
+  if (!apellido) return { error: 'Ingresá al menos el apellido del huésped.', valores }
 
   const supabase = await crearClienteServidor()
-  const agenciaId = String(formData.get('agencia_id') ?? '')
 
   // Con convenio siempre corresponde tarifa NETA, sea cual sea el canal por el
   // que entró la reserva: es lo que define el acuerdo con la agencia.
   const tarifaTipo: TarifaTipo = agenciaId ? 'neto' : (CANAL_TARIFA[canal] ?? 'rack')
+
+  /*
+    Se cotiza ANTES de tocar la tabla de huéspedes.
+
+    Antes el huésped se creaba primero y, si la reserva fallaba —por ejemplo por
+    no haber tarifa cargada—, quedaba en la base un registro sin ninguna reserva
+    asociada. Cotizar primero convierte el caso más común de fallo en un
+    rechazo limpio, sin escribir nada.
+  */
+  const cotizacion = await cotizarEstadia({ tipoUnidadId, checkIn, checkOut, tarifaTipo })
+  if (cotizacion.faltanTarifas) {
+    return {
+      error:
+        'No hay tarifa cargada para esas fechas. Cargá la temporada y sus precios en Configuración → Temporadas.',
+      valores,
+    }
+  }
 
   // Reusar el huésped por email o crearlo.
   let huespedId: string | null = null
@@ -79,17 +124,22 @@ export async function crearReservaAction(
       .maybeSingle()
     huespedId = existente?.id ?? null
   }
+
+  // Solo hay que revertir el huésped si lo creó ESTA llamada: si ya existía,
+  // borrarlo destruiría la ficha de alguien que se alojó antes.
+  let huespedCreadoAca = false
   if (!huespedId) {
     const { data: nuevo, error: eHuesped } = await supabase
       .from('huespedes')
       .insert({ nombre: nombre || apellido, apellido, email: email || null, doc_numero: docNumero })
       .select('id')
       .single()
-    if (eHuesped || !nuevo) return { error: 'No se pudo registrar al huésped.' }
+    if (eHuesped || !nuevo) return { error: 'No se pudo registrar al huésped.', valores }
     huespedId = nuevo.id
+    huespedCreadoAca = true
   }
 
-  if (!huespedId) return { error: 'No se pudo registrar al huésped.' }
+  if (!huespedId) return { error: 'No se pudo registrar al huésped.', valores }
 
   // Alta atómica: unidad libre + cotización + anti-overbooking (helper compartido).
   const res = await crearReservaEnUnidadLibre(supabase, {
@@ -102,7 +152,16 @@ export async function crearReservaAction(
     tarifaTipo,
     estado: 'confirmada',
   })
-  if (!res.ok) return { error: res.error }
+
+  if (!res.ok) {
+    // La cotización ya se validó arriba, así que llegar acá significa que la
+    // unidad se ocupó entre la búsqueda y el alta. Si el huésped se creó en
+    // esta misma llamada, se revierte: no debe quedar una ficha sin reserva.
+    if (huespedCreadoAca) {
+      await supabase.from('huespedes').delete().eq('id', huespedId)
+    }
+    return { error: res.error, valores }
+  }
 
   // El vínculo con la agencia se guarda aparte: el helper de alta atómica es
   // compartido con el portal público, donde no existe el concepto de convenio.

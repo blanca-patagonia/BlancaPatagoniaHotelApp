@@ -20,6 +20,7 @@ import {
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
 import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
+import { llevaStock, stockBajo, faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { obtenerProveedorEmail } from '@/lib/email'
 import { actualizarTarifa, reponerStock, crearProducto, alternarProducto } from './actions'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
@@ -131,9 +132,10 @@ export default async function ConfigPage({
       : a.nombre.localeCompare(b.nombre),
   )
 
-  // Solo alerta lo que efectivamente lleva control de stock.
-  const conStock = inventario.filter((p) => p.stock !== null)
-  const bajos = conStock.filter((p) => Number(p.stock) <= Number(p.stock_minimo ?? 0))
+  // Misma función que usa el tablero de inicio: antes cada pantalla escribía su
+  // propia condición y los números no coincidían.
+  const conStock = inventario.filter(llevaStock)
+  const bajos = articulosFaltantes(inventario)
 
   return (
     <Pagina>
@@ -341,9 +343,10 @@ export default async function ConfigPage({
             </thead>
             <tbody>
               {inventario.map((p) => {
-                // Un servicio (late check-out) no lleva stock: la columna es null.
-                const llevaStock = p.stock !== null
-                const bajo = llevaStock && Number(p.stock) <= Number(p.stock_minimo ?? 0)
+                // Un servicio (una excursión, un traslado) no lleva stock: la
+                // columna viene en null. Las dos reglas salen del dominio.
+                const controla = llevaStock(p)
+                const bajo = stockBajo(p)
                 return (
                   <tr key={p.id} className={`${FILA} ${p.activo ? '' : 'opacity-50'}`}>
                     <td className={`${TD} font-medium text-stone-800`}>{p.nombre}</td>
@@ -352,7 +355,7 @@ export default async function ConfigPage({
                       {Number(p.precio).toLocaleString('es-AR')}
                     </td>
                     <td className={`${TD} tabular text-right`}>
-                      {llevaStock ? (
+                      {controla ? (
                         <>
                           <span className={bajo ? 'font-semibold text-red-600' : 'text-stone-800'}>
                             {p.stock}
@@ -380,7 +383,7 @@ export default async function ConfigPage({
                     {puedeEditar && (
                       <td className={TD}>
                         <div className="flex flex-wrap items-center gap-2">
-                          {llevaStock && (
+                          {controla && (
                             <form action={reponerStock} className="flex items-center gap-1">
                               <input type="hidden" name="producto_id" value={p.id} />
                               <input

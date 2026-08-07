@@ -252,6 +252,67 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       )
       expect(r.error).toMatch(/check-out/i)
     })
+
+    /*
+      Los dos que siguen nacen de un recorrido manual del sistema: al reservar
+      para una fecha sin tarifa cargada, la reserva fallaba PERO el huésped
+      quedaba creado, y encima el formulario se vaciaba.
+    */
+    it('NO deja al huésped creado si no hay tarifa para esas fechas', async () => {
+      const { data: tipo } = await ctx.db.from('tipos_unidad').select('id').limit(1).single()
+      const apellido = `Huerfano-${ctx.sufijo}`
+
+      const r = await crearReservaAction(
+        {},
+        formulario({
+          tipo_unidad_id: (tipo as { id: string }).id,
+          // Muy lejos de cualquier temporada cargada: no hay tarifa posible.
+          check_in: '2031-07-10',
+          check_out: '2031-07-13',
+          huespedes: 1,
+          apellido,
+          canal: 'directo',
+        }),
+      )
+
+      expect(r.error, 'debía rechazarse por falta de tarifa').toMatch(/tarifa/i)
+
+      // El punto del test: la base no debe quedar con la ficha suelta.
+      const { data: quedo } = await ctx.db
+        .from('huespedes')
+        .select('id')
+        .eq('apellido', apellido)
+        .maybeSingle()
+      if (quedo) ctx.aBorrar.push({ tabla: 'huespedes', id: (quedo as { id: string }).id })
+      expect(quedo, 'quedó un huésped sin reserva asociada').toBeNull()
+    })
+
+    it('devuelve lo cargado para que el formulario no se vacíe', async () => {
+      const { data: tipo } = await ctx.db.from('tipos_unidad').select('id').limit(1).single()
+
+      const r = await crearReservaAction(
+        {},
+        formulario({
+          tipo_unidad_id: (tipo as { id: string }).id,
+          check_in: '2031-07-10',
+          check_out: '2031-07-13',
+          huespedes: 2,
+          apellido: 'Pérez',
+          nombre: 'Juan',
+          email: 'juan.perez@ejemplo.com',
+          doc_numero: '30111222',
+          canal: 'booking',
+        }),
+      )
+
+      expect(r.error).toBeTruthy()
+      // Sin esto, corregir un solo campo obligaba a escribir todo de nuevo.
+      expect(r.valores?.apellido).toBe('Pérez')
+      expect(r.valores?.nombre).toBe('Juan')
+      expect(r.valores?.email).toBe('juan.perez@ejemplo.com')
+      expect(r.valores?.doc_numero).toBe('30111222')
+      expect(r.valores?.canal).toBe('booking')
+    })
   })
 
   describe('cambiarEstadoReserva', () => {
