@@ -7,6 +7,8 @@ import { urlDelSitio } from '@/lib/env'
 import { formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import { HORA_CHECK_IN, HORA_CHECK_OUT } from '@/lib/domain/hotel'
+import { permitirIntento } from '@/lib/limites'
+import { mensajeLimite } from '@/lib/domain/limites'
 
 export interface EstadoReservaPublica {
   error?: string
@@ -39,6 +41,19 @@ export async function crearReservaPublica(
   }
   if (!apellido || !email) return { error: 'Ingresá tu apellido y tu email.' }
   if (!RE_EMAIL.test(email)) return { error: 'Ingresá un email válido.' }
+
+  /*
+    Límite de volumen. Es la protección más importante del sistema hacia afuera:
+    cada reserva pendiente bloquea una unidad durante 5 días, así que sin esto
+    unas decenas de envíos dejan al hotel sin inventario vendible por casi una
+    semana (ver `docs/SEGURIDAD.md`).
+
+    Se comprueba DESPUÉS de validar los campos para no gastar cupo en envíos
+    malformados, y ANTES de escribir nada.
+  */
+  if (!(await permitirIntento('reserva_publica'))) {
+    return { error: mensajeLimite('reserva_publica') }
+  }
   if (diasEntre(checkIn, checkOut) > MAX_NOCHES_PUBLICO) {
     return { error: `La estadía no puede superar las ${MAX_NOCHES_PUBLICO} noches.` }
   }
