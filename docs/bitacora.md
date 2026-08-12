@@ -1462,3 +1462,56 @@ huésped huérfano y el test falló con «quedó un huésped sin reserva asociad
 limpios. El circuito se probó de punta a punta en el navegador: se cargó el
 período faltante desde la pantalla nueva y el buscador pasó de «USD 0» a
 mostrar precios reales (435,60 · 471,90 · 504,57) en las nueve unidades.
+
+---
+
+## 2026-08-07 · Fase 19 — Experiencia de uso
+
+Últimos puntos del recorrido manual. Se midió antes de implementar, y la
+medición cambió dos de las tres decisiones.
+
+### Buscador global
+
+Lo que faltaba de verdad. Recepción atiende un llamado y tiene que encontrar a
+la persona **mientras está al teléfono**, sin adivinar si está cargada como
+huésped, como reserva o como cuenta de agencia. Ahora hay una caja en el
+encabezado, presente en todo el panel, que busca a la vez por apellido, nombre,
+email, documento y código de reserva.
+
+`lib/domain/busqueda.ts` define **qué puede buscar cada rol**, apoyándose en los
+mismos permisos que arman el menú. No alcanzaba con que la pantalla no muestre
+un módulo: si el buscador consultara todo, alguien de housekeeping podría
+escribir un apellido y ver datos que su navegación no le ofrece. La seguridad
+real la sigue imponiendo RLS; esto evita pedir lo que no corresponde. Hay un
+test que lo verifica para los cuatro roles.
+
+También se escapan los comodines `%` y `_`: sin eso, buscar «%» devolvía el
+sistema entero.
+
+### Confirmaciones: la medición cambió el plan
+
+El pedido era agregar *toasts* después de cada acción. Al medirlo, de **31
+acciones** que redirigen sin `?ok=`, casi todas ya confirman de otra manera: la
+lista se actualiza a la vista (cambiar el estado de una habitación mueve su
+etiqueta, quitar un consumo borra la fila) o pasan un conteo que la página
+muestra («se generaron N órdenes», «se enviaron N recordatorios»).
+
+El hueco real era **uno**: publicar un aviso. El campo se vaciaba y no quedaba
+nada en pantalla; sin mensaje no había forma de distinguir «se publicó» de «no
+pasó nada». Ahora confirma.
+
+Se optó por **mensaje persistente y no por toast**, siguiendo el principio que
+fijó el usuario para todo el proyecto: *no ocultar información*. Un aviso que se
+desvanece a los tres segundos es justamente información que desaparece, y quien
+menos maneja la computadora es quien más probablemente se lo pierda.
+
+### El nombre repetido
+
+El encabezado mostraba el nombre y el rol siempre, y con el administrador de
+desarrollo ambos son «Administrador». El rol se muestra ahora solo cuando aporta
+algo distinto del nombre.
+
+**Verificación:** **342 tests en verde** (35 archivos), typecheck y lint
+limpios. En el navegador: el encabezado muestra «Administrador» una sola vez y
+tiene el buscador; buscar con una letra pide más, con texto sin coincidencias
+avisa, y buscando «Pér» encuentra a los huéspedes cargados.

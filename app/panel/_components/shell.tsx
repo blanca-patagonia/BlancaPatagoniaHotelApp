@@ -188,10 +188,37 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
             Blanca Patagonia
           </span>
 
-          <div className="ml-auto flex items-center gap-3">
+          {/* Buscador global: recepción necesita encontrar a alguien mientras
+              lo tiene al teléfono, sin adivinar en qué módulo está cargado. */}
+          <form action="/panel/buscar" method="get" className="ml-auto max-w-xs flex-1 lg:ml-6">
+            <label className="sr-only" htmlFor="busqueda-global">
+              Buscar en todo el sistema
+            </label>
+            <div className="relative">
+              <span
+                className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400"
+                aria-hidden="true"
+              >
+                <Icono nombre="buscar" tam={16} />
+              </span>
+              <input
+                id="busqueda-global"
+                type="search"
+                name="q"
+                placeholder="Buscar huésped, reserva…"
+                className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-9 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-lago-600"
+              />
+            </div>
+          </form>
+
+          <div className="flex items-center gap-3 lg:ml-auto">
             <div className="hidden text-right sm:block">
               <p className="text-sm leading-tight font-medium text-stone-800">{nombre}</p>
-              <p className="text-xs text-stone-500">{rolEtiqueta}</p>
+              {/* El rol solo se muestra si aporta algo: con el admin de
+                  desarrollo, nombre y rol son ambos «Administrador». */}
+              {rolEtiqueta.toLowerCase() !== nombre.trim().toLowerCase() && (
+                <p className="text-xs text-stone-500">{rolEtiqueta}</p>
+              )}
             </div>
             <span
               className="flex size-9 items-center justify-center rounded-full bg-lago-100 text-sm font-semibold text-lago-800 ring-1 ring-lago-200"

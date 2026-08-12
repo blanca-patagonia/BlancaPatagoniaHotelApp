@@ -7,6 +7,7 @@ import { obtenerSesion } from '@/lib/auth/session'
 
 export interface EstadoAviso {
   error?: string
+  ok?: string
 }
 
 export async function publicarAviso(_prev: EstadoAviso, formData: FormData): Promise<EstadoAviso> {
@@ -19,7 +20,9 @@ export async function publicarAviso(_prev: EstadoAviso, formData: FormData): Pro
   const { error } = await supabase.from('avisos').insert({ mensaje, autor_id: sesion.userId })
   if (error) return { error: 'No se pudo publicar el aviso.' }
   revalidatePath('/panel/avisos')
-  return {}
+  // Sin este mensaje, al vaciarse el campo no hay forma de distinguir «se
+  // publicó» de «no pasó nada».
+  return { ok: 'Aviso publicado. Ya lo ve todo el equipo.' }
 }
 
 /**
