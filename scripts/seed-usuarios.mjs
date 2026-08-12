@@ -26,6 +26,30 @@ const email = process.env.ADMIN_EMAIL ?? 'admin@blancapatagonia.local'
 const password = process.env.ADMIN_PASSWORD ?? 'blancadev1234'
 const nombre = process.env.ADMIN_NOMBRE ?? 'Administrador'
 
+/*
+  La contraseña por defecto está documentada en el README y en el repositorio:
+  es pública. Sirve para levantar el entorno local sin fricción, pero si este
+  script llegara a correrse contra una base real dejaría un administrador con
+  una contraseña que cualquiera puede leer en GitHub.
+
+  El corte se hace por la URL: `localhost` y `127.0.0.1` son inequívocamente
+  desarrollo. Contra cualquier otra base hay que definir ADMIN_PASSWORD a mano.
+  Se falla en lugar de generar una al azar: una contraseña aleatoria impresa en
+  un log de deploy es casi tan mala, y encima da la sensación de que el problema
+  está resuelto.
+*/
+const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)
+
+if (!esLocal && !process.env.ADMIN_PASSWORD) {
+  console.error(`✗ Te estás conectando a una base que no es local:\n    ${url}\n`)
+  console.error('  La contraseña por defecto de este script es PÚBLICA: está en el')
+  console.error('  README y en el repositorio. Usarla fuera de desarrollo dejaría un')
+  console.error('  administrador accesible para cualquiera.\n')
+  console.error('  Definí una contraseña propia antes de correrlo:\n')
+  console.error('    ADMIN_PASSWORD="…" npm run seed:usuarios\n')
+  process.exit(1)
+}
+
 const db = createClient(url, serviceKey, { auth: { persistSession: false } })
 
 async function obtenerUsuarioPorEmail(correo) {

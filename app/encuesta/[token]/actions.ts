@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { puntajeValido } from '@/lib/domain/encuestas'
+import { permitirIntento } from '@/lib/limites'
 
 /**
  * Registra la respuesta de la encuesta de satisfacción.
@@ -18,6 +19,12 @@ export async function responderEncuesta(formData: FormData): Promise<void> {
 
   if (!token) redirect('/')
   if (!puntajeValido(puntaje)) redirect(`/encuesta/${token}?error=puntaje`)
+
+  // Una encuesta se responde una vez. El límite evita que se inflen los
+  // promedios de NPS, que alimentan los reportes de gestión.
+  if (!(await permitirIntento('encuesta'))) {
+    redirect(`/encuesta/${token}?error=limite`)
+  }
 
   const admin = crearClienteAdmin()
   const { data: encuesta } = await admin

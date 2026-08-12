@@ -110,3 +110,85 @@ literal sospechoso en el código. **No hace falta rotar credenciales.**
   pero eso no dice qué permite cada una.
 - Validación con Zod en el borde público (hoy es una expresión regular).
 - Límite en la encuesta pública (el limitador ya existe; falta conectarlo).
+
+---
+
+## 🟠 3. Contraseña de administrador por defecto
+
+### Qué encontré
+`scripts/seed-usuarios.mjs` usaba `blancadev1234` cuando no se define
+`ADMIN_PASSWORD`. Está documentada en el README, así que es **pública**.
+
+### Por qué es riesgo
+El riesgo no es que esté en el repositorio —para desarrollo local está bien—
+sino que **nada impedía correr el script contra una base real**. Un deploy
+apurado dejaría un administrador con una contraseña que cualquiera puede leer en
+GitHub.
+
+### Qué hice
+El script ahora aborta si la URL no es local y no se definió `ADMIN_PASSWORD`.
+El corte es por URL: `localhost` y `127.0.0.1` son inequívocamente desarrollo.
+
+Se **falla** en lugar de generar una contraseña al azar: una clave aleatoria
+impresa en un log de deploy es casi tan mala, y encima da la sensación de que el
+problema está resuelto.
+
+### Cómo verificarlo
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://x.supabase.co" node scripts/seed-usuarios.mjs
+# → ✗ Te estás conectando a una base que no es local … (aborta)
+
+ADMIN_PASSWORD="…" NEXT_PUBLIC_SUPABASE_URL="https://x.supabase.co" node scripts/seed-usuarios.mjs
+# → pasa la guarda
+```
+
+---
+
+## 🟡 4. Sin encabezados de seguridad
+
+### Qué encontré
+`next.config.ts` estaba vacío: ninguna respuesta llevaba encabezados de
+seguridad.
+
+### Por qué es riesgo
+Sin `X-Frame-Options`, una página ajena puede embeber el panel en un iframe y
+superponer sus propios botones sobre acciones reales (clickjacking). Sin
+`Referrer-Policy`, salir por un enlace externo desde el detalle de una reserva
+filtra su identificador al sitio de destino.
+
+### Qué hice
+Cinco encabezados en `next.config.ts`, cada uno comentado con su motivo:
+`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy` y `Strict-Transport-Security`.
+
+**No se agregó Content-Security-Policy.** Next inyecta estilos y scripts en
+línea; una CSP mal calibrada rompe la aplicación de formas difíciles de
+diagnosticar. Hacerla bien exige `nonce` por petición y probar cada pantalla.
+Queda como trabajo pendiente: es mejor no tenerla que tenerla mal y desactivarla
+al primer problema.
+
+### Cómo verificarlo
+```js
+const r = await fetch('/reservar')
+r.headers.get('x-frame-options')  // → DENY
+```
+Los cinco verificados en el navegador.
+
+---
+
+## 🟡 5. La encuesta pública ya tiene límite
+
+Conectada al limitador de §1: 3 respuestas por hora y por IP.
+
+---
+
+## Pendiente — lo más importante que queda
+
+**Auditar cada política RLS, una por una.** Están activadas en las 32 tablas,
+pero *activada* no es *correcta*: hay que leer las ~60 políticas y probar cada
+una contra la base con los cuatro roles, verificando que ninguna deje ver de
+más. Es el control central de autorización de este sistema y merece una sesión
+dedicada.
+
+También queda: validación con Zod en el borde público (hoy es una expresión
+regular), y revisar qué campos exactos devuelven las respuestas públicas.
