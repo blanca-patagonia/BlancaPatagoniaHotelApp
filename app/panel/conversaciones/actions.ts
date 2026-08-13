@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
 import { mensajeValido, normalizarMensaje } from '@/lib/domain/conversaciones'
+import { cortarSiFalla } from '@/lib/acciones'
 
 /**
  * Publica un mensaje en un canal.
@@ -23,11 +24,14 @@ export async function enviarMensaje(formData: FormData): Promise<void> {
   if (!canalId || !mensajeValido(cuerpo)) redirect(`/panel/conversaciones?canal=${canalId}`)
 
   const supabase = await crearClienteServidor()
-  await supabase.from('mensajes').insert({
+  const { error } = await supabase.from('mensajes').insert({
     canal_id: canalId,
     autor_id: sesion.userId,
     cuerpo: normalizarMensaje(cuerpo),
   })
+  // Un mensaje que no se envía y no avisa es peor que un error: quien escribió
+  // queda convencido de que el equipo lo leyó.
+  cortarSiFalla(error, `/panel/conversaciones?canal=${canalId}`, 'mensaje')
 
   revalidatePath('/panel/conversaciones')
   redirect(`/panel/conversaciones?canal=${canalId}`)
@@ -41,7 +45,11 @@ export async function marcarConsultaRespondida(formData: FormData): Promise<void
   const id = String(formData.get('consulta_id') ?? '')
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('consultas_bot').update({ respondida: true }).eq('id', id)
+    const { error } = await supabase
+      .from('consultas_bot')
+      .update({ respondida: true })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/conversaciones?vista=consultas', 'consulta')
   }
 
   revalidatePath('/panel/conversaciones')

@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoObjeto {
   error?: string
@@ -25,7 +26,11 @@ export async function marcarDevuelto(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('objetos_perdidos').update({ estado: 'devuelto' }).eq('id', id)
+    const { error } = await supabase
+      .from('objetos_perdidos')
+      .update({ estado: 'devuelto' })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/objetos-perdidos', 'devuelto')
   }
   redirect('/panel/objetos-perdidos')
 }

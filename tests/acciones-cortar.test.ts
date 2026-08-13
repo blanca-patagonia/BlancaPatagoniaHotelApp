@@ -58,6 +58,15 @@ describe('cortarSiFalla', () => {
     expect(destino).toBe('/panel/proveedores?error=guardar')
   })
 
+  it('usa & cuando el destino ya trae query string', () => {
+    // Conversaciones redirige a `?canal=…` para no perder el canal abierto. Con
+    // `?` fijo la URL saldría rota y se perdería ese contexto.
+    const destino = destinoDe(() =>
+      cortarSiFalla({ message: 'boom' }, '/panel/conversaciones?canal=abc', 'mensaje'),
+    )
+    expect(destino).toBe('/panel/conversaciones?canal=abc&error=mensaje')
+  })
+
   it('manda el mensaje real de la base al log del servidor, no a la URL', () => {
     // Al usuario le sirve saber qué operación falló; el detalle técnico es para
     // diagnosticar. Y sin log la causa se perdería del todo.

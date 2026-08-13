@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
+import { cortarSiFalla } from '@/lib/acciones'
 
 /**
  * Actualiza el precio neto y rack de una tarifa (tipo de unidad × temporada).
@@ -118,7 +119,11 @@ export async function alternarProducto(formData: FormData): Promise<void> {
   const activo = String(formData.get('activo') ?? '') === 'true'
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('productos_servicios').update({ activo: !activo }).eq('id', id)
+    const { error } = await supabase
+      .from('productos_servicios')
+      .update({ activo: !activo })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/config', 'producto')
   }
   revalidatePath('/panel/config')
   redirect('/panel/config')

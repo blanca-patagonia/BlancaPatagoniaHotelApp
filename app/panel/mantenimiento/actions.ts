@@ -6,6 +6,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
 import { periodicidadValida, primeraEjecucionSugerida } from '@/lib/domain/preventivo'
 import { hoyISO } from '@/lib/fechas'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoOrden {
   error?: string
@@ -39,7 +40,8 @@ export async function cambiarEstadoOrden(formData: FormData): Promise<void> {
     const supabase = await crearClienteServidor()
     const upd: { estado: string; resuelta_en?: string | null } = { estado }
     upd.resuelta_en = estado === 'resuelta' ? new Date().toISOString() : null
-    await supabase.from('ordenes_mantenimiento').update(upd).eq('id', id)
+    const { error } = await supabase.from('ordenes_mantenimiento').update(upd).eq('id', id)
+    cortarSiFalla(error, '/panel/mantenimiento', 'estado_orden')
   }
   redirect('/panel/mantenimiento')
 }

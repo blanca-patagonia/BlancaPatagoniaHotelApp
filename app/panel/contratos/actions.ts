@@ -13,6 +13,7 @@ import {
   type TipoContrato,
 } from '@/lib/domain/contratos'
 import { obtenerProveedorFirma } from '@/lib/firma'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoContratoForm {
   error?: string
@@ -143,7 +144,8 @@ export async function cambiarEstadoContrato(formData: FormData): Promise<void> {
     redirect(`/panel/contratos/${id}?error=transicion`)
   }
 
-  await supabase.from('contratos').update({ estado: nuevo }).eq('id', id)
+  const { error: eEstado } = await supabase.from('contratos').update({ estado: nuevo }).eq('id', id)
+  cortarSiFalla(eEstado, `/panel/contratos/${id}`, 'estado')
   revalidatePath(`/panel/contratos/${id}`)
   redirect(`/panel/contratos/${id}`)
 }

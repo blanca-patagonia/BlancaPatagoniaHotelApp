@@ -11,6 +11,7 @@ import {
   Tarjeta,
   botonClases,
   Pagina,
+  Mensaje,
 } from '../_components/ui'
 import { Chat, type MensajeVista } from './chat'
 import { marcarConsultaRespondida } from './actions'
@@ -33,10 +34,19 @@ interface Consulta {
   creado_en: string
 }
 
+/**
+ * Motivos con que las acciones de esta pantalla pueden volver por `?error=`.
+ * El fallback cubre cualquiera que no esté acá.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  mensaje: 'No se pudo enviar el mensaje. Nadie del equipo lo recibió: probá de nuevo.',
+  consulta: 'No se pudo marcar la consulta como atendida.',
+}
+
 export default async function ConversacionesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ canal?: string; vista?: string }>
+  searchParams: Promise<{ canal?: string; vista?: string; error?: string }>
 }) {
   const sesion = await requerirAcceso('conversaciones')
   const sp = await searchParams
@@ -104,6 +114,14 @@ export default async function ConversacionesPage({
           ) : null
         }
       />
+
+      {sp.error && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
 
       {verConsultas && puedeVerConsultas ? (
         <>

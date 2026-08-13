@@ -47,5 +47,28 @@ export function cortarSiFalla(
 ): void {
   if (!error) return
   console.error(`No se pudo completar «${motivo}» en ${destino}:`, error.message)
-  redirect(`${destino}?error=${motivo}`)
+  // El destino puede traer su propia query (`?canal=…`, `?vista=…`), y entonces
+  // el separador es `&`. Con `?` fijo la URL saldría rota y el parámetro que ya
+  // venía se perdería junto con el contexto de la pantalla.
+  const separador = destino.includes('?') ? '&' : '?'
+  redirect(`${destino}${separador}error=${motivo}`)
+}
+
+/**
+ * Registra el fallo de una escritura **sin** cortar la acción.
+ *
+ * Es para las escrituras que no deben decidir el destino de la pantalla:
+ *
+ * · **Compensaciones.** Cuando un flujo de varios pasos falla y se deshace lo ya
+ *   escrito, el error que el usuario tiene que ver es el **original**, no el del
+ *   rollback. Si la compensación redirigiera, taparía la causa real.
+ * · **Escrituras accesorias**, donde cortar sería peor que seguir: perder un
+ *   registro no justifica interrumpirle la operación a quien está trabajando.
+ *
+ * No es una excusa para tragarse errores: sigue quedando en el log del servidor
+ * con su contexto. Lo que cambia es quién decide qué ve el usuario.
+ */
+export function registrarFalla(error: ErrorDeBase | null | undefined, contexto: string): void {
+  if (!error) return
+  console.error(`Falló una escritura accesoria (${contexto}):`, error.message)
 }

@@ -17,6 +17,7 @@ import {
   Tarjeta,
   botonClases,
   Pagina,
+  Mensaje,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { cambiarRolUsuario, alternarActivoUsuario } from './actions'
@@ -38,13 +39,23 @@ function ultimoAcceso(iso: string | undefined): string {
   return new Date(iso).toLocaleDateString('es-AR')
 }
 
+/**
+ * Motivos con que las acciones de esta pantalla pueden volver por `?error=`.
+ * Acá escribe el cliente admin, que saltea RLS: un fallo no es falta de permisos
+ * sino una falla real, y hay que decirlo.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  rol: 'No se pudo cambiar el rol. El usuario sigue con el que tenía.',
+  activo: 'No se pudo cambiar el estado del usuario. Quedó como estaba.',
+}
+
 export default async function UsuariosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; error?: string }>
 }) {
   const sesion = await requerirAcceso('usuarios')
-  const { q } = await searchParams
+  const { q, error: errorParam } = await searchParams
   const admin = crearClienteAdmin()
 
   const [{ data: perfilesData }, { data: authData }] = await Promise.all([
@@ -81,6 +92,14 @@ export default async function UsuariosPage({
           </Link>
         }
       />
+
+      {errorParam && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Kpi titulo="Usuarios" valor={String(perfiles.length)} detalle="dados de alta" icono="usuarios" />
