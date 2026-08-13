@@ -168,13 +168,25 @@ describe('temporadas', () => {
     // El nombre se respeta tal como está cargado en la base.
     expect(texto).toMatch(/alta/i)
     expect(texto).toContain('15/11')
-    expect(texto).toContain('16/03')
+  })
+
+  it('anuncia la última noche de cada temporada, no el fin excluido del rango', () => {
+    // `hasta` es el fin EXCLUIDO del `daterange`: la Alta está cargada como
+    // [15/11, 16/03), así que la última noche a ese precio es el 15/03. Decir
+    // «al 16/03» le anuncia al huésped un día que ya se cobra a la temporada
+    // siguiente.
+    const texto = describirTemporadas([
+      { nombre: 'Alta', rangos: [{ desde: '2026-11-15', hasta: '2027-03-16' }] },
+    ])
+    expect(texto).toContain('al 15/03')
+    expect(texto).not.toContain('16/03')
   })
 
   it('junta los varios períodos de una misma temporada', () => {
     const texto = describirTemporadas(DATOS.temporadas)
     expect(texto).toContain('01/09')
-    expect(texto).toContain('01/05')
+    // [16/03, 01/05) → la última noche es el 30/04.
+    expect(texto).toContain('30/04')
   })
 
   it('NO repite la palabra «temporada» si el nombre ya la trae', () => {

@@ -11,6 +11,7 @@
  */
 
 import type { ReglaCancelacion } from './cancelacion'
+import { sumarDias } from '@/lib/fechas'
 
 export const INTENCIONES = [
   'check_in_out',
@@ -202,7 +203,11 @@ export function describirTemporadas(temporadas: readonly TemporadaInfo[]): strin
   return conRangos
     .map((t) => {
       const periodos = t.rangos.map(
-        (r) => `del ${formatoDiaMes(r.desde)} al ${formatoDiaMes(r.hasta)}`,
+        // ⚠️ `hasta` es el fin EXCLUIDO del `daterange` de Postgres. Decirlo tal
+        // cual le anuncia al huésped un día que ya se cobra a la temporada
+        // siguiente: con [01/11, 01/12) la última noche a ese precio es el 30/11.
+        // No es formato, es una fecha equivocada dicha por el asistente.
+        (r) => `del ${formatoDiaMes(r.desde)} al ${formatoDiaMes(sumarDias(r.hasta, -1))}`,
       )
       // «A, B y C» en lugar de «A y B y C».
       const texto =
