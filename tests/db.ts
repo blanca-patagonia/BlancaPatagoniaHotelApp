@@ -34,6 +34,25 @@ export function clienteDePrueba(): SupabaseClient {
   })
 }
 
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+/** Hay clave publicable para probar el borde público. */
+export const hayAnon = Boolean(hayDB && anonKey)
+
+/**
+ * Cliente con la clave **publicable**, es decir con el rol `anon`.
+ *
+ * Sirve para probar el sistema como lo ve cualquiera desde internet: esa clave
+ * viaja en el bundle del navegador por diseño, así que todo lo que este cliente
+ * puede hacer es, literalmente, público. Es el único modo de verificar que las
+ * políticas y las guardas no dejan pasar de más.
+ */
+export function clienteAnonimo(): SupabaseClient {
+  return createClient(url!, anonKey!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
+
 /** Sufijo aleatorio para que dos corridas no colisionen entre sí. */
 export function sufijoUnico(): string {
   return Math.random().toString(36).slice(2, 8)
