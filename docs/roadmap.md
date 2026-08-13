@@ -62,5 +62,52 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Backups, secrets, observabilidad · Dominio + SSL · Deploy (Vercel + Supabase cloud)
 - [ ] Migración de datos desde Winpax / Excel
 
-## Fase 8 — AFIP WSFE/CAE (posterior)
+## Fase 8 — Ampliación tipo WinPax / Odoo
+- [x] 8.1 Cuentas corrientes de agencias y empresas
+- [x] 8.2 Reservas grupales
+- [x] 8.3 Mantenimiento, objetos perdidos, encuestas y reportes avanzados (ADR / RevPAR)
+- [x] 8.4 / 8.5 Consolidación de la gestión y dashboard-hub
+- [x] 8.6 Fidelidad e inventario
+- [x] 8.7 Proveedores (cuentas por pagar), reprogramación, mucamas y avisos internos
+
+## Fase 9 — Mejora integral del panel
+- [x] Identidad visual propia y sistema de diseño compartido (ADR 0009)
+- [x] Búsqueda, filtros, paginación y exportación a CSV en todos los listados
+- [x] Navegación móvil, accesibilidad, estados de carga y error por ruta
+- [x] Mejora funcional módulo por módulo (13 módulos)
+
+## Fase 10 — Contratos y comunicación (inspiradas en Odoo)
+- [x] Contratos con firma electrónica por token (ADR 0010)
+- [x] Conversaciones internas en tiempo real por canal
+- [x] Asistente del portal basado en reglas (ADR 0011)
+
+## Fase 11 — Alcance ERP
+- [x] Facturación fiscal argentina: letra, IVA discriminado, CUIT (ADR 0012)
+- [x] Auditoría *append-only* de operaciones sensibles
+- [x] Conciliación de proveedores y antigüedad de saldos (*aging*)
+- [x] Pipeline comercial de agencias · encuestas NPS · mantenimiento preventivo
+- [x] Portal de agencias y proveedores por token (ADR 0014)
+- [ ] Gestión documental con Storage · seguridad por campo · multi-propiedad (ADR 0013)
+
+## Fase 12 — Endurecimiento y verificación
+- [x] CI que corre los tests de integración con credenciales reales (`EXIGIR_DB=1`)
+- [x] Tests sobre las Server Actions · reglas faltantes y concurrencia (ADR 0015)
+
+## Fases 13 a 19 — Uso real del sistema
+- [x] 13 Limpieza de código muerto y cambio de unidad (mudanza de habitación)
+- [x] 14 Experiencia de uso e interacción táctil (móvil)
+- [x] 15 Rediseño de la interfaz (nada oculto) y sección de Ayuda
+- [x] 16 Portal público: paridad con el trabajo hecho en el panel
+- [x] 17 El CI en verde, verificado en GitHub (corrida #31)
+- [x] 18 Cinco bugs encontrados recorriendo el sistema a mano
+- [x] 19 Buscador global por rol, confirmaciones y encabezado
+
+## Auditoría de seguridad (numeración propia)
+- [x] Fase 0 — Reconocimiento sin modificar código (`docs/AUDITORIA_INICIAL.md`)
+- [x] Fase 1 — Límite de tasa en entradas públicas y login (migración 0029),
+      guarda del seed y encabezados de seguridad
+- [ ] Auditar las ~60 políticas RLS una por una: que estén activadas en las 33
+      tablas no dice qué permite cada una
+
+## Pendiente — AFIP WSFE/CAE real
 - [ ] Facturación electrónica real (certificados, punto de venta, CAE)
