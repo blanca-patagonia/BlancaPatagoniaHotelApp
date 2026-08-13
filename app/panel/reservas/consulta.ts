@@ -1,6 +1,6 @@
 import 'server-only'
 import type { crearClienteServidor } from '@/lib/supabase/server'
-import { terminoBusqueda } from '@/lib/listados'
+import { terminoBusqueda, patronOr } from '@/lib/listados'
 
 /**
  * Consulta compartida del listado de reservas.
@@ -48,11 +48,13 @@ export async function filtroTermino(supabase: Cliente, q: string | undefined): P
   const { data } = await supabase
     .from('huespedes')
     .select('id')
-    .or(`apellido.ilike.%${termino}%,nombre.ilike.%${termino}%,email.ilike.%${termino}%`)
+    .or(
+      `apellido.ilike.${patronOr(termino)},nombre.ilike.${patronOr(termino)},email.ilike.${patronOr(termino)}`,
+    )
     .limit(MAX_HUESPEDES_BUSQUEDA)
 
   const ids = (data ?? []).map((h) => h.id as string)
-  const porCodigo = `codigo.ilike.%${termino}%`
+  const porCodigo = `codigo.ilike.${patronOr(termino)}`
   return ids.length ? `${porCodigo},huesped_id.in.(${ids.join(',')})` : porCodigo
 }
 

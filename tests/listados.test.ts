@@ -7,6 +7,7 @@ import {
   resumenRango,
   construirQuery,
   terminoBusqueda,
+  patronOr,
 } from '@/lib/listados'
 
 describe('página actual', () => {
@@ -98,5 +99,43 @@ describe('término de búsqueda', () => {
     // Sin escapar, "100%" traería todas las filas.
     expect(terminoBusqueda('100%')).toBe('100\\%')
     expect(terminoBusqueda('a_b')).toBe('a\\_b')
+  })
+})
+
+/**
+ * La coma separa condiciones dentro de `or=(…)`. Estos tests fijan que el
+ * término del usuario no pueda cerrar el patrón y agregar condiciones propias:
+ * es la diferencia entre buscar y elegir el filtro.
+ */
+describe('patrón para or() de PostgREST', () => {
+  it('encierra el patrón entre comillas dobles', () => {
+    expect(patronOr('ana')).toBe('"%ana%"')
+  })
+
+  it('neutraliza la coma, que es el separador de condiciones', () => {
+    // Pelado, esto partía el `or` y colaba `id.gt.0` como condición aparte.
+    expect(patronOr('x,id.gt.0')).toBe('"%x,id.gt.0%"')
+  })
+
+  it('neutraliza los paréntesis, que agrupan condiciones', () => {
+    expect(patronOr('a)or(b')).toBe('"%a)or(b%"')
+  })
+
+  it('escapa la comilla doble, lo único que puede cerrar el valor', () => {
+    expect(patronOr('a"b')).toBe('"%a\\"b%"')
+  })
+
+  it('escapa la barra invertida para que no se coma la comilla siguiente', () => {
+    // Sin esto, un término terminado en `\` dejaría `\"` y la comilla de cierre
+    // pasaría a ser un carácter más: el valor quedaría abierto.
+    expect(patronOr('a\\')).toBe('"%a\\\\%"')
+  })
+
+  it('deja pasar el escape de LIKE que ya hizo terminoBusqueda', () => {
+    // `100%` → terminoBusqueda → `100\%` → patronOr → `"%100\\%%"`.
+    // PostgREST desescapa `\\` a `\`, y LIKE lee `\%` como porcentaje literal.
+    const t = terminoBusqueda('100%')
+    expect(t).toBe('100\\%')
+    expect(patronOr(t!)).toBe('"%100\\\\%%"')
   })
 })

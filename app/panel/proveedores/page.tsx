@@ -12,7 +12,7 @@ import {
   type ComprobanteDeuda,
 } from '@/lib/domain/antiguedad'
 import { hoyISO, formatoFechaCorta, diasEntre } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda } from '@/lib/listados'
+import { construirQuery, terminoBusqueda, patronOr } from '@/lib/listados'
 import {
   BarraHerramientas,
   BotonExportar,
@@ -57,7 +57,7 @@ export default async function ProveedoresPage({
 
   let consulta = supabase.from('proveedores').select('id, nombre, rubro, activo').order('nombre')
   const termino = terminoBusqueda(q)
-  if (termino) consulta = consulta.or(`nombre.ilike.%${termino}%,rubro.ilike.%${termino}%`)
+  if (termino) consulta = consulta.or(`nombre.ilike.${patronOr(termino)},rubro.ilike.${patronOr(termino)}`)
 
   const [{ data: provData }, { data: movsData }, { data: saldosData }] = await Promise.all([
     consulta,

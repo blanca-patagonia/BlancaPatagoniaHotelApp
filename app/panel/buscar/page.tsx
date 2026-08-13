@@ -4,6 +4,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { ETIQUETAS_AMBITO, ambitosPara, terminoBuscado } from '@/lib/domain/busqueda'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
+import { patronOr } from '@/lib/listados'
 import { TONO_ESTADO } from '../_components/estilos'
 import {
   Encabezado,
@@ -66,7 +67,7 @@ export default async function BuscarPage({
               .from('huespedes')
               .select('id, apellido, nombre, email, doc_numero')
               .or(
-                `apellido.ilike.%${termino}%,nombre.ilike.%${termino}%,email.ilike.%${termino}%,doc_numero.ilike.%${termino}%`,
+                `apellido.ilike.${patronOr(termino)},nombre.ilike.${patronOr(termino)},email.ilike.${patronOr(termino)},doc_numero.ilike.${patronOr(termino)}`,
               )
               .limit(TOPE)
               .then((r) => (r.data ?? []) as Record<string, string>[])
