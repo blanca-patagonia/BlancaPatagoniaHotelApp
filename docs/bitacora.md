@@ -1934,3 +1934,70 @@ permisos coinciden sin excepciones.
 
 **Verificación:** **386 tests** (21 nuevos sobre el dominio del catálogo: filtro,
 orden, «desde», IVA y rangos de fecha), typecheck, lint y build limpios.
+
+---
+
+## 2026-08-13 · Fase 22 — Revisión del código: dos bugs en la cara al huésped
+
+Barrido sistemático buscando errores, no funcionalidades. Los dos hallazgos están
+en el **asistente del portal**, que es justamente la parte que le habla al huésped
+sin que ningún empleado revise lo que dice.
+
+### El asistente informaba precios sin IVA, afirmando que los incluía
+
+`lib/asistente/index.ts` leía `precio_rack` crudo y armaba el rango de tarifas. La
+columna se guarda **sin IVA** (ADR 0004) y el checkout lo suma vía
+`calcularEstadia`, así que el bot respondía «las tarifas van de USD 120 a USD 340
+por noche **(con IVA)**» cuando el checkout cobra de 145,20 a 411,40.
+
+Lo grave no es el número bajo: es que **el texto afirma «con IVA»**. No era un dato
+incompleto, era una afirmación falsa, dicha por escrito y sin intervención humana.
+Se arregla pasando por `conIva()`, el helper que se había creado el mismo día para
+el catálogo, y se suma el filtro `vigente` que faltaba.
+
+### El asistente anunciaba un día de más en cada temporada
+
+`describirTemporadas` imprimía `hasta` tal como viene del `daterange`, que tiene el
+**fin excluido**: decía «Temporada alta del 15/11 al 16/03» cuando la última noche
+a ese precio es el **15/03** y el 16 ya se cobra como media.
+
+Lo que hace interesante al hallazgo: **la pantalla del panel ya lo hacía bien**
+(`app/panel/config/temporadas/page.tsx` resta el día con `sumarDias(p.hasta, -1)`).
+El mismo concepto estaba resuelto correctamente para el staff y mal para el
+huésped. No fue un descuido de quien escribió el asistente, fue que la convención
+vivía en una pantalla y no en un lugar compartido.
+
+Los tests **fijaban el bug**: `expect(texto).toContain('16/03')` daba verde porque
+16/03 aparece además como inicio de la temporada siguiente — pasaba por casualidad,
+no por estar bien. Se reemplaza por una prueba que afirma la semántica (`al 15/03`
+y `not.toContain('16/03')`), más el caso del cruce de mes.
+
+### Lo que se revisó y está sano
+
+Se barrieron las clases de error que este proyecto ya conoce, y las cuatro dieron
+cero: escrituras que descartan el error, interpolación en filtros `or`, `<details>`
+escondiendo acciones y embeds de `huespedes` sin la clave foránea explícita. Las
+divisiones del código de dinero están todas guardadas (ADR/RevPAR y NPS cortan
+antes de dividir por cero). Las seis consultas que parecían construidas sin
+ejecutar resultaron falsos positivos: se resuelven dentro de un `Promise.all`. Y
+las pantallas de checkout y confirmación muestran totales que **sí** incluyen IVA.
+
+### Dos cosas que quedan anotadas y NO se tocaron
+
+**Zona horaria.** `lib/fechas.ts` trabaja en UTC y lo declara. Para un hotel en
+Santa Cruz (UTC−3) eso significa que entre las 21:00 y la medianoche el sistema ya
+cuenta el día siguiente. Impacta donde hay plata: el cargo por cancelación depende
+de los días de anticipación, así que una cancelación a las 22:00 puede caer en el
+tramo equivocado. Arreglarlo bien no es cambiar `hoyISO()`: las funciones SQL
+(`expirar_reservas_pendientes`, `vencer_contratos`) usan la fecha de la base, y
+tocar solo el lado JavaScript dejaría la aplicación y la base discrepando. Pide su
+propia fase y un ADR.
+
+**Lecturas que descartan el error.** La Fase 20 dejó en cero las escrituras, pero
+del lado de la lectura hay **56 consultas** que no capturan el error contra 18 que
+sí. Una lectura fallida no rompe: renderiza el estado vacío, así que un problema de
+base se ve como «no hay datos». Es menos grave que el equivalente en escritura
+—nada se pierde— pero puede hacer creer que un listado está vacío cuando no lo
+está.
+
+**Verificación:** **387 tests**, typecheck, lint y build limpios.

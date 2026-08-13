@@ -3,6 +3,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import type { ReglaCancelacion } from '@/lib/domain/cancelacion'
 import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
 import { hoyISO, parsearPeriodo } from '@/lib/fechas'
+import { conIva } from '@/lib/domain/catalogo'
 import {
   detectarIntencion,
   componerRespuesta,
@@ -44,7 +45,7 @@ async function cargarDatosHotel(): Promise<DatosHotel> {
   const [{ data: politica }, { data: tarifas }, { data: temporadasData }] = await Promise.all([
     supabase.from('politicas_cancelacion').select('reglas').eq('codigo', 'estandar').maybeSingle(),
     // El rango de precios sale del tarifario real, no de un texto fijo.
-    supabase.from('tarifas').select('precio_rack'),
+    supabase.from('tarifas').select('precio_rack, iva_pct').eq('vigente', true),
     // Temporadas con sus rangos: el calendario también sale de la base.
     supabase
       .from('temporadas')
@@ -52,8 +53,11 @@ async function cargarDatosHotel(): Promise<DatosHotel> {
       .order('orden'),
   ])
 
+  // Con IVA: `precio_rack` se guarda SIN IVA (ADR 0004) y el checkout lo suma.
+  // El texto que arma el asistente dice «(con IVA)», así que volcar la columna
+  // cruda no era solo un precio bajo: era una afirmación falsa al huésped.
   const precios = (tarifas ?? [])
-    .map((t) => Number(t.precio_rack))
+    .map((t) => conIva(Number(t.precio_rack), Number(t.iva_pct)))
     .filter((p) => Number.isFinite(p) && p > 0)
 
   return {
