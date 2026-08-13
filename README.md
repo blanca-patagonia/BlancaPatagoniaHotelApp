@@ -13,7 +13,7 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**342 tests en verde** · typecheck y lint limpios · CI verificado en GitHub.
+**363 tests en verde** · typecheck y lint limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
 
@@ -50,8 +50,21 @@ proveedor real vía variable de entorno, pero **ninguno está integrado**:
 `AsistenteProvider` y `FacturacionElectronicaProvider`. No se procesan pagos ni
 se envían correos reales, y el CAE es simulado.
 
-El **deploy** (Vercel + Supabase cloud) está pendiente. Ver
-[roadmap](docs/roadmap.md) y [ADR 0013](docs/decisiones/0013-alcance-erp-y-trabajo-futuro.md)
+El **deploy** (Vercel + Supabase cloud) está pendiente.
+
+Tres pendientes técnicos, anotados donde viven y no solo acá:
+
+- **Auditar las ~60 políticas RLS una por una.** Que estén activadas en las 33
+  tablas no dice qué permite cada una. Exige ejecutarlas contra una base con los
+  cuatro roles.
+- **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
+  de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
+  transaccional.
+- **Un segundo camino de lectura al precio neto de agencia**, documentado en la
+  migración `0030`: cerrarlo exige revocar el privilegio por columna y cambiar el
+  modelo de seguridad de una función central a la vez.
+
+Ver [roadmap](docs/roadmap.md) y [ADR 0013](docs/decisiones/0013-alcance-erp-y-trabajo-futuro.md)
 para el trabajo futuro documentado.
 
 ## Stack
@@ -130,9 +143,9 @@ app/            # Next.js App Router
   portal/       #   portal de agencias y proveedores por token
   api/          #   route handlers y webhooks
 lib/            # dominio puro, disponibilidad, pagos, clientes Supabase
-supabase/       # 29 migraciones SQL numeradas + seed
+supabase/       # 30 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 342 tests (Vitest)
+tests/          # 363 tests (Vitest)
 ```
 
 ## Scripts

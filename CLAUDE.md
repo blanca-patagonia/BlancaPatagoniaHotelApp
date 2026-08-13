@@ -81,7 +81,7 @@ Tarifario 2025/2026 (Anexo A).
 - Dev `npm run dev` · Tests `npm test` · Typecheck `npm run typecheck` · Lint `npm run lint`.
 - **CI (`.github/workflows/ci.yml`): verde y verificado en GitHub** desde la
   corrida #31. Levanta Supabase con Docker, crea el admin y corre typecheck,
-  lint, los 342 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
+  lint, los 363 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
   toca: el paso del seed invoca `node scripts/seed-usuarios.mjs` **directo** y no
   `npm run seed:usuarios` (ese script usa `--env-file-if-exists`, que necesita
   Node ≥ 20.12 y no hay `.env.local` en el runner); y sin ese paso la tabla
@@ -115,15 +115,23 @@ Tarifario 2025/2026 (Anexo A).
   **Fase 16** portal público a la par del panel · **Fase 17** el CI en verde y
   verificado (corrida #31) · **Fase 18** cinco bugs encontrados recorriendo el
   sistema a mano (el más caro: «USD 0» al reservar, por falta de temporadas
-  cargadas) · **Fase 19** buscador global por rol, confirmaciones y encabezado.
+  cargadas) · **Fase 19** buscador global por rol, confirmaciones y encabezado ·
+  **Fase 20** ningún fallo de escritura en silencio (ver `lib/acciones.ts`).
 - **Auditoría de seguridad (numeración propia, empieza de nuevo en Fase 0):**
   **Fase 0 ✅** reconocimiento sin tocar código (`docs/AUDITORIA_INICIAL.md`) ·
   **Fase 1 ✅** límite de tasa en las entradas públicas y en el login
   (migración 0029, `lib/domain/limites.ts`), guarda del seed contra bases no
   locales y encabezados de seguridad en `next.config.ts` (sin CSP, y está
-  documentado por qué). **Pendiente:** auditar las ~60 políticas RLS una por una
-  — que estén activadas en las 33 tablas no dice qué permite cada una.
-- **342 tests verdes** (35 archivos).
+  documentado por qué) · **Fase 2 ✅** cuatro bugs leyendo el código: el **precio
+  neto de agencia quedaba expuesto a `anon`** por RPC (migración 0030), el webhook
+  de pagos fallaba abierto, inyección de condiciones en los filtros `or` de
+  PostgREST y el `<details>` número 12.
+  **Pendiente:** auditar las ~60 políticas RLS una por una — que estén activadas en
+  las 33 tablas no dice qué permite cada una. ⚠️ **No se puede hacer en un entorno
+  sin Docker**: exige ejecutar las políticas contra una base con los cuatro roles, y
+  el *pull* de las imágenes de Supabase está bloqueado por política de egreso en el
+  entorno remoto (403 contra las CDN de los registries). Hay que hacerlo en local.
+- **363 tests verdes** (37 archivos).
 - **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
@@ -145,6 +153,30 @@ Tarifario 2025/2026 (Anexo A).
   guardar no se redirige solo, se usa `ExitoConPasos`; los `<form action={…}>`
   de servidor usan `BotonEnvio` (bloquea el doble clic) y `confirmar` si la
   acción no tiene vuelta atrás. Envolver cada pantalla en `Pagina`.
+- **Escrituras a la base (Fase 20) — OBLIGATORIO en toda Server Action nueva:**
+  *nunca descartar el error de un `insert`/`update`/`delete`.* Si la base rechaza y
+  nadie avisa, la pantalla recarga sin cambios y quien la usa no puede distinguir
+  «no se pudo» de «no pasó nada». Había 38 así; hoy hay **cero**, y conviene que
+  siga en cero.
+  - Acción que **devuelve estado**: `return { error: 'mensaje en español' }`.
+  - Acción que **redirige**: `cortarSiFalla(error, destino, 'motivo')` de
+    `lib/acciones.ts`, y sumar el motivo al `MENSAJES_ERROR` de la pantalla destino
+    (que además tiene fallback, así que un motivo sin mapear igual muestra algo).
+    Verificar que esa pantalla **renderice** `?error=`: varias no lo hacían y el
+    mensaje se perdía.
+  - **Compensaciones y escrituras accesorias**: `registrarFalla(error, contexto)`,
+    que loguea sin cortar. En un rollback, `cortarSiFalla` **taparía el error
+    original**, que es el que hay que mostrar.
+  - El detalle técnico va al **log del servidor, nunca a la URL**.
+  - ⚠️ Un mensaje de error **no arregla la atomicidad**: en los flujos de varios
+    pasos de `reservas`, si falla el paso 3 los datos quedan a medias. Está anotado
+    en el código; resolverlo pide una función SQL transaccional.
+- **Filtros `or` de PostgREST:** el término del usuario **nunca** se interpola
+  pelado (la coma separa condiciones y los paréntesis agrupan: `x,id.gt.0` cambia
+  el filtro). Va `patronOr()` de `lib/listados.ts`, que lo encierra entre comillas
+  dobles. Escapar `%` y `_` **no alcanza**: esos son los comodines de LIKE, otra
+  capa distinta. Las llamadas `.ilike('col', valor)` son seguras: ahí el valor
+  viaja como parámetro y no como sintaxis.
 - **Ayuda:** el contenido vive en `lib/domain/ayuda.ts` y se filtra por rol con
   `puedeAcceder`. Al agregar un módulo, sumarle su capítulo ahí.
 - **Móvil (Fase 14):** columnas de tabla no esenciales con `COL_SECUNDARIA`

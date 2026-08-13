@@ -101,13 +101,26 @@ diseño / implementación / pruebas de la tesis.
 - [x] 17 El CI en verde, verificado en GitHub (corrida #31)
 - [x] 18 Cinco bugs encontrados recorriendo el sistema a mano
 - [x] 19 Buscador global por rol, confirmaciones y encabezado
+- [x] 20 Ningún fallo de escritura en silencio: `cortarSiFalla` / `registrarFalla`
+      en las 38 escrituras que descartaban su error
 
 ## Auditoría de seguridad (numeración propia)
 - [x] Fase 0 — Reconocimiento sin modificar código (`docs/AUDITORIA_INICIAL.md`)
 - [x] Fase 1 — Límite de tasa en entradas públicas y login (migración 0029),
       guarda del seed y encabezados de seguridad
+- [x] Fase 2 — Cuatro bugs leyendo el código: precio neto de agencia expuesto a
+      `anon` (migración 0030), webhook de pagos que fallaba abierto, inyección de
+      condiciones en los filtros `or` y el último `<details>`
 - [ ] Auditar las ~60 políticas RLS una por una: que estén activadas en las 33
-      tablas no dice qué permite cada una
+      tablas no dice qué permite cada una. **No se pudo hacer en el entorno de
+      trabajo**: exige ejecutar las políticas contra una base con los cuatro roles
+      y el *pull* de las imágenes de Supabase está bloqueado por política de
+      egreso (403 contra las CDN de los registries)
+- [ ] Cerrar el segundo camino al precio neto: `GET /rest/v1/tarifas?select=precio_neto`.
+      Exige revocar por columna **y** hacer `cotizar_estadia` `security definer` a la
+      vez; ver la migración 0030. Pide ADR
+- [ ] Atomicidad de los flujos de varios pasos de `reservas`: hoy un fallo a mitad
+      de camino avisa, pero deja los datos a medias. Pide función SQL transaccional
 
 ## Pendiente — AFIP WSFE/CAE real
 - [ ] Facturación electrónica real (certificados, punto de venta, CAE)
