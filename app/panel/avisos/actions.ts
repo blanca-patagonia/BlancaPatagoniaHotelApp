@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoAviso {
   error?: string
@@ -36,7 +37,8 @@ export async function alternarFijado(formData: FormData): Promise<void> {
   const fijar = String(formData.get('fijar') ?? '') === '1'
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('avisos').update({ fijado: fijar }).eq('id', id)
+    const { error } = await supabase.from('avisos').update({ fijado: fijar }).eq('id', id)
+    cortarSiFalla(error, '/panel/avisos', 'fijar')
   }
   redirect('/panel/avisos')
 }
@@ -45,7 +47,8 @@ export async function borrarAviso(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('avisos').delete().eq('id', id)
+    const { error } = await supabase.from('avisos').delete().eq('id', id)
+    cortarSiFalla(error, '/panel/avisos', 'borrar')
   }
   redirect('/panel/avisos')
 }
