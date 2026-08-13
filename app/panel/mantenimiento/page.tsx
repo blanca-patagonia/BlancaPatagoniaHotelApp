@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { hoyISO, diasEntre, formatoFechaCorta } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda } from '@/lib/listados'
+import { construirQuery, terminoBusqueda, patronOr } from '@/lib/listados'
 import {
   BarraHerramientas,
   BotonExportar,
@@ -110,7 +110,7 @@ export default async function MantenimientoPage({
   if (estado) consulta = consulta.eq('estado', estado)
   if (prioridad) consulta = consulta.eq('prioridad', prioridad)
   const termino = terminoBusqueda(sp.q)
-  if (termino) consulta = consulta.or(`titulo.ilike.%${termino}%,descripcion.ilike.%${termino}%`)
+  if (termino) consulta = consulta.or(`titulo.ilike.${patronOr(termino)},descripcion.ilike.${patronOr(termino)}`)
 
   const [{ data: ordenesData }, { data: unidadesData }, { data: todasData }, { data: planesData }] =
     await Promise.all([

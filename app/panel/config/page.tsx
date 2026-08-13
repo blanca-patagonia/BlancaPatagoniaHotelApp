@@ -285,16 +285,16 @@ export default async function ConfigPage({
             const plantilla = PLANTILLAS[evento]
             const vista = renderizar(evento, MUESTRA)
             return (
-              <details
+              <div
                 key={evento}
                 className="rounded-xl border border-stone-200 bg-stone-50/60 px-4 py-3"
               >
-                <summary className="cursor-pointer text-sm font-medium text-stone-800 marker:text-lago-600">
+                <h3 className="text-sm font-medium text-stone-800">
                   {plantilla.nombre}
                   <span className="ml-2 text-xs font-normal text-stone-500">
                     {plantilla.disparador}
                   </span>
-                </summary>
+                </h3>
 
                 <div className="mt-3 rounded-lg border border-stone-200 bg-white p-4">
                   <p className="text-xs tracking-wide text-stone-400 uppercase">Asunto</p>
@@ -325,7 +325,7 @@ export default async function ConfigPage({
                     </BotonEnvio>
                   </form>
                 )}
-              </details>
+              </div>
             )
           })}
         </div>

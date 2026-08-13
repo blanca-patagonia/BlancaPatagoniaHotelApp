@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { formatoFechaCorta } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda } from '@/lib/listados'
+import { construirQuery, terminoBusqueda, patronOr } from '@/lib/listados'
 import {
   BarraHerramientas,
   BotonExportar,
@@ -50,7 +50,7 @@ export default async function ObjetosPerdidosPage({
 
   if (estado) consulta = consulta.eq('estado', estado)
   const termino = terminoBusqueda(sp.q)
-  if (termino) consulta = consulta.or(`descripcion.ilike.%${termino}%,ubicacion.ilike.%${termino}%`)
+  if (termino) consulta = consulta.or(`descripcion.ilike.${patronOr(termino)},ubicacion.ilike.${patronOr(termino)}`)
 
   const [{ data }, { data: todosData }] = await Promise.all([
     consulta,

@@ -81,3 +81,30 @@ export function terminoBusqueda(crudo: string | undefined): string | null {
   if (!limpio) return null
   return limpio.replaceAll('%', '\\%').replaceAll('_', '\\_')
 }
+
+/**
+ * Envuelve un patrón `ilike` para usarlo **dentro de la lista de condiciones de
+ * `.or()`**.
+ *
+ * ⚠️ En `or=(…)` la **coma separa condiciones** y los paréntesis agrupan. Si el
+ * término del usuario se interpola pelado, una coma parte la expresión y agrega
+ * condiciones que nadie pidió: buscar `x,id.gt.0` deja de ser una búsqueda y
+ * pasa a ser un filtro elegido por quien escribe.
+ *
+ * Escapar `%` y `_` no alcanza: esos son los comodines de LIKE, no la sintaxis
+ * del filtro. Son dos capas distintas y hay que atravesar las dos.
+ *
+ * PostgREST admite valores **entre comillas dobles** justamente para valores con
+ * caracteres reservados. Dentro de las comillas hay que escapar `\` y `"`, que
+ * es lo único que puede cerrarlas antes de tiempo.
+ *
+ * Recibe el término **ya escapado para LIKE** (lo que devuelve
+ * `terminoBusqueda`), y le agrega solo la capa de PostgREST. Así cada función
+ * hace una cosa y no se escapa dos veces lo mismo: un `%` literal llega como
+ * `\\%` dentro de las comillas, PostgREST lo desescapa a `\%` y LIKE lo lee
+ * como un porcentaje literal.
+ */
+export function patronOr(termino: string): string {
+  const escapado = termino.replaceAll('\\', '\\\\').replaceAll('"', '\\"')
+  return `"%${escapado}%"`
+}
