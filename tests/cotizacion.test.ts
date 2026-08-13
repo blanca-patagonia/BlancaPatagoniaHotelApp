@@ -68,29 +68,44 @@ describe.skipIf(!hayAnon)('cotizar_estadia desde el borde público', () => {
     tipoId = data!.id as string
   })
 
-  it('devuelve rack aunque se pida neto', async () => {
-    const { data, error } = await publico.rpc('cotizar_estadia', {
+  it('no puede ejecutar la función que conoce el neto', async () => {
+    // Migración 0031: se le revocó el `execute`. Es más fuerte que una guarda por
+    // parámetro —no es que se niegue a devolver el neto, es que no la alcanza—.
+    const { error } = await publico.rpc('cotizar_estadia', {
       p_tipo_unidad_id: tipoId,
       p_check_in: '2025-11-10',
       p_check_out: '2025-11-12',
       p_tarifa_tipo: 'neto',
     })
-    expect(error).toBeNull()
-    const precios = (data ?? []).map((f: { precio: number | string }) => Number(f.precio))
-    // Alta: rack 177, neto 155. Pidiendo neto tiene que llegar el rack.
-    expect(precios).toEqual([177, 177])
-    expect(precios).not.toContain(155)
+    expect(error).not.toBeNull()
   })
 
-  it('sigue cotizando rack con normalidad: la guarda no rompe el portal', async () => {
-    const { data, error } = await publico.rpc('cotizar_estadia', {
+  it('no puede leer la columna precio_neto de tarifas', async () => {
+    // El otro camino al mismo dato, que la 0030 había dejado abierto. RLS no lo
+    // cubre: filtra filas, y esto es una columna.
+    const { error } = await publico.from('tarifas').select('precio_neto').limit(1)
+    expect(error).not.toBeNull()
+  })
+
+  it('sí puede leer precio_rack: el asistente del portal depende de eso', async () => {
+    // Revocar la tabla entera habría sido más simple y habría roto el asistente,
+    // que lee `precio_rack` como anon (lib/asistente/index.ts).
+    const { data, error } = await publico.from('tarifas').select('precio_rack').limit(1)
+    expect(error).toBeNull()
+    expect((data ?? []).length).toBeGreaterThan(0)
+  })
+
+  it('cotiza rack por la función pública, cruzando temporadas', async () => {
+    const { data, error } = await publico.rpc('cotizar_estadia_publica', {
       p_tipo_unidad_id: tipoId,
       p_check_in: '2025-11-29',
       p_check_out: '2025-12-02',
-      p_tarifa_tipo: 'rack',
     })
     expect(error).toBeNull()
     const precios = (data ?? []).map((f: { precio: number | string }) => Number(f.precio))
+    // 29 y 30 nov (Alta rack 177) + 1 dic (Media rack 143).
     expect(precios).toEqual([177, 177, 143])
+    // El neto de Alta es 155: no tiene que aparecer por ningún lado.
+    expect(precios).not.toContain(155)
   })
 })

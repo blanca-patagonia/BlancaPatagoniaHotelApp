@@ -13,7 +13,7 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**363 tests en verde** · typecheck y lint limpios · CI verificado en GitHub.
+**365 tests en verde** · typecheck y lint limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
 
@@ -60,9 +60,6 @@ Tres pendientes técnicos, anotados donde viven y no solo acá:
 - **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
   de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
   transaccional.
-- **Un segundo camino de lectura al precio neto de agencia**, documentado en la
-  migración `0030`: cerrarlo exige revocar el privilegio por columna y cambiar el
-  modelo de seguridad de una función central a la vez.
 
 Ver [roadmap](docs/roadmap.md) y [ADR 0013](docs/decisiones/0013-alcance-erp-y-trabajo-futuro.md)
 para el trabajo futuro documentado.
@@ -127,7 +124,7 @@ Toda la documentación vive en [`docs/`](docs/), en español:
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
 - [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
 - [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
-- [Decisiones (ADR)](docs/decisiones/) — 15 decisiones de arquitectura numeradas.
+- [Decisiones (ADR)](docs/decisiones/) — 16 decisiones de arquitectura numeradas.
 - [Manual de usuario](docs/manual-usuario.md) · [Manual técnico](docs/manual-tecnico.md)
 - [Seguridad](docs/SEGURIDAD.md) · [Auditoría inicial](docs/AUDITORIA_INICIAL.md) ·
   [Revisión de RLS y endpoints](docs/revision-seguridad.md)
@@ -143,9 +140,9 @@ app/            # Next.js App Router
   portal/       #   portal de agencias y proveedores por token
   api/          #   route handlers y webhooks
 lib/            # dominio puro, disponibilidad, pagos, clientes Supabase
-supabase/       # 30 migraciones SQL numeradas + seed
+supabase/       # 31 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 363 tests (Vitest)
+tests/          # 365 tests (Vitest)
 ```
 
 ## Scripts

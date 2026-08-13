@@ -1800,3 +1800,61 @@ fallback dice exactamente «No pudimos registrar la firma», que es el texto
 correcto. Uno de los 5 tests del helper existe porque armaba mal la URL cuando el
 destino ya traía query string (`?canal=X?error=…`), detectado al aplicarlo a
 conversaciones y antes de propagarlo a 38 sitios.
+
+---
+
+## 2026-08-13 · Fase 2 de la auditoría (2.ª parte) — El neto, fuera del alcance público
+
+Cierra el pendiente que la migración 0030 había dejado anotado: el **segundo
+camino** al precio de agencia, `GET /rest/v1/tarifas?select=precio_neto`.
+
+**Por qué no se hizo junto con la 0030.** Porque el arreglo obvio rompe el portal.
+`cotizar_estadia` menciona `t.precio_neto` en su `CASE`, y Postgres exige
+privilegio sobre toda columna referenciada **aunque la rama no se ejecute**: un
+`revoke` a secas haría fallar la función para `anon` y tiraría abajo la cotización
+pública entera.
+
+### La trampa que se evitó
+
+El camino obvio era hacer la función `security definer`. Habría resuelto el
+privilegio **y habría desactivado en silencio la guarda de la 0030**: dentro de una
+función definer, `current_user` es el **dueño** de la función y no quien la llama,
+así que `current_user <> 'anon'` habría quedado siempre en verdadero y `anon`
+habría vuelto a recibir el neto.
+
+Lo peor no es el error sino que **el test seguiría en verde**: prueba el resultado
+con la clave publicable a través de una función que ya no distinguiría nada. Un
+arreglo que reabre el agujero que vino a cerrar y encima se reporta como
+verificado.
+
+### Decisión: dos funciones, cada una con un solo trabajo
+
+En vez de una función que decide a quién le muestra qué, hay una que **nunca toca
+la columna sensible** y otra a la que `anon` **no llega**:
+
+- `cotizar_estadia_publica` — solo rack, no menciona `precio_neto`, y por eso
+  funciona sin privilegio sobre esa columna. Es la que usa el portal.
+- `cotizar_estadia` — sin cambios, y se le revoca el `execute` a `anon`.
+- `tarifas` — se revoca el `select` de tabla a `anon` y se otorga **por columna**
+  sobre todas menos `precio_neto`.
+
+Ninguna es `security definer`: no hay privilegio elevado que auditar. Y la garantía
+es más fuerte que una guarda por parámetro —no es que la función se niegue a
+devolver el neto, es que el rol público no puede ni ejecutarla ni leer la columna—.
+Migración **0031**, **ADR 0016**.
+
+Revocar la tabla entera habría sido más simple y habría roto el asistente del
+portal, que lee `precio_rack` como `anon`. De ahí el grant por columna.
+
+**Lo que este arreglo deja escrito sobre el modelo de seguridad:** RLS filtra
+**filas**, y esto era una **columna**. La frase «RLS activado en las 33 tablas» no
+cubre la exposición por columna, y conviene tenerlo presente al leer el README.
+
+**Verificación:** 4 tests con la **clave publicable** —el único modo de ver el
+sistema como lo ve internet—: que `anon` no pueda ejecutar la función que conoce el
+neto, que no pueda leer la columna, que **sí** pueda leer `precio_rack` (el
+asistente depende de eso) y que la cotización rack del portal siga dando los mismos
+precios cruzando temporadas. **365 tests**, typecheck, lint y build limpios.
+
+⚠️ Como en toda esta fase, la migración **no se pudo probar en el entorno de
+trabajo** —sin Docker no hay base— y la verificación real es la corrida de CI.
