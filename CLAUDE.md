@@ -81,7 +81,7 @@ Tarifario 2025/2026 (Anexo A).
 - Dev `npm run dev` · Tests `npm test` · Typecheck `npm run typecheck` · Lint `npm run lint`.
 - **CI (`.github/workflows/ci.yml`): verde y verificado en GitHub** desde la
   corrida #31. Levanta Supabase con Docker, crea el admin y corre typecheck,
-  lint, los 307 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
+  lint, los 342 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
   toca: el paso del seed invoca `node scripts/seed-usuarios.mjs` **directo** y no
   `npm run seed:usuarios` (ese script usa `--env-file-if-exists`, que necesita
   Node ≥ 20.12 y no hay `.env.local` en el runner); y sin ese paso la tabla
@@ -95,7 +95,7 @@ Tarifario 2025/2026 (Anexo A).
   **Fase 3 ✅** pagos · **Fase 4 ✅** portal público de reservas ·
   **Fase 5 ✅** consumos + factura · **Fase 6 ✅** reportes gerenciales ·
   **Fase 7 (parcial) ✅** hardening (token confirmación, expiración pendientes, webhook
-  fail-closed) · **Fase 8 (en curso)** ampliación tipo WinPax/Odoo: **8.1 ✅ cuentas
+  fail-closed) · **Fase 8 ✅** ampliación tipo WinPax/Odoo: **8.1** cuentas
   corrientes de agencias · **8.2** reservas grupales · **8.3** mantenimiento, objetos
   perdidos, encuestas, reportes avanzados (ADR/RevPAR) · **8.4/8.5** consolidación +
   dashboard-hub · **8.6** fidelidad + inventario · **8.7** proveedores (cuentas por
@@ -111,14 +111,28 @@ Tarifario 2025/2026 (Anexo A).
   sobre las Server Actions · **Fase 13** limpieza de código muerto y **cambio de
   unidad** (mudanza de habitación, migración 0028) · **Fase 14** experiencia de
   uso e interacción táctil · **Fase 15** rediseño de la interfaz (se eliminaron
-  los 11 formularios plegados, altas en pantalla propia) y **sección de Ayuda**.
-  **307 tests verdes.**
+  los 11 formularios plegados, altas en pantalla propia) y **sección de Ayuda** ·
+  **Fase 16** portal público a la par del panel · **Fase 17** el CI en verde y
+  verificado (corrida #31) · **Fase 18** cinco bugs encontrados recorriendo el
+  sistema a mano (el más caro: «USD 0» al reservar, por falta de temporadas
+  cargadas) · **Fase 19** buscador global por rol, confirmaciones y encabezado.
+- **Auditoría de seguridad (numeración propia, empieza de nuevo en Fase 0):**
+  **Fase 0 ✅** reconocimiento sin tocar código (`docs/AUDITORIA_INICIAL.md`) ·
+  **Fase 1 ✅** límite de tasa en las entradas públicas y en el login
+  (migración 0029, `lib/domain/limites.ts`), guarda del seed contra bases no
+  locales y encabezados de seguridad en `next.config.ts` (sin CSP, y está
+  documentado por qué). **Pendiente:** auditar las ~60 políticas RLS una por una
+  — que estén activadas en las 33 tablas no dice qué permite cada una.
+- **342 tests verdes** (35 archivos).
 - **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
   único camino para mandar correo). Ningún borde externo es real.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
+- **Hay 15 ADRs.** Los dos últimos no estaban listados acá: **ADR 0014** portal
+  de agencias y proveedores por token · **ADR 0015** qué se verifica y qué se
+  garantiza (los hallazgos de la revisión crítica de la Fase 12).
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.
