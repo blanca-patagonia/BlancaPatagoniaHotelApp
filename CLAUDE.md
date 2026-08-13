@@ -81,7 +81,7 @@ Tarifario 2025/2026 (Anexo A).
 - Dev `npm run dev` · Tests `npm test` · Typecheck `npm run typecheck` · Lint `npm run lint`.
 - **CI (`.github/workflows/ci.yml`): verde y verificado en GitHub** desde la
   corrida #31. Levanta Supabase con Docker, crea el admin y corre typecheck,
-  lint, los 363 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
+  lint, los 365 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
   toca: el paso del seed invoca `node scripts/seed-usuarios.mjs` **directo** y no
   `npm run seed:usuarios` (ese script usa `--env-file-if-exists`, que necesita
   Node ≥ 20.12 y no hay `.env.local` en el runner); y sin ese paso la tabla
@@ -125,20 +125,24 @@ Tarifario 2025/2026 (Anexo A).
   documentado por qué) · **Fase 2 ✅** cuatro bugs leyendo el código: el **precio
   neto de agencia quedaba expuesto a `anon`** por RPC (migración 0030), el webhook
   de pagos fallaba abierto, inyección de condiciones en los filtros `or` de
-  PostgREST y el `<details>` número 12.
+  PostgREST y el `<details>` número 12. La segunda parte (migración 0031, **ADR
+  0016**) cierra el otro camino al neto: `anon` ya no puede ejecutar
+  `cotizar_estadia` ni leer la columna `precio_neto`. ⚠️ **No hacer
+  `cotizar_estadia` `security definer`**: ahí `current_user` es el dueño de la
+  función y la guarda quedaría siempre en verdadero.
   **Pendiente:** auditar las ~60 políticas RLS una por una — que estén activadas en
   las 33 tablas no dice qué permite cada una. ⚠️ **No se puede hacer en un entorno
   sin Docker**: exige ejecutar las políticas contra una base con los cuatro roles, y
   el *pull* de las imágenes de Supabase está bloqueado por política de egreso en el
   entorno remoto (403 contra las CDN de los registries). Hay que hacerlo en local.
-- **363 tests verdes** (37 archivos).
+- **365 tests verdes** (37 archivos).
 - **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
   único camino para mandar correo). Ningún borde externo es real.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 15 ADRs.** Los dos últimos no estaban listados acá: **ADR 0014** portal
+- **Hay 16 ADRs.** Los dos últimos no estaban listados acá: **ADR 0014** portal
   de agencias y proveedores por token · **ADR 0015** qué se verifica y qué se
   garantiza (los hallazgos de la revisión crítica de la Fase 12).
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`

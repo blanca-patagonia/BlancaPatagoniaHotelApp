@@ -116,9 +116,10 @@ diseño / implementación / pruebas de la tesis.
       trabajo**: exige ejecutar las políticas contra una base con los cuatro roles
       y el *pull* de las imágenes de Supabase está bloqueado por política de
       egreso (403 contra las CDN de los registries)
-- [ ] Cerrar el segundo camino al precio neto: `GET /rest/v1/tarifas?select=precio_neto`.
-      Exige revocar por columna **y** hacer `cotizar_estadia` `security definer` a la
-      vez; ver la migración 0030. Pide ADR
+- [x] Cerrar el segundo camino al precio neto (migración 0031, ADR 0016): dos
+      funciones en vez de una con parámetro, `execute` revocado a `anon` sobre la
+      que conoce el neto y privilegios por columna sobre `tarifas`. Se descartó
+      `security definer`, que habría desactivado en silencio la guarda de la 0030
 - [ ] Atomicidad de los flujos de varios pasos de `reservas`: hoy un fallo a mitad
       de camino avisa, pero deja los datos a medias. Pide función SQL transaccional
 

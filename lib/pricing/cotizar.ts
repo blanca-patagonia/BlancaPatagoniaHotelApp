@@ -35,12 +35,25 @@ export async function cotizarEstadia(params: {
   anticipacionDias?: number
 }): Promise<Cotizacion> {
   const supabase = await crearClienteServidor()
-  const { data, error } = await supabase.rpc('cotizar_estadia', {
-    p_tipo_unidad_id: params.tipoUnidadId,
-    p_check_in: params.checkIn,
-    p_check_out: params.checkOut,
-    p_tarifa_tipo: params.tarifaTipo,
-  })
+
+  // Dos funciones y no una con parámetro (migración 0031). `cotizar_estadia`
+  // menciona `precio_neto`, así que el rol `anon` no puede ni ejecutarla ni leer
+  // esa columna; `cotizar_estadia_publica` solo toca rack y por eso funciona
+  // desde el portal. Pedir rack por la pública también cuando hay sesión no
+  // cuesta nada y deja un solo camino para el precio de mostrador.
+  const { data, error } =
+    params.tarifaTipo === 'neto'
+      ? await supabase.rpc('cotizar_estadia', {
+          p_tipo_unidad_id: params.tipoUnidadId,
+          p_check_in: params.checkIn,
+          p_check_out: params.checkOut,
+          p_tarifa_tipo: 'neto',
+        })
+      : await supabase.rpc('cotizar_estadia_publica', {
+          p_tipo_unidad_id: params.tipoUnidadId,
+          p_check_in: params.checkIn,
+          p_check_out: params.checkOut,
+        })
   if (error) throw new Error(`Error al cotizar la estadía: ${error.message}`)
 
   const filas = (data ?? []) as FilaCotizacion[]
