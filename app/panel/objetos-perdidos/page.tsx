@@ -20,6 +20,7 @@ import {
   Tarjeta,
   botonClases,
   Pagina,
+  Mensaje,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { marcarDevuelto } from './actions'
@@ -32,10 +33,18 @@ interface Objeto {
   estado: 'guardado' | 'devuelto'
 }
 
+/**
+ * Motivos con que las acciones de esta pantalla pueden volver por `?error=`.
+ * El fallback cubre cualquiera que no esté acá.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  devuelto: 'No se pudo marcar el objeto como devuelto. Sigue en depósito.',
+}
+
 export default async function ObjetosPerdidosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; estado?: string }>
+  searchParams: Promise<{ q?: string; estado?: string; error?: string }>
 }) {
   await requerirAcceso('objetos_perdidos')
   const sp = await searchParams
@@ -82,6 +91,14 @@ export default async function ObjetosPerdidosPage({
           </>
         }
       />
+
+      {sp.error && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="En depósito" valor={String(guardados)} detalle="sin reclamar" icono="objetos" tono="alerta" />

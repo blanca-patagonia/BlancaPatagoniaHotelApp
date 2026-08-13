@@ -17,6 +17,7 @@ import {
   Tarjeta,
   botonClases,
   Pagina,
+  Mensaje,
 } from '../_components/ui'
 import { cambiarEstadoUnidad, asignarMucama } from './actions'
 
@@ -83,10 +84,19 @@ function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
   )
 }
 
+/**
+ * Motivos con que las acciones de esta pantalla pueden volver por `?error=`.
+ * El fallback cubre cualquiera que no esté acá.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  estado: 'No se pudo cambiar el estado de la unidad. Quedó como estaba.',
+  asignar: 'No se pudo asignar la mucama/o. La unidad quedó como estaba.',
+}
+
 export default async function HousekeepingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string; mucama?: string; vista?: string }>
+  searchParams: Promise<{ estado?: string; mucama?: string; vista?: string; error?: string }>
 }) {
   await requerirAcceso('housekeeping')
   const sp = await searchParams
@@ -164,6 +174,14 @@ export default async function HousekeepingPage({
           </>
         }
       />
+
+      {sp.error && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {ESTADOS_HK.map((e) => (

@@ -81,6 +81,18 @@ interface Orden {
   unidad: { nombre: string } | null
 }
 
+/**
+ * Motivos con que las acciones de esta pantalla pueden volver por `?error=`.
+ *
+ * Antes solo se mostraba `plan`; cualquier otro motivo no se renderizaba y el
+ * usuario no veía nada.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  plan: 'Revisá el título y la periodicidad del plan.',
+  plan_guardar: 'No se pudo guardar el plan. No quedó cargado.',
+  estado_orden: 'No se pudo cambiar el estado de la orden. Quedó como estaba.',
+}
+
 export default async function MantenimientoPage({
   searchParams,
 }: {
@@ -219,8 +231,10 @@ export default async function MantenimientoPage({
         </Mensaje>
       )}
       {sp.ok === 'plan' && <Mensaje tono="ok">Plan preventivo creado.</Mensaje>}
-      {sp.error === 'plan' && (
-        <Mensaje tono="error">Revisá el título y la periodicidad del plan.</Mensaje>
+      {sp.error && (
+        <Mensaje tono="error">
+          {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+        </Mensaje>
       )}
 
       {/* Mantenimiento preventivo: lo planificado, que es lo que evita la avería. */}

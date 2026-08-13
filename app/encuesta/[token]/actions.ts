@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { puntajeValido } from '@/lib/domain/encuestas'
 import { permitirIntento } from '@/lib/limites'
+import { cortarSiFalla } from '@/lib/acciones'
 
 /**
  * Registra la respuesta de la encuesta de satisfacción.
@@ -37,7 +38,7 @@ export async function responderEncuesta(formData: FormData): Promise<void> {
   // Una sola respuesta por encuesta: si no, el NPS se podría inflar.
   if (encuesta.respondida_en) redirect(`/encuesta/${token}?ok=1`)
 
-  await admin
+  const { error } = await admin
     .from('encuestas_satisfaccion')
     .update({
       puntaje,
@@ -45,6 +46,9 @@ export async function responderEncuesta(formData: FormData): Promise<void> {
       respondida_en: new Date().toISOString(),
     })
     .eq('id', encuesta.id)
+  // Sin esto el huésped veía «gracias» con la respuesta perdida, y el NPS se
+  // calculaba sobre menos respuestas de las que la gente creyó dejar.
+  cortarSiFalla(error, `/encuesta/${token}`, 'guardar')
 
   redirect(`/encuesta/${token}?ok=1`)
 }

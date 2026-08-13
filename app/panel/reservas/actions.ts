@@ -32,6 +32,7 @@ import { enviarPlantilla } from '@/lib/email'
 import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
+import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -158,7 +159,13 @@ export async function crearReservaAction(
     // unidad se ocupó entre la búsqueda y el alta. Si el huésped se creó en
     // esta misma llamada, se revierte: no debe quedar una ficha sin reserva.
     if (huespedCreadoAca) {
-      await supabase.from('huespedes').delete().eq('id', huespedId)
+      // Compensación: se loguea y NO se corta. El error que el usuario tiene que
+      // ver es `res.error` —por qué no se pudo reservar—, no el del rollback. Si
+      // esto redirigiera, taparía la causa real. Si el borrado falla queda una
+      // ficha de huésped sin reserva, que es prolijable a mano; perder el motivo
+      // del rechazo, no.
+      const { error: eRollback } = await supabase.from('huespedes').delete().eq('id', huespedId)
+      registrarFalla(eRollback, `rollback del huésped ${huespedId} tras fallar el alta`)
     }
     return { error: res.error, valores }
   }
@@ -166,7 +173,14 @@ export async function crearReservaAction(
   // El vínculo con la agencia se guarda aparte: el helper de alta atómica es
   // compartido con el portal público, donde no existe el concepto de convenio.
   if (agenciaId) {
-    await supabase.from('reservas').update({ agencia_id: agenciaId }).eq('id', res.reserva.id)
+    const { error } = await supabase
+      .from('reservas')
+      .update({ agencia_id: agenciaId })
+      .eq('id', res.reserva.id)
+    // La reserva ya está creada: no se devuelve `{ error }` porque diría que no
+    // se pudo reservar, y sí se pudo. Va al detalle avisando qué quedó sin
+    // guardar, que además decide la tarifa y la cuenta corriente.
+    cortarSiFalla(error, `/panel/reservas/${res.reserva.id}`, 'agencia')
   }
 
   redirect(`/panel/reservas/${res.reserva.id}`)
@@ -195,7 +209,8 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
     redirect(`/panel/reservas/${id}?error=transicion`)
   }
 
-  await supabase.from('reservas').update({ estado: nuevo }).eq('id', id)
+  const { error: eEstado } = await supabase.from('reservas').update({ estado: nuevo }).eq('id', id)
+  cortarSiFalla(eEstado, `/panel/reservas/${id}`, 'estado')
 
   // Fidelidad: el check-out otorga puntos al huésped (una sola vez; 'checkout' es terminal).
   if (nuevo === 'checkout' && reserva.huesped_id) {
@@ -209,7 +224,15 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
 
       const previos = h?.puntos ?? 0
       const totales = previos + puntos
-      await supabase.from('huespedes').update({ puntos: totales }).eq('id', reserva.huesped_id)
+      const { error: ePuntos } = await supabase
+        .from('huespedes')
+        .update({ puntos: totales })
+        .eq('id', reserva.huesped_id)
+      // El check-out ya quedó hecho arriba. Se corta igual: perder los puntos de
+      // un huésped en silencio es un problema real, y avisando se pueden cargar
+      // a mano. El aviso de nivel no se manda, que es lo correcto si no se pudo
+      // guardar el nivel nuevo.
+      cortarSiFalla(ePuntos, `/panel/reservas/${id}`, 'puntos')
 
       // Solo se avisa si la estadía lo hizo CAMBIAR de nivel; sumar puntos sin
       // cruzar el umbral no amerita un correo.
@@ -280,7 +303,14 @@ export async function registrarPago(formData: FormData): Promise<void> {
       .eq('reserva_id', reservaId)
     const resumen = resumenPagos(Number(reserva.total), (pagos ?? []) as Pago[])
     if (resumen.saldada && puedeTransicionar(reserva.estado as EstadoReserva, 'pagada')) {
-      await supabase.from('reservas').update({ estado: 'pagada' }).eq('id', reservaId)
+      const { error: eSaldada } = await supabase
+        .from('reservas')
+        .update({ estado: 'pagada' })
+        .eq('id', reservaId)
+      // Mismo fallo que tenía el webhook: el pago ya está registrado, y si esto
+      // se pierde queda cobrado sin marcar. Acá al menos hay alguien mirando la
+      // pantalla, pero solo si se le dice.
+      cortarSiFalla(eSaldada, `/panel/reservas/${reservaId}`, 'saldada')
     }
   }
 
@@ -301,12 +331,15 @@ export async function agregarConsumo(formData: FormData): Promise<void> {
     .eq('id', productoId)
     .single()
   if (producto) {
-    await supabase.from('consumos').insert({
+    const { error } = await supabase.from('consumos').insert({
       reserva_id: reservaId,
       producto_id: productoId,
       cantidad,
       precio_unitario: Number(producto.precio),
     })
+    // El trigger de la base descuenta stock al insertar: si esto falla y no se
+    // avisa, el consumo no se cobra y el stock queda mostrando otra cosa.
+    cortarSiFalla(error, `/panel/reservas/${reservaId}`, 'consumo')
   }
   redirect(`/panel/reservas/${reservaId}`)
 }
@@ -317,7 +350,8 @@ export async function quitarConsumo(formData: FormData): Promise<void> {
   const consumoId = String(formData.get('consumo_id') ?? '')
   if (consumoId) {
     const supabase = await crearClienteServidor()
-    await supabase.from('consumos').delete().eq('id', consumoId)
+    const { error } = await supabase.from('consumos').delete().eq('id', consumoId)
+    cortarSiFalla(error, `/panel/reservas/${reservaId}`, 'quitar_consumo')
   }
   redirect(`/panel/reservas/${reservaId}`)
 }
@@ -454,7 +488,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
 
   if (!resultado.ok) redirect(`/panel/reservas/${reservaId}?error=cae`)
 
-  await supabase.from('facturas').insert({
+  const { error: eFactura } = await supabase.from('facturas').insert({
     reserva_id: reservaId,
     total: desglose.total,
     neto: desglose.neto,
@@ -470,6 +504,12 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     cae_solicitado_en: new Date().toISOString(),
     emitida_por: sesion?.userId ?? null,
   })
+  // El punto más caro del archivo: acá ya se pidió el CAE al proveedor y ya se
+  // consumió el número correlativo del punto de venta. Si el insert se pierde en
+  // silencio queda un CAE emitido y un número gastado SIN factura, y el usuario
+  // ve la pantalla como si no hubiera pasado nada. La correlatividad es una
+  // obligación formal (ADR 0015): el hueco tiene que ser visible.
+  cortarSiFalla(eFactura, `/panel/reservas/${reservaId}`, 'factura')
 
   redirect(`/panel/reservas/${reservaId}/factura`)
 }
@@ -545,7 +585,14 @@ export async function crearReservaGrupal(
         primerError ??= res.error
         break // no quedan más unidades de este tipo
       }
-      await supabase.from('reservas').update({ grupo_id: grupoId }).eq('id', res.reserva.id)
+      const { error: eGrupo } = await supabase
+        .from('reservas')
+        .update({ grupo_id: grupoId })
+        .eq('id', res.reserva.id)
+      // No se corta: la reserva quedó creada y las demás del grupo también deben
+      // intentarse. Sin el `grupo_id` aparece como individual, que se arregla
+      // desde el panel; abortar el lote a medias sería peor.
+      registrarFalla(eGrupo, `vínculo de la reserva ${res.reserva.id} con el grupo ${grupoId}`)
       creadas++
     }
   }
@@ -594,7 +641,13 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   if (error) {
     redirect(`/panel/reservas/${id}?error=${error.code === '23P01' ? 'overlap' : 'repro'}`)
   }
-  await supabase.from('reservas').update({ total: cot.resumen.total }).eq('id', id)
+  const { error: eTotal } = await supabase
+    .from('reservas')
+    .update({ total: cot.resumen.total })
+    .eq('id', id)
+  // Las fechas ya se movieron. Si el total no se actualiza, la reserva queda con
+  // el precio de las fechas viejas: hay que decirlo, no es un detalle.
+  cortarSiFalla(eTotal, `/panel/reservas/${id}`, 'total')
   redirect(`/panel/reservas/${id}`)
 }
 
@@ -674,8 +727,18 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
     if (!cot.faltanTarifas) {
       const noches = diasEntre(desde, hasta)
       const precioNoche = noches > 0 ? Number((cot.resumen.totalNeto / noches).toFixed(2)) : 0
-      await supabase.from('estadias').update({ precio_noche: precioNoche }).eq('reserva_id', id)
-      await supabase.from('reservas').update({ total: cot.resumen.total }).eq('id', id)
+      const { error: ePrecio } = await supabase
+        .from('estadias')
+        .update({ precio_noche: precioNoche })
+        .eq('reserva_id', id)
+      cortarSiFalla(ePrecio, `/panel/reservas/${id}`, 'total')
+      const { error: eTotalMudanza } = await supabase
+        .from('reservas')
+        .update({ total: cot.resumen.total })
+        .eq('id', id)
+      // La mudanza ya se hizo. Si el precio no se recotiza, la reserva queda
+      // facturando la unidad anterior.
+      cortarSiFalla(eTotalMudanza, `/panel/reservas/${id}`, 'total')
     } else {
       redirect(`/panel/reservas/${id}?error=tarifa_destino`)
     }

@@ -6,6 +6,7 @@ import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { hoyISO } from '@/lib/fechas'
 import { motivoNoFirmable, type EstadoContrato } from '@/lib/domain/contratos'
 import { obtenerProveedorFirma, ipDePeticion } from '@/lib/firma'
+import { cortarSiFalla } from '@/lib/acciones'
 
 /**
  * Acciones de la vista pública de firma.
@@ -57,7 +58,12 @@ export async function firmarContrato(formData: FormData): Promise<void> {
   })
 
   const admin = crearClienteAdmin()
-  await admin
+  // Las dos escrituras que siguen tienen que fallar cerrado, y en este orden.
+  // Si se guardara el estado «firmado» sin haber guardado la constancia, el
+  // contrato quedaría firmado sin evidencia; y si se guarda la constancia pero
+  // no el estado, el huésped ve «listo» con el contrato sin firmar. `cortarSiFalla`
+  // lanza, así que la segunda no corre si la primera falló.
+  const { error: eFirma } = await admin
     .from('firmas')
     .update({
       firmante_nombre: nombre,
@@ -67,11 +73,13 @@ export async function firmarContrato(formData: FormData): Promise<void> {
       fecha_firma: constancia.fecha.toISOString(),
     })
     .eq('id', registro.id)
+  cortarSiFalla(eFirma, `/firmar/${token}`, 'firma')
 
-  await admin
+  const { error: eEstado } = await admin
     .from('contratos')
     .update({ estado: 'firmado', fecha_firma: constancia.fecha.toISOString() })
     .eq('id', registro.contrato.id)
+  cortarSiFalla(eEstado, `/firmar/${token}`, 'firma')
 
   redirect(`/firmar/${token}?ok=1`)
 }
@@ -85,6 +93,10 @@ export async function rechazarContrato(formData: FormData): Promise<void> {
   if (registro.contrato.estado !== 'enviado') redirect(`/firmar/${token}`)
 
   const admin = crearClienteAdmin()
-  await admin.from('contratos').update({ estado: 'rechazado' }).eq('id', registro.contrato.id)
+  const { error } = await admin
+    .from('contratos')
+    .update({ estado: 'rechazado' })
+    .eq('id', registro.contrato.id)
+  cortarSiFalla(error, `/firmar/${token}`, 'rechazo')
   redirect(`/firmar/${token}?rechazado=1`)
 }

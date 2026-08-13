@@ -58,7 +58,7 @@ interface ContratoRow {
 export default async function ContratosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; estado?: string; tipo?: string; ok?: string }>
+  searchParams: Promise<{ q?: string; estado?: string; tipo?: string; ok?: string; error?: string }>
 }) {
   const sesion = await requerirAcceso('contratos')
   // Redactar lo restringe la acción a admin y gerencia: la pantalla no ofrece
@@ -136,6 +136,15 @@ export default async function ContratosPage({
         }
       />
 
+      {sp.error && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {sp.error === 'vencer'
+              ? 'No se pudieron marcar los contratos vencidos. Los que veías siguen figurando como vigentes.'
+              : 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
       {sp.ok === 'vencidos' && (
         <Mensaje tono="ok">Se marcaron como vencidos los contratos fuera de vigencia.</Mensaje>
       )}

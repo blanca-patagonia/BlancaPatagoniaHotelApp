@@ -98,7 +98,13 @@ export default async function FirmarPage({
             Escribí tu nombre y apellido para poder firmar.
           </p>
         )}
-        {sp.error && sp.error !== 'nombre' && (
+        {sp.error === 'rechazo' && (
+          <p role="alert" className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800 ring-1 ring-red-200">
+            No pudimos registrar el rechazo. El contrato sigue pendiente de tu
+            respuesta: probá de nuevo.
+          </p>
+        )}
+        {sp.error && sp.error !== 'nombre' && sp.error !== 'rechazo' && (
           <p role="alert" className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800 ring-1 ring-red-200">
             {MENSAJES_NO_FIRMABLE[sp.error as keyof typeof MENSAJES_NO_FIRMABLE] ??
               'No pudimos registrar la firma.'}

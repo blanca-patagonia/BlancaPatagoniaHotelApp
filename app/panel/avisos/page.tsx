@@ -11,6 +11,7 @@ import {
   Tarjeta,
   botonClases,
   Pagina,
+  Mensaje,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
@@ -36,13 +37,23 @@ function cuando(iso: string): string {
   return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+/**
+ * Motivos con que las acciones de esta pantalla pueden volver por `?error=`.
+ * El fallback cubre cualquier motivo que no esté acá, así que sumar uno nuevo en
+ * una acción nunca deja al usuario sin respuesta.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  fijar: 'No se pudo fijar ni desfijar el aviso. Probá de nuevo.',
+  borrar: 'No se pudo borrar el aviso. Probá de nuevo.',
+}
+
 export default async function AvisosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; error?: string }>
 }) {
   const sesion = await requerirAcceso('avisos')
-  const { q } = await searchParams
+  const { q, error: errorParam } = await searchParams
   const supabase = await crearClienteServidor()
 
   let consulta = supabase
@@ -67,6 +78,14 @@ export default async function AvisosPage({
         descripcion="Tablón interno del equipo: novedades, pedidos y recordatorios."
         icono="avisos"
       />
+
+      {errorParam && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
 
       <Tarjeta className="mb-4 p-5">
         <FormularioAviso />

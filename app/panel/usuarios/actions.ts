@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { obtenerSesion } from '@/lib/auth/session'
 import { esRolValido } from '@/lib/domain/roles'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoUsuario {
   error?: string
@@ -54,12 +55,21 @@ export async function crearUsuario(
   return { ok: `Usuario ${email} creado con rol ${rol}.` }
 }
 
+/**
+ * Estas dos acciones escriben con el cliente **admin**, que saltea RLS. Eso
+ * cambia qué significa un error: no puede ser un rechazo de permisos, así que si
+ * falla es una falla real. Y el fallo silencioso es más grave que en el resto del
+ * panel —un administrador queda convencido de que cambió el rol de alguien, o de
+ * que lo dio de baja, y no pasó nada—, que es una diferencia de seguridad y no de
+ * comodidad.
+ */
 export async function cambiarRolUsuario(formData: FormData): Promise<void> {
   await exigirAdmin()
   const id = String(formData.get('user_id') ?? '')
   const rol = String(formData.get('rol') ?? '')
   if (id && esRolValido(rol)) {
-    await crearClienteAdmin().from('perfiles').update({ rol }).eq('id', id)
+    const { error } = await crearClienteAdmin().from('perfiles').update({ rol }).eq('id', id)
+    cortarSiFalla(error, '/panel/usuarios', 'rol')
   }
   redirect('/panel/usuarios')
 }
@@ -69,7 +79,11 @@ export async function alternarActivoUsuario(formData: FormData): Promise<void> {
   const id = String(formData.get('user_id') ?? '')
   const activo = String(formData.get('activo') ?? '') === 'true'
   if (id) {
-    await crearClienteAdmin().from('perfiles').update({ activo: !activo }).eq('id', id)
+    const { error } = await crearClienteAdmin()
+      .from('perfiles')
+      .update({ activo: !activo })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/usuarios', 'activo')
   }
   redirect('/panel/usuarios')
 }

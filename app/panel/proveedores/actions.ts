@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoProveedor {
   error?: string
@@ -57,7 +58,8 @@ export async function registrarMovimientoProveedor(formData: FormData): Promise<
   if (proveedorId && ['cargo', 'pago'].includes(tipo) && monto > 0) {
     const esCargo = tipo === 'cargo'
     const supabase = await crearClienteServidor()
-    await supabase.from('movimientos_proveedor').insert({
+    // Un cargo o un pago que no se registra descuadra lo que el hotel debe.
+    const { error } = await supabase.from('movimientos_proveedor').insert({
       proveedor_id: proveedorId,
       tipo,
       monto,
@@ -66,6 +68,7 @@ export async function registrarMovimientoProveedor(formData: FormData): Promise<
       vencimiento: esCargo && vencimiento ? vencimiento : null,
       estado: esCargo ? 'pendiente' : 'pagado',
     })
+    cortarSiFalla(error, `/panel/proveedores/${proveedorId}`, 'movimiento')
   }
   redirect(`/panel/proveedores/${proveedorId}`)
 }
@@ -77,7 +80,11 @@ export async function marcarComprobantePagado(formData: FormData): Promise<void>
   const proveedorId = String(formData.get('proveedor_id') ?? '')
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('movimientos_proveedor').update({ estado: 'pagado' }).eq('id', id)
+    const { error } = await supabase
+      .from('movimientos_proveedor')
+      .update({ estado: 'pagado' })
+      .eq('id', id)
+    cortarSiFalla(error, `/panel/proveedores/${proveedorId}`, 'pagado')
   }
   redirect(`/panel/proveedores/${proveedorId}`)
 }
@@ -102,7 +109,7 @@ export async function actualizarProveedor(formData: FormData): Promise<void> {
   if (!id) redirect('/panel/proveedores')
 
   const supabase = await crearClienteServidor()
-  await supabase
+  const { error } = await supabase
     .from('proveedores')
     .update({
       nombre: String(formData.get('nombre') ?? '').trim(),
@@ -112,6 +119,7 @@ export async function actualizarProveedor(formData: FormData): Promise<void> {
       telefono: String(formData.get('telefono') ?? '').trim() || null,
     })
     .eq('id', id)
+  cortarSiFalla(error, `/panel/proveedores/${id}`, 'datos')
 
   revalidatePath(`/panel/proveedores/${id}`)
   redirect(`/panel/proveedores/${id}?ok=datos`)
@@ -124,7 +132,8 @@ export async function alternarActivoProveedor(formData: FormData): Promise<void>
   const activo = String(formData.get('activo') ?? '') === 'true'
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('proveedores').update({ activo: !activo }).eq('id', id)
+    const { error } = await supabase.from('proveedores').update({ activo: !activo }).eq('id', id)
+    cortarSiFalla(error, `/panel/proveedores/${id}`, 'activo')
   }
   revalidatePath('/panel/proveedores')
   redirect(`/panel/proveedores/${id}`)
