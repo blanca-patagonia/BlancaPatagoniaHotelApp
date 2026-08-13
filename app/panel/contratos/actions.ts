@@ -159,12 +159,15 @@ export async function cambiarEstadoContrato(formData: FormData): Promise<void> {
 export async function vencerContratos(): Promise<void> {
   await exigirGestion()
   const supabase = await crearClienteServidor()
-  await supabase
+  const { error } = await supabase
     .from('contratos')
     .update({ estado: 'vencido' })
     .eq('estado', 'enviado')
     .not('vigencia_hasta', 'is', null)
     .lt('vigencia_hasta', hoyISO())
+  // Sin esto, «se marcaron los vencidos» se mostraba igual sin haber marcado
+  // ninguno, y el listado seguía ofreciendo contratos como vigentes.
+  cortarSiFalla(error, '/panel/contratos', 'vencer')
 
   revalidatePath('/panel/contratos')
   redirect('/panel/contratos?ok=vencidos')

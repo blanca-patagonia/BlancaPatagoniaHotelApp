@@ -71,6 +71,10 @@ const MENSAJES_ERROR: Record<string, string> = {
   producto: 'Revisá el nombre y el precio del producto.',
   neto_mayor: 'El precio neto (agencia) no puede superar al rack (mostrador).',
   guardar: 'No se pudo guardar la tarifa. Probá de nuevo.',
+  // Fallos de escritura, antes silenciosos. `producto_estado` no reusa el slug
+  // `producto`, que ya significa «revisá los datos del alta».
+  producto_estado: 'No se pudo activar ni desactivar el producto. Quedó como estaba.',
+  stock: 'No se pudo registrar la reposición. El stock quedó con el valor anterior.',
 }
 
 export default async function ConfigPage({

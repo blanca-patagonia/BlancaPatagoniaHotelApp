@@ -50,10 +50,13 @@ export async function reponerStock(formData: FormData): Promise<void> {
       .eq('id', id)
       .single()
     if (p && p.stock != null) {
-      await supabase
+      const { error } = await supabase
         .from('productos_servicios')
         .update({ stock: (p.stock as number) + cantidad })
         .eq('id', id)
+      // Un reposición que no se guarda deja el stock mostrando menos de lo que
+      // hay, y el próximo consumo lo descuenta de un número equivocado.
+      cortarSiFalla(error, '/panel/config', 'stock')
     }
   }
   redirect('/panel/config')
@@ -123,7 +126,7 @@ export async function alternarProducto(formData: FormData): Promise<void> {
       .from('productos_servicios')
       .update({ activo: !activo })
       .eq('id', id)
-    cortarSiFalla(error, '/panel/config', 'producto')
+    cortarSiFalla(error, '/panel/config', 'producto_estado')
   }
   revalidatePath('/panel/config')
   redirect('/panel/config')

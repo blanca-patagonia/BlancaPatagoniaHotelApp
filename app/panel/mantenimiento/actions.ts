@@ -66,13 +66,14 @@ export async function crearPlanPreventivo(formData: FormData): Promise<void> {
   }
 
   const supabase = await crearClienteServidor()
-  await supabase.from('planes_mantenimiento').insert({
+  const { error } = await supabase.from('planes_mantenimiento').insert({
     titulo,
     unidad_id: unidadId || null,
     cada_meses: cadaMeses,
     prioridad,
     proxima_ejecucion: primeraEjecucionSugerida(hoyISO()),
   })
+  cortarSiFalla(error, '/panel/mantenimiento', 'plan_guardar')
 
   revalidatePath('/panel/mantenimiento')
   redirect('/panel/mantenimiento?ok=plan')

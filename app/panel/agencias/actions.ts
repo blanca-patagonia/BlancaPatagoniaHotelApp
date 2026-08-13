@@ -6,6 +6,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
 import { puedeAvanzar, type EtapaComercial } from '@/lib/domain/comercial'
 import { TIPOS_CUENTA } from '@/lib/domain/cuentas'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoAgencia {
   error?: string
@@ -50,12 +51,15 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
     redirect(`/panel/agencias/${agenciaId}`)
   }
   const supabase = await crearClienteServidor()
-  await supabase.from('movimientos_cuenta').insert({
+  // Un movimiento de cuenta corriente que no se registra y no avisa descuadra el
+  // saldo de la agencia sin que nadie lo note.
+  const { error } = await supabase.from('movimientos_cuenta').insert({
     agencia_id: agenciaId,
     tipo,
     monto,
     concepto,
   })
+  cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'movimiento')
   redirect(`/panel/agencias/${agenciaId}`)
 }
 
@@ -85,7 +89,8 @@ export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
     redirect('/panel/agencias?error=etapa')
   }
 
-  await supabase.from('agencias').update({ etapa: nueva }).eq('id', id)
+  const { error } = await supabase.from('agencias').update({ etapa: nueva }).eq('id', id)
+  cortarSiFalla(error, '/panel/agencias', 'etapa_guardar')
   revalidatePath('/panel/agencias')
   redirect('/panel/agencias?ok=etapa')
 }
@@ -100,7 +105,7 @@ export async function actualizarAgencia(formData: FormData): Promise<void> {
   if (!id) redirect('/panel/agencias')
 
   const supabase = await crearClienteServidor()
-  await supabase
+  const { error } = await supabase
     .from('agencias')
     .update({
       nombre: String(formData.get('nombre') ?? '').trim(),
@@ -111,6 +116,7 @@ export async function actualizarAgencia(formData: FormData): Promise<void> {
       descuento_pct: Number.isFinite(descuento) ? Math.min(100, Math.max(0, descuento)) : 0,
     })
     .eq('id', id)
+  cortarSiFalla(error, `/panel/agencias/${id}`, 'datos')
 
   revalidatePath(`/panel/agencias/${id}`)
   redirect(`/panel/agencias/${id}?ok=datos`)
@@ -128,7 +134,8 @@ export async function alternarActivoAgencia(formData: FormData): Promise<void> {
   const activo = String(formData.get('activo') ?? '') === 'true'
   if (id) {
     const supabase = await crearClienteServidor()
-    await supabase.from('agencias').update({ activo: !activo }).eq('id', id)
+    const { error } = await supabase.from('agencias').update({ activo: !activo }).eq('id', id)
+    cortarSiFalla(error, `/panel/agencias/${id}`, 'activo')
   }
   revalidatePath('/panel/agencias')
   redirect(`/panel/agencias/${id}`)

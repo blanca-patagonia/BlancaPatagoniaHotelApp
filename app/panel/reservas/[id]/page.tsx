@@ -88,6 +88,18 @@ const MENSAJES_ERROR: Record<string, string> = {
   ya_facturada: MENSAJES_NO_FACTURABLE.ya_facturada,
   cuit: 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped o de la agencia.',
   cae: 'El proveedor de facturación rechazó el comprobante. Revisá los importes.',
+  // Escrituras que la base puede rechazar. Antes fallaban en silencio: la
+  // pantalla recargaba igual y no había forma de saber que no se había guardado.
+  estado: 'No se pudo guardar el estado nuevo. La reserva quedó como estaba.',
+  agencia: 'La reserva se creó, pero no se pudo vincular con la agencia. Asignala desde la ficha: de eso dependen la tarifa y la cuenta corriente.',
+  puntos: 'Se registró el check-out, pero no se pudieron acreditar los puntos de fidelidad. Cargalos a mano desde la ficha del huésped.',
+  saldada: 'Se registró el pago, pero la reserva no quedó marcada como pagada. Revisá el estado antes de seguir.',
+  consumo: 'No se pudo cargar el consumo. No se cobró ni se descontó del stock.',
+  quitar_consumo: 'No se pudo quitar el consumo. Sigue cargado a la cuenta.',
+  factura:
+    'Se pidió el CAE y se consumió el número de comprobante, pero la factura NO quedó guardada. Avisá antes de volver a emitir: el número ya se usó.',
+  total: 'El cambio se hizo, pero no se pudo recalcular el precio. La reserva quedó con el total anterior.',
+  repro: 'No se pudo reprogramar la estadía.',
   // Cambio de unidad.
   ...MENSAJES_RECHAZO_MUDANZA,
   ocupada: 'Esa unidad ya está ocupada en las fechas de la reserva.',

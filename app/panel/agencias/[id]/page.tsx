@@ -38,13 +38,33 @@ interface MovRow {
   reserva: { codigo: string } | null
 }
 
+/**
+ * Mensajes de las acciones de esta ficha.
+ *
+ * Esta pantalla no recibía `searchParams`, así que el `?ok=datos` que las
+ * acciones ya mandaban al guardar nunca se vio, y los fallos de escritura
+ * tampoco.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  movimiento: 'No se pudo registrar el movimiento. El saldo de la cuenta quedó sin cambios.',
+  datos: 'No se pudieron guardar los datos de la agencia.',
+  activo: 'No se pudo cambiar el estado de la cuenta.',
+}
+
+const MENSAJES_OK: Record<string, string> = {
+  datos: 'Datos actualizados.',
+}
+
 export default async function AgenciaDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ ok?: string; error?: string }>
 }) {
   await requerirAcceso('agencias')
   const { id } = await params
+  const { ok: okParam, error: errorParam } = await searchParams
   const supabase = await crearClienteServidor()
 
   const [{ data: agenciaData }, { data: movsData }] = await Promise.all([
@@ -71,6 +91,19 @@ export default async function AgenciaDetallePage({
       >
         ‹ Volver a agencias
       </Link>
+
+      {errorParam && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
+      {okParam && MENSAJES_OK[okParam] && (
+        <div className="mb-4">
+          <Mensaje tono="ok">{MENSAJES_OK[okParam]}</Mensaje>
+        </div>
+      )}
 
       <Encabezado
         titulo={agencia.nombre}

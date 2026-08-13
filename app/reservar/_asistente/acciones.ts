@@ -6,6 +6,7 @@ import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { obtenerAsistente } from '@/lib/asistente'
 import { ipDePeticion } from '@/lib/firma'
 import type { RespuestaAsistente } from '@/lib/domain/asistente'
+import { registrarFalla } from '@/lib/acciones'
 
 /** Largo máximo aceptado, para no guardar textos abusivos. */
 const MAX_PREGUNTA = 500
@@ -52,7 +53,14 @@ export async function preguntarAlAsistente(pregunta: string): Promise<RespuestaA
     })
 
     if (typeof recientes !== 'number' || recientes < MAX_POR_MINUTO) {
-      await admin.from('consultas_bot').insert({ pregunta: texto, ip })
+      const { error } = await admin.from('consultas_bot').insert({ pregunta: texto, ip })
+      // Se loguea y NO se corta, a propósito: esto es el REGISTRO de la consulta,
+      // no la respuesta al huésped, que ya está calculada y se devuelve igual.
+      // El ADR 0011 fijó que pasado el límite «sigue respondiendo y deja de
+      // registrar»; cortarle la respuesta a un huésped real porque no se pudo
+      // guardar el log sería el intercambio equivocado. Queda explícito acá para
+      // que no parezca un descuido, que es como se veía antes.
+      registrarFalla(error, 'registro de una consulta del asistente público')
     }
   }
 

@@ -22,6 +22,21 @@ interface Fila {
   } | null
 }
 
+/**
+ * Motivos con que la acción puede volver por `?error=`.
+ *
+ * Antes solo se mostraba «puntaje»: los otros dos que la acción ya usaba
+ * —`limite` e `invalida`— no se renderizaban, así que un huésped que chocaba con
+ * el límite de respuestas por hora no veía nada y creía que el formulario estaba
+ * roto.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  puntaje: 'Elegí un puntaje del 0 al 10 para continuar.',
+  limite: 'Recibimos varias respuestas desde tu conexión. Esperá un rato y probá de nuevo.',
+  invalida: 'Este enlace de encuesta no es válido o ya venció.',
+  guardar: 'No pudimos guardar tu respuesta. Probá de nuevo.',
+}
+
 export default async function EncuestaPage({
   params,
   searchParams,
@@ -73,9 +88,9 @@ export default async function EncuestaPage({
           >
             <input type="hidden" name="token" value={token} />
 
-            {sp.error === 'puntaje' && (
+            {sp.error && (
               <p role="alert" className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800 ring-1 ring-red-200">
-                Elegí un puntaje del 0 al 10 para continuar.
+                {MENSAJES_ERROR[sp.error] ?? 'No pudimos guardar tu respuesta. Probá de nuevo.'}
               </p>
             )}
 

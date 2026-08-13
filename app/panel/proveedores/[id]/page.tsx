@@ -37,13 +37,34 @@ interface MovRow {
   comprobante: string | null
 }
 
+/**
+ * Mensajes de las acciones de esta ficha.
+ *
+ * Esta pantalla no recibía `searchParams`, así que el `?ok=datos` que las
+ * acciones ya mandaban al guardar nunca se vio, y los fallos de escritura
+ * tampoco.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  movimiento: 'No se pudo registrar el movimiento. Lo que el hotel debe quedó sin cambios.',
+  pagado: 'No se pudo marcar el comprobante como pagado. Sigue figurando como pendiente.',
+  datos: 'No se pudieron guardar los datos del proveedor.',
+  activo: 'No se pudo cambiar el estado del proveedor.',
+}
+
+const MENSAJES_OK: Record<string, string> = {
+  datos: 'Datos actualizados.',
+}
+
 export default async function ProveedorDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ ok?: string; error?: string }>
 }) {
   await requerirAcceso('proveedores')
   const { id } = await params
+  const { ok: okParam, error: errorParam } = await searchParams
   const supabase = await crearClienteServidor()
 
   const [{ data: provData }, { data: movsData }] = await Promise.all([
@@ -71,6 +92,19 @@ export default async function ProveedorDetallePage({
       >
         ‹ Volver a proveedores
       </Link>
+
+      {errorParam && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
+      {okParam && MENSAJES_OK[okParam] && (
+        <div className="mb-4">
+          <Mensaje tono="ok">{MENSAJES_OK[okParam]}</Mensaje>
+        </div>
+      )}
 
       <Encabezado
         titulo={proveedor.nombre}

@@ -29,6 +29,7 @@ import {
   Tarjeta,
   botonClases,
   Pagina,
+  Mensaje,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { cambiarEtapaAgencia } from './actions'
@@ -51,13 +52,25 @@ const TONO_ETAPA: Record<EtapaComercial, 'neutro' | 'lago' | 'calafate' | 'exito
   perdida: 'peligro',
 }
 
+/**
+ * Mensajes de las acciones del embudo comercial.
+ *
+ * `cambiarEtapaAgencia` ya mandaba `?error=etapa` y `?ok=etapa` desde que existe,
+ * pero esta pantalla no los renderizaba: el rechazo de la regla —no se puede
+ * saltear de «contacto» a «activa»— era invisible, y confirmar el avance también.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  etapa: 'Ese salto de etapa no está permitido: hay que avanzar de a una.',
+  etapa_guardar: 'No se pudo guardar la etapa nueva. La agencia quedó como estaba.',
+}
+
 export default async function AgenciasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; saldo?: string }>
+  searchParams: Promise<{ q?: string; saldo?: string; ok?: string; error?: string }>
 }) {
   const sesion = await requerirAcceso('agencias')
-  const { q, saldo: filtroSaldo } = await searchParams
+  const { q, saldo: filtroSaldo, ok: okParam, error: errorParam } = await searchParams
   const supabase = await crearClienteServidor()
 
   let consulta = supabase
@@ -112,6 +125,19 @@ export default async function AgenciasPage({
           </>
         }
       />
+
+      {errorParam && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
+      {okParam === 'etapa' && (
+        <div className="mb-4">
+          <Mensaje tono="ok">La agencia avanzó de etapa.</Mensaje>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi
