@@ -1581,3 +1581,222 @@ typecheck, lint y build, con Supabase levantado y `EXIGIR_DB=1`. Los datos del
 README se comprobaron contra el código y no de memoria: los tests contados sobre
 `tests/`, las 33 tablas con RLS sobre `supabase/migrations/`, y cada módulo de la
 tabla verificado en `app/` y `lib/`.
+
+---
+
+## 2026-08-13 · Fase 2 de la auditoría de seguridad — Cuatro bugs leyendo el código
+
+A diferencia de la Fase 18, que salió de recorrer el sistema a mano, estos cuatro
+salieron de **leer el código**. Ninguno se ve usando la aplicación: tres de ellos
+solo aparecen si se le pega directo a la API, y el cuarto solo cuando la base
+falla.
+
+Nota de método: la auditoría de RLS que iba a ser esta fase no se pudo hacer.
+Requiere ejecutar las políticas contra una base con los cuatro roles —«activada»
+no es «correcta»— y en el entorno de trabajo no se pudo levantar Supabase: el
+*pull* de las imágenes muere con 403 contra las CDN de los registries, bloqueadas
+por política de egreso. Queda pendiente, y se cambió de rumbo a buscar bugs en
+código, que sí se puede sin base.
+
+### Los precios de agencia eran públicos
+
+`cotizar_estadia` (migración 0008) tenía tres propiedades que, juntas, abrían el
+agujero: recibe `p_tarifa_tipo` y devuelve `precio_neto` cuando vale `'neto'`,
+**no** es `security definer` —corre con los privilegios de quien llama— y tiene
+`grant execute … to anon`, porque el portal la necesita.
+
+La aplicación siempre manda `'rack'` en las rutas públicas, pero eso no defiende
+nada: la clave publicable viaja en el bundle del navegador **por diseño**. Un POST
+a `/rest/v1/rpc/cotizar_estadia` con `'neto'` devolvía, noche por noche, los
+precios que el hotel negocia con las agencias (ADR 0004). No es un dato personal,
+es un dato comercial, y de los que se defienden solos: una agencia que ve la
+grilla de netos negocia distinto.
+
+**Decisión — la guarda va sobre `current_user`, no sobre `rol_actual()`.** Parece
+un detalle y es el corazón del arreglo: `rol_actual()` sale de `perfiles` vía
+`auth.uid()`, y para `service_role` eso es NULL porque no hay perfil detrás de la
+clave del servidor. Con `rol_actual() is not null` se habría roto el cotizado neto
+del servidor **y** el test de integración que ya lo cubría. PostgREST cambia el rol
+de Postgres según la credencial, así que `current_user` distingue exactamente lo
+que hay que distinguir. Migración **0030**.
+
+A `anon` que pida neto se le devuelve rack, en silencio y sin error: ningún
+llamador legítimo pide neto sin sesión, y un error solo le confirmaría a quien
+sondea que encontró algo.
+
+**Queda abierto** el otro camino al mismo dato: `grant select on all tables … to
+anon` (0006) más la política de lectura pública de `tarifas` sin cláusula `to`
+permiten `GET /rest/v1/tarifas?select=precio_neto`. Cerrarlo exige revocar por
+columna **y** hacer la función `security definer` a la vez, porque Postgres pide
+privilegio sobre toda columna referenciada aunque la rama del `CASE` no se
+ejecute: un `revoke` a secas tiraría abajo la cotización del portal entero. Está
+documentado dentro de la migración 0030 y pide su propio ADR.
+
+### El webhook de pagos fallaba abierto
+
+Para una pasarela, un `200` significa «entregado, no reintentes». El handler
+cuidaba el `insert` de `pagos` —chequeaba el error, manejaba la idempotencia del
+23505— y después descartaba el resultado de la transición a `pagada`.
+
+Escenario: entra un pago aprobado que salda la reserva, el pago **se registra**, el
+`update` falla (deadlock, timeout, corte) y se responde `ok`. Plata cobrada,
+reserva sin marcar, sin reintento y sin aviso.
+
+**El agravante era peor que el bug:** como la fila de `pagos` ya existe con su
+`external_id` único, reenviar el evento a mano entraba por el atajo del 23505 y
+devolvía `{ok, duplicado}` **sin volver a intentar la transición**. La
+inconsistencia era permanente: no había forma de repararla. Los dos `select`
+previos tenían el mismo problema —si fallaba la lectura, el resumen daba «no
+saldada» y se salteaba la transición por un problema de infraestructura—.
+
+**Decisión:** toda operación de base responde 500, que es el único modo de pedir el
+reintento, y la conciliación corre **también** cuando el evento viene repetido. Así
+reenviar el evento pasa de ser un atajo que impedía la reparación a ser el
+mecanismo de reparación.
+
+Queda deliberadamente igual: una reserva anulada y saldada no se transiciona. Qué
+hacer con esa plata es decisión del hotel, no del webhook.
+
+### Inyección de condiciones en los filtros `or`
+
+El término del usuario se interpolaba pelado dentro de `or=(…)`, donde **la coma
+separa condiciones** y los paréntesis agrupan. Buscar `x,id.gt.0` dejaba de ser una
+búsqueda y pasaba a ser un filtro elegido por quien escribe.
+
+El escape que había cubría `%` y `_`, que son los comodines de **LIKE**: otra capa,
+otro problema. Son dos y hay que atravesar las dos. Se agrega `patronOr()` en
+`lib/listados.ts`, que encierra el patrón entre **comillas dobles** —el mecanismo
+que PostgREST admite para valores con caracteres reservados— y escapa `\` y `"`.
+
+Seis sitios, incluido el buscador global, que filtra por `doc_numero`. Las llamadas
+`.ilike('col', …)` **no** estaban afectadas: ahí el valor viaja como parámetro y no
+como sintaxis.
+
+**Alcance real, dicho sin inflar:** RLS seguía imponiendo qué filas ve cada rol, así
+que esto no cruzaba un límite de autorización; lo que se podía era ensanchar o
+romper el filtro dentro de lo ya permitido. Se arregla igual porque la barrera no
+debe ser un solo control.
+
+### El `<details>` número 12
+
+La Fase 15 eliminó los 11 que escondían acciones, pero quedó uno en `config`:
+escondía el contenido de cada plantilla de correo **y** un formulario con acción de
+servidor. Son 4 plantillas, así que quedan desplegadas.
+
+**Verificación:** CI en verde sobre `main` con base real — 36 archivos, **358
+tests**, cero salteados. Los 8 tests del webhook usan base **falseada** a propósito,
+y es la herramienta correcta y no un atajo: lo que se prueba es qué pasa *cuando la
+base falla*, y eso no se puede provocar contra una Postgres sana. Se comprobó que
+sirven como regresión —contra el código anterior pasan los 4 comportamientos que ya
+eran correctos y fallan exactamente los 4 de fallo cerrado—; un test que pasa en las
+dos versiones no prueba nada. Y `cotizacion.test.ts` corrió con 4 tests en vez de 2:
+los dos nuevos consultan con la **clave publicable**, que es el único modo de ver el
+sistema como lo ve internet, y confirman que la guarda del neto no rompió el
+cotizado rack del portal.
+
+---
+
+## 2026-08-13 · Fase 20 — Ningún fallo de escritura en silencio
+
+Continúa el principio de la Fase 15 —*nada oculto*— pero del lado del resultado: no
+alcanza con que la pantalla no esconda nada si, cuando la base rechaza una
+escritura, no lo dice.
+
+### El problema
+
+Las acciones que devuelven estado podían informar un fallo con
+`return { error: … }`, pero las que redirigen no tienen valor de retorno, y eso
+derivó en **38 escrituras** cuyo resultado se descartaba:
+
+```ts
+await supabase.from('avisos').delete().eq('id', id)
+redirect('/panel/avisos')
+```
+
+Si la base rechazaba —por RLS, por un trigger, por un corte— la pantalla recargaba
+sin cambios y **sin un solo mensaje**. Quien lo usa no podía distinguir «no se
+pudo» de «no pasó nada», que es exactamente lo que el proyecto decidió no hacer.
+
+Que era un hueco y no una decisión de diseño se ve dentro de un mismo archivo: en
+`avisos`, `publicarAviso` sí devolvía `{ error }` y las dos acciones void al lado
+descartaban el suyo.
+
+### Decisión: dos helpers, y no son intercambiables
+
+`lib/acciones.ts`:
+
+- **`cortarSiFalla(error, destino, motivo)`** — redirige a `destino?error=<motivo>`
+  con la convención que el panel ya tenía. El mensaje real de la base va al **log
+  del servidor y no a la URL**: al usuario le sirve saber qué operación falló, no
+  leer `duplicate key value violates unique constraint`; sin el log, en cambio, la
+  causa se perdería y el fallo sería imposible de diagnosticar.
+- **`registrarFalla(error, contexto)`** — loguea sin cortar. Hace falta para las
+  **compensaciones**: el rollback del huésped cuando el alta de la reserva falla no
+  debe redirigir, porque taparía `res.error`, que es el motivo real. También para
+  lo accesorio, donde cortar sería peor que seguir.
+
+No hace falta mapear cada motivo nuevo: las pantallas traen fallback
+(`MENSAJES_ERROR[x] ?? 'No se pudo completar la operación.'`), así que sumar un
+motivo nunca deja al usuario sin respuesta.
+
+### Los casos que merecen nombre propio
+
+**Factura.** El `insert` de `facturas` ocurre **después** de pedir el CAE al
+proveedor y de consumir el número correlativo del punto de venta. Si se perdía en
+silencio quedaba un CAE emitido y un número gastado **sin factura**, con la pantalla
+como si no hubiera pasado nada. La correlatividad es una obligación formal (ADR
+0015): el mensaje avisa que el número ya se usó, antes de que alguien reemita.
+
+**Firma.** Dos escrituras encadenadas: la constancia y el estado. Si se guardara
+«firmado» sin la constancia, el contrato quedaría firmado **sin evidencia**.
+`cortarSiFalla` lanza, así que la segunda no corre si falló la primera.
+
+**Pago en el panel.** El mismo fallo que tenía el webhook. Acá hay alguien mirando
+la pantalla, pero solo si se le dice.
+
+**Puntos y totales.** El check-out o la mudanza ya se hicieron. Se corta igual:
+perder los puntos de un huésped, o quedar facturando la unidad anterior, son
+problemas reales que avisando se arreglan a mano.
+
+### Bugs preexistentes que aparecieron revisando los destinos
+
+Ajenos a los fallos silenciosos, y estaban desde antes:
+
+1. `cambiarEtapaAgencia` mandaba `?error=etapa` y `?ok=etapa` **desde que existe**,
+   y `/panel/agencias` no los renderizaba: el rechazo de la regla comercial —no se
+   puede saltear de «contacto» a «activa»— era invisible.
+2. `agencias/[id]` y `proveedores/[id]` no recibían `searchParams`, así que el
+   `?ok=datos` que sus acciones ya mandaban al guardar nunca se vio.
+3. `/panel/mantenimiento` solo renderizaba el motivo `plan` y `/encuesta/[token]`
+   solo `puntaje`: los otros que las acciones ya usaban —`limite` e `invalida`— no
+   se mostraban, así que un huésped que chocaba con el límite de respuestas por
+   hora no veía nada y creía que el formulario estaba roto.
+
+Y una colisión introducida durante la fase y corregida: se usó el slug `producto`
+en `config`, que ya significaba «revisá el nombre y el precio». Pasó a
+`producto_estado`, o la pantalla habría mostrado el mensaje equivocado.
+
+### Lo que esta fase NO arregla
+
+**Un mensaje de error no arregla la atomicidad.** En los flujos de varios pasos de
+`reservas`, si falla el paso 3 los datos ya quedaron a medias. Mostrar el error es
+estrictamente mejor que el silencio —la inconsistencia pasa de invisible a
+revisable— pero resolverlo de verdad pide mover esos flujos a una **función SQL
+transaccional**. Está anotado en el código donde corresponde, no tapado, y es el
+siguiente paso natural.
+
+El asistente sigue fallando **abierto a propósito**: inserta en `consultas_bot`, que
+es el registro y no la respuesta al huésped. El ADR 0011 fijó que pasado el límite
+«sigue respondiendo y deja de registrar»; cortarle la respuesta a un huésped real
+porque no se pudo guardar el log sería el intercambio equivocado. Ahora usa
+`registrarFalla`, así que la decisión queda explícita en el código en vez de
+parecer un descuido.
+
+**Verificación:** **363 tests**, typecheck, lint y build limpios, y CI en verde
+sobre base real. Dos comprobaciones mecánicas sobre el árbol final: no queda
+**ninguna** escritura cuyo error se descarte —el detector que encontró las 38
+devuelve 0— y los **28 motivos** en uso tienen mensaje mapeado, salvo `firma`, cuyo
+fallback dice exactamente «No pudimos registrar la firma», que es el texto
+correcto. Uno de los 5 tests del helper existe porque armaba mal la URL cuando el
+destino ya traía query string (`?canal=X?error=…`), detectado al aplicarlo a
+conversaciones y antes de propagarlo a 38 sitios.
