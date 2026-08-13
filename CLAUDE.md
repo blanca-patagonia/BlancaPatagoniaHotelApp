@@ -81,7 +81,7 @@ Tarifario 2025/2026 (Anexo A).
 - Dev `npm run dev` · Tests `npm test` · Typecheck `npm run typecheck` · Lint `npm run lint`.
 - **CI (`.github/workflows/ci.yml`): verde y verificado en GitHub** desde la
   corrida #31. Levanta Supabase con Docker, crea el admin y corre typecheck,
-  lint, los 365 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
+  lint, los 386 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
   toca: el paso del seed invoca `node scripts/seed-usuarios.mjs` **directo** y no
   `npm run seed:usuarios` (ese script usa `--env-file-if-exists`, que necesita
   Node ≥ 20.12 y no hay `.env.local` en el runner); y sin ese paso la tabla
@@ -116,7 +116,8 @@ Tarifario 2025/2026 (Anexo A).
   verificado (corrida #31) · **Fase 18** cinco bugs encontrados recorriendo el
   sistema a mano (el más caro: «USD 0» al reservar, por falta de temporadas
   cargadas) · **Fase 19** buscador global por rol, confirmaciones y encabezado ·
-  **Fase 20** ningún fallo de escritura en silencio (ver `lib/acciones.ts`).
+  **Fase 20** ningún fallo de escritura en silencio (ver `lib/acciones.ts`) ·
+  **Fase 21** catálogo público de alojamientos (`/alojamientos` + detalle).
 - **Auditoría de seguridad (numeración propia, empieza de nuevo en Fase 0):**
   **Fase 0 ✅** reconocimiento sin tocar código (`docs/AUDITORIA_INICIAL.md`) ·
   **Fase 1 ✅** límite de tasa en las entradas públicas y en el login
@@ -135,7 +136,7 @@ Tarifario 2025/2026 (Anexo A).
   sin Docker**: exige ejecutar las políticas contra una base con los cuatro roles, y
   el *pull* de las imágenes de Supabase está bloqueado por política de egreso en el
   entorno remoto (403 contra las CDN de los registries). Hay que hacerlo en local.
-- **365 tests verdes** (37 archivos).
+- **386 tests verdes** (38 archivos).
 - **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
@@ -175,6 +176,12 @@ Tarifario 2025/2026 (Anexo A).
   - ⚠️ Un mensaje de error **no arregla la atomicidad**: en los flujos de varios
     pasos de `reservas`, si falla el paso 3 los datos quedan a medias. Está anotado
     en el código; resolverlo pide una función SQL transaccional.
+- **Precios al público — OBLIGATORIO:** `tarifas.precio_rack` se guarda **sin
+  IVA** (ADR 0004) y el checkout lo suma en `calcularEstadia`. Toda pantalla que
+  le muestre un precio a un huésped tiene que pasarlo por `conIva()` de
+  `lib/domain/catalogo.ts`, o publica un número más bajo del que después cobra.
+  Y los rangos de temporada son `[desde, hasta)` con el **fin excluido**: para
+  mostrarlos va `textoRango()`, que resta el día.
 - **Filtros `or` de PostgREST:** el término del usuario **nunca** se interpola
   pelado (la coma separa condiciones y los paréntesis agrupan: `x,id.gt.0` cambia
   el filtro). Va `patronOr()` de `lib/listados.ts`, que lo encierra entre comillas

@@ -13,7 +13,7 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**365 tests en verde** · typecheck y lint limpios · CI verificado en GitHub.
+**386 tests en verde** · typecheck y lint limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
 
@@ -21,7 +21,7 @@ concentran el **79 %** de las reservas del hotel.
 |---|---|
 | **Reservas** | Alta con cotización por temporada e IVA, máquina de estados (confirmar · check-in · check-out · cancelar · no-show), política de cancelación con vista previa del cargo, reservas grupales, reprogramación y cambio de unidad |
 | **Ocupación** | Grilla unidades × días con celdas accionables, filtros por categoría, ventana de 14/30 días y KPIs del período |
-| **Portal público** | Búsqueda de disponibilidad sin login, checkout del huésped, confirmación por token opaco, expiración de reservas pendientes y asistente basado en reglas |
+| **Portal público** | Catálogo de alojamientos con detalle y precios por temporada, búsqueda de disponibilidad sin login, checkout del huésped, confirmación por token opaco, expiración de reservas pendientes y asistente basado en reglas |
 | **Pagos** | Seña → saldo → `pagada` automática al saldar, registro manual desde recepción y webhook idempotente |
 | **Consumos y factura** | Catálogo de productos/servicios, consumos por reserva, cuenta consolidada y comprobante imprimible con IVA discriminado |
 | **Facturación fiscal** | Letra del comprobante según condición de emisor y receptor, desglose que garantiza `neto + iva = total` y validación de CUIT por módulo 11 |
@@ -60,6 +60,10 @@ Tres pendientes técnicos, anotados donde viven y no solo acá:
 - **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
   de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
   transaccional.
+- **Las fotos de los alojamientos.** El catálogo está diseñado para verse
+  terminado sin ellas; para sumarlas, copiar los archivos en
+  `public/alojamientos/` y descomentar su línea en `FOTOS`
+  (`lib/domain/catalogo.ts`).
 
 Ver [roadmap](docs/roadmap.md) y [ADR 0013](docs/decisiones/0013-alcance-erp-y-trabajo-futuro.md)
 para el trabajo futuro documentado.
@@ -134,6 +138,7 @@ Toda la documentación vive en [`docs/`](docs/), en español:
 ```
 app/            # Next.js App Router
   panel/        #   gestión hotelera (staff, por rol)
+  alojamientos/ #   catálogo público con detalle por tipo
   reservar/     #   portal público de reservas
   firmar/       #   firma de contratos por token
   encuesta/     #   encuesta de satisfacción por token
@@ -142,7 +147,7 @@ app/            # Next.js App Router
 lib/            # dominio puro, disponibilidad, pagos, clientes Supabase
 supabase/       # 31 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 365 tests (Vitest)
+tests/          # 386 tests (Vitest)
 ```
 
 ## Scripts
