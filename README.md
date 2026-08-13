@@ -1,6 +1,6 @@
 # Sistema de Gestión Hotelera — Hotel Blanca Patagonia
 
-[![CI](https://github.com/octi35/BlancaPatgoniaHotelApp/actions/workflows/ci.yml/badge.svg)](https://github.com/octi35/BlancaPatgoniaHotelApp/actions/workflows/ci.yml)
+[![CI](https://github.com/blanca-patagonia/BlancaPatgoniaHotelApp/actions/workflows/ci.yml/badge.svg)](https://github.com/blanca-patagonia/BlancaPatgoniaHotelApp/actions/workflows/ci.yml)
 
 Sistema integral de gestión hotelera (PMS) para el **Hotel Blanca Patagonia**
 (El Calafate, Santa Cruz): reservas, estadías, consumos, facturación y reportes.
