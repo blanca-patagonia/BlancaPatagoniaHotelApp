@@ -1515,3 +1515,69 @@ algo distinto del nombre.
 limpios. En el navegador: el encabezado muestra «Administrador» una sola vez y
 tiene el buscador; buscar con una letra pide más, con texto sin coincidencias
 avisa, y buscando «Pér» encuentra a los huéspedes cargados.
+
+---
+
+## 2026-08-13 · Mantenimiento — Traspaso a la organización y documentación al día
+
+Sin cambios de código: se movió el repositorio a su lugar definitivo y se puso al
+día lo que se lee antes de abrirlo.
+
+### El repositorio pasó a una organización
+
+El proyecto vivía en la cuenta personal `octi35` y se transfirió a la
+organización **`blanca-patagonia`**. Al mismo tiempo se corrigió el nombre, que
+arrastraba un error de tipeo desde el primer día: `BlancaPatgoniaHotelApp` →
+**`BlancaPatagoniaHotelApp`** (faltaba la «a» de Patagonia).
+
+La entrada del 2026-06-14 sigue diciendo `BlancaPatgoniaHotelApp` **a
+propósito**: en esa fecha ese era el nombre real del remoto. Esta bitácora es un
+registro cronológico, y corregir hacia atrás un dato que en su momento fue
+cierto la volvería menos confiable como fuente para la tesis. El nombre viejo se
+documenta acá, en la fecha en que cambió.
+
+Efecto colateral: el badge de CI del README se reapuntó dos veces —primero por el
+dueño, después por el nombre—, porque su URL incluye ambos.
+
+### `main` quedó protegida
+
+Se configuró un *ruleset* sobre `main`: no acepta escrituras directas, exige
+**pull request** y que el check **`verificar`** termine en verde. La consecuencia
+práctica es que ningún cambio entra a `main` sin haber pasado typecheck, lint,
+los 342 tests con base real y el build.
+
+**Decisión:** se mantiene el ruleset aun cuando el agente tenga permiso de
+escritura sobre el repositorio. La tentación era desactivarlo para agilizar, pero
+es justamente la única barrera automática que impide romper `main`, y el costo es
+solo un PR intermedio. Lo que **no** se agrega es la exigencia de aprobación
+humana: obligaría a una intervención manual en cada cambio sin sumar garantía
+técnica alguna.
+
+### Documentación al día
+
+Los tres archivos que describen el proyecto se habían quedado atrás y son lo
+primero que lee cualquiera que entre al repositorio, tribunal incluido:
+
+- **README** reescrito: tabla de las doce áreas implementadas con su alcance
+  real, las garantías que impone la base (anti-overbooking por exclusión GiST,
+  RLS en las 33 tablas, auditoría *append-only*, límite de tasa de la migración
+  0029) y una sección **«lo que todavía no está»** con el mismo peso que lo
+  hecho. Sin esa sección, un README que enumera «pagos» y «facturación
+  electrónica» deja creer que el sistema cobra dinero y emite CAE de verdad,
+  cuando los cinco adapters son *stubs*. La guía de puesta en marcha se corrigió
+  con los tropiezos reales de levantar el entorno desde cero: el `.env.local` se
+  completa **antes** del seed, y de las varias URLs que imprime
+  `npx supabase status` la que va es la de la API, no la de Storage/S3.
+- **`docs/roadmap.md`**: cortaba en la Fase 8. Se completaron las fases 8 a 19 y
+  la auditoría de seguridad (que lleva numeración propia y arranca de nuevo en
+  Fase 0), a partir de esta bitácora.
+- **`CLAUDE.md`**: decía «307 tests» en dos lugares siendo **342**, marcaba la
+  Fase 8 «en curso» estando terminada y no mencionaba los ADR 0014 y 0015. Un
+  número desactualizado en el archivo de contexto es peor que no tenerlo: se
+  arrastra a cada resumen y de ahí a la tesis.
+
+**Verificación:** CI en verde sobre `main` — 35 archivos, **342 tests**,
+typecheck, lint y build, con Supabase levantado y `EXIGIR_DB=1`. Los datos del
+README se comprobaron contra el código y no de memoria: los tests contados sobre
+`tests/`, las 33 tablas con RLS sobre `supabase/migrations/`, y cada módulo de la
+tabla verificado en `app/` y `lib/`.
