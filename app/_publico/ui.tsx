@@ -74,7 +74,7 @@ export function Marco({ children, ancho = 'normal', volver }: MarcoProps) {
 }
 
 /** Silueta de montaña: la marca del hotel, en SVG propio. */
-function Montana() {
+export function Montana() {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -137,6 +137,50 @@ export function Tarjeta({
       )}
       {children}
     </section>
+  )
+}
+
+/* -------------------------------------------------------------- chips -- */
+
+/**
+ * Dato corto y no accionable: una comodidad, la capacidad, la categoría.
+ *
+ * No es un botón ni lo parece: sin sombra ni cursor, para que nadie pierda el
+ * tiempo intentando tocarlo.
+ */
+export function Etiqueta({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1 text-sm text-stone-700">
+      {children}
+    </span>
+  )
+}
+
+/**
+ * Chip de filtro: es un enlace, así que el estado queda en la URL y se puede
+ * compartir o volver con el botón «atrás» del navegador.
+ */
+export function ChipEnlace({
+  href,
+  activo,
+  children,
+}: {
+  href: string
+  activo: boolean
+  children: ReactNode
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={activo ? 'page' : undefined}
+      className={`toque inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition ${
+        activo
+          ? 'bg-lago-700 text-white'
+          : 'bg-white text-stone-600 ring-1 ring-stone-300 ring-inset hover:bg-stone-50 hover:text-stone-900'
+      }`}
+    >
+      {children}
+    </Link>
   )
 }
 

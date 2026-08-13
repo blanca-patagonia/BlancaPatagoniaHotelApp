@@ -30,19 +30,27 @@ export default function Home() {
           con hogar a leña, a pasos del Parque Nacional Los Glaciares.
         </p>
 
+        {/* Dos caminos, según con qué llega la persona: quien todavía no
+            decidió mira el catálogo; quien ya tiene fechas va derecho a
+            buscar. Antes solo existía el segundo, y al que venía a mirar no le
+            quedaba más opción que inventar unas fechas. */}
         <div className="mt-2 flex w-full max-w-md flex-col gap-3 sm:w-auto sm:flex-row sm:justify-center">
-          <Link href="/reservar" className={botonPublico('primario', 'text-lg')}>
-            Ver disponibilidad
+          <Link href="/alojamientos" className={botonPublico('primario', 'text-lg')}>
+            Ver alojamientos
           </Link>
-          <a
-            href="https://www.blancapatagonia.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={botonPublico('secundario')}
-          >
-            Conocé el hotel
-          </a>
+          <Link href="/reservar" className={botonPublico('secundario', 'text-lg')}>
+            Consultar fechas
+          </Link>
         </div>
+
+        <a
+          href="https://www.blancapatagonia.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-stone-500 underline underline-offset-4 transition hover:text-stone-800"
+        >
+          Conocé más del hotel
+        </a>
 
         {/* Los servicios salen de `lib/domain/hotel.ts`, el mismo lugar del que
             los toma el asistente: si el hotel cambia uno, no quedan dos

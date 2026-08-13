@@ -103,6 +103,8 @@ diseño / implementación / pruebas de la tesis.
 - [x] 19 Buscador global por rol, confirmaciones y encabezado
 - [x] 20 Ningún fallo de escritura en silencio: `cortarSiFalla` / `registrarFalla`
       en las 38 escrituras que descartaban su error
+- [x] 21 Catálogo público de alojamientos (`/alojamientos` + detalle por tipo),
+      con precios por temporada. Pendiente: incorporar las fotos del hotel
 
 ## Auditoría de seguridad (numeración propia)
 - [x] Fase 0 — Reconocimiento sin modificar código (`docs/AUDITORIA_INICIAL.md`)

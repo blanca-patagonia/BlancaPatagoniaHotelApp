@@ -1858,3 +1858,79 @@ precios cruzando temporadas. **365 tests**, typecheck, lint y build limpios.
 
 ⚠️ Como en toda esta fase, la migración **no se pudo probar en el entorno de
 trabajo** —sin Docker no hay base— y la verificación real es la corrida de CI.
+
+---
+
+## 2026-08-13 · Fase 21 — Catálogo público de alojamientos
+
+**Resumen:** el portal tenía un buscador pero no una vitrina. Se agregan
+`/alojamientos` y `/alojamientos/[codigo]`.
+
+### El hueco
+
+`/reservar` **exige elegir fechas antes de mostrar nada**. Quien todavía no
+decidió cuándo viaja no tenía forma de ver qué ofrece el hotel: la portada
+enumeraba servicios en texto y nada más. En Booking se puede mirar sin
+comprometerse, y este portal existe justamente para reducir la dependencia de las
+OTAs —que hoy concentran el 79 % de las reservas—. Pedirle a alguien que invente
+unas fechas para poder mirar es perder la visita.
+
+### Qué se hizo
+
+- **`/alojamientos`** — los 10 tipos con foto (o cabecera de marca), descripción,
+  capacidad, comodidades y «desde USD X». Filtro Todos / Hostería / Cabañas.
+- **`/alojamientos/[codigo]`** — detalle con qué incluye, **tabla de precios por
+  temporada con las fechas de cada una**, horarios, política de cancelación y
+  otras opciones de la misma categoría.
+- **Puntos de entrada:** la portada pasa a ofrecer dos caminos —«Ver alojamientos»
+  para quien viene a mirar, «Consultar fechas» para quien ya decidió— y `/reservar`
+  suma un enlace al catálogo.
+- **`/reservar?tipo=`** destaca el alojamiento del que viene el visitante, sin
+  ocultar el resto: si justo ese está lleno, la alternativa es la venta.
+
+El contenido sale de la base. `tipos_unidad` ya guardaba `descripcion` y
+`amenities`, así que el catálogo no duplica textos en el código: si el hotel
+corrige una descripción desde el panel, cambia también en el portal.
+
+### Dos bugs que se evitaron, y valen más que la pantalla
+
+**1. Los precios se publicaban sin IVA.** `tarifas.precio_rack` se guarda **sin
+IVA** (ADR 0004: se discrimina y se calcula en el dominio), pero el checkout sí lo
+suma vía `calcularEstadia`. Volcar la columna cruda en el catálogo habría
+publicado USD 177 para una Doble Standard en alta cuando el checkout cobra
+**214,17**. El huésped lo descubre al momento de pagar: reclamo en el mostrador y
+reseña mala. Se agrega `conIva()`, con el mismo redondeo que el motor de precios
+para que el «desde» y el total no difieran ni por un centavo.
+
+**2. La tabla de temporadas mostraba un día de más.** Los rangos de Postgres son
+`[desde, hasta)` con el **fin excluido**. Volcarlos tal cual decía que la
+temporada alta va «01/11 al 01/12», cuando la última noche a ese precio es el
+**30/11** y el 1 de diciembre ya se cobra como media. No es formato: es un precio
+equivocado publicado en el sitio. `textoRango()` resta el día, con tests que
+cubren el cruce de mes y de año.
+
+### Decisiones
+
+**Sin fotos, y no se nota.** El sitio del hotel está bloqueado por la política de
+egreso del entorno (403 al CONNECT), así que no se pudieron incorporar imágenes.
+En vez de dejar recuadros grises, la portada sin foto es un diseño terminado: el
+degradé de marca y la silueta del logo. Un placeholder roto le dice al huésped que
+la página está a medio hacer, y de ahí a desconfiar del formulario de reserva hay
+un paso. `FOTOS` en `lib/domain/catalogo.ts` tiene las diez líneas comentadas con
+los nombres de archivo: cuando el hotel las entregue, se copian en
+`public/alojamientos/` y se descomenta. Cero cambios de código.
+
+**No se copió el mockup de Stitch.** Era otro sistema —serif dorada, fondo oscuro,
+`amber`— y la paleta del proyecto es `lago`/`calafate`/`lenga`/`stone`. Se tomó la
+idea (tarjetas, filtro, precio, CTA) y se vistió con el diseño propio.
+
+**El filtro va en la URL**, así que se puede compartir «solo cabañas» y el botón
+«atrás» hace lo que uno espera. Un valor inesperado cae en «todas» en vez de dejar
+la pantalla vacía.
+
+Encaja con la migración 0031 del mismo día: el catálogo lee `precio_rack` y el rol
+público **no puede** leer `precio_neto`. La vitrina pública y el modelo de
+permisos coinciden sin excepciones.
+
+**Verificación:** **386 tests** (21 nuevos sobre el dominio del catálogo: filtro,
+orden, «desde», IVA y rangos de fecha), typecheck, lint y build limpios.

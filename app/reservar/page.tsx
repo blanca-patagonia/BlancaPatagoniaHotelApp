@@ -39,7 +39,7 @@ interface Opcion {
 export default async function ReservarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ check_in?: string; check_out?: string; huespedes?: string }>
+  searchParams: Promise<{ check_in?: string; check_out?: string; huespedes?: string; tipo?: string }>
 }) {
   const sp = await searchParams
   const checkIn = RE_FECHA.test(sp.check_in ?? '') ? sp.check_in! : ''
@@ -116,10 +116,17 @@ export default async function ReservarPage({
               className={CAMPO_PUBLICO}
             />
           </Campo>
-          <div className="sm:col-span-3">
+          <div className="flex flex-col gap-3 sm:col-span-3 sm:flex-row sm:items-center">
             <button type="submit" className={botonPublico('primario', 'w-full sm:w-auto')}>
               Ver disponibilidad
             </button>
+            {/* Salida para quien llegó acá sin saber qué ofrece el hotel. */}
+            <Link
+              href="/alojamientos"
+              className="text-sm text-lago-700 underline underline-offset-4 transition hover:text-lago-900"
+            >
+              Ver todos los alojamientos y sus precios
+            </Link>
           </div>
         </form>
       </Tarjeta>
@@ -145,11 +152,19 @@ export default async function ReservarPage({
               </p>
               {opciones.map((o) => {
                 const reservable = o.hayLugar && o.hayPrecio
+                // Quien llegó desde el detalle de un alojamiento tiene que
+                // reconocerlo en la lista sin leerla entera; el resto sigue a la
+                // vista porque si justo ese está lleno, la alternativa es la venta.
+                const elegido = o.tipoUnidadId === sp.tipo
                 return (
                   <article
                     key={o.tipoUnidadId}
                     className={`flex flex-col gap-4 rounded-2xl border bg-white p-5 shadow-sm transition sm:flex-row sm:items-center sm:justify-between ${
-                      reservable ? 'border-stone-200 hover:border-lago-300' : 'border-stone-200'
+                      elegido
+                        ? 'border-lago-500 ring-1 ring-lago-200'
+                        : reservable
+                          ? 'border-stone-200 hover:border-lago-300'
+                          : 'border-stone-200'
                     }`}
                   >
                     <div className="min-w-0">
@@ -160,6 +175,11 @@ export default async function ReservarPage({
                         {ETIQUETAS_CATEGORIA[o.categoria]} · hasta {o.capacidadMax}{' '}
                         {o.capacidadMax === 1 ? 'persona' : 'personas'}
                       </p>
+                      {elegido && (
+                        <p className="mt-1.5 text-sm font-medium text-lago-700">
+                          El que estabas mirando
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-end justify-between gap-5 sm:items-center">
