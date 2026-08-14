@@ -151,6 +151,28 @@ export default async function ObjetosPerdidosPage({
                 : 'Registrá acá lo que los huéspedes se olvidan en las habitaciones.'
             }
             icono="objetos"
+            /*
+              La descripción indicaba «quitá los filtros» sin dar con qué. Tener
+              el botón, y no solo la instrucción, es lo que hace la diferencia
+              para quien no usa mucho la computadora.
+            */
+            accion={
+              hayFiltros ? (
+                <Link
+                  href="/panel/objetos-perdidos"
+                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                >
+                  Quitar filtros
+                </Link>
+              ) : (
+                <Link
+                  href="/panel/objetos-perdidos/nuevo"
+                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                >
+                  Registrar el primero
+                </Link>
+              )
+            }
           />
         ) : (
           <Tabla resumen="Objetos perdidos con fecha de hallazgo, ubicación y estado">

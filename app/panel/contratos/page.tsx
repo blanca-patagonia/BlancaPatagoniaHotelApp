@@ -219,6 +219,28 @@ export default async function ContratosPage({
                 : 'Redactá el primero con el formulario de arriba y enviálo a firmar.'
             }
             icono="contratos"
+            /*
+              La descripción indicaba «quitá los filtros» sin dar con qué. Tener
+              el botón, y no solo la instrucción, es lo que hace la diferencia
+              para quien no usa mucho la computadora.
+            */
+            accion={
+              hayFiltros ? (
+                <Link
+                  href="/panel/contratos"
+                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                >
+                  Quitar filtros
+                </Link>
+              ) : (
+                <Link
+                  href="/panel/contratos/nuevo"
+                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                >
+                  Crear el primero
+                </Link>
+              )
+            }
           />
         ) : (
           <Tabla resumen="Contratos con su contraparte, vigencia y estado de firma">

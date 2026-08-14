@@ -224,6 +224,28 @@ export default async function AgenciasPage({
                 : 'Las agencias permiten facturar a cuenta corriente con tarifa neta.'
             }
             icono="agencias"
+            /*
+              La descripción indicaba «quitá los filtros» sin dar con qué. Tener
+              el botón, y no solo la instrucción, es lo que hace la diferencia
+              para quien no usa mucho la computadora.
+            */
+            accion={
+              q || soloPendientes ? (
+                <Link
+                  href="/panel/agencias"
+                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                >
+                  Quitar filtros
+                </Link>
+              ) : (
+                <Link
+                  href="/panel/agencias/nueva"
+                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                >
+                  Cargar la primera
+                </Link>
+              )
+            }
           />
         ) : (
           <Tabla resumen="Agencias y empresas con su tipo, descuento y saldo de cuenta corriente">
