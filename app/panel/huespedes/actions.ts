@@ -1,14 +1,22 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { CONDICIONES_IVA, cuitValido, type CondicionIva } from '@/lib/domain/facturacion'
 
 export interface EstadoHuesped {
   error?: string
   ok?: string
+  /**
+   * Lo que se había cargado, para reponerlo si hubo error.
+   *
+   * React limpia el formulario después de una Server Action. Sin esto, un CUIT
+   * con un dígito verificador mal tipeado borraba los nueve campos y había que
+   * escribir todo de nuevo —con alguien esperando en el mostrador—. Es el mismo
+   * patrón que ya usaba `EstadoNuevaReserva`.
+   */
+  valores?: Partial<Record<keyof ReturnType<typeof leerCampos>, string>>
   /**
    * Id del huésped recién creado.
    *
@@ -23,10 +31,19 @@ export interface EstadoHuesped {
 
 const DOCS = ['DNI', 'Pasaporte', 'CUIT', 'CUIL', 'LC', 'LE']
 
+/**
+ * Guarda de acceso al módulo.
+ *
+ * Antes comprobaba solo que existiera sesión, sin mirar el rol: cualquier
+ * usuario autenticado —housekeeping incluido— podía dar de alta y editar
+ * huéspedes con sus datos de documento. Una Server Action es un endpoint HTTP
+ * público: que la pantalla no muestre el enlace no impide invocarla.
+ *
+ * `requerirAcceso` consulta la matriz de `lib/domain/permisos.ts`, que es la
+ * única fuente de verdad de quién puede qué.
+ */
 async function exigirAcceso() {
-  const sesion = await obtenerSesion()
-  if (!sesion) redirect('/login')
-  return sesion
+  return requerirAcceso('huespedes')
 }
 
 /** Campos comunes al alta y a la edición. */
@@ -64,6 +81,13 @@ function validar(c: ReturnType<typeof leerCampos>): string | null {
   return null
 }
 
+/** Convierte los campos leídos a strings, para reponerlos en el formulario. */
+function aValores(c: ReturnType<typeof leerCampos>): EstadoHuesped['valores'] {
+  return Object.fromEntries(
+    Object.entries(c).map(([k, v]) => [k, v == null ? '' : String(v)]),
+  ) as EstadoHuesped['valores']
+}
+
 export async function crearHuesped(
   _prev: EstadoHuesped,
   formData: FormData,
@@ -71,7 +95,7 @@ export async function crearHuesped(
   await exigirAcceso()
   const campos = leerCampos(formData)
   const error = validar(campos)
-  if (error) return { error }
+  if (error) return { error, valores: aValores(campos) }
 
   const supabase = await crearClienteServidor()
 
@@ -83,11 +107,11 @@ export async function crearHuesped(
       .select('id')
       .eq('email', campos.email)
       .maybeSingle()
-    if (existente) return { error: 'Ya hay un huésped con ese email.' }
+    if (existente) return { error: 'Ya hay un huésped con ese email.', valores: aValores(campos) }
   }
 
   const { data, error: e } = await supabase.from('huespedes').insert(campos).select('id').single()
-  if (e) return { error: `No se pudo crear: ${e.message}` }
+  if (e) return { error: `No se pudo crear: ${e.message}`, valores: aValores(campos) }
 
   revalidatePath('/panel/huespedes')
   return {
@@ -106,11 +130,11 @@ export async function actualizarHuesped(
 
   const campos = leerCampos(formData)
   const error = validar(campos)
-  if (error) return { error }
+  if (error) return { error, valores: aValores(campos) }
 
   const supabase = await crearClienteServidor()
   const { error: e } = await supabase.from('huespedes').update(campos).eq('id', id)
-  if (e) return { error: `No se pudo guardar: ${e.message}` }
+  if (e) return { error: `No se pudo guardar: ${e.message}`, valores: aValores(campos) }
 
   revalidatePath(`/panel/huespedes/${id}`)
   return { ok: 'Datos actualizados.' }

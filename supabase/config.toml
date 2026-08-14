@@ -23,10 +23,19 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000"]
 jwt_expiry = 3600
-enable_signup = true
+# El staff NO se auto-registra: los usuarios los crea un administrador desde
+# `app/panel/usuarios` con el cliente `service_role` (ADR 0005). Con el registro
+# abierto, cualquiera con la clave publicable —que viaja al navegador por
+# diseño— podía crearse una cuenta, y hasta la migración 0032 esa cuenta nacía
+# con rol de recepción activo.
+#
+# ⚠️ Esta línea configura el Supabase LOCAL. En el proyecto hosted hay que
+# apagarlo además en Authentication → Providers, donde el default de la
+# plataforma es «habilitado».
+enable_signup = false
 
 [auth.email]
-enable_signup = true
+enable_signup = false
 enable_confirmations = false
 
 [storage]
