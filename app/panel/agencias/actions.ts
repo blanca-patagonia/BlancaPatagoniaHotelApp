@@ -42,7 +42,20 @@ export async function crearAgencia(
   return { ok: `Se registró ${nombre}.`, id: (data as { id: string } | null)?.id }
 }
 
+/**
+ * Registra un cargo o un pago en la cuenta corriente de una agencia.
+ *
+ * No tenía ninguna verificación (auditoría · Fase 3): era la única de este
+ * archivo sin guarda, y la que mueve plata. Se le aplica la MISMA regla que a
+ * sus hermanas —admin/gerencia— y no la del área `agencias`, que en
+ * `lib/domain/permisos.ts` también alcanza a recepción: esa matriz gobierna
+ * quién *ve* la sección, mientras que escribir sobre una cuenta corriente es
+ * competencia de gerencia.
+ */
 export async function registrarMovimiento(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+
   const agenciaId = String(formData.get('agencia_id') ?? '')
   const tipo = String(formData.get('tipo') ?? '')
   const monto = Number(formData.get('monto') ?? 0)

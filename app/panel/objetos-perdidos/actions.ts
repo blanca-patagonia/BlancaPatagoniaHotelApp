@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { requerirAcceso } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoObjeto {
@@ -10,7 +11,13 @@ export interface EstadoObjeto {
   ok?: string
 }
 
+/**
+ * Una Server Action es un endpoint HTTP público: se invoca con un POST sin pasar
+ * por la pantalla. Cada una verifica el rol por sí misma contra
+ * `lib/domain/permisos.ts` (auditoría · Fase 3).
+ */
 export async function crearObjeto(_prev: EstadoObjeto, formData: FormData): Promise<EstadoObjeto> {
+  await requerirAcceso('objetos_perdidos')
   const descripcion = String(formData.get('descripcion') ?? '').trim()
   const ubicacion = String(formData.get('ubicacion') ?? '').trim()
   if (!descripcion) return { error: 'Describí el objeto encontrado.' }
@@ -23,6 +30,7 @@ export async function crearObjeto(_prev: EstadoObjeto, formData: FormData): Prom
 }
 
 export async function marcarDevuelto(formData: FormData): Promise<void> {
+  await requerirAcceso('objetos_perdidos')
   const id = String(formData.get('id') ?? '')
   if (id) {
     const supabase = await crearClienteServidor()

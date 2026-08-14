@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoAviso {
@@ -11,9 +11,14 @@ export interface EstadoAviso {
   ok?: string
 }
 
+/**
+ * Una Server Action es un endpoint HTTP público: se invoca con un POST sin pasar
+ * por la pantalla. Cada una verifica el rol por sí misma contra
+ * `lib/domain/permisos.ts` (auditoría · Fase 3).
+ */
 export async function publicarAviso(_prev: EstadoAviso, formData: FormData): Promise<EstadoAviso> {
-  const sesion = await obtenerSesion()
-  if (!sesion) redirect('/login')
+  // Antes solo comprobaba que hubiera sesión, sin mirar el rol.
+  const sesion = await requerirAcceso('avisos')
   const mensaje = String(formData.get('mensaje') ?? '').trim()
   if (!mensaje) return { error: 'Escribí un mensaje.' }
 
@@ -33,6 +38,7 @@ export async function publicarAviso(_prev: EstadoAviso, formData: FormData): Pro
  * no pueda tocar el texto ni la autoría, solo esta bandera.
  */
 export async function alternarFijado(formData: FormData): Promise<void> {
+  await requerirAcceso('avisos')
   const id = String(formData.get('id') ?? '')
   const fijar = String(formData.get('fijar') ?? '') === '1'
   if (id) {
@@ -44,6 +50,7 @@ export async function alternarFijado(formData: FormData): Promise<void> {
 }
 
 export async function borrarAviso(formData: FormData): Promise<void> {
+  await requerirAcceso('avisos')
   const id = String(formData.get('id') ?? '')
   if (id) {
     const supabase = await crearClienteServidor()
