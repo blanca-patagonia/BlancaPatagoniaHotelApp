@@ -15,6 +15,8 @@ import 'server-only'
  * confianza. Es una constancia de aceptación verificable.
  */
 
+import { seleccionarProveedor } from '@/lib/integraciones/seleccion'
+
 export interface SolicitudFirma {
   contratoId: string
   /** Token opaco que genera la base y viaja en la URL pública. */
@@ -97,9 +99,17 @@ const PROVEEDORES: Record<string, FirmaElectronicaProvider> = {
  * real sea un cambio de configuración, no de código.
  */
 export function obtenerProveedorFirma(
-  nombre: string = process.env.FIRMA_PROVIDER ?? 'local',
+  nombre: string | undefined = process.env.FIRMA_PROVIDER,
 ): FirmaElectronicaProvider {
-  return PROVEEDORES[nombre] ?? PROVEEDORES.local
+  // El proveedor local registra la aceptación pero, como documenta este módulo,
+  // NO es una firma digital con validez legal. Usarlo en producción tiene que
+  // ser una decisión declarada, no el resultado de una variable sin definir.
+  return seleccionarProveedor({
+    variable: 'FIRMA_PROVIDER',
+    proveedores: PROVEEDORES,
+    simulado: 'local',
+    valor: nombre,
+  })
 }
 
 /**

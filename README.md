@@ -13,7 +13,8 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**386 tests en verde** · typecheck y lint limpios · CI verificado en GitHub.
+**486 tests en verde** (47 archivos, cero salteados contra la base local) · typecheck,
+lint y build limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
 
@@ -128,7 +129,8 @@ Toda la documentación vive en [`docs/`](docs/), en español:
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
 - [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
 - [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
-- [Decisiones (ADR)](docs/decisiones/) — 16 decisiones de arquitectura numeradas.
+- [Decisiones (ADR)](docs/decisiones/) — 19 decisiones de arquitectura numeradas.
+- [Auditoría de seguridad](docs/audit/) — qué se corrigió y qué queda abierto.
 - [Manual de usuario](docs/manual-usuario.md) · [Manual técnico](docs/manual-tecnico.md)
 - [Seguridad](docs/SEGURIDAD.md) · [Auditoría inicial](docs/AUDITORIA_INICIAL.md) ·
   [Revisión de RLS y endpoints](docs/revision-seguridad.md)
@@ -145,9 +147,9 @@ app/            # Next.js App Router
   portal/       #   portal de agencias y proveedores por token
   api/          #   route handlers y webhooks
 lib/            # dominio puro, disponibilidad, pagos, clientes Supabase
-supabase/       # 31 migraciones SQL numeradas + seed
+supabase/       # 35 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 386 tests (Vitest)
+tests/          # 486 tests (Vitest)
 ```
 
 ## Scripts
@@ -164,3 +166,15 @@ tests/          # 386 tests (Vitest)
 
 El test de integración anti-overbooking necesita la base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.
+
+Para correr los 486 en local hay que exportar las tres variables — vitest no lee
+`.env.local`, y sin la clave publicable los 4 tests del borde público saltean sin
+avisar aunque `EXIGIR_DB=1` esté puesto:
+
+```bash
+EXIGIR_DB=1 \
+SUPABASE_URL="http://127.0.0.1:54321" \
+SUPABASE_SERVICE_ROLE_KEY="sb_secret_…" \
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_…" \
+npm test
+```

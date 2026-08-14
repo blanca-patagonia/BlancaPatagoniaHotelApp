@@ -10,6 +10,7 @@ import {
 import {
   cargoPorCancelacion,
   montoCancelacion,
+  nochePromedioConIva,
   type ReglaCancelacion,
 } from '@/lib/domain/cancelacion'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
@@ -186,10 +187,13 @@ export default async function DetalleReservaPage({
     const reglas = (pol?.reglas ?? []) as ReglaCancelacion[]
     const dias = diasEntre(hoyISO(), periodo.desde)
     const tipoCargo = cargoPorCancelacion(reglas, dias)
+    // `estadia.precio_noche` está SIN IVA (es `totalNeto / noches`), mientras que
+    // `reserva.total` sí lo lleva. Pasarlos juntos mezclaba unidades y el cargo
+    // anunciado al huésped salía mal.
     const monto = montoCancelacion({
       cargo: tipoCargo,
       totalEstadia: Number(reserva.total),
-      primeraNoche: Number(estadia.precio_noche),
+      primeraNocheConIva: nochePromedioConIva(Number(reserva.total), noches),
     })
     cargo = { dias, monto }
   }

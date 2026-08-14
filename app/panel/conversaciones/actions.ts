@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { obtenerSesion, requerirAcceso } from '@/lib/auth/session'
 import { mensajeValido, normalizarMensaje } from '@/lib/domain/conversaciones'
 import { cortarSiFalla } from '@/lib/acciones'
 
@@ -16,6 +16,7 @@ import { cortarSiFalla } from '@/lib/acciones'
  * la sesión, de modo que nadie pueda escribir en nombre de otro.
  */
 export async function enviarMensaje(formData: FormData): Promise<void> {
+  await requerirAcceso('conversaciones')
   const sesion = await obtenerSesion()
   if (!sesion) redirect('/login')
 
@@ -39,6 +40,7 @@ export async function enviarMensaje(formData: FormData): Promise<void> {
 
 /** Marca una consulta del asistente público como ya atendida. */
 export async function marcarConsultaRespondida(formData: FormData): Promise<void> {
+  await requerirAcceso('conversaciones')
   const sesion = await obtenerSesion()
   if (!sesion) redirect('/login')
 

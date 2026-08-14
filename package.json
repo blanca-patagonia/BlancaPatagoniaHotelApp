@@ -10,6 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "setup": "npm ci && node --env-file-if-exists=.env.local scripts/setup.mjs",
     "seed:usuarios": "node --env-file-if-exists=.env.local scripts/seed-usuarios.mjs"
   },
   "dependencies": {

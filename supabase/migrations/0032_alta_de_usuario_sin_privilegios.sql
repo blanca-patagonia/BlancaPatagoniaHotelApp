@@ -1,0 +1,42 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migración 0032 — El alta de un usuario nace SIN privilegios (Auditoría · Fase 3)
+--
+-- Qué corrige. La migración 0001 dejó `perfiles.rol` con default `'recepcion'` y
+-- `perfiles.activo` con default `true`. El trigger `manejar_nuevo_usuario`
+-- inserta solo `(id, nombre)`, así que toma ambos defaults. Como el trigger está
+-- en `after insert on auth.users`, CUALQUIER alta —incluido un
+-- `POST /auth/v1/signup` hecho desde internet con la clave publicable, que viaja
+-- al navegador por diseño— creaba un perfil de recepción activo.
+--
+-- Ese perfil satisface directamente las políticas RLS del esquema
+-- (`rol_actual() in ('admin','gerencia','recepcion')` sobre huéspedes, reservas,
+-- pagos, consumos y facturas) y los GRANT de la migración 0006 ya habilitan a
+-- `authenticated` sobre todas las tablas. Es decir: RLS era lo único que separaba
+-- a un desconocido de la base entera, y el trigger se lo entregaba.
+--
+-- Por qué acá y no solo en la configuración. Apagar `enable_signup` es necesario
+-- pero no suficiente: es una casilla del panel de Supabase que alguien puede
+-- volver a marcar sin saber lo que habilita. Esta migración hace que, aun con el
+-- registro abierto, un alta que no pase por `app/panel/usuarios` nazca sin
+-- alcance. Defensa en profundidad: la configuración puede fallar, el default no.
+--
+-- El camino legítimo no se ve afectado: `app/panel/usuarios/actions.ts` crea el
+-- usuario con `service_role` y después fija `rol` y `activo` explícitamente.
+--
+-- ⚠️ Esta migración agrega SOLAMENTE el valor al enum. Todo lo que lo usa
+-- (defaults de la tabla y trigger) vive en la 0035, y tiene que ser así:
+-- Postgres rechaza usar un valor de enum recién agregado dentro de la misma
+-- transacción que lo agregó (SQLSTATE 55P04, «unsafe use of new value»), y el
+-- CLI de Supabase aplica cada archivo de migración en una sola transacción.
+-- Juntas en un archivo, `supabase db reset` falla acá y no aplica nada de lo
+-- que sigue. Separadas, cada una commitea y la 0035 ya encuentra el valor.
+--
+-- Referencias: ADR 0005 («los usuarios no se auto-registran»), ADR 0016.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ── Un rol sin ningún alcance ────────────────────────────────────────────────
+-- `rol_actual()` devuelve este valor para un perfil recién creado. Ninguna
+-- política RLS lo nombra, así que no habilita nada. Se agrega al enum en vez de
+-- permitir NULL porque `rol` es `not null` y las políticas ya comparan con
+-- `rol_actual() is not null`: un NULL las habría dejado pasar de otro modo.
+alter type rol_usuario add value if not exists 'sin_rol';

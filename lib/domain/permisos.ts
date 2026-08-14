@@ -9,6 +9,7 @@ import type { Rol } from './roles'
 export const AREAS = [
   'dashboard',
   'ocupacion',
+  'servicio',
   'reservas',
   'huespedes',
   'housekeeping',
@@ -31,6 +32,7 @@ export type Area = (typeof AREAS)[number]
 export const ETIQUETAS_AREA: Record<Area, string> = {
   dashboard: 'Inicio',
   ocupacion: 'Ocupación',
+  servicio: 'Servicio de cocina',
   reservas: 'Reservas',
   huespedes: 'Huéspedes',
   housekeeping: 'Housekeeping',
@@ -58,12 +60,12 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
 export const PERMISOS: Record<Rol, readonly Area[]> = {
   admin: [...AREAS],
   gerencia: [
-    'dashboard', 'ocupacion', 'reservas', 'huespedes', 'housekeeping',
+    'dashboard', 'ocupacion', 'servicio', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
     'proveedores', 'contratos', 'reportes', 'config', 'ayuda',
   ],
   recepcion: [
-    'dashboard', 'ocupacion', 'reservas', 'huespedes', 'objetos_perdidos',
+    'dashboard', 'ocupacion', 'servicio', 'reservas', 'huespedes', 'objetos_perdidos',
     'avisos', 'conversaciones', 'agencias', 'ayuda',
   ],
   housekeeping: [

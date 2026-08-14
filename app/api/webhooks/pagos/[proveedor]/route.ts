@@ -1,6 +1,12 @@
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { obtenerProveedor } from '@/lib/payments'
-import { resumenPagos, type Pago } from '@/lib/domain/pagos'
+import {
+  puedeAvanzarEstadoPago,
+  resumenPagos,
+  type EstadoPago,
+  type Pago,
+} from '@/lib/domain/pagos'
+import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
 
 type ClienteAdmin = ReturnType<typeof crearClienteAdmin>
@@ -49,6 +55,18 @@ export async function POST(
     return Response.json({ error: error.message }, { status: 500 })
   }
 
+  // Un `external_id` identifica la INTENCIÓN de pago, no una entrega concreta:
+  // las pasarelas mandan varios eventos sobre el mismo id a medida que la
+  // operación avanza (`pendiente` → `aprobado`). Antes, el segundo evento
+  // chocaba con la restricción única y se descartaba entero, así que la fila
+  // quedaba en `pendiente` para siempre. Como `resumenPagos` solo suma los pagos
+  // `aprobado` (lib/domain/pagos.ts:54), la reserva no se saldaba nunca **con la
+  // plata ya cobrada**: el huésped llegaba al mostrador figurando como impago.
+  if (duplicado) {
+    const falla = await avanzarEstadoDelPago(admin, evento.externalId, evento.estado)
+    if (falla) return Response.json({ error: falla }, { status: 500 })
+  }
+
   // La conciliación corre TAMBIÉN cuando el evento viene repetido, y es
   // deliberado: si una vez se registró el pago pero la transición de estado
   // falló, la fila de `pagos` ya existe y cualquier reenvío chocaría con la
@@ -61,6 +79,41 @@ export async function POST(
   }
 
   return duplicado ? Response.json({ ok: true, duplicado: true }) : Response.json({ ok: true })
+}
+
+/**
+ * Avanza el estado de un pago ya registrado, sin permitir retrocesos.
+ *
+ * Devuelve `null` si no había nada que hacer o salió bien, y el motivo si falló
+ * la base. Un fallo acá tiene que responder 500 por la misma razón que el resto
+ * del webhook: es el único modo de pedirle el reintento a la pasarela.
+ */
+async function avanzarEstadoDelPago(
+  admin: ClienteAdmin,
+  externalId: string,
+  estadoEntrante: EstadoPago,
+): Promise<string | null> {
+  const { data: pago, error: eLectura } = await admin
+    .from('pagos')
+    .select('estado')
+    .eq('external_id', externalId)
+    .maybeSingle()
+  if (eLectura) return `no se pudo leer el pago existente: ${eLectura.message}`
+
+  // Si no aparece, el 23505 vino de otra restricción única y no de `external_id`.
+  // No es este el lugar para adivinar cuál: se deja el pago como está.
+  if (!pago) return null
+
+  // La regla de qué transición corresponde vive en el dominio, no acá.
+  if (!puedeAvanzarEstadoPago(pago.estado as EstadoPago, estadoEntrante)) return null
+
+  const { error: eEscritura } = await admin
+    .from('pagos')
+    .update({ estado: estadoEntrante })
+    .eq('external_id', externalId)
+  if (eEscritura) return `no se pudo actualizar el estado del pago: ${eEscritura.message}`
+
+  return null
 }
 
 /**
@@ -92,7 +145,29 @@ async function saldarSiCorresponde(
     .eq('reserva_id', reservaId)
   if (ePagos) return `no se pudieron leer los pagos: ${ePagos.message}`
 
-  const resumen = resumenPagos(Number(reserva.total), (pagos ?? []) as Pago[])
+  /*
+    La cuenta del huésped es alojamiento MÁS consumos, no solo el alojamiento.
+
+    Antes se comparaba lo pagado contra `reserva.total`, que cubre únicamente la
+    estadía. Quien había consumido del frigobar quedaba marcado como «pagada»
+    debiendo esa parte, y en el mostrador nadie se lo cobraba porque el sistema
+    decía que estaba al día. Se descubría al cerrar caja, o no se descubría.
+  */
+  const { data: consumos, error: eConsumos } = await admin
+    .from('consumos')
+    .select('cantidad, precio_unitario')
+    .eq('reserva_id', reservaId)
+  if (eConsumos) return `no se pudieron leer los consumos: ${eConsumos.message}`
+
+  const cuenta = cuentaConsolidada(
+    Number(reserva.total),
+    (consumos ?? []).map((c) => ({
+      cantidad: c.cantidad,
+      precioUnitario: Number(c.precio_unitario),
+    })) as Consumo[],
+  )
+
+  const resumen = resumenPagos(cuenta.total, (pagos ?? []) as Pago[])
   if (!resumen.saldada) return null
 
   // Una reserva anulada que quedó saldada no se transiciona: la máquina de

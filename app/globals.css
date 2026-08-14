@@ -84,9 +84,47 @@ body {
   border-radius: 0.25rem;
 }
 
+/*
+  Foco reforzado donde una utilidad lo apaga.
+
+  Quince controles del panel usan `focus:outline-none` y lo reemplazan solo con
+  un cambio de color de borde. Esa utilidad tiene más especificidad que la regla
+  `:focus-visible` de arriba, así que gana; y un borde que cambia de tono es un
+  indicador débil: quien tiene baja visión puede no percibirlo, y quien navega
+  con teclado necesita saber sin dudar dónde está parado.
+
+  Se agrega un anillo por `box-shadow`, que no compite con `outline` y por lo
+  tanto convive con el borde que esos controles ya cambian.
+*/
+:is(input, select, textarea, button, a, [role='button']):focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-lago-500) 45%, transparent);
+}
+
 /* Los tabulares alinean mejor las columnas de importes. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+  Movimiento reducido
+  --------------------
+  La interfaz usa transiciones en 84 lugares. Para quien tiene trastornos
+  vestibulares o sensibilidad al movimiento, esas animaciones van desde molestas
+  hasta mareantes, y el sistema operativo ya expone esa preferencia: respetarla
+  no es una opción de diseño.
+
+  No se apagan del todo —un cambio instantáneo puede hacer perder de vista qué
+  se movió— sino que se reducen a algo casi imperceptible pero continuo.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /*
@@ -125,8 +163,45 @@ body {
   }
 }
 
+/*
+  Impresión
+  ----------
+  La app usa la utilidad `print:hidden` de Tailwind (seis pantallas). La clase
+  `.no-print` que había acá no la usaba ningún archivo: se conserva como alias
+  para no romper nada que la traiga de afuera, pero la convención es `print:hidden`.
+*/
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  /* Papel: fondo blanco, sin sombras y con el texto en negro pleno. */
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  /* Las tablas no se parten a la mitad de una fila. */
+  tr,
+  td,
+  th {
+    break-inside: avoid;
+  }
+
+  /* Un encabezado suelto al pie de la hoja no sirve a nadie. */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  /*
+    Los enlaces impresos no dicen a dónde van. En un listado que se archiva —una
+    factura, la lista de desayuno— eso importa.
+  */
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.75em;
+    color: #555555;
   }
 }

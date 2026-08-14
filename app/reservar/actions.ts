@@ -9,6 +9,7 @@ import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import { HORA_CHECK_IN, HORA_CHECK_OUT } from '@/lib/domain/hotel'
 import { permitirIntento } from '@/lib/limites'
 import { mensajeLimite } from '@/lib/domain/limites'
+import { validarCapacidad } from '@/lib/domain/unidades'
 
 export interface EstadoReservaPublica {
   error?: string
@@ -60,13 +61,54 @@ export async function crearReservaPublica(
 
   const admin = crearClienteAdmin()
 
-  // Registrar al huésped.
-  const { data: huesped, error: eHuesped } = await admin
+  /*
+    Capacidad del alojamiento.
+
+    Hasta acá el límite existía solo en el filtro de la pantalla, que sirve para
+    no ofrecer una cabaña de cuatro a quien busca para seis. Pero esta acción es
+    un endpoint HTTP público: un envío directo con `huespedes: 50` sobre una
+    habitación doble entraba sin objeción, y el hotel se enteraba en el mostrador.
+  */
+  const { data: tipo, error: eTipo } = await admin
+    .from('tipos_unidad')
+    .select('capacidad_max')
+    .eq('id', tipoUnidadId)
+    .maybeSingle()
+  if (eTipo) return { error: 'No se pudo verificar el alojamiento elegido.' }
+  if (!tipo) return { error: 'Ese alojamiento no existe.' }
+
+  const excedeCapacidad = validarCapacidad(huespedesCant, Number(tipo.capacidad_max))
+  if (excedeCapacidad) return { error: excedeCapacidad }
+
+  /*
+    Huésped: se reutiliza el existente en vez de crear otro.
+
+    El panel ya resuelve esto (`app/panel/huespedes/actions.ts`): el email es el
+    modo en que el sistema reconoce a quien vuelve. Acá se insertaba siempre una
+    fila nueva, así que un huésped habitual terminaba repetido una vez por
+    reserva, con su historial partido entre varias fichas y la fidelidad sin
+    acumular.
+  */
+  const { data: existente, error: eBusqueda } = await admin
     .from('huespedes')
-    .insert({ nombre: nombre || apellido, apellido, email, telefono })
     .select('id')
-    .single()
-  if (eHuesped || !huesped) return { error: 'No se pudieron registrar tus datos.' }
+    .eq('email', email)
+    .maybeSingle()
+  if (eBusqueda) return { error: 'No se pudieron registrar tus datos.' }
+
+  let huespedId = existente?.id as string | undefined
+
+  if (!huespedId) {
+    const { data: huesped, error: eHuesped } = await admin
+      .from('huespedes')
+      .insert({ nombre: nombre || apellido, apellido, email, telefono })
+      .select('id')
+      .single()
+    if (eHuesped || !huesped) return { error: 'No se pudieron registrar tus datos.' }
+    huespedId = huesped.id
+  }
+
+  if (!huespedId) return { error: 'No se pudieron registrar tus datos.' }
 
   // Alta atómica (service_role): unidad libre + cotización + anti-overbooking.
   const res = await crearReservaEnUnidadLibre(admin, {
@@ -74,7 +116,7 @@ export async function crearReservaPublica(
     checkIn,
     checkOut,
     huespedes: huespedesCant,
-    huespedId: huesped.id,
+    huespedId,
     canal: 'web',
     tarifaTipo: 'rack',
     estado: 'pendiente',

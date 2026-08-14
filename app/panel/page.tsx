@@ -23,6 +23,7 @@ import {
 const MODULOS: Record<Area, { href: string; icono: NombreIcono }> = {
   dashboard: { href: '/panel', icono: 'inicio' },
   ocupacion: { href: '/panel/ocupacion', icono: 'ocupacion' },
+  servicio: { href: '/panel/servicio', icono: 'reportes' },
   reservas: { href: '/panel/reservas', icono: 'reservas' },
   huespedes: { href: '/panel/huespedes', icono: 'huespedes' },
   housekeeping: { href: '/panel/housekeeping', icono: 'housekeeping' },

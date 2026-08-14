@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { obtenerSesion, requerirAcceso } from '@/lib/auth/session'
 import { periodicidadValida, primeraEjecucionSugerida } from '@/lib/domain/preventivo'
 import { hoyISO } from '@/lib/fechas'
 import { cortarSiFalla } from '@/lib/acciones'
@@ -17,6 +17,7 @@ const PRIORIDADES = ['baja', 'media', 'alta']
 const ESTADOS = ['pendiente', 'en_proceso', 'resuelta']
 
 export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promise<EstadoOrden> {
+  await requerirAcceso('mantenimiento')
   const titulo = String(formData.get('titulo') ?? '').trim()
   const descripcion = String(formData.get('descripcion') ?? '').trim()
   const prioridad = String(formData.get('prioridad') ?? 'media')
@@ -34,6 +35,7 @@ export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promis
 }
 
 export async function cambiarEstadoOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
   const id = String(formData.get('id') ?? '')
   const estado = String(formData.get('estado') ?? '')
   if (id && ESTADOS.includes(estado)) {

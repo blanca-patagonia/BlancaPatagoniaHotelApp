@@ -287,9 +287,33 @@ export default async function ProveedoresPage({
             descripcion={
               q || soloPendientes
                 ? 'Probá con otro término o quitá los filtros.'
-                : 'Cargá el primero con el formulario de arriba.'
+                : 'Cargá el primero para empezar a registrar movimientos.'
             }
             icono="proveedores"
+            /*
+              La descripción decía «quitá los filtros» pero no daba con qué. Para
+              quien no usa mucho la computadora, la diferencia entre leer una
+              instrucción y tener el botón es la diferencia entre seguir o
+              trabarse. Lo mismo con el alta: un listado vacío sin salida es un
+              callejón.
+            */
+            accion={
+              q || soloPendientes ? (
+                <Link
+                  href="/panel/proveedores"
+                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                >
+                  Quitar filtros
+                </Link>
+              ) : (
+                <Link
+                  href="/panel/proveedores/nuevo"
+                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                >
+                  Cargar el primero
+                </Link>
+              )
+            }
           />
         ) : (
           <Tabla resumen="Proveedores con su rubro y saldo a pagar">

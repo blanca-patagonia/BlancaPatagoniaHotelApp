@@ -51,19 +51,30 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
     ESTADO_INICIAL,
   )
 
+  /*
+    Al fallar, la acción devuelve lo que se había escrito. Sin esto React
+    limpiaba el formulario entero: un CUIT mal tipeado obligaba a recargar los
+    nueve campos, con alguien esperando en el mostrador.
+
+    El orden importa: primero lo que la persona acaba de escribir, después lo
+    que estaba guardado. Al revés, un error de validación pisaría la corrección
+    con el valor viejo.
+  */
+  const v = estado.valores ?? {}
+
   return (
     <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       {esEdicion && <input type="hidden" name="huesped_id" value={huesped!.id} />}
 
       <Campo etiqueta="Apellido" requerido>
-        <input name="apellido" required defaultValue={huesped?.apellido ?? ''} className={CAMPO} />
+        <input name="apellido" required defaultValue={v.apellido ?? huesped?.apellido ?? ''} className={CAMPO} />
       </Campo>
       <Campo etiqueta="Nombre" requerido>
-        <input name="nombre" required defaultValue={huesped?.nombre ?? ''} className={CAMPO} />
+        <input name="nombre" required defaultValue={v.nombre ?? huesped?.nombre ?? ''} className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Tipo de documento">
-        <select name="doc_tipo" defaultValue={huesped?.doc_tipo ?? 'DNI'} className={CAMPO}>
+        <select name="doc_tipo" defaultValue={v.doc_tipo ?? huesped?.doc_tipo ?? 'DNI'} className={CAMPO}>
           {DOCS.map((d) => (
             <option key={d} value={d}>
               {d}
@@ -72,23 +83,23 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
         </select>
       </Campo>
       <Campo etiqueta="Número de documento" ayuda="Sin puntos ni guiones.">
-        <input name="doc_numero" defaultValue={huesped?.doc_numero ?? ''} className={CAMPO} />
+        <input name="doc_numero" defaultValue={v.doc_numero ?? huesped?.doc_numero ?? ''} className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Email" ayuda="Acá se envían la confirmación y la encuesta de la estadía.">
-        <input name="email" type="email" defaultValue={huesped?.email ?? ''} className={CAMPO} />
+        <input name="email" type="email" defaultValue={v.email ?? huesped?.email ?? ''} className={CAMPO} />
       </Campo>
       <Campo etiqueta="Teléfono">
         <input
           name="telefono"
           type="tel"
-          defaultValue={huesped?.telefono ?? ''}
+          defaultValue={v.telefono ?? huesped?.telefono ?? ''}
           className={CAMPO}
         />
       </Campo>
 
       <Campo etiqueta="Nacionalidad">
-        <input name="nacionalidad" defaultValue={huesped?.nacionalidad ?? ''} className={CAMPO} />
+        <input name="nacionalidad" defaultValue={v.nacionalidad ?? huesped?.nacionalidad ?? ''} className={CAMPO} />
       </Campo>
 
       <Campo
@@ -97,7 +108,7 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
       >
         <select
           name="condicion_iva"
-          defaultValue={huesped?.condicion_iva ?? 'consumidor_final'}
+          defaultValue={v.condicion_iva ?? huesped?.condicion_iva ?? 'consumidor_final'}
           className={CAMPO}
         >
           {CONDICIONES_IVA.map((c) => (
@@ -113,7 +124,7 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
         ayuda="Preferencias, alergias u observaciones. El huésped no las ve."
         anchoCompleto
       >
-        <textarea name="notas" rows={3} defaultValue={huesped?.notas ?? ''} className={CAMPO} />
+        <textarea name="notas" rows={3} defaultValue={v.notas ?? huesped?.notas ?? ''} className={CAMPO} />
       </Campo>
 
       {estado.error && (

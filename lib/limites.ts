@@ -15,12 +15,43 @@ import { LIMITES, type AccionLimitada } from '@/lib/domain/limites'
  * IPs se intentó algo, ni borrar su propio rastro.
  */
 
-/** IP del visitante, según los encabezados que agrega el proxy. */
+/**
+ * IP del visitante, tomada **solo** de encabezados que pone la plataforma.
+ *
+ * Antes se leía el primer valor de `x-forwarded-for`, y eso volvía inútil el
+ * limitador: ese encabezado se acumula de izquierda a derecha, así que el primer
+ * valor es el que **manda el cliente**, no el que agrega el proxy. Bastaba con
+ * enviar `X-Forwarded-For: 1.2.3.4` y rotarlo en cada intento para tener fuerza
+ * bruta ilimitada contra el login y contra el alta pública de reservas.
+ *
+ * El orden de preferencia va de más confiable a menos:
+ *  1. `x-vercel-forwarded-for` — lo escribe Vercel y no es reenviable.
+ *  2. `x-real-ip` — lo fija el proxy con un valor único, no una lista.
+ *  3. `x-forwarded-for`, tomando el **último** valor: el que agregó el salto de
+ *     confianza más cercano. Todo lo que está a su izquierda pudo inventarlo el
+ *     cliente.
+ *
+ * Detrás de un proxy distinto habría que ajustar este orden. Es preferible eso
+ * a un limitador que aparenta funcionar.
+ */
 async function ipActual(): Promise<string | null> {
   const cabeceras = await headers()
+
+  const vercel = cabeceras.get('x-vercel-forwarded-for')?.trim()
+  if (vercel) return vercel
+
+  const real = cabeceras.get('x-real-ip')?.trim()
+  if (real) return real
+
   const reenviada = cabeceras.get('x-forwarded-for')
-  if (reenviada) return reenviada.split(',')[0].trim()
-  return cabeceras.get('x-real-ip')
+  if (!reenviada) return null
+
+  const saltos = reenviada
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  return saltos.at(-1) ?? null
 }
 
 /**

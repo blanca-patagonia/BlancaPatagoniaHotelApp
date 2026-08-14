@@ -15,7 +15,7 @@ import {
 import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 import { puntosPorEstadia, nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import {
   tipoComprobante,
@@ -63,6 +63,7 @@ export async function crearReservaAction(
   _prev: EstadoNuevaReserva,
   formData: FormData,
 ): Promise<EstadoNuevaReserva> {
+  await requerirAcceso('reservas')
   const tipoUnidadId = String(formData.get('tipo_unidad_id') ?? '')
   const checkIn = String(formData.get('check_in') ?? '')
   const checkOut = String(formData.get('check_out') ?? '')
@@ -191,6 +192,7 @@ export async function crearReservaAction(
  * estados. El trigger de la base sincroniza las estadías (libera/ocupa inventario).
  */
 export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
   const id = String(formData.get('reserva_id') ?? '')
   const nuevo = String(formData.get('nuevo_estado') ?? '') as EstadoReserva
   if (!id || !nuevo) redirect('/panel/reservas')
@@ -277,6 +279,7 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
  * la reserva queda saldada, intenta la transición a `pagada`.
  */
 export async function registrarPago(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
   const reservaId = String(formData.get('reserva_id') ?? '')
   const medio = String(formData.get('medio') ?? 'efectivo')
   const tipo = String(formData.get('tipo') ?? 'saldo')
@@ -319,6 +322,7 @@ export async function registrarPago(formData: FormData): Promise<void> {
 
 /** Carga un consumo (producto × cantidad) a la cuenta de la reserva. */
 export async function agregarConsumo(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
   const reservaId = String(formData.get('reserva_id') ?? '')
   const productoId = String(formData.get('producto_id') ?? '')
   const cantidad = Math.max(1, Number(formData.get('cantidad') ?? 1) || 1)
@@ -346,6 +350,7 @@ export async function agregarConsumo(formData: FormData): Promise<void> {
 
 /** Quita un consumo de la cuenta. */
 export async function quitarConsumo(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
   const reservaId = String(formData.get('reserva_id') ?? '')
   const consumoId = String(formData.get('consumo_id') ?? '')
   if (consumoId) {
@@ -387,7 +392,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const reservaId = String(formData.get('reserva_id') ?? '')
   if (!reservaId) redirect('/panel/reservas')
 
-  const sesion = await obtenerSesion()
+  const sesion = await requerirAcceso('reservas')
   const supabase = await crearClienteServidor()
 
   const { data: existente } = await supabase
@@ -527,6 +532,7 @@ export async function crearReservaGrupal(
   _prev: EstadoReservaGrupal,
   formData: FormData,
 ): Promise<EstadoReservaGrupal> {
+  await requerirAcceso('reservas')
   const checkIn = String(formData.get('check_in') ?? '')
   const checkOut = String(formData.get('check_out') ?? '')
   const canal = String(formData.get('canal') ?? 'directo')
@@ -607,6 +613,7 @@ export async function crearReservaGrupal(
  * misma unidad, la restricción de exclusión lo rechaza).
  */
 export async function reprogramarReserva(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
   const id = String(formData.get('reserva_id') ?? '')
   const checkIn = String(formData.get('check_in') ?? '')
   const checkOut = String(formData.get('check_out') ?? '')
@@ -661,6 +668,7 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
  * de exclusión lo rechaza con 23P01.
  */
 export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
   const id = String(formData.get('reserva_id') ?? '')
   const unidadDestino = String(formData.get('unidad_destino') ?? '')
   const motivo = String(formData.get('motivo') ?? '')
@@ -755,7 +763,7 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
  * producción iría por cron. Se limita a las reservas activas con email cargado.
  */
 export async function enviarRecordatoriosLlegada(): Promise<void> {
-  const sesion = await obtenerSesion()
+  const sesion = await requerirAcceso('reservas')
   if (!sesion) redirect('/login')
 
   const manana = sumarDias(hoyISO(), 1)

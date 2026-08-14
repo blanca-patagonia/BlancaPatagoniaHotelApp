@@ -8,6 +8,7 @@ import {
   type EstadoReserva,
 } from '@/lib/domain/reservas'
 import { mesActual } from '@/lib/fechas'
+import { traerTodo } from '@/lib/paginado'
 import {
   metricasDeMes,
   mesRelativo,
@@ -37,6 +38,7 @@ import {
   Tabla,
   Tarjeta,
   botonClases,
+  Mensaje,
   Pagina,
 } from '../_components/ui'
 
@@ -73,27 +75,61 @@ export default async function ReportesPage({
   const mes = RE_MES.test(sp.mes ?? '') ? sp.mes! : mesActual()
 
   const supabase = await crearClienteServidor()
-  const [
-    { data: unidades },
-    { data: estadiasData },
-    { data: reservasData },
-    { data: pagos },
-    { data: facturas },
-    { data: encuestas },
-  ] = await Promise.all([
-    supabase.from('unidades').select('id').eq('activo', true),
-    supabase
-      .from('estadias')
-      .select('periodo, precio_noche')
-      .in('estado', ['pendiente', 'confirmada', 'pagada', 'in_house', 'checkout']),
-    supabase.from('reservas').select('canal, estado, total'),
-    supabase.from('pagos').select('tipo, monto').eq('estado', 'aprobado'),
-    supabase.from('facturas').select('total'),
-    supabase.from('encuestas_satisfaccion').select('puntaje, respondida_en'),
-  ])
 
-  const cantidadUnidades = unidades?.length ?? 0
-  const estadias = (estadiasData ?? []) as unknown as EstadiaMetrica[]
+  // Estas seis consultas se agregan en JavaScript sobre la tabla completa, así
+  // que están expuestas al techo de PostgREST (`max_rows = 1000`): sin paginar,
+  // la respuesta se recortaba en mil filas **sin error y sin aviso**, y todos los
+  // indicadores de abajo —ocupación, ADR, RevPAR, ingresos— quedaban mal en
+  // cuanto cualquiera de estas tablas superaba ese tamaño. Un KPI equivocado es
+  // peor que ninguno: se usa para decidir.
+  //
+  // `traerTodo` recorre por tramos y, si aun así corta, lo informa: más abajo se
+  // muestra el aviso en pantalla en vez de dar el número por bueno.
+  const [unidades, estadiasRes, reservasRes, pagosRes, facturasRes, encuestasRes] =
+    await Promise.all([
+      traerTodo<{ id: string }>((d, h) =>
+        supabase.from('unidades').select('id').eq('activo', true).order('id').range(d, h),
+      ),
+      traerTodo<EstadiaMetrica>((d, h) =>
+        supabase
+          .from('estadias')
+          .select('periodo, precio_noche')
+          .in('estado', ['pendiente', 'confirmada', 'pagada', 'in_house', 'checkout'])
+          .order('id')
+          .range(d, h),
+      ),
+      traerTodo<{ canal: string; estado: string; total: number }>((d, h) =>
+        supabase.from('reservas').select('canal, estado, total').order('id').range(d, h),
+      ),
+      traerTodo<{ tipo: string; monto: number }>((d, h) =>
+        supabase.from('pagos').select('tipo, monto').eq('estado', 'aprobado').order('id').range(d, h),
+      ),
+      traerTodo<{ total: number }>((d, h) =>
+        supabase.from('facturas').select('total').order('id').range(d, h),
+      ),
+      traerTodo<{ puntaje: number; respondida_en: string | null }>((d, h) =>
+        supabase.from('encuestas_satisfaccion').select('puntaje, respondida_en').order('id').range(d, h),
+      ),
+    ])
+
+  // Si algún conjunto quedó incompleto, los números de esta pantalla no son
+  // confiables y hay que decirlo.
+  const datosIncompletos = [
+    unidades,
+    estadiasRes,
+    reservasRes,
+    pagosRes,
+    facturasRes,
+    encuestasRes,
+  ].some((r) => r.truncado)
+
+  const reservasData = reservasRes.filas
+  const pagos = pagosRes.filas
+  const facturas = facturasRes.filas
+  const encuestas = encuestasRes.filas
+
+  const cantidadUnidades = unidades.filas.length
+  const estadias = estadiasRes.filas
 
   // Métricas del mes elegido y del anterior, para la comparativa.
   const actual = metricasDeMes(estadias, mes, cantidadUnidades)
@@ -144,6 +180,19 @@ export default async function ReportesPage({
         icono="reportes"
         acciones={<BotonExportar href={`/panel/exportar/reportes?mes=${mes}`} titulo="Exportar serie" />}
       />
+
+      {/*
+        Antes, cuando los datos venían recortados, la pantalla mostraba los
+        números igual y nadie podía saberlo. Se avisa: un indicador incompleto
+        presentado como completo lleva a decidir mal.
+      */}
+      {datosIncompletos && (
+        <Mensaje tono="error">
+          Hay más datos de los que se pudieron leer de una vez, así que estos indicadores
+          están calculados sobre una parte del historial y no son confiables. Avisale a
+          quien mantiene el sistema: hay que pasar estas agregaciones a la base de datos.
+        </Mensaje>
+      )}
 
       <BarraHerramientas>
         <form method="get" action="/panel/reportes" className="flex items-end gap-2">
