@@ -2,7 +2,13 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
-import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda } from '@/lib/listados'
+import {
+  construirQuery,
+  paginaActual,
+  patronOr,
+  rangoDePagina,
+  terminoBusqueda,
+} from '@/lib/listados'
 import {
   BarraHerramientas,
   BotonExportar,
@@ -53,10 +59,16 @@ export default async function HuespedesPage({
     .order('apellido')
 
   // Antes solo se buscaba por apellido; ahora también por nombre, documento y email.
+  //
+  // El término va por `patronOr`, como en los otros seis listados. Interpolarlo
+  // crudo dejaba inyectar condiciones: PostgREST separa los términos de un `or`
+  // por comas, así que una coma en la búsqueda cierra la condición y abre otra
+  // (buscar `x,id.gt.0` devolvía el padrón entero, ignorando el filtro).
   const termino = terminoBusqueda(q)
   if (termino) {
+    const patron = patronOr(termino)
     query = query.or(
-      `apellido.ilike.%${termino}%,nombre.ilike.%${termino}%,doc_numero.ilike.%${termino}%,email.ilike.%${termino}%`,
+      `apellido.ilike.${patron},nombre.ilike.${patron},doc_numero.ilike.${patron},email.ilike.${patron}`,
     )
   }
 

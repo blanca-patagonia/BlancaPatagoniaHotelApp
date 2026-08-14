@@ -2,6 +2,7 @@ import { obtenerSesion } from '@/lib/auth/session'
 import { puedeAcceder, type Area } from '@/lib/domain/permisos'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { aCsv, respuestaCsv, type Columna } from '@/lib/csv'
+import { traerTodo } from '@/lib/paginado'
 import { parsearPeriodo, mesActual } from '@/lib/fechas'
 import {
   metricasDeMes,
@@ -22,7 +23,17 @@ import { consultaReservas, filtroTermino } from '../../reservas/consulta'
 
 type Cliente = Awaited<ReturnType<typeof crearClienteServidor>>
 
-/** Tope de filas por archivo, para no tumbar el servidor con una descarga. */
+/**
+ * Tope de filas por archivo, para no tumbar el servidor con una descarga.
+ *
+ * ⚠️ `.limit(MAX_FILAS)` **no alcanzaba** para traer esta cantidad: PostgREST
+ * aplica su propio techo (`max_rows = 1000` en supabase/config.toml) y recorta
+ * la respuesta sin error y sin aviso. Todas las exportaciones venían saliendo
+ * con mil filas, y quien descargaba el archivo no tenía cómo notarlo.
+ *
+ * Por eso las consultas van por `traerTodo`, que pagina en tramos de mil hasta
+ * completar, y avisa si igual quedó truncado.
+ */
 const MAX_FILAS = 5000
 
 interface Definicion {
@@ -39,8 +50,15 @@ function simple<T>(
   columnas: Columna<T>[],
 ): (supabase: Cliente, params: URLSearchParams) => Promise<string> {
   return async (supabase) => {
-    const { data } = await supabase.from(tabla).select(select).order(orden).limit(MAX_FILAS)
-    return aCsv((data ?? []) as T[], columnas)
+    const { filas, truncado } = await traerTodo<T>(
+      (desde, hasta) =>
+        supabase.from(tabla).select(select).order(orden).range(desde, hasta) as never,
+      MAX_FILAS,
+    )
+    if (truncado) {
+      console.warn(`[exportar] «${tabla}» superó ${MAX_FILAS} filas: el CSV sale incompleto.`)
+    }
+    return aCsv(filas, columnas)
   }
 }
 
@@ -75,8 +93,14 @@ const RECURSOS: Record<string, Definicion> = {
         },
         orTermino,
       )
-      const { data } = await consulta.limit(MAX_FILAS)
-      const filas = (data ?? []) as unknown as FilaReserva[]
+      const { filas: crudas, truncado } = await traerTodo<FilaReserva>(
+        (desde, hasta) => consulta.range(desde, hasta) as never,
+        MAX_FILAS,
+      )
+      if (truncado) {
+        console.warn(`[exportar] «reservas» superó ${MAX_FILAS} filas: el CSV sale incompleto.`)
+      }
+      const filas = crudas
 
       return aCsv<FilaReserva>(filas, [
         { titulo: 'Código', valor: (r) => r.codigo },

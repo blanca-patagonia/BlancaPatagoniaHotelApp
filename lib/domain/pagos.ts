@@ -42,6 +42,36 @@ export interface ResumenPagos {
   tieneSenia: boolean
 }
 
+/**
+ * Estados en los que un pago ya quedó resuelto. No se sale de ellos.
+ */
+export const ESTADOS_PAGO_FINALES: readonly EstadoPago[] = [
+  'aprobado',
+  'rechazado',
+  'reembolsado',
+]
+
+/**
+ * ¿Corresponde mover un pago de `actual` a `entrante`?
+ *
+ * Un `external_id` identifica la intención de pago, no una entrega concreta: las
+ * pasarelas mandan varios eventos sobre el mismo id a medida que la operación
+ * avanza (`pendiente` → `aprobado`), y **no garantizan el orden de entrega**.
+ *
+ * La regla es de una sola dirección: un pago sin resolver puede pasar a un
+ * estado final, y nada más. Así un `pendiente` que llega tarde —después del
+ * `aprobado`— no degrada un cobro ya confirmado, y reenviar un evento sigue
+ * siendo inofensivo.
+ *
+ * Vive acá y no en el webhook porque es una regla del negocio: quién puede pasar
+ * a qué estado no depende de cómo llegó la novedad.
+ */
+export function puedeAvanzarEstadoPago(actual: EstadoPago, entrante: EstadoPago): boolean {
+  if (actual === entrante) return false
+  if (ESTADOS_PAGO_FINALES.includes(actual)) return false
+  return ESTADOS_PAGO_FINALES.includes(entrante)
+}
+
 function redondear(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }

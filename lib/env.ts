@@ -61,10 +61,27 @@ export function envServidor() {
 /**
  * URL pública del sitio, para los enlaces que viajan por correo.
  *
- * En desarrollo cae a localhost; en producción conviene fijar
- * `NEXT_PUBLIC_SITE_URL` para que los enlaces de encuesta, firma y portal
- * apunten al dominio real.
+ * En desarrollo cae a localhost. En producción **es obligatoria**: sin ella, los
+ * enlaces de encuesta, firma y portal del huésped salían apuntando a
+ * `http://localhost:3000`, es decir a la máquina de quien recibe el correo. El
+ * correo se enviaba, el sistema informaba éxito, y el enlace no funcionaba para
+ * nadie. Un fallo así no se descubre desde adentro: lo descubre el huésped que
+ * no puede hacer el check-in.
+ *
+ * Se prefiere romper el despliegue a mandar cientos de correos inservibles.
  */
 export function urlDelSitio(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const configurada = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+  if (configurada) return configurada
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Falta NEXT_PUBLIC_SITE_URL y el sistema está en producción.\n' +
+        'Sin ella, los enlaces de encuesta, firma y portal saldrían apuntando a ' +
+        'http://localhost:3000 en los correos al huésped.\n' +
+        'Definila con el dominio real del sitio (por ejemplo https://blancapatagonia.com).',
+    )
+  }
+
+  return 'http://localhost:3000'
 }

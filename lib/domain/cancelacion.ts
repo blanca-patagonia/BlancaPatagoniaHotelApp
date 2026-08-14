@@ -31,11 +31,39 @@ export function cargoPorCancelacion(
   return 'total'
 }
 
-/** Traduce el tipo de cargo a un monto concreto. */
+/**
+ * Precio de una noche **con IVA**, a partir del total de la estadía.
+ *
+ * Por qué existe. `estadias.precio_noche` guarda `totalNeto / noches`: está
+ * **sin IVA y promediado**. La pantalla de la reserva lo pasaba directo como
+ * «primera noche» junto a `reserva.total`, que **sí** lleva IVA: los dos montos
+ * que decide el cargo estaban en unidades distintas, así que al huésped se le
+ * anunciaba un número mal calculado.
+ *
+ * Como `precio_noche = totalNeto / noches`, llevarlo a IVA incluido es dividir
+ * el total con IVA por la misma cantidad de noches.
+ *
+ * ⚠️ Esto corrige la unidad, **no el promedio**. Si las noches tienen precios
+ * distintos —temporada que cambia a mitad de la estadía—, la primera noche real
+ * no es el promedio. Arreglarlo exige guardar el precio de cada noche, que hoy
+ * no se persiste. Queda anotado como pendiente en `docs/audit/00-pendientes.md`.
+ */
+export function nochePromedioConIva(totalConIva: number, noches: number): number {
+  if (noches <= 0) return 0
+  return Math.round((totalConIva / noches + Number.EPSILON) * 100) / 100
+}
+
+/**
+ * Traduce el tipo de cargo a un monto concreto.
+ *
+ * **Los dos importes tienen que venir en la misma unidad** —ambos con IVA—, o el
+ * cargo sale mal según qué regla aplique. El nombre del parámetro lo dice para
+ * que no se repita el error: usá `nochePromedioConIva` para calcularlo.
+ */
 export function montoCancelacion(params: {
   cargo: Cargo
   totalEstadia: number
-  primeraNoche: number
+  primeraNocheConIva: number
   noShow?: boolean
 }): number {
   if (params.noShow) return params.totalEstadia
@@ -43,7 +71,7 @@ export function montoCancelacion(params: {
     case 'ninguno':
       return 0
     case 'primera_noche':
-      return params.primeraNoche
+      return params.primeraNocheConIva
     case 'total':
       return params.totalEstadia
   }
