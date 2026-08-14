@@ -13,6 +13,8 @@ import type { CondicionIva, TipoComprobante } from '@/lib/domain/facturacion'
  * circuito completo en la defensa de la tesis. Ver ADR 0012.
  */
 
+import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
+
 export interface SolicitudCae {
   tipo: TipoComprobante
   puntoVenta: number
@@ -93,7 +95,17 @@ const PROVEEDORES: Record<string, FacturacionElectronicaProvider> = {
  * dominio ni las pantallas.
  */
 export function obtenerProveedorFacturacion(
-  nombre: string = process.env.FACTURACION_PROVIDER ?? 'simulado',
+  nombre: string | undefined = process.env.FACTURACION_PROVIDER,
 ): FacturacionElectronicaProvider {
-  return PROVEEDORES[nombre] ?? PROVEEDORES.simulado
+  // En producción, quedarse con el simulador tiene que ser una decisión
+  // explícita: emite un CAE simulado de 14 dígitos sobre una factura real, y
+  // eso es un comprobante apócrifo ante AFIP. Ver lib/integraciones/seleccion.ts.
+  const proveedor = seleccionarProveedor({
+    variable: 'FACTURACION_PROVIDER',
+    proveedores: PROVEEDORES,
+    simulado: 'simulado',
+    valor: nombre,
+  })
+  advertirSiEsSimulado(proveedor, 'FACTURACION_PROVIDER')
+  return proveedor
 }

@@ -13,6 +13,8 @@ import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
  * interfaz y cambiar `EMAIL_PROVIDER` (ver ADR 0012).
  */
 
+import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
+
 export interface MensajeEmail {
   para: string
   asunto: string
@@ -60,9 +62,19 @@ const PROVEEDORES: Record<string, EmailProvider> = {
 }
 
 export function obtenerProveedorEmail(
-  nombre: string = process.env.EMAIL_PROVIDER ?? 'consola',
+  nombre: string | undefined = process.env.EMAIL_PROVIDER,
 ): EmailProvider {
-  return PROVEEDORES[nombre] ?? PROVEEDORES.consola
+  // El proveedor «consola» no envía nada: escribe el correo en el log. Si queda
+  // activo por descuido en producción, la confirmación de reserva, el enlace de
+  // firma y la encuesta nunca llegan al huésped, y el sistema informa «enviado».
+  const proveedor = seleccionarProveedor({
+    variable: 'EMAIL_PROVIDER',
+    proveedores: PROVEEDORES,
+    simulado: 'consola',
+    valor: nombre,
+  })
+  advertirSiEsSimulado(proveedor, 'EMAIL_PROVIDER')
+  return proveedor
 }
 
 /**

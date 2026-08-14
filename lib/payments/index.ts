@@ -12,6 +12,8 @@ import type { MedioPago, TipoPago, EstadoPago } from '@/lib/domain/pagos'
  * sin tocar el resto del sistema.
  */
 
+import { verificarFirmaWebhook } from '@/lib/integraciones/firma-webhook'
+
 export interface CheckoutParams {
   reservaId: string
   monto: number
@@ -67,7 +69,19 @@ class ProveedorStub implements PaymentProvider {
       // registrar pagos falsos sin la firma de la pasarela.
       return process.env.NODE_ENV !== 'production'
     }
-    return req.headers.get('x-webhook-signature') === secreto
+
+    // El cuerpo tiene que leerse CRUDO: parsearlo y volver a serializarlo cambia
+    // espacios y orden de claves, y la firma deja de coincidir. Por eso el
+    // llamador pasa un `req.clone()`.
+    const cuerpo = await req.text()
+    const { valida, motivo } = await verificarFirmaWebhook(secreto, req.headers, cuerpo)
+
+    if (!valida) {
+      // El motivo va al log del servidor y nunca a la respuesta: decirle a quien
+      // llama *por qué* falló su firma es ayudarlo a construir una válida.
+      console.error(`[webhook ${this.nombre}] firma rechazada: ${motivo}`)
+    }
+    return valida
   }
 
   async parsearWebhook(req: Request): Promise<WebhookEvent | null> {
