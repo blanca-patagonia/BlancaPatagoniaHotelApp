@@ -33,23 +33,38 @@ Documentación y comentarios **en español**. Usá `rg`, `fd`, `bat`; no uses `g
    ```
 5. Reportá el estado real ANTES de proponer nada.
 
-### REGLA DE BLOQUEO
+### REGLA DE BLOQUEO — LEVANTADA el 2026-08-14
 
-**No escribas ni una migración más hasta que las tres pendientes (`0032`, `0033`, `0034`) estén
-aplicadas y verificadas contra una base real.** SQL sin aplicar es riesgo acumulado, no trabajo
-hecho. Si `db reset` falla, arreglar eso ES la tarea.
+Las migraciones `0032`, `0033`, `0034` (y la `0035` que salió de dividir la primera) están
+**aplicadas y verificadas contra Postgres**. Ya se puede escribir SQL nuevo. La regla que la
+motivaba sigue valiendo para lo que venga: SQL sin aplicar es riesgo acumulado, no trabajo hecho.
+
+Aplicarlas destapó que la `0032` **no podía aplicarse nunca** — usaba un valor de enum en la
+misma transacción que lo agregaba (SQLSTATE 55P04) y hacía fallar el `db reset` completo, así que
+ninguna corrección de la Fase 3 llegaba a la base. Se dividió en `0032` (agrega el valor) +
+`0035_defaults_sin_rol.sql` (lo usa).
+
+> ⚠️ **La `0035` está ocupada.** La restricción única sobre `facturas.reserva_id` (P0 #2) es
+> ahora la **`0036`**.
 
 ---
 
 ## ESTADO AL CERRAR LA SESIÓN ANTERIOR
 
+> Actualizado el **2026-08-14**: los 10 commits ya están en el remoto, en la rama
+> `audit/fase-1-seguridad-critica`. Ver la fila «Verificado» de abajo.
+
 | | |
 |---|---|
-| Rama | `audit/fase-1-seguridad-critica` · **sin commitear** |
+| Rama | `audit/fase-1-seguridad-critica` · commiteada y pusheada |
 | `npm run check` | exit 0 |
-| Tests | **443 pasan · 43 salteados** (los de integración; no había Docker) |
-| Migraciones escritas y **NO aplicadas** | `0032`, `0033`, `0034` |
-| Pendientes | ~30 abiertos de ~97 confirmados |
+| Verificado | **486 tests pasan · 0 salteados** con `EXIGIR_DB=1` y base real · 35 migraciones aplican · `/api/salud` en ok |
+| Migraciones | `0032`–`0035` **aplicadas** |
+| Pendientes | ~29 abiertos de ~97 confirmados |
+
+> Para correr los 486 hace falta exportar `NEXT_PUBLIC_SUPABASE_ANON_KEY` además de
+> `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`: vitest no lee `.env.local` y sin esa variable los
+> 4 tests del borde público (ADR 0016) saltean sin avisar, aun con `EXIGIR_DB=1`.
 
 Se corrieron dos auditorías multi-agente sobre 24 dimensiones: **193 hallazgos brutos → ~97
 confirmados** tras verificación adversarial.
@@ -119,13 +134,15 @@ confirmados** tras verificación adversarial.
 
 ## LO QUE FALTA — por prioridad
 
-### P0 — bloqueado hasta tener base real
+### P0
 
-1. **Aplicar y verificar `0032`, `0033`, `0034`** — una por vez: up, down, up, y comprobar el
-   esquema resultante contra lo que cada una dice hacer.
-   ⚠️ La `0033` **no tiene `down` limpio**: reescribe `siguiente_numero_comprobante` leyendo su
-   propia definición con `pg_get_functiondef`. Revertirla exige guardar la definición previa.
-2. **Restricción única sobre `facturas.reserva_id`** (migración `0035`). `emitirFactura` es
+1. ~~**Aplicar y verificar `0032`, `0033`, `0034`**~~ — ✅ **hecho el 2026-08-14**: las cuatro
+   aplican en un `db reset` limpio y la suite pasa 486/486 con base real.
+   Queda anotado, para cuando haga falta revertir: la `0033` **no tiene `down` limpio**, porque
+   reescribe `siguiente_numero_comprobante` leyendo su propia definición con `pg_get_functiondef`.
+   Revertirla exige guardar la definición previa.
+2. **Restricción única sobre `facturas.reserva_id`** (migración `0036`; la `0035` quedó ocupada
+   por la división de la `0032`). `emitirFactura` es
    check-then-act: dos emisiones simultáneas generan dos comprobantes fiscales de la misma reserva.
    Exigencia: **test de integración que intente emitir dos y falle a nivel base**, no aplicación.
 3. **Los 29 tests de Server Actions siguen desactivando la autorización**
@@ -204,9 +221,9 @@ confirmados** tras verificación adversarial.
 
 | # | Qué | Por qué |
 |---|---|---|
-| 1 | **Levantar Docker Desktop** | 3 migraciones sin aplicar. Bloquea todo el P0. |
+| 1 | ~~**Levantar Docker Desktop**~~ | ✅ hecho el 2026-08-14: las migraciones están aplicadas y verificadas. |
 | 2 | **Apagar el auto-registro en el Supabase hosted** (*Authentication → Providers*) | `config.toml` solo cubre local; el default de la plataforma es habilitado. **Es el único crítico vivo en producción.** |
-| 3 | Agregar a `.env.example`: `EMAIL_PROVIDER`, `FIRMA_PROVIDER`, `FACTURACION_PROVIDER` | El harness bloquea editar archivos `.env`. Son obligatorias en producción desde el ADR 0018. |
+| 3 | ~~Agregar a `.env.example`: `EMAIL_PROVIDER`, `FIRMA_PROVIDER`, `FACTURACION_PROVIDER`~~ | ✅ hecho el 2026-08-14, con el nombre del simulador de cada uno anotado al lado. |
 | 4 | **Completar la decisión del ADR 0019** (`docs/decisiones/0019-*.md`) | La política de cancelación se calcula, se le anuncia al huésped y **nunca se cobra**. Es decisión de producto y de riesgo comercial, no técnica. |
 | 5 | **Mandar un export de muestra de Winpax** (20 filas anonimizadas) + definir alcance | Sin el formato real, un importador inventado mete basura en producción. ¿Solo huéspedes? ¿Historial de reservas? ¿Cuentas de agencias? |
 | 6 | **Verificar en el navegador** el formulario de huéspedes | Ver "Pendiente de verificación" arriba. |

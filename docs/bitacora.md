@@ -2001,3 +2001,85 @@ base se ve como «no hay datos». Es menos grave que el equivalente en escritura
 está.
 
 **Verificación:** **387 tests**, typecheck, lint y build limpios.
+
+---
+
+## 2026-08-14 · Fase 3 de la auditoría — Las migraciones, por fin aplicadas contra una base real
+
+**Resumen:** la Fase 3 de la auditoría de seguridad se escribió en un entorno **sin
+Docker**, así que sus tres migraciones (`0032`, `0033`, `0034`) quedaron escritas y
+**nunca aplicadas** — el propio `docs/audit/HANDOFF.md` lo declaraba como el P0
+bloqueante. Al correrlas por primera vez contra Postgres apareció que la `0032`
+**no podía aplicarse nunca**. Se corrigió, se aplicaron las cuatro y se verificó
+todo lo que dependía de ellas.
+
+### El bug: un valor de enum recién agregado no se puede usar todavía
+
+La `0032` hacía dos cosas en un mismo archivo:
+
+```sql
+alter type rol_usuario add value if not exists 'sin_rol';   -- línea 34
+alter table perfiles alter column rol set default 'sin_rol'; -- línea 37
+```
+
+Postgres rechaza la segunda con **SQLSTATE 55P04** («unsafe use of new value of
+enum type»): un valor agregado a un enum no se puede usar hasta que la transacción
+que lo agregó haya commiteado. Y el CLI de Supabase aplica **cada archivo de
+migración dentro de una sola transacción**. Resultado: `supabase db reset` cortaba
+en la `0032` y **no aplicaba nada de lo que venía después** — es decir, ninguna de
+las correcciones de seguridad de la Fase 3 llegaba a la base.
+
+Es el tipo de error que no se puede encontrar leyendo: el SQL es válido, la lógica
+es correcta y la revisión humana lo aprueba. Solo aparece al ejecutarlo. Es
+exactamente el argumento de la regla de bloqueo del handoff: *SQL sin aplicar es
+riesgo acumulado, no trabajo hecho.*
+
+**Corrección:** la `0032` queda con el `alter type` solo, y todo lo que **usa** el
+valor —los dos defaults y la reescritura del trigger `manejar_nuevo_usuario`— se
+mueve a la nueva `0035_defaults_sin_rol.sql`. Al ser archivos distintos, cada uno
+commitea y el segundo ya encuentra el valor disponible. La intención de seguridad
+no cambió en nada; cambió dónde está escrita.
+
+> ⚠️ El número `0035` estaba **reservado en el plan** para la restricción única
+> sobre `facturas.reserva_id` (P0 #2 del handoff). Esa migración pasa a ser la
+> `0036`.
+
+### Lo verificado, ya con base
+
+| Qué | Resultado |
+|---|---|
+| `npx supabase db reset` | **35 migraciones + seed** aplican de punta a punta |
+| `npm test` con `EXIGIR_DB=1` | **486 pasan · 0 salteados** (47 archivos) |
+| `npm run typecheck` · `npm run lint` · `npm run build` | limpios |
+| `GET /api/salud` | `{"estado":"ok","base":"ok"}` |
+| Portal, catálogo, login y panel en el navegador | responden; `/panel` redirige a login |
+
+Con esto quedan cerrados los puntos **1, 4, 5, 8, 9 y 10** de la tabla «Corregido en
+esta rama» de `docs/audit/00-pendientes.md`, que estaban marcados «⚠️ sin Docker».
+
+### Los 4 tests que salteaban en silencio, y por qué importan
+
+`EXIGIR_DB=1` convierte la falta de base en un error, pero solo mira `hayDB`
+(`tests/db.ts:20`). La bandera `hayAnon` depende además de
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, y **vitest no lee `.env.local`**. Sin esa variable
+exportada a mano, los 4 tests del borde público —los que verifican el ADR 0016:
+que `anon` no pueda ejecutar `cotizar_estadia` ni leer `precio_neto`— se saltean
+localmente sin decir nada.
+
+En CI no pasa: el workflow la exporta desde `supabase status -o env`
+(`.github/workflows/ci.yml:72`). Es un agujero **solo local**, pero es el mismo
+patrón que la Fase 17 ya había pagado caro. Queda anotado en `AGENTS.md`.
+
+### Entorno
+
+Se rehízo la puesta en marcha en Windows: el `node_modules` que venía en el
+traspaso era de macOS (`@next/swc-darwin-arm64`, `@tailwindcss/oxide-darwin-arm64`),
+así que `npm ci`. También se completó `.env.example` con `EMAIL_PROVIDER`,
+`FIRMA_PROVIDER` y `FACTURACION_PROVIDER` (ADR 0018), que era la tarea #3 de la
+lista del usuario en el handoff: el entorno anterior tenía bloqueada la escritura
+sobre archivos `.env`.
+
+**Decisión registrada:** no se abrió ADR. Dividir la `0032` no cambia ninguna
+decisión de arquitectura —el ADR 0017 sigue describiendo exactamente lo que hace el
+esquema—, solo corrige cómo está empaquetada. El motivo queda en el encabezado de
+las dos migraciones, que es donde lo va a leer quien las toque.

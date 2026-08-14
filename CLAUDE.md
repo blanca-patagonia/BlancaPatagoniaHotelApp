@@ -136,16 +136,36 @@ Tarifario 2025/2026 (Anexo A).
   sin Docker**: exige ejecutar las políticas contra una base con los cuatro roles, y
   el *pull* de las imágenes de Supabase está bloqueado por política de egreso en el
   entorno remoto (403 contra las CDN de los registries). Hay que hacerlo en local.
-- **386 tests verdes** (38 archivos).
+  **Fase 3 ✅** (escrita sin Docker, **aplicada y verificada el 2026-08-14**): alta de
+  usuario sin privilegios (ADR 0017, migraciones `0032` + `0035`), la baja de un
+  usuario revoca acceso en la base y la numeración de facturas vuelve a funcionar
+  (`0033`), tokens de firma fuera del alcance del staff, facturas inmutables y 9
+  índices en FKs (`0034`), las 51 Server Actions verifican rol con guarda estructural,
+  firma HMAC real en el webhook y los simuladores fallan fuerte en producción
+  (ADR 0018). Estado y pendientes en `docs/audit/` (`00-pendientes.md` y `HANDOFF.md`).
+  ⚠️ **Al agregar una migración que toque un enum:** `alter type ... add value` y el
+  primer uso de ese valor **no pueden ir en el mismo archivo**. El CLI de Supabase
+  envuelve cada migración en una transacción y Postgres corta con SQLSTATE 55P04;
+  el `db reset` falla ahí y **no aplica nada de lo que sigue**. Es lo que le pasó a
+  la `0032` y por eso existe la `0035`.
+- **486 tests verdes** (47 archivos), **cero salteados** contra la base local. Para
+  que no salteen hay que exportar `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` **y**
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`: vitest no lee `.env.local`, y `EXIGIR_DB=1`
+  protege `hayDB` pero **no** `hayAnon` (`tests/db.ts:40`), así que sin la clave
+  publicable los 4 tests del borde público del ADR 0016 saltean en silencio. En CI
+  no pasa: el workflow la exporta (`ci.yml:72`).
 - **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
   único camino para mandar correo). Ningún borde externo es real.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 16 ADRs.** Los dos últimos no estaban listados acá: **ADR 0014** portal
-  de agencias y proveedores por token · **ADR 0015** qué se verifica y qué se
-  garantiza (los hallazgos de la revisión crítica de la Fase 12).
+- **Hay 19 ADRs.** Los últimos: **ADR 0014** portal de agencias y proveedores por
+  token · **ADR 0015** qué se verifica y qué se garantiza (los hallazgos de la
+  revisión crítica de la Fase 12) · **ADR 0016** el precio neto fuera del alcance
+  público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
+  simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
+  política de cancelación (**sin decidir**: espera una definición de producto).
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.

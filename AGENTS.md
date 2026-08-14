@@ -28,7 +28,7 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 | **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | verificado, exit 0 |
 | Lint | `npm run lint` | verificado, exit 0 |
 | Typecheck | `npm run typecheck` | verificado, exit 0 |
-| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, 393 pasan / 43 saltean |
+| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **486 pasan / 0 saltean** con base y las 3 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
 | Base local | `npx supabase start` · `npx supabase db reset` | necesita Docker |
@@ -86,6 +86,12 @@ Regla corta de módulo del panel: `page.tsx` (listado) · `nuevo/page.tsx` · `[
 - Los que tocan Postgres van bajo `describe.skipIf(!hayDB)` (`tests/db.ts`).
 - **Trampa:** `npm test` sale verde con **43 tests salteados** si no hay base local — entre ellos
   el anti-overbooking. En CI `EXIGIR_DB=1` los vuelve obligatorios (`tests/db.ts:22`).
+- **Segunda trampa, la que `EXIGIR_DB` NO cubre:** esa guarda mira `hayDB`, no `hayAnon`
+  (`tests/db.ts:40`). Vitest no lee `.env.local`, así que sin exportar
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` los **4 tests del borde público (ADR 0016) saltean en
+  silencio** aun con `EXIGIR_DB=1`. Localmente hay que exportar las tres variables:
+  `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`. En CI ya se
+  exportan (`ci.yml:72`).
 - Todo bugfix entra con un test que fallaba antes del fix.
 
 ## Definition of Done
@@ -104,6 +110,10 @@ Regla corta de módulo del panel: `page.tsx` (listado) · `nuevo/page.tsx` · `[
 - No commitees `.env.local` ni ningún secreto.
 - No edites el bloque entre `BEGIN:nextjs-agent-rules` y `END:nextjs-agent-rules`: lo genera Next.
 - No edites una migración ya aplicada. Creá la siguiente con el número que sigue.
+- No pongas `alter type ... add value` y el primer uso de ese valor en el **mismo** archivo de
+  migración: el CLI envuelve cada uno en una transacción y Postgres corta con SQLSTATE 55P04
+  («unsafe use of new value»). El `db reset` falla ahí y no aplica nada de lo que sigue. Van en
+  dos migraciones (ver `0032` + `0035`).
 - No hagas `git push --force` ni trabajes directo sobre `main`.
 - No corras `npx supabase db reset` sin avisar: **borra los usuarios de auth**.
 - No hagas `cotizar_estadia` `security definer`: ahí `current_user` pasa a ser el dueño de la

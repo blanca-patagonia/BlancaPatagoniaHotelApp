@@ -15,16 +15,16 @@ hallazgos está en los journals de las corridas `wf_10f9c38e-13f` y `wf_a6a689c5
 
 | # | Problema | Dónde | Verificación |
 |---|---|---|---|
-| 1 | Cualquiera en internet se registraba como recepcionista | migración `0032`, `config.toml` | ⚠️ sin Docker |
+| 1 | Cualquiera en internet se registraba como recepcionista | migraciones `0032` + `0035`, `config.toml` | ✅ aplicada |
 | 2 | Huéspedes exigía sesión, no rol | `app/panel/huespedes/actions.ts` | ✅ test |
 | 3 | Facturación emitía CAE inventado en silencio | `lib/integraciones/seleccion.ts` | ✅ 10 tests |
-| 4 | La baja de un usuario no revocaba acceso a la base | migración `0033` | ⚠️ sin Docker |
-| 5 | Ninguna factura se podía emitir (función invoker sin permiso) | migración `0033` | ⚠️ sin Docker |
+| 4 | La baja de un usuario no revocaba acceso a la base | migración `0033` | ✅ aplicada |
+| 5 | Ninguna factura se podía emitir (función invoker sin permiso) | migración `0033` | ✅ aplicada |
 | 6 | Inyección de condiciones en el filtro de huéspedes | `app/panel/huespedes/page.tsx` | ✅ typecheck |
 | 7 | Pago aprobado quedaba `pendiente` y la reserva impaga | webhook + `lib/domain/pagos.ts` | ✅ 7 tests |
-| 8 | Tokens de firma legibles por cualquier rol de staff | migración `0034` | ⚠️ sin Docker |
-| 9 | Facturas emitidas se podían editar y borrar | migración `0034` | ⚠️ sin Docker |
-| 10 | 9 claves foráneas sin índice | migración `0034` | ⚠️ sin Docker |
+| 8 | Tokens de firma legibles por cualquier rol de staff | migración `0034` | ✅ aplicada |
+| 9 | Facturas emitidas se podían editar y borrar | migración `0034` | ✅ aplicada |
+| 10 | 9 claves foráneas sin índice | migración `0034` | ✅ aplicada |
 | 11 | Limitador evadible rotando `x-forwarded-for` | `lib/limites.ts` | ✅ typecheck |
 | 12 | CSV y reportes truncados en 1000 filas sin aviso | `lib/paginado.ts` | ✅ 6 tests |
 | 13 | KPI calculados sobre datos incompletos, en silencio | `app/panel/reportes/page.tsx` | ✅ aviso visible |
@@ -59,6 +59,29 @@ recorre los `actions.ts` y falla nombrando archivo, línea y acción. **Verifica
 guarda a propósito y comprobando que la suite se pone en rojo.**
 
 Suite: **393 tests** (eran 344). ADRs `0017` y `0018`. Migraciones `0032`, `0033`, `0034`.
+
+### 2026-08-14 — Aplicadas y verificadas contra Postgres
+
+Las cuatro migraciones ya están aplicadas: `npx supabase db reset` corre las **35** de punta a
+punta y la suite pasa **486 / 486 con `EXIGIR_DB=1`, cero salteados**. Con eso se cierra el **P0
+#1** y las seis filas que arriba decían «⚠️ sin Docker».
+
+Aplicarlas destapó que la **`0032` no podía aplicarse nunca**: agregaba `'sin_rol'` al enum y lo
+usaba en la misma transacción, que es justo lo que Postgres prohíbe (SQLSTATE 55P04) y el CLI de
+Supabase envuelve cada archivo en una transacción. Cortaba ahí y **no aplicaba nada de lo que
+seguía**. Se dividió: la `0032` agrega el valor, la nueva **`0035_defaults_sin_rol.sql`** lo usa.
+Detalle en `docs/bitacora.md` (entrada del 2026-08-14).
+
+> ⚠️ **El `0035` del plan ya no está libre.** La restricción única sobre `facturas.reserva_id`
+> (P0 #2, acá abajo) pasa a ser la **`0036`**.
+
+También se cerró la tarea #3 de la lista del usuario: `.env.example` ya declara `EMAIL_PROVIDER`,
+`FIRMA_PROVIDER` y `FACTURACION_PROVIDER`.
+
+**Hallazgo nuevo (bajo, solo local).** `EXIGIR_DB=1` protege `hayDB` pero no `hayAnon`
+(`tests/db.ts:40`), y vitest no lee `.env.local`: sin exportar `NEXT_PUBLIC_SUPABASE_ANON_KEY` a
+mano, los **4 tests del borde público del ADR 0016 saltean en silencio**. En CI no ocurre — el
+workflow la exporta (`ci.yml:72`).
 
 ---
 
