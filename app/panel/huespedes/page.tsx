@@ -113,12 +113,23 @@ export default async function HuespedesPage({
         {huespedes.length === 0 ? (
           <EstadoVacio
             titulo={q ? 'Ningún huésped coincide con la búsqueda' : 'Todavía no hay huéspedes'}
+            /* El texto anterior decía que los huéspedes «se cargan al crear una
+               reserva», y arriba, en el encabezado, hay un botón «Registrar
+               huésped» que funciona. Contradecir al botón que está a la vista
+               hace dudar de cuál es el camino bueno: son los dos. */
             descripcion={
               q
                 ? 'Se busca por apellido, nombre, documento o email.'
-                : 'Los huéspedes se cargan al crear una reserva.'
+                : 'Se cargan solos al crear una reserva, o los podés registrar vos ahora.'
             }
             icono="huespedes"
+            accion={
+              q ? undefined : (
+                <Link href="/panel/huespedes/nuevo" className={botonClases('primario')}>
+                  Registrar huésped
+                </Link>
+              )
+            }
           />
         ) : (
           <>

@@ -229,10 +229,18 @@ export function EstadoVacio({
 /**
  * Envoltorio de tabla con scroll horizontal propio: en pantallas chicas la
  * tabla se desplaza sola en lugar de desbordar la página entera.
+ *
+ * `overscroll-x-contain` está por un motivo concreto. Un contenedor con scroll
+ * propio **atrapa la rueda del mouse**: al llegar a su borde horizontal, el
+ * navegador seguía aplicando el gesto al contenedor en vez de devolvérselo a la
+ * página, así que bajar la pantalla con el cursor sobre una tabla ancha —el
+ * tarifario de Configuración es la peor— se trababa. `contain` corta esa
+ * propagación hacia adentro y deja que el scroll vertical siga siendo de la
+ * página.
  */
 export function Tabla({ children, resumen }: { children: ReactNode; resumen: string }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto overscroll-x-contain">
       <table className="min-w-full text-sm">
         <caption className="sr-only">{resumen}</caption>
         {children}
