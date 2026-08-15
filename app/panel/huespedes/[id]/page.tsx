@@ -112,7 +112,7 @@ export default async function DetalleHuespedPage({
                   {huesped.email}
                 </a>
               ) : (
-                <span className="text-stone-400">Sin cargar</span>
+                <span className="text-stone-600">Sin cargar</span>
               )}
             </Dato>
             <Dato etiqueta="Teléfono">
@@ -125,11 +125,11 @@ export default async function DetalleHuespedPage({
                   {huesped.telefono}
                 </a>
               ) : (
-                <span className="text-stone-400">Sin cargar</span>
+                <span className="text-stone-600">Sin cargar</span>
               )}
             </Dato>
             <Dato etiqueta="Nacionalidad">
-              {huesped.nacionalidad || <span className="text-stone-400">Sin cargar</span>}
+              {huesped.nacionalidad || <span className="text-stone-600">Sin cargar</span>}
             </Dato>
             <Dato etiqueta="Condición frente al IVA">
               {ETIQUETAS_CONDICION_IVA[huesped.condicion_iva]}

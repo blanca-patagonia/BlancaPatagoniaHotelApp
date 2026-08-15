@@ -126,7 +126,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
                 <p className="text-stone-500">{fac?.numero ?? '(proforma)'}</p>
               </>
             )}
-            <p className="text-xs text-stone-400">Reserva {reserva.codigo}</p>
+            <p className="text-xs text-stone-600">Reserva {reserva.codigo}</p>
           </div>
         </div>
 
@@ -134,14 +134,14 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
             teléfono se apilan para que los datos no queden partidos. */}
         <div className="grid grid-cols-1 gap-4 py-4 text-sm sm:grid-cols-2 print:grid-cols-2">
           <div>
-            <p className="text-xs uppercase tracking-wide text-stone-400">Huésped</p>
+            <p className="text-xs uppercase tracking-wide text-stone-600">Huésped</p>
             <p className="text-stone-800">
               {reserva.huesped ? `${reserva.huesped.apellido}, ${reserva.huesped.nombre}` : '—'}
             </p>
             <p className="text-stone-500">{reserva.huesped?.doc_numero || ''}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-stone-400">Estadía</p>
+            <p className="text-xs uppercase tracking-wide text-stone-600">Estadía</p>
             <p className="text-stone-800">
               {estadia?.unidad?.tipo?.nombre ?? estadia?.unidad?.nombre ?? '—'}
             </p>
@@ -156,7 +156,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full border-t border-stone-200 text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-400">
+            <tr className="text-left text-xs uppercase tracking-wide text-stone-600">
               <th className="py-2">Detalle</th>
               <th className="py-2 text-right">Importe (USD)</th>
             </tr>
@@ -244,14 +244,14 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
                 El CAE está vencido: este comprobante ya no puede entregarse al cliente.
               </p>
             )}
-            <p className="mt-3 text-xs text-stone-400">
+            <p className="mt-3 text-xs text-stone-600">
               ⚠️ CAE emitido por un proveedor <strong>simulado</strong>: este comprobante NO tiene
               validez fiscal. La integración con AFIP/ARCA queda documentada en el ADR 0012.
               Tarifas en dólares.
             </p>
           </div>
         ) : (
-          <p className="mt-6 border-t border-stone-100 pt-3 text-xs text-stone-400">
+          <p className="mt-6 border-t border-stone-100 pt-3 text-xs text-stone-600">
             Comprobante interno sin CAE. No válido como factura fiscal. Tarifas en dólares;
             IVA incluido en el alojamiento.
           </p>

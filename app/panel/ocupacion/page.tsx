@@ -6,7 +6,7 @@ import {
   ETIQUETAS_ESTADO_RESERVA,
   type EstadoReserva,
 } from '@/lib/domain/reservas'
-import { ETIQUETAS_ESTADO_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
+import { type EstadoHousekeeping } from '@/lib/domain/unidades'
 import {
   hoyISO,
   sumarDias,
@@ -17,12 +17,12 @@ import {
   formatoFechaCorta,
 } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
-import { PUNTO_HK } from '../_components/estilos'
 import { Icono } from '../_components/iconos'
 import {
   BarraHerramientas,
   Chip,
   Encabezado,
+  EstadoUnidad,
   Kpi,
   Pagina,
   Tarjeta,
@@ -262,7 +262,7 @@ export default async function OcupacionPage({
                       }`}
                     >
                       <div>{LETRA_DIA[new Date(dia + 'T00:00:00Z').getUTCDay()]}</div>
-                      <div className={esHoy ? 'font-semibold' : 'text-stone-400'}>
+                      <div className={esHoy ? 'font-semibold' : 'text-stone-600'}>
                         {formatoFechaCorta(dia)}
                       </div>
                     </th>
@@ -277,12 +277,9 @@ export default async function OcupacionPage({
                   <tr key={u.id} className="border-b border-stone-100 last:border-0">
                     <td className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-block size-2 rounded-full ${PUNTO_HK[u.estado]}`}
-                          title={ETIQUETAS_ESTADO_HK[u.estado]}
-                        />
+                        <EstadoUnidad estado={u.estado} />
                         <span className="font-medium text-stone-800">{u.nombre}</span>
-                        <span className="text-xs text-stone-400">{u.tipo?.nombre}</span>
+                        <span className="text-xs text-stone-600">{u.tipo?.nombre}</span>
                       </div>
                     </td>
                     {dias.map((dia) => {
@@ -356,7 +353,7 @@ export default async function OcupacionPage({
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-3 rounded bg-lenga-500" /> In house
         </span>
-        <span className="text-stone-400">· Clic en una celda libre para crear la reserva</span>
+        <span className="text-stone-600">· Clic en una celda libre para crear la reserva</span>
       </div>
     </Pagina>
   )

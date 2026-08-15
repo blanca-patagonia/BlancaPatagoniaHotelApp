@@ -76,7 +76,7 @@ export function Chat({ canalId, usuarioId, iniciales, nombres }: Props) {
     <div className="flex h-[28rem] flex-col">
       <div className="flex-1 overflow-y-auto px-5 py-4" aria-live="polite">
         {mensajes.length === 0 && (
-          <p className="py-10 text-center text-sm text-stone-400">
+          <p className="py-10 text-center text-sm text-stone-600">
             Todavía no hay mensajes en este canal. Escribí el primero.
           </p>
         )}
@@ -86,7 +86,7 @@ export function Chat({ canalId, usuarioId, iniciales, nombres }: Props) {
           return (
             <div key={m.id} className={`flex flex-col ${propio ? 'items-end' : 'items-start'}`}>
               {!agrupado && (
-                <p className={`mt-3 mb-0.5 text-xs text-stone-400 ${propio ? 'text-right' : ''}`}>
+                <p className={`mt-3 mb-0.5 text-xs text-stone-600 ${propio ? 'text-right' : ''}`}>
                   {propio ? 'Vos' : (nombres[m.autor_id ?? ''] ?? 'Staff')} · {hora(m.creado_en)}
                 </p>
               )}
@@ -116,7 +116,7 @@ export function Chat({ canalId, usuarioId, iniciales, nombres }: Props) {
           name="cuerpo"
           required
           autoComplete="off"
-          placeholder="Escribí un mensaje…"
+          placeholder="Escribí un mensaje⬦"
           aria-label="Mensaje"
           className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
         />

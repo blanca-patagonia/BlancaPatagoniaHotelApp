@@ -206,7 +206,7 @@ export default async function ProveedoresPage({
                 >
                   <div className="min-w-40 flex-1">
                     <p className="font-medium text-stone-800">{nombre}</p>
-                    <p className="text-xs text-stone-400">
+                    <p className="text-xs text-stone-600">
                       {m.concepto || 'Factura'}
                       {m.comprobante && ` · ${m.comprobante}`}
                     </p>

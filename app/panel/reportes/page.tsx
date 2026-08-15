@@ -55,8 +55,8 @@ interface ReservaRow {
 
 /** Flecha de variación contra el mes anterior. */
 function Variacion({ valor }: { valor: number | null }) {
-  if (valor === null) return <span className="text-xs text-stone-400">sin base previa</span>
-  if (valor === 0) return <span className="text-xs text-stone-400">igual que el mes anterior</span>
+  if (valor === null) return <span className="text-xs text-stone-600">sin base previa</span>
+  if (valor === 0) return <span className="text-xs text-stone-600">igual que el mes anterior</span>
   const sube = valor > 0
   return (
     <span className={`text-xs font-medium ${sube ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -224,7 +224,7 @@ export default async function ReportesPage({
           <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
             {actual.ocupacionPct}%
           </p>
-          <p className="mt-1.5 text-xs text-stone-400">
+          <p className="mt-1.5 text-xs text-stone-600">
             {actual.nochesVendidas} de {actual.nochesDisponibles} noches-unidad
           </p>
           <p className="mt-1">
@@ -239,7 +239,7 @@ export default async function ReportesPage({
           <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
             USD {actual.adr.toLocaleString('es-AR')}
           </p>
-          <p className="mt-1.5 text-xs text-stone-400">por noche vendida (neto)</p>
+          <p className="mt-1.5 text-xs text-stone-600">por noche vendida (neto)</p>
           <p className="mt-1">
             <Variacion valor={variacionPct(actual.adr, previo.adr)} />
           </p>
@@ -250,7 +250,7 @@ export default async function ReportesPage({
           <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
             USD {actual.revpar.toLocaleString('es-AR')}
           </p>
-          <p className="mt-1.5 text-xs text-stone-400">por unidad disponible (neto)</p>
+          <p className="mt-1.5 text-xs text-stone-600">por unidad disponible (neto)</p>
           <p className="mt-1">
             <Variacion valor={variacionPct(actual.revpar, previo.revpar)} />
           </p>
@@ -296,11 +296,11 @@ export default async function ReportesPage({
                 />
               </div>
               <span
-                className={`text-xs ${m.mes === mes ? 'font-semibold text-lago-800' : 'text-stone-400'}`}
+                className={`text-xs ${m.mes === mes ? 'font-semibold text-lago-800' : 'text-stone-600'}`}
               >
                 {etiquetaMes(m.mes)}
               </span>
-              <span className="tabular text-[10px] text-stone-400">
+              <span className="tabular text-[10px] text-stone-600">
                 ADR {m.adr ? m.adr.toLocaleString('es-AR') : '—'}
               </span>
             </div>
@@ -320,12 +320,12 @@ export default async function ReportesPage({
               {nps.nps ?? '—'}
             </p>
             <p className="mt-1 text-sm font-medium text-lago-700">{interpretarNps(nps.nps)}</p>
-            <p className="mt-1 text-xs text-stone-400">
+            <p className="mt-1 text-xs text-stone-600">
               {nps.respuestas} respuesta(s)
               {respuesta !== null && ` · ${respuesta}% de respuesta`}
             </p>
             {nps.promedio !== null && (
-              <p className="tabular text-xs text-stone-400">Promedio {nps.promedio} / 10</p>
+              <p className="tabular text-xs text-stone-600">Promedio {nps.promedio} / 10</p>
             )}
           </div>
 
@@ -345,7 +345,7 @@ export default async function ReportesPage({
               )
             })}
             {nps.respuestas === 0 && (
-              <p className="mt-1 text-xs text-stone-400">
+              <p className="mt-1 text-xs text-stone-600">
                 Las encuestas se generan solas al hacer el check-out de una reserva.
               </p>
             )}

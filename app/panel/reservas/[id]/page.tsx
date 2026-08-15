@@ -143,7 +143,7 @@ interface Reserva {
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-stone-400">{etiqueta}</dt>
+      <dt className="text-xs uppercase tracking-wide text-stone-600">{etiqueta}</dt>
       <dd className="mt-0.5 text-stone-800">{valor}</dd>
     </div>
   )
@@ -339,7 +339,7 @@ export default async function DetalleReservaPage({
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium text-stone-700">Acciones</h2>
         {transiciones.length === 0 ? (
-          <p className="text-sm text-stone-400">La reserva está en un estado final.</p>
+          <p className="text-sm text-stone-600">La reserva está en un estado final.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {transiciones.map((t) => (
@@ -400,7 +400,7 @@ export default async function DetalleReservaPage({
               Reprogramar
             </BotonEnvio>
           </form>
-          <p className="mt-2 text-xs text-stone-400">
+          <p className="mt-2 text-xs text-stone-600">
             Recotiza el total; se rechaza si la unidad ya está ocupada en esas fechas.
           </p>
         </div>
@@ -409,13 +409,13 @@ export default async function DetalleReservaPage({
       {puedeMudarse && (
         <div className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-1 text-sm font-medium text-stone-700">Cambiar de unidad</h2>
-          <p className="mb-3 text-xs text-stone-400">
+          <p className="mb-3 text-xs text-stone-600">
             Para averías, pedidos del huésped o para liberar la habitación. Solo se listan las
             unidades libres en {formatoFechaCorta(periodo!.desde)} – {formatoFechaCorta(periodo!.hasta)}.
           </p>
 
           {libres.length === 0 ? (
-            <p className="text-sm text-stone-400">
+            <p className="text-sm text-stone-600">
               No hay otra unidad libre en esas fechas. Se puede liberar una reprogramando o
               cancelando otra reserva.
             </p>
@@ -461,7 +461,7 @@ export default async function DetalleReservaPage({
               </BotonEnvio>
             </form>
           )}
-          <p className="mt-2 text-xs text-stone-400">
+          <p className="mt-2 text-xs text-stone-600">
             Dentro del mismo tipo el precio no cambia. La unidad que se libera queda sucia solo si
             el huésped ya había hecho el check-in.
           </p>
@@ -477,7 +477,7 @@ export default async function DetalleReservaPage({
             110px se cortaban. En móvil van de a uno. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-lg bg-stone-50 px-4 py-3">
-            <p className="text-xs text-stone-400">Total</p>
+            <p className="text-xs text-stone-600">Total</p>
             <p className="text-lg font-semibold text-stone-900">
               USD {Number(reserva.total).toLocaleString('es-AR')}
             </p>
@@ -563,7 +563,7 @@ export default async function DetalleReservaPage({
             </BotonEnvio>
           </form>
         )}
-        <p className="mt-3 text-xs text-stone-400">
+        <p className="mt-3 text-xs text-stone-600">
           Seña sugerida (primera noche): USD {senia.toLocaleString('es-AR')}. Las pasarelas
           (MercadoPago / Stripe) ingresan por webhook.
         </p>
@@ -582,7 +582,7 @@ export default async function DetalleReservaPage({
           ) : motivoFactura ? (
             /* El botón no se ofrece si no corresponde: es más claro explicar por
                qué que dejar apretar y devolver un error. */
-            <span className="max-w-sm text-right text-xs text-stone-400">
+            <span className="max-w-sm text-right text-xs text-stone-600">
               {MENSAJES_NO_FACTURABLE[motivoFactura]}
             </span>
           ) : (
@@ -604,7 +604,7 @@ export default async function DetalleReservaPage({
               <li key={c.id} className="flex items-center justify-between py-2">
                 <span className="text-stone-600">
                   {c.cantidad}× {c.producto?.nombre}
-                  <span className="ml-2 text-xs text-stone-400">
+                  <span className="ml-2 text-xs text-stone-600">
                     {c.producto ? ETIQUETAS_CATEGORIA_PRODUCTO[c.producto.categoria] : ''}
                   </span>
                 </span>
@@ -615,7 +615,7 @@ export default async function DetalleReservaPage({
                   <form action={quitarConsumo}>
                     <input type="hidden" name="reserva_id" value={reserva.id} />
                     <input type="hidden" name="consumo_id" value={c.id} />
-                    <button className="text-xs text-stone-400 transition hover:text-red-600" title="Quitar">
+                    <button className="text-xs text-stone-600 transition hover:text-red-600" title="Quitar">
                       ✕
                     </button>
                   </form>

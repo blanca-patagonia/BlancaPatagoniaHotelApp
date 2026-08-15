@@ -204,7 +204,7 @@ export default async function ConfigPage({
                 <tr key={f.nombre} className={FILA}>
                   <td className={TD}>
                     <span className="font-medium text-stone-800">{f.nombre}</span>
-                    <span className="ml-2 text-xs text-stone-400">
+                    <span className="ml-2 text-xs text-stone-600">
                       {ETIQUETAS_CATEGORIA[f.categoria]}
                     </span>
                   </td>
@@ -269,7 +269,7 @@ export default async function ConfigPage({
       </Tarjeta>
 
       {!puedeEditar && (
-        <p className="mt-2 text-xs text-stone-400">
+        <p className="mt-2 text-xs text-stone-600">
           Tu rol puede consultar el tarifario, pero no modificarlo.
         </p>
       )}
@@ -301,11 +301,11 @@ export default async function ConfigPage({
                 </h3>
 
                 <div className="mt-3 rounded-lg border border-stone-200 bg-white p-4">
-                  <p className="text-xs tracking-wide text-stone-400 uppercase">Asunto</p>
+                  <p className="text-xs tracking-wide text-stone-600 uppercase">Asunto</p>
                   <p className="text-sm font-medium text-stone-800">{vista.asunto}</p>
-                  <p className="mt-3 text-xs tracking-wide text-stone-400 uppercase">Cuerpo</p>
+                  <p className="mt-3 text-xs tracking-wide text-stone-600 uppercase">Cuerpo</p>
                   <p className="mt-1 text-sm whitespace-pre-line text-stone-700">{vista.cuerpo}</p>
-                  <p className="mt-3 text-xs text-stone-400">
+                  <p className="mt-3 text-xs text-stone-600">
                     Variables: {plantilla.variables.join(', ')}
                   </p>
                 </div>
@@ -373,7 +373,7 @@ export default async function ConfigPage({
                           <span className={bajo ? 'font-semibold text-red-600' : 'text-stone-800'}>
                             {p.stock}
                           </span>
-                          <span className="ml-1 text-xs text-stone-400">
+                          <span className="ml-1 text-xs text-stone-600">
                             / mín. {p.stock_minimo ?? 0}
                           </span>
                           {bajo && (
@@ -383,7 +383,7 @@ export default async function ConfigPage({
                           )}
                         </>
                       ) : (
-                        <span className="text-stone-400">servicio</span>
+                        <span className="text-stone-600">servicio</span>
                       )}
                     </td>
                     <td className={TD}>

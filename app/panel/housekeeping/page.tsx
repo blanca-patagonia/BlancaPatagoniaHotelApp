@@ -7,10 +7,10 @@ import {
   type EstadoHousekeeping,
 } from '@/lib/domain/unidades'
 import { construirQuery } from '@/lib/listados'
-import { PUNTO_HK } from '../_components/estilos'
 import {
   BarraHerramientas,
   Chip,
+  EstadoUnidad,
   Encabezado,
   EstadoVacio,
   Kpi,
@@ -38,10 +38,10 @@ interface Mucama {
 function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-4 py-3 first:border-0">
-      <span className={`size-2.5 shrink-0 rounded-full ${PUNTO_HK[u.estado]}`} aria-hidden="true" />
+      <EstadoUnidad estado={u.estado} />
       <div className="min-w-36 flex-1">
         <p className="font-medium text-stone-800">{u.nombre}</p>
-        <p className="text-xs text-stone-400">{u.tipo?.nombre}</p>
+        <p className="text-xs text-stone-600">{u.tipo?.nombre}</p>
       </div>
 
       <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Estado de ${u.nombre}`}>

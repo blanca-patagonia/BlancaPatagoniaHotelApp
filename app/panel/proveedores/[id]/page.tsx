@@ -130,7 +130,7 @@ export default async function ProveedorDetallePage({
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5">
         <div>
-          <p className="text-xs uppercase tracking-wide text-stone-400">Saldo a pagar</p>
+          <p className="text-xs uppercase tracking-wide text-stone-600">Saldo a pagar</p>
           <p className={`text-2xl font-semibold ${saldo > 0 ? 'text-red-600' : 'text-stone-900'}`}>
             USD {saldo.toLocaleString('es-AR')}
           </p>
@@ -213,7 +213,7 @@ export default async function ProveedorDetallePage({
           <tbody>
             {movs.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-stone-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-stone-600">
                   Sin movimientos.
                 </td>
               </tr>
@@ -224,7 +224,7 @@ export default async function ProveedorDetallePage({
                 <td className="px-4 py-2 text-stone-700">
                   {m.concepto || (m.tipo === 'cargo' ? 'Factura' : 'Pago')}
                   {m.comprobante && (
-                    <span className="ml-1.5 text-xs text-stone-400">{m.comprobante}</span>
+                    <span className="ml-1.5 text-xs text-stone-600">{m.comprobante}</span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-stone-500">
@@ -232,7 +232,7 @@ export default async function ProveedorDetallePage({
                     <>
                       {formatoFechaCorta(m.vencimiento)}
                       {m.estado !== 'pagado' && (
-                        <span className="ml-1.5 text-xs text-stone-400">
+                        <span className="ml-1.5 text-xs text-stone-600">
                           {ETIQUETAS_TRAMO[clasificarTramo(m.vencimiento, hoy)]}
                         </span>
                       )}

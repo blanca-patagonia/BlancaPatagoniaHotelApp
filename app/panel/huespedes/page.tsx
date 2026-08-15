@@ -175,7 +175,7 @@ export default async function HuespedesPage({
                             )}
                             {h.email && <p className="hidden sm:block">{h.email}</p>}
                             {h.telefono && (
-                              <p className="hidden text-xs text-stone-400 sm:block">{h.telefono}</p>
+                              <p className="hidden text-xs text-stone-600 sm:block">{h.telefono}</p>
                             )}
                             {!h.telefono && h.email && (
                               <p className="truncate sm:hidden">{h.email}</p>
@@ -194,7 +194,7 @@ export default async function HuespedesPage({
                             {ETIQUETAS_NIVEL[nivel]} · {puntos} pts
                           </Etiqueta>
                         ) : (
-                          <span className="text-stone-400">—</span>
+                          <span className="text-stone-600">—</span>
                         )}
                       </td>
                     </tr>

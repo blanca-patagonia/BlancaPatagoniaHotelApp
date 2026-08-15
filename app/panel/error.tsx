@@ -35,7 +35,7 @@ export default function ErrorPanel({
         nuevo; si el problema sigue, avisá al administrador del sistema.
       </p>
       {error.digest && (
-        <p className="font-mono text-xs text-stone-400">Referencia: {error.digest}</p>
+        <p className="font-mono text-xs text-stone-600">Referencia: {error.digest}</p>
       )}
       <button
         onClick={reset}

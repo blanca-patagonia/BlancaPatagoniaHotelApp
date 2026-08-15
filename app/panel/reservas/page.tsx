@@ -157,7 +157,7 @@ export default async function ReservasPage({
               aria-label="Fecha desde"
               className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
             />
-            <span className="text-stone-400">y</span>
+            <span className="text-stone-600">y</span>
             <input
               type="date"
               name="hasta"
@@ -272,7 +272,7 @@ export default async function ReservasPage({
                         {periodo ? (
                           <>
                             {formatoFechaCorta(periodo.desde)} → {formatoFechaCorta(periodo.hasta)}
-                            <span className="ml-1.5 text-xs text-stone-400">
+                            <span className="ml-1.5 text-xs text-stone-600">
                               {noches} {noches === 1 ? 'noche' : 'noches'}
                             </span>
                           </>

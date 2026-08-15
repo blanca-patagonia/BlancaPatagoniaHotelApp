@@ -161,10 +161,10 @@ export default async function ConversacionesPage({
                     className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-5 py-3 first:border-0"
                   >
                     <div className="min-w-48 flex-1">
-                      <p className={c.respondida ? 'text-stone-400 line-through' : 'text-stone-800'}>
+                      <p className={c.respondida ? 'text-stone-600 line-through' : 'text-stone-800'}>
                         {c.pregunta}
                       </p>
-                      <p className="text-xs text-stone-400">
+                      <p className="text-xs text-stone-600">
                         {new Date(c.creado_en).toLocaleString('es-AR')}
                         {c.contacto && ` · ${c.contacto}`}
                       </p>
@@ -204,7 +204,7 @@ export default async function ConversacionesPage({
                   <span className="block"># {c.nombre}</span>
                   {c.descripcion && (
                     <span
-                      className={`mt-0.5 hidden text-xs lg:block ${activo ? 'text-lago-100' : 'text-stone-400'}`}
+                      className={`mt-0.5 hidden text-xs lg:block ${activo ? 'text-lago-100' : 'text-stone-600'}`}
                     >
                       {c.descripcion}
                     </span>

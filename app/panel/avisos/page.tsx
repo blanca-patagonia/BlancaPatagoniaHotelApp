@@ -96,7 +96,7 @@ export default async function AvisosPage({
           accion="/panel/avisos"
           valor={q}
           etiqueta="Buscar avisos"
-          placeholder="Buscar en los mensajes…"
+          placeholder="Buscar en los mensajes⬦"
         />
         {fijados > 0 && (
           <span className="text-xs text-stone-500">
@@ -139,7 +139,7 @@ export default async function AvisosPage({
                   </p>
                 )}
                 <p className="whitespace-pre-line text-stone-800">{a.mensaje}</p>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600">
                   <span>
                     {a.autor?.nombre ?? 'Staff'} · {cuando(a.creado_en)}
                   </span>
@@ -148,7 +148,7 @@ export default async function AvisosPage({
                       <input type="hidden" name="id" value={a.id} />
                       <input type="hidden" name="fijar" value={a.fijado ? '0' : '1'} />
                       <button
-                        className="inline-flex items-center gap-1 text-stone-400 transition hover:text-lenga-700"
+                        className="inline-flex items-center gap-1 text-stone-600 transition hover:text-lenga-700"
                         aria-label={a.fijado ? 'Desfijar el aviso' : 'Fijar el aviso arriba'}
                       >
                         <Icono nombre="montana" tam={13} />
@@ -161,9 +161,9 @@ export default async function AvisosPage({
                         {/* Borrar no tiene deshacer: se pregunta antes. */}
                         <BotonEnvio
                           variante="fantasma"
-                          extra="text-stone-400 hover:text-red-600"
-                          cargando="Borrando…"
-                          confirmar={`¿Borrar el aviso «${a.mensaje.slice(0, 60)}${a.mensaje.length > 60 ? '…' : ''}»? No se puede recuperar.`}
+                          extra="text-stone-600 hover:text-red-600"
+                          cargando="Borrando⬦"
+                          confirmar={`¿Borrar el aviso «${a.mensaje.slice(0, 60)}${a.mensaje.length > 60 ? '⬦' : ''}»? No se puede recuperar.`}
                         >
                           Borrar
                         </BotonEnvio>
