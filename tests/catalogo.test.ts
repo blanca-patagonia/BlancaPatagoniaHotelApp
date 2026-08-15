@@ -174,10 +174,18 @@ describe('texto de un rango de temporada', () => {
 })
 
 describe('fotos', () => {
-  it('devuelve null mientras no haya foto cargada', () => {
-    // El catálogo está diseñado para verse terminado sin fotos; cuando el hotel
-    // las entregue, alcanza con descomentar su línea en `FOTOS`.
-    expect(fotoDe('HOST-SUITE')).toBeNull()
+  it('devuelve la ruta de la portada de un tipo conocido', () => {
+    // Hasta la Fase 23 este test afirmaba que `fotoDe` devolvía `null` para
+    // todo, porque `FOTOS` estaba vacío a la espera de las fotos del hotel.
+    // Eso fijaba una situación transitoria, no el contrato: lo que la función
+    // promete es resolver el código al archivo de su portada.
+    expect(fotoDe('HOST-SUITE')).toBe('/alojamientos/suite-principal.jpg')
+    expect(fotoDe('CAB-1D-3P')).toBe('/alojamientos/cabana-1-dormitorio.jpg')
+  })
+
+  it('devuelve null ante un código sin portada', () => {
+    // Es el caso que mantiene viva la cabecera de marca de `PortadaAlojamiento`
+    // para un tipo nuevo que todavía no tenga foto.
     expect(fotoDe('CODIGO-INEXISTENTE')).toBeNull()
   })
 })

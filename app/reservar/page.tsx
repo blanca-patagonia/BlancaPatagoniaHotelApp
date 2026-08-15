@@ -3,25 +3,25 @@ import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { hoyISO, sumarDias, diasEntre } from '@/lib/fechas'
 import { ETIQUETAS_CATEGORIA, type CategoriaUnidad } from '@/lib/domain/unidades'
+import { formatearUSD, porNoche } from '@/lib/domain/moneda'
+import { senalEscasez } from '@/lib/domain/senales'
+import { textoCapacidad } from '@/lib/domain/catalogo'
 import { ChatAsistente } from './_asistente/chat'
-import {
-  CAMPO_PUBLICO,
-  Campo,
-  Marco,
-  Mensaje,
-  Tarjeta,
-  Titulo,
-  botonPublico,
-} from '../_publico/ui'
+import { PortadaAlojamiento } from '../alojamientos/_portada'
+import { BuscadorEstadia } from '../_publico/buscador'
+import { Insignia, Marco, Mensaje, Precio, Titulo, botonPublico } from '../_publico/ui'
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
 interface Opcion {
   tipoUnidadId: string
+  codigo: string
   nombre: string
   categoria: CategoriaUnidad
   capacidadMax: number
   total: number
+  /** Unidades libres de este tipo en el rango. Alimenta la señal de escasez. */
+  disponibles: number
   /** Queda alguna unidad de este tipo libre en el rango. */
   hayLugar: boolean
   /**
@@ -63,10 +63,12 @@ export default async function ReservarPage({
           })
           return {
             tipoUnidadId: t.tipo_unidad_id,
+            codigo: t.codigo,
             nombre: t.nombre,
             categoria: t.categoria,
             capacidadMax: t.capacidad_max,
             total: cot.resumen.total,
+            disponibles: t.disponibles,
             hayLugar: t.disponibles > 0,
             hayPrecio: !cot.faltanTarifas,
           }
@@ -83,53 +85,30 @@ export default async function ReservarPage({
 
   return (
     <Marco>
+      {/* Patrón de Booking: la búsqueda queda arriba y acompaña el scroll, así
+          corregir las fechas no obliga a volver atrás ni a perder los
+          resultados que se estaban leyendo. */}
+      <BuscadorEstadia
+        checkIn={checkIn}
+        checkOut={checkOut}
+        huespedes={huespedes}
+        hoy={hoyISO()}
+        salidaPorDefecto={sumarDias(hoyISO(), 2)}
+        tipo={sp.tipo}
+      />
+
       <Titulo
         titulo="Reservá tu estadía"
         descripcion="Elegí las fechas y cuántos son. Te mostramos lo que está libre, con el precio final."
       />
 
-      <Tarjeta>
-        <form method="get" className="grid gap-x-4 gap-y-5 p-5 sm:grid-cols-3 sm:p-6">
-          <Campo etiqueta="Llegada">
-            <input
-              type="date"
-              name="check_in"
-              defaultValue={checkIn || hoyISO()}
-              className={CAMPO_PUBLICO}
-            />
-          </Campo>
-          <Campo etiqueta="Salida">
-            <input
-              type="date"
-              name="check_out"
-              defaultValue={checkOut || sumarDias(hoyISO(), 2)}
-              className={CAMPO_PUBLICO}
-            />
-          </Campo>
-          <Campo etiqueta="Huéspedes">
-            <input
-              type="number"
-              name="huespedes"
-              min={1}
-              max={7}
-              defaultValue={huespedes}
-              className={CAMPO_PUBLICO}
-            />
-          </Campo>
-          <div className="flex flex-col gap-3 sm:col-span-3 sm:flex-row sm:items-center">
-            <button type="submit" className={botonPublico('primario', 'w-full sm:w-auto')}>
-              Ver disponibilidad
-            </button>
-            {/* Salida para quien llegó acá sin saber qué ofrece el hotel. */}
-            <Link
-              href="/alojamientos"
-              className="text-sm text-lago-700 underline underline-offset-4 transition hover:text-lago-900"
-            >
-              Ver todos los alojamientos y sus precios
-            </Link>
-          </div>
-        </form>
-      </Tarjeta>
+      {/* Salida para quien llegó acá sin saber qué ofrece el hotel. */}
+      <Link
+        href="/alojamientos"
+        className="text-sm text-lago-700 underline underline-offset-4 transition hover:text-lago-900"
+      >
+        Ver todos los alojamientos y sus precios
+      </Link>
 
       {buscado && (
         <div className="mt-6 flex flex-col gap-3">
@@ -156,74 +135,118 @@ export default async function ReservarPage({
                 // reconocerlo en la lista sin leerla entera; el resto sigue a la
                 // vista porque si justo ese está lleno, la alternativa es la venta.
                 const elegido = o.tipoUnidadId === sp.tipo
+                // Señal con el número real de unidades libres. Solo habla
+                // cuando queda una: ver lib/domain/senales.ts, donde está
+                // explicado por qué no se avisa con 2 o 3.
+                const escasez = senalEscasez(o.disponibles)
+
                 return (
                   <article
                     key={o.tipoUnidadId}
-                    className={`flex flex-col gap-4 rounded-2xl border bg-white p-5 shadow-sm transition sm:flex-row sm:items-center sm:justify-between ${
+                    className={`grid overflow-hidden rounded-2xl border bg-white shadow-sm transition sm:grid-cols-[16rem_1fr] ${
                       elegido
                         ? 'border-lago-500 ring-1 ring-lago-200'
                         : reservable
-                          ? 'border-stone-200 hover:border-lago-300'
+                          ? 'border-stone-200 hover:border-lago-300 hover:shadow-md'
                           : 'border-stone-200'
                     }`}
                   >
-                    <div className="min-w-0">
-                      <h2 className="font-display text-lg font-semibold text-stone-900">
-                        {o.nombre}
-                      </h2>
-                      <p className="mt-0.5 text-sm text-stone-500">
-                        {ETIQUETAS_CATEGORIA[o.categoria]} · hasta {o.capacidadMax}{' '}
-                        {o.capacidadMax === 1 ? 'persona' : 'personas'}
-                      </p>
-                      {elegido && (
-                        <p className="mt-1.5 text-sm font-medium text-lago-700">
-                          El que estabas mirando
-                        </p>
+                    {/* Patrón de Booking: la foto manda en el resultado. Se
+                        decide mirando, no leyendo una lista de nombres. */}
+                    <Link
+                      href={`/alojamientos/${o.codigo}`}
+                      className="group relative block"
+                      aria-label={`Ver el detalle de ${o.nombre}`}
+                    >
+                      <PortadaAlojamiento
+                        codigo={o.codigo}
+                        nombre={o.nombre}
+                        categoria={o.categoria}
+                        alto="resultado"
+                      />
+                      {escasez && reservable && (
+                        <span className="absolute top-3 left-3">
+                          <Insignia tono="atencion">{escasez.texto}</Insignia>
+                        </span>
                       )}
-                    </div>
+                    </Link>
 
-                    <div className="flex items-end justify-between gap-5 sm:items-center">
-                      <div className="sm:text-right">
+                    {/* `min-w-0` en la celda y en las columnas internas. Un hijo
+                        de grid/flex no se encoge por debajo de su contenido
+                        mínimo, y acá la línea del precio («USD 435,60 por 3
+                        noches, con IVA») es larga: sin esto, un nombre de
+                        alojamiento más largo o una moneda de más dígitos
+                        empujarían el ancho de la tarjeta. */}
+                    <div className="flex min-w-0 flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <h2 className="font-display text-lg font-semibold text-stone-900">
+                          <Link
+                            href={`/alojamientos/${o.codigo}`}
+                            className="transition hover:text-lago-800"
+                          >
+                            {o.nombre}
+                          </Link>
+                        </h2>
+                        <p className="mt-0.5 text-sm text-stone-500">
+                          {ETIQUETAS_CATEGORIA[o.categoria]} · {textoCapacidad(o.capacidadMax)}
+                        </p>
+                        {elegido && (
+                          <p className="mt-1.5 text-sm font-medium text-lago-700">
+                            El que estabas mirando
+                          </p>
+                        )}
+                        <Link
+                          href={`/alojamientos/${o.codigo}`}
+                          className="mt-2 inline-block text-sm text-lago-700 underline underline-offset-4 transition hover:text-lago-900"
+                        >
+                          Ver fotos y servicios
+                        </Link>
+                      </div>
+
+                      <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-5 gap-y-3 sm:flex-col sm:items-end sm:flex-nowrap">
                         {o.hayPrecio ? (
-                          <>
-                            <p className="tabular font-display text-2xl leading-none font-semibold text-stone-900">
-                              USD {o.total.toLocaleString('es-AR')}
-                            </p>
-                            <p className="mt-1 text-sm text-stone-500">
-                              por {noches} {noches === 1 ? 'noche' : 'noches'}
-                            </p>
-                          </>
+                          /* Precio por noche arriba y total abajo: el primero
+                             sirve para comparar entre opciones, el segundo es
+                             el que se paga. Booking muestra los dos por eso
+                             mismo, y acá el total ya lleva IVA (ADR 0004). */
+                          <Precio
+                            monto={formatearUSD(porNoche(o.total, noches))}
+                            detalle={`${formatearUSD(o.total)} por ${noches} ${
+                              noches === 1 ? 'noche' : 'noches'
+                            }, con IVA`}
+                            alineado="derecha"
+                          />
                         ) : (
                           <p className="text-sm text-stone-500">Precio a confirmar</p>
                         )}
-                      </div>
 
-                      {reservable ? (
-                        <Link
-                          href={`/reservar/checkout?tipo=${o.tipoUnidadId}&check_in=${checkIn}&check_out=${checkOut}&huespedes=${huespedes}`}
-                          className={botonPublico('primario', 'shrink-0')}
-                        >
-                          Reservar
-                        </Link>
-                      ) : !o.hayLugar ? (
-                        <span className="shrink-0 rounded-xl bg-stone-100 px-5 py-3 text-stone-500">
-                          Sin lugar
-                        </span>
-                      ) : (
-                        /* Hay lugar pero todavía no está cargada la tarifa de
-                           esas fechas: se ofrece consultar en lugar de decir
-                           que está lleno, que sería mentira y perdería la venta. */
-                        <a
-                          href={`mailto:reservas@blancapatagonia.com?subject=${encodeURIComponent(
-                            `Consulta de disponibilidad · ${o.nombre}`,
-                          )}&body=${encodeURIComponent(
-                            `Hola, quisiera consultar por ${o.nombre} del ${checkIn} al ${checkOut} para ${huespedes} huésped(es).`,
-                          )}`}
-                          className={botonPublico('secundario', 'shrink-0')}
-                        >
-                          Consultar
-                        </a>
-                      )}
+                        {reservable ? (
+                          <Link
+                            href={`/reservar/checkout?tipo=${o.tipoUnidadId}&check_in=${checkIn}&check_out=${checkOut}&huespedes=${huespedes}`}
+                            className={botonPublico('primario', 'shrink-0')}
+                          >
+                            Reservar
+                          </Link>
+                        ) : !o.hayLugar ? (
+                          <span className="shrink-0 rounded-xl bg-stone-100 px-5 py-3 text-stone-500">
+                            Sin lugar
+                          </span>
+                        ) : (
+                          /* Hay lugar pero todavía no está cargada la tarifa de
+                             esas fechas: se ofrece consultar en lugar de decir
+                             que está lleno, que sería mentira y perdería la venta. */
+                          <a
+                            href={`mailto:reservas@blancapatagonia.com?subject=${encodeURIComponent(
+                              `Consulta de disponibilidad · ${o.nombre}`,
+                            )}&body=${encodeURIComponent(
+                              `Hola, quisiera consultar por ${o.nombre} del ${checkIn} al ${checkOut} para ${huespedes} huésped(es).`,
+                            )}`}
+                            className={botonPublico('secundario', 'shrink-0')}
+                          >
+                            Consultar
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </article>
                 )

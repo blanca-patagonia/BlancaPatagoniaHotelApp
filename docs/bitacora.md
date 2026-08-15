@@ -2083,3 +2083,96 @@ sobre archivos `.env`.
 decisión de arquitectura —el ADR 0017 sigue describiendo exactamente lo que hace el
 esquema—, solo corrige cómo está empaquetada. El motivo queda en el encabezado de
 las dos migraciones, que es donde lo va a leer quien las toque.
+
+---
+
+## 2026-08-14 · Fase 23 — El portal público con patrones de Booking (A · B · C)
+
+**Resumen:** primera de tres tandas de mejoras de interfaz en el portal del
+huésped, tomando los patrones que hacen efectivo a Booking.com y adaptándolos a
+la escala del hotel. **No se tocó el panel** (es otro sistema de diseño, ADR 0009)
+ni el motor de precios, ni disponibilidad, ni las Server Actions: todo el cambio
+es de presentación.
+
+### A · Fundación: un formato de precio, señales y fotos
+
+**El bug que estaba a la vista de todos.** El portal escribía los importes con
+`monto.toLocaleString('es-AR')`, que usa **entre 0 y 3 decimales**. La tarifa base
+de USD 120 más el 21 % de IVA da 145,2 y se publicaba **«USD 145,2»**, al lado de
+«USD 168,19» y de «USD 120». Tres formatos en la misma columna, y uno de ellos con
+cara de número cortado. Se centraliza en `lib/domain/moneda.ts` (`importe`,
+`formatearUSD`, `porNoche`), con dos decimales siempre. El panel repite el mismo
+`toLocaleString` en unos 30 lugares: queda anotado, no se migró de paso.
+
+**Fotos.** `FOTOS` estaba vacío y `public/` solo tenía los SVG del starter de Next,
+así que los patrones que dependen de imagen no se podían ni evaluar. Se cargaron
+**10 portadas de muestra** de Pexels (licencia libre, sin atribución obligatoria),
+elegidas revisando una por una: se descartaron una con vista a una ciudad, otra con
+las almohadas marcadas de otro hotel y otra con decoración del sudeste asiático.
+⚠️ **No son fotos del hotel**; están documentadas como muestra en `catalogo.ts` y
+se reemplazan pisando los archivos, sin tocar código.
+
+### B · El buscador dejó de ser una pantalla y pasó a ser un elemento
+
+Patrón: en Booking la búsqueda acompaña siempre. `app/_publico/buscador.tsx` es un
+único componente que va en la portada (grande, es la acción principal) y como barra
+adherida arriba de `/reservar` y `/alojamientos`. Antes la portada tenía dos botones
+y ningún campo, y el catálogo no tenía forma de consultar fechas sin volver.
+
+**Sobre «colapsable en móvil», que choca con una regla del proyecto.** El principio
+fijado es *nada oculto, pensado para gente que no usa mucho la computadora*; un
+buscador reducido a una lupa lo incumple. La resolución: en el teléfono se colapsa,
+pero lo que queda visible **no es un ícono, es la búsqueda escrita** —«10 abr — 13
+abr · 2 huéspedes»— dentro de un botón rotulado. En escritorio no se colapsa nunca.
+Sigue siendo `method="get"`: la búsqueda vive en la URL, se comparte y anda sin
+JavaScript.
+
+### C · Los resultados, con foto y con el precio que se compara
+
+Las filas de texto de `/reservar` pasan a tarjetas con portada, y el precio adopta
+la jerarquía de Booking: **por noche en grande** —que es con lo que se compara entre
+opciones— y el total con IVA debajo, que es lo que se paga.
+
+### El hallazgo: una alerta de urgencia que iba a mentir todos los días
+
+`disponibilidadPorTipo` ya devolvía `disponibles` y el portal lo estaba tirando
+—solo miraba `> 0`—, así que la señal de escasez se podía construir con **el dato
+real**, sin inventar nada. La primera versión avisaba con 3 o menos: «Quedan 2
+habitaciones», «Queda 1 cabaña».
+
+Al verlo renderizado apareció el problema: **salía en las nueve opciones**. El
+inventario son 15 unidades en 10 tipos, y **seis tipos tienen una sola unidad** (las
+cinco cabañas y la Suite). «Queda 1 cabaña» no informaba escasez, informaba el
+inventario, y lo iba a mostrar todos los días del año aunque no hubiera ni una
+reserva: cada palabra cierta y el conjunto dando a entender algo falso. Además, una
+alerta presente en el 100 % de los resultados deja de ser una alerta.
+
+Se corrigió la regla (`lib/domain/senales.ts`): habla **solo cuando queda una**, con
+tono suave y como hecho —«Última libre en estas fechas»—, no como cuenta regresiva.
+
+⚠️ **Pendiente honesto:** aun así la insignia aparece siempre en las cinco cabañas,
+porque tienen una unidad. Para el patrón completo —«quedan pocas» comparado contra
+el total del tipo— hace falta que `disponibilidadPorTipo` devuelva también cuántas
+unidades tiene el tipo, y eso es una **migración**: `unidades` no es legible por el
+rol público. No se resolvió de contrabando con `service_role` en una pantalla
+pública. Decisión de producto pendiente con el usuario.
+
+### Un test que fijaba una situación, no un contrato
+
+`tests/catalogo.test.ts` afirmaba que `fotoDe` devolvía `null` **para todo**, porque
+`FOTOS` estaba vacío. Eso no era el contrato de la función —resolver el código al
+archivo de su portada— sino el estado transitorio de no tener fotos. Se reescribió
+para verificar lo que la función promete.
+
+### Falsa alarma, anotada para que no se repita
+
+La captura de pantalla en móvil mostraba el contenido cortado y parecía scroll
+horizontal, que este proyecto prohíbe. Medido en el navegador por CDP:
+`scrollWidth === clientWidth === 390` y **cero** elementos desbordados. El corte era
+del método de captura —Edge headless en Windows no achica la ventana por debajo de
+~500 px y después recorta—. Para mirar el móvil hay que **emular el dispositivo**
+(`Emulation.setDeviceMetricsOverride`), no encoger la ventana.
+
+**Verificación:** `npm run check` exit 0 · **499 tests** (eran 486; +13 de `moneda` y
+`senales`) · portada, catálogo, resultados y detalle revisados en escritorio y en
+móvil emulado.

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { HORA_CHECK_IN, HORA_CHECK_OUT, SERVICIOS } from '@/lib/domain/hotel'
-import { botonPublico } from './_publico/ui'
+import { hoyISO, sumarDias } from '@/lib/fechas'
+import { BuscadorEstadia } from './_publico/buscador'
 
 export const metadata = {
   title: 'Blanca Patagonia — Hostería y cabañas en El Calafate',
@@ -16,9 +17,11 @@ export const metadata = {
  * para responder las dudas que frenan esa decisión, no para lucirse.
  */
 export default function Home() {
+  const hoy = hoyISO()
+
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <section className="flex flex-1 flex-col items-center justify-center gap-6 bg-gradient-to-b from-lago-50 to-stone-100 px-5 py-20 text-center sm:px-6">
+      <section className="flex flex-1 flex-col items-center justify-center gap-6 bg-linear-to-b from-lago-50 to-stone-100 px-5 py-16 text-center sm:px-6 sm:py-20">
         <p className="text-sm font-medium tracking-[0.2em] text-lago-700 uppercase">
           Hostería boutique &amp; cabañas
         </p>
@@ -30,18 +33,30 @@ export default function Home() {
           con hogar a leña, a pasos del Parque Nacional Los Glaciares.
         </p>
 
-        {/* Dos caminos, según con qué llega la persona: quien todavía no
-            decidió mira el catálogo; quien ya tiene fechas va derecho a
-            buscar. Antes solo existía el segundo, y al que venía a mirar no le
-            quedaba más opción que inventar unas fechas. */}
-        <div className="mt-2 flex w-full max-w-md flex-col gap-3 sm:w-auto sm:flex-row sm:justify-center">
-          <Link href="/alojamientos" className={botonPublico('primario', 'text-lg')}>
-            Ver alojamientos
-          </Link>
-          <Link href="/reservar" className={botonPublico('secundario', 'text-lg')}>
-            Consultar fechas
-          </Link>
+        {/* Patrón de Booking: el buscador ES la portada. La decisión que trae
+            a alguien acá es «¿tienen lugar en mis fechas?», y antes había que
+            navegar a otra pantalla para preguntarlo. Ahora se responde desde
+            el primer scroll, sin intermediarios y sin cuenta. */}
+        <div className="mt-4 w-full max-w-3xl text-left">
+          <BuscadorEstadia
+            variante="hero"
+            checkIn=""
+            checkOut=""
+            huespedes={2}
+            hoy={hoy}
+            salidaPorDefecto={sumarDias(hoy, 2)}
+          />
         </div>
+
+        {/* Salida para quien todavía no decidió cuándo viaja: mirar sin
+            comprometerse es justamente lo que se puede hacer en una OTA, y es
+            la razón por la que existe el catálogo (ADR 0007). */}
+        <Link
+          href="/alojamientos"
+          className="text-base font-medium text-lago-700 underline underline-offset-4 transition hover:text-lago-900"
+        >
+          Todavía no tengo fechas — ver los alojamientos
+        </Link>
 
         <a
           href="https://www.blancapatagonia.com"
