@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  ETIQUETAS_PUNTO,
-  PUNTOS_VENTA,
-  esPuntoVenta,
   filtrarCatalogo,
   lineasCargadas,
-  puntoSugerido,
   subtotalLinea,
   totalComanda,
   validarComanda,
@@ -138,21 +134,41 @@ describe('filtrarCatalogo', () => {
   })
 })
 
-describe('puntos de venta', () => {
-  it('cada punto tiene etiqueta', () => {
-    for (const p of PUNTOS_VENTA) expect(ETIQUETAS_PUNTO[p]).toBeTruthy()
+/**
+ * El módulo ya NO declara una lista de puntos de venta.
+ *
+ * El paso 7 tenía `PUNTOS_VENTA` (cinco valores fijos) y una columna
+ * `consumos.punto`; el paso 8 creó la tabla `departamentos` con jerarquía y
+ * `consumos.departamento_id`. Quedaron dos clasificaciones para el mismo dato, y
+ * nada impedía que se contradijeran. La migración 0044 eliminó `punto`.
+ *
+ * Estos tests fijan que la decisión no se revierta por descuido: si alguien vuelve
+ * a agregar una lista de sectores acá, se está reintroduciendo la segunda fuente de
+ * verdad que se acaba de sacar.
+ */
+describe('una sola clasificación de los consumos', () => {
+  it('el módulo no exporta ninguna lista de sectores', async () => {
+    const modulo = await import('@/lib/domain/punto-venta')
+    const exportados = Object.keys(modulo)
+
+    expect(exportados).not.toContain('PUNTOS_VENTA')
+    expect(exportados).not.toContain('ETIQUETAS_PUNTO')
+    expect(exportados).not.toContain('puntoSugerido')
+    expect(exportados).not.toContain('esPuntoVenta')
   })
 
-  it('valida lo que llega de un formulario', () => {
-    expect(esPuntoVenta('frigobar')).toBe(true)
-    expect(esPuntoVenta('cualquier_cosa')).toBe(false)
-  })
-
-  it('sugiere el punto según la categoría del producto', () => {
-    expect(puntoSugerido('frigobar')).toBe('frigobar')
-    expect(puntoSugerido('excursion')).toBe('excursiones')
-    expect(puntoSugerido('desayuno')).toBe('restaurante')
-    expect(puntoSugerido('traslado')).toBe('recepcion')
-    expect(puntoSugerido('otro')).toBe('recepcion')
+  it('el dominio del punto de venta solo se ocupa de la comanda', async () => {
+    // Lo que sí tiene que exportar: las cuentas y las guardas de la comanda. El
+    // departamento sale del producto y lo resuelve la base.
+    const modulo = await import('@/lib/domain/punto-venta')
+    for (const esperado of [
+      'subtotalLinea',
+      'totalComanda',
+      'lineasCargadas',
+      'validarComanda',
+      'filtrarCatalogo',
+    ]) {
+      expect(Object.keys(modulo)).toContain(esperado)
+    }
   })
 })
