@@ -33,6 +33,19 @@ import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
+import {
+  paxQueOcupa,
+  validarOcupantes,
+  type Ocupantes,
+} from '@/lib/domain/ocupantes'
+import {
+  GARANTIAS,
+  PLANES,
+  SEGMENTOS,
+  type Garantia,
+  type Plan,
+  type Segmento,
+} from '@/lib/domain/reservas'
 
 export interface EstadoNuevaReserva {
   error?: string
@@ -49,6 +62,18 @@ export interface EstadoNuevaReserva {
     doc_numero?: string
     canal?: string
     agencia_id?: string
+    /* Desglose de ocupantes y condiciones comerciales (paso 6). */
+    adultos?: string
+    menores?: string
+    bebes?: string
+    camas_extra?: string
+    cunas?: string
+    no_mover?: string
+    plan?: string
+    garantia?: string
+    segmento?: string
+    voucher?: string
+    descuento_pct?: string
   }
 }
 
@@ -75,6 +100,30 @@ export async function crearReservaAction(
   const docNumero = String(formData.get('doc_numero') ?? '').trim()
 
   const agenciaId = String(formData.get('agencia_id') ?? '')
+
+  // ── Desglose de ocupantes y condiciones comerciales (paso 6) ───────────────
+  const entero = (clave: string, porDefecto = 0) => {
+    const n = Number(formData.get(clave))
+    return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : porDefecto
+  }
+
+  const ocupantes: Ocupantes = {
+    // Sin desglose cargado se asume que todos los huéspedes de la búsqueda son
+    // adultos, que es lo que el sistema suponía antes del paso 6.
+    adultos: entero('adultos', huespedesCant) || huespedesCant,
+    menores: entero('menores'),
+    bebes: entero('bebes'),
+    camasExtra: entero('camas_extra'),
+    cunas: entero('cunas'),
+  }
+  const noMover = formData.get('no_mover') === '1'
+
+  const planCrudo = String(formData.get('plan') ?? 'desayuno')
+  const garantiaCrudo = String(formData.get('garantia') ?? 'sin_garantia')
+  const segmentoCrudo = String(formData.get('segmento') ?? '')
+  const voucher = String(formData.get('voucher') ?? '').trim()
+  const descuentoPct = Math.min(100, Math.max(0, Number(formData.get('descuento_pct')) || 0))
+
   // Se devuelve tal cual vino para reponer el formulario ante cualquier error.
   const valores = {
     apellido,
@@ -83,6 +132,17 @@ export async function crearReservaAction(
     doc_numero: docNumero,
     canal,
     agencia_id: agenciaId,
+    adultos: String(ocupantes.adultos),
+    menores: String(ocupantes.menores),
+    bebes: String(ocupantes.bebes),
+    camas_extra: String(ocupantes.camasExtra),
+    cunas: String(ocupantes.cunas),
+    no_mover: noMover ? '1' : '',
+    plan: planCrudo,
+    garantia: garantiaCrudo,
+    segmento: segmentoCrudo,
+    voucher,
+    descuento_pct: String(descuentoPct),
   }
 
   if (!tipoUnidadId || !checkIn || !checkOut) {
@@ -92,6 +152,26 @@ export async function crearReservaAction(
     return { error: 'El check-out debe ser posterior al check-in.', valores }
   }
   if (!apellido) return { error: 'Ingresá al menos el apellido del huésped.', valores }
+
+  // El desglose se valida contra la capacidad de la unidad elegida. Se hace acá y
+  // no en la base porque el mensaje tiene que decir cuántos entran y por qué, no
+  // «viola una restricción».
+  const { data: tipoElegido } = await (await crearClienteServidor())
+    .from('tipos_unidad')
+    .select('capacidad_max')
+    .eq('id', tipoUnidadId)
+    .maybeSingle<{ capacidad_max: number }>()
+
+  const problemas = validarOcupantes(ocupantes, tipoElegido?.capacidad_max)
+  if (problemas.length > 0) return { error: problemas[0], valores }
+
+  const plan = (PLANES as readonly string[]).includes(planCrudo) ? (planCrudo as Plan) : 'desayuno'
+  const garantia = (GARANTIAS as readonly string[]).includes(garantiaCrudo)
+    ? (garantiaCrudo as Garantia)
+    : 'sin_garantia'
+  const segmento = (SEGMENTOS as readonly string[]).includes(segmentoCrudo)
+    ? (segmentoCrudo as Segmento)
+    : undefined
 
   const supabase = await crearClienteServidor()
 
@@ -148,11 +228,24 @@ export async function crearReservaAction(
     tipoUnidadId,
     checkIn,
     checkOut,
-    huespedes: huespedesCant,
+    // `crear_reserva` deriva el pax del desglose, así que este valor queda como
+    // respaldo para el caso sin desglose.
+    huespedes: paxQueOcupa(ocupantes),
     huespedId,
     canal,
     tarifaTipo,
     estado: 'confirmada',
+    ocupantes,
+    noMover,
+    comercial: {
+      plan,
+      garantia,
+      segmento,
+      voucher,
+      // El descuento del convenio de la agencia ya está aplicado en la cotización
+      // neta; éste es el adicional que carga recepción.
+      descuentoPct,
+    },
   })
 
   if (!res.ok) {
