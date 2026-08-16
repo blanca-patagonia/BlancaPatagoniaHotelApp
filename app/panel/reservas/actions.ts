@@ -12,8 +12,8 @@ import {
   debeRecotizar,
   type PoliticaTarifa,
 } from '@/lib/domain/mudanzas'
-import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
+import { saldarSiCorresponde } from '@/lib/reservas/saldar'
 import { puntosPorEstadia, nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 import { requerirAcceso } from '@/lib/auth/session'
 import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
@@ -387,28 +387,16 @@ export async function registrarPago(formData: FormData): Promise<void> {
   if (error) redirect(`/panel/reservas/${reservaId}?error=pago`)
 
   // ¿Quedó saldada? → intentar pasar a 'pagada'.
-  const { data: reserva } = await supabase
-    .from('reservas')
-    .select('estado, total')
-    .eq('id', reservaId)
-    .single()
-  if (reserva && reserva.estado !== 'pagada') {
-    const { data: pagos } = await supabase
-      .from('pagos')
-      .select('tipo, monto, estado')
-      .eq('reserva_id', reservaId)
-    const resumen = resumenPagos(Number(reserva.total), (pagos ?? []) as Pago[])
-    if (resumen.saldada && puedeTransicionar(reserva.estado as EstadoReserva, 'pagada')) {
-      const { error: eSaldada } = await supabase
-        .from('reservas')
-        .update({ estado: 'pagada' })
-        .eq('id', reservaId)
-      // Mismo fallo que tenía el webhook: el pago ya está registrado, y si esto
-      // se pierde queda cobrado sin marcar. Acá al menos hay alguien mirando la
-      // pantalla, pero solo si se le dice.
-      cortarSiFalla(eSaldada, `/panel/reservas/${reservaId}`, 'saldada')
-    }
-  }
+  //
+  // La regla vive en `lib/reservas/saldar.ts` y no acá porque el webhook de pagos
+  // hace exactamente lo mismo. Estaban duplicadas y divergieron: allá se corrigió
+  // para consolidar alojamiento + consumos, y acá quedó comparando contra
+  // `reservas.total`, que cubre solo la estadía. Quien había consumido del frigobar
+  // y pagaba el alojamiento en efectivo quedaba marcado «pagada» debiendo esa parte.
+  const { error: eSaldada } = await saldarSiCorresponde(supabase, reservaId)
+  // El pago ya está registrado. Si esto se pierde queda cobrado sin marcar, y acá
+  // hay alguien mirando la pantalla — pero solo se entera si se le dice.
+  cortarSiFalla(eSaldada ? { message: eSaldada } : null, `/panel/reservas/${reservaId}`, 'saldada')
 
   redirect(`/panel/reservas/${reservaId}`)
 }

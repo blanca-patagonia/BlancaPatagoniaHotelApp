@@ -44,6 +44,8 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
   let emitirFactura: Acciones['emitirFactura']
   let crearReservaAction: Acciones['crearReservaAction']
   let cambiarEstadoReserva: Acciones['cambiarEstadoReserva']
+  let registrarPago: Acciones['registrarPago']
+  let agregarConsumo: Acciones['agregarConsumo']
 
   beforeAll(async () => {
     ctx = nuevoContexto()
@@ -51,6 +53,8 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
     emitirFactura = acciones.emitirFactura
     crearReservaAction = acciones.crearReservaAction
     cambiarEstadoReserva = acciones.cambiarEstadoReserva
+    registrarPago = acciones.registrarPago
+    agregarConsumo = acciones.agregarConsumo
 
     // El usuario de la sesión falsa tiene que existir: `emitirFactura` guarda
     // quién emitió, y hay una FK contra `perfiles`.
@@ -406,6 +410,84 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
         .maybeSingle()
       expect(enc).not.toBeNull()
       ctx.aBorrar.push({ tabla: 'encuestas_satisfaccion', id: (enc as { id: string }).id })
+    })
+  })
+
+  describe('registrarPago', () => {
+    /** Carga un consumo y devuelve lo que suma a la cuenta. */
+    async function consumoDePrueba(reservaId: string, cantidad: number): Promise<number> {
+      const { data: producto } = await ctx.db
+        .from('productos_servicios')
+        .select('id, precio')
+        .limit(1)
+        .single()
+      const p = producto as { id: string; precio: number }
+
+      await destinoDe(() =>
+        agregarConsumo(
+          formulario({ reserva_id: reservaId, producto_id: p.id, cantidad: String(cantidad) }),
+        ),
+      )
+
+      const { data: filas } = await ctx.db
+        .from('consumos')
+        .select('id')
+        .eq('reserva_id', reservaId)
+      for (const c of (filas ?? []) as { id: string }[]) {
+        ctx.aBorrar.push({ tabla: 'consumos', id: c.id })
+      }
+
+      return Number(p.precio) * cantidad
+    }
+
+    /** Los pagos que la acción crea no tienen id conocido: se limpian por reserva. */
+    async function borrarPagosDe(reservaId: string): Promise<void> {
+      const { data } = await ctx.db.from('pagos').select('id').eq('reserva_id', reservaId)
+      for (const p of (data ?? []) as { id: string }[]) {
+        ctx.aBorrar.push({ tabla: 'pagos', id: p.id })
+      }
+    }
+
+    it('marca pagada la reserva cuando el cobro cubre alojamiento y consumos', async () => {
+      const id = await reservaEnEstado('confirmada')
+      const consumos = await consumoDePrueba(id, 2)
+
+      await destinoDe(() =>
+        registrarPago(formulario({ reserva_id: id, monto: String(121 + consumos) })),
+      )
+      await borrarPagosDe(id)
+
+      const { data } = await ctx.db.from('reservas').select('estado').eq('id', id).single()
+      expect((data as { estado: string }).estado).toBe('pagada')
+    })
+
+    /**
+     * El bug que este test denuncia, y que estaba vivo.
+     *
+     * `registrarPago` comparaba lo cobrado contra `reservas.total`, que cubre **solo
+     * el alojamiento**. Quien había consumido del frigobar y pagaba la estadía en
+     * efectivo quedaba marcado «pagada» debiendo esa parte, y en el mostrador nadie
+     * se lo cobraba porque el sistema decía que estaba al día. Se descubría al
+     * cerrar caja, o no se descubría.
+     *
+     * Lo peor no es el bug sino que **ya estaba arreglado en el webhook de pagos**:
+     * las dos rutas tenían la misma secuencia duplicada y solo se corrigió una. Por
+     * eso la regla ahora vive en `lib/reservas/saldar.ts` y las dos la llaman.
+     */
+    it('NO la marca pagada si se cobró el alojamiento pero quedan consumos', async () => {
+      const id = await reservaEnEstado('confirmada')
+      const consumos = await consumoDePrueba(id, 2)
+      expect(consumos, 'el producto del seed tiene precio 0: el test no probaría nada').toBeGreaterThan(0)
+
+      // Se cobra exactamente el alojamiento, ni un peso de los consumos.
+      await destinoDe(() => registrarPago(formulario({ reserva_id: id, monto: '121' })))
+      await borrarPagosDe(id)
+
+      const { data } = await ctx.db.from('reservas').select('estado').eq('id', id).single()
+      expect(
+        (data as { estado: string }).estado,
+        'quedó «pagada» debiendo los consumos: el saldo se calculó sin ellos',
+      ).toBe('confirmada')
     })
   })
 })
