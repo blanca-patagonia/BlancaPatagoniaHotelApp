@@ -7,7 +7,7 @@ import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/
 import { hoyISO, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
-import { areasDe, type Area } from '@/lib/domain/permisos'
+import { areasDe, estaOculta, type Area } from '@/lib/domain/permisos'
 import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
 import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
@@ -83,7 +83,14 @@ export default async function DashboardPage() {
       .from('ordenes_mantenimiento')
       .select('*', { count: 'exact', head: true })
       .in('estado', ['pendiente', 'en_proceso']),
-    supabase.from('objetos_perdidos').select('*', { count: 'exact', head: true }).eq('estado', 'guardado'),
+    // Si el módulo está apagado (`AREAS_OCULTAS`), nadie va a ver este número y la
+    // consulta sería un viaje a la base de más en la pantalla que más se abre.
+    estaOculta('objetos_perdidos')
+      ? Promise.resolve({ count: 0 })
+      : supabase
+          .from('objetos_perdidos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado', 'guardado'),
     supabase.from('productos_servicios').select('nombre, stock, stock_minimo').eq('activo', true),
     supabase
       .from('movimientos_proveedor')

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { agruparAreas, areasSinGrupo, AREAS_AGRUPADAS, GRUPOS } from '@/lib/domain/navegacion'
-import { AREAS, areasDe } from '@/lib/domain/permisos'
+import { AREAS, AREAS_OCULTAS, areasDe } from '@/lib/domain/permisos'
 import { ROLES } from '@/lib/domain/roles'
 
 describe('cobertura de la agrupación', () => {
@@ -58,5 +58,26 @@ describe('agruparAreas', () => {
       const enGrupos = agruparAreas(visibles).flatMap((g) => g.areas)
       expect(new Set(enGrupos)).toEqual(new Set(visibles))
     }
+  })
+
+  it('un área apagada no llega al menú de ningún rol', () => {
+    // Éste es el test que corresponde al pedido de ocultar módulos: `shell.tsx` arma
+    // el menú con `agruparAreas(areasDe(rol))`, así que afirmarlo acá es afirmar lo
+    // que se ve en pantalla, y no solo lo que devuelve una función de permisos.
+    for (const rol of ROLES) {
+      const enMenu = agruparAreas(areasDe(rol)).flatMap((g) => g.areas)
+      for (const area of AREAS_OCULTAS) {
+        expect(enMenu, `${rol} todavía tiene ${area} en el menú`).not.toContain(area)
+      }
+    }
+  })
+
+  it('ningún grupo del menú queda vacío ni desaparece del todo', () => {
+    // Apagar áreas puede dejar un grupo sin ítems. `agruparAreas` ya descarta los
+    // vacíos, pero conviene fijar que ninguno quedó como un título suelto y que el
+    // admin sigue viendo un menú con varios grupos.
+    const grupos = agruparAreas(areasDe('admin'))
+    for (const g of grupos) expect(g.areas.length, `grupo ${g.titulo}`).toBeGreaterThan(0)
+    expect(grupos.length).toBeGreaterThan(3)
   })
 })
