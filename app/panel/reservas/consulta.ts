@@ -35,6 +35,15 @@ export interface FiltrosReservas {
   plan?: string
   garantia?: string
   segmento?: string
+  /** Contrato que fija la tarifa. La columna existe desde el paso 6. */
+  contrato?: string
+  /**
+   * Habitación asignada y tipo pedido. Van sobre `estadias`, no sobre `reservas`,
+   * y por eso hacen falta las dos: una reserva grupal tiene varias estadías, así
+   * que «la habitación 103» significa «alguna de sus estadías está en la 103».
+   */
+  unidad?: string
+  tipoUnidad?: string
   /**
    * Día de referencia de las vistas por fecha. Se pasa explícito y no se toma de
    * `hoyISO()` acá adentro para que la consulta siga siendo determinista y
@@ -60,6 +69,9 @@ export const SELECT_RESERVAS =
 /** Tope de ids de huésped que se inyectan en el filtro `in` de la búsqueda. */
 const MAX_HUESPEDES_BUSQUEDA = 200
 
+/** Tope de ids de reserva que se inyectan por coincidencia de habitación. */
+const MAX_RESERVAS_POR_UNIDAD = 300
+
 /**
  * Traduce el término libre a la expresión `or` de PostgREST.
  *
@@ -67,23 +79,76 @@ const MAX_HUESPEDES_BUSQUEDA = 200
  * una tabla embebida, así que primero se resuelven los huéspedes que coinciden
  * y después se filtra por `codigo` **o** por esos ids.
  *
+ * ── Por qué la habitación necesita dos consultas ────────────────────────────
+ *
+ * El nombre de la unidad («103», «Cabaña del Lago») vive en `unidades`, a dos
+ * saltos de `reservas`: hay que pasar por `estadias`. Y como el `or` no puede
+ * mezclar la tabla madre con una embebida, la única forma es resolver primero qué
+ * unidades coinciden, después qué reservas las ocupan, y recién entonces sumar
+ * esos ids al `or`.
+ *
+ * Buscar «103» y que no aparezca nada era el hueco más molesto del buscador:
+ * recepción identifica una reserva por la habitación mucho antes que por su código.
+ *
  * Devuelve `null` cuando no hay término que aplicar.
  */
 export async function filtroTermino(supabase: Cliente, q: string | undefined): Promise<string | null> {
   const termino = terminoBusqueda(q)
   if (!termino) return null
 
-  const { data } = await supabase
-    .from('huespedes')
-    .select('id')
-    .or(
-      `apellido.ilike.${patronOr(termino)},nombre.ilike.${patronOr(termino)},email.ilike.${patronOr(termino)}`,
-    )
-    .limit(MAX_HUESPEDES_BUSQUEDA)
+  // Las tres resoluciones van en paralelo: son independientes entre sí.
+  //
+  // ⚠️ La habitación y el tipo se buscan por SEPARADO y no con un `or` que mezcle
+  // `nombre` de `unidades` con `tipo.nombre` embebido. Es la misma limitación que
+  // explica el comentario de arriba, y la primera versión de esto la incumplía: el
+  // filtro no devolvía nada y no daba error, que es exactamente el modo de falla
+  // silencioso de este stack.
+  const [{ data: huespedes }, { data: porNombre }, { data: tipos }] = await Promise.all([
+    supabase
+      .from('huespedes')
+      .select('id')
+      .or(
+        `apellido.ilike.${patronOr(termino)},nombre.ilike.${patronOr(termino)},email.ilike.${patronOr(termino)}`,
+      )
+      .limit(MAX_HUESPEDES_BUSQUEDA),
 
-  const ids = (data ?? []).map((h) => h.id as string)
-  const porCodigo = `codigo.ilike.${patronOr(termino)}`
-  return ids.length ? `${porCodigo},huesped_id.in.(${ids.join(',')})` : porCodigo
+    // `.ilike` con el valor como parámetro es seguro: viaja como dato, no como
+    // sintaxis del filtro.
+    supabase.from('unidades').select('id').ilike('nombre', `%${termino}%`),
+
+    supabase.from('tipos_unidad').select('id').ilike('nombre', `%${termino}%`),
+  ])
+
+  const idsHuesped = (huespedes ?? []).map((h) => h.id as string)
+  const idsUnidad = new Set((porNombre ?? []).map((u) => u.id as string))
+
+  // Las unidades de los tipos que coincidieron por nombre («Cabaña», «Doble»).
+  const idsTipo = (tipos ?? []).map((t) => t.id as string)
+  if (idsTipo.length > 0) {
+    const { data: delTipo } = await supabase
+      .from('unidades')
+      .select('id')
+      .in('tipo_unidad_id', idsTipo)
+    for (const u of delTipo ?? []) idsUnidad.add(u.id as string)
+  }
+
+  // De las unidades a las reservas que las ocupan.
+  let idsReserva: string[] = []
+  if (idsUnidad.size > 0) {
+    const { data: estadias } = await supabase
+      .from('estadias')
+      .select('reserva_id')
+      .in('unidad_id', [...idsUnidad])
+      .limit(MAX_RESERVAS_POR_UNIDAD)
+
+    idsReserva = [...new Set((estadias ?? []).map((e) => e.reserva_id as string))]
+  }
+
+  const condiciones = [`codigo.ilike.${patronOr(termino)}`]
+  if (idsHuesped.length) condiciones.push(`huesped_id.in.(${idsHuesped.join(',')})`)
+  if (idsReserva.length) condiciones.push(`id.in.(${idsReserva.join(',')})`)
+
+  return condiciones.join(',')
 }
 
 /**
@@ -104,6 +169,13 @@ export function consultaReservas(supabase: Cliente, f: FiltrosReservas, orTermin
   if (f.plan) q = q.eq('plan', f.plan)
   if (f.garantia) q = q.eq('garantia', f.garantia)
   if (f.segmento) q = q.eq('segmento', f.segmento)
+  if (f.contrato) q = q.eq('contrato_id', f.contrato)
+
+  // Habitación y tipo van sobre la tabla embebida. Funcionan porque `estadias` se
+  // trae con `!inner`: con un embed normal, PostgREST devolvería todas las reservas
+  // con el array vacío y el filtro no filtraría nada, en silencio.
+  if (f.unidad) q = q.eq('estadias.unidad_id', f.unidad)
+  if (f.tipoUnidad) q = q.eq('estadias.tipo_unidad_id', f.tipoUnidad)
 
   // Reservas cuya estadía se superpone con la ventana pedida.
   if (f.desde && f.hasta) q = q.filter('estadias.periodo', 'ov', `[${f.desde},${f.hasta})`)
