@@ -28,7 +28,7 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 | **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | verificado, exit 0 |
 | Lint | `npm run lint` | verificado, exit 0 |
 | Typecheck | `npm run typecheck` | verificado, exit 0 |
-| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **486 pasan / 0 saltean** con base y las 3 variables |
+| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **897 pasan / 0 saltean** con base y las 3 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
 | Base local | `npx supabase start` · `npx supabase db reset` | necesita Docker |
@@ -41,15 +41,15 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 ```
 app/rutas ──124──> app/panel/_components (UI compartida)
           ──100──> lib/domain          (reglas puras)
-          ───89──> lib/{auth,pricing,payments,email,firma,facturacion,availability}
+          ───89──> lib/{auth,pricing,payments,email,firma,facturacion,availability,canales,divisas}
           ───60──> lib/supabase        ← puentea la capa de datos (deuda conocida)
 lib/servicios ──> lib/domain ──> lib/fechas
-lib/supabase ──> Postgres + RLS (~60 políticas sobre 33 tablas)
+lib/supabase ──> Postgres + RLS (~75 políticas sobre 40 tablas)
 ```
 
 Reglas de dependencia, verificables con `rg`:
 
-- **`lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 28 módulos de
+- **`lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 36 módulos de
   reglas testeables sin base. **Nunca** metas un cliente de datos ahí.
 - **`lib/` nunca importa de `app/`.** Cero excepciones (hoy hay cero aristas).
 - La lógica de negocio va en `lib/domain/`. Las páginas y acciones orquestan; no calculan reglas.
@@ -79,6 +79,17 @@ Cada receta está en un skill. Invocalos: `add-feature`, `api-endpoint`, `ui-com
 
 Regla corta de módulo del panel: `page.tsx` (listado) · `nuevo/page.tsx` · `[id]/page.tsx` ·
 `[id]/editar/page.tsx` · `actions.ts` · `loading.tsx` · test en `tests/`.
+
+**Un área nueva del panel se toca en cinco lugares, y cuatro tienen que moverse JUNTOS** o el
+typecheck falla (`Area` es una unión de tipos y `NAV` un `Record<Area, …>`):
+
+1. `lib/domain/permisos.ts` — `AREAS`, `ETIQUETAS_AREA` y los roles en `PERMISOS`
+2. `lib/domain/navegacion.ts` — el grupo del menú (hay un test que verifica cobertura)
+3. `app/panel/_components/shell.tsx` — la ruta y el icono
+4. `lib/domain/ayuda.ts` — el capítulo (`CLAUDE.md` lo exige)
+5. `app/panel/_components/iconos.tsx` si el icono es nuevo
+
+Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 
 ## Testing
 
@@ -132,14 +143,42 @@ Regla corta de módulo del panel: `page.tsx` (listado) · `nuevo/page.tsx` · `[
 - **CI:** el seed invoca `node scripts/seed-usuarios.mjs` **directo**, no `npm run seed:usuarios`
   (ese usa `--env-file-if-exists`, que no aplica en el runner). Sin ese paso `perfiles` queda vacía
   y los tests de facturación fallan por la FK.
-- **Rol hardcodeado:** hay 19 lugares con el literal `['admin','gerencia']` en vez de
-  `lib/domain/permisos.ts`. Al tocar uno, migralo.
+- **Rol hardcodeado:** hay 21 lugares con el literal `['admin','gerencia']` en vez de
+  `lib/domain/permisos.ts`. Al tocar uno, migralo a `puedeAcceder(rol, area)` — es lo que hicieron
+  las acciones de la modernización WinPAX, así que hay ejemplos en
+  `app/panel/{canales,punto-venta}/actions.ts`.
 - **`lib/env.ts`** dice que falla "al arrancar", pero `envPublico()`/`envServidor()` son perezosas y
   no validan `MERCADOPAGO_*`, `STRIPE_*` ni `RESEND_API_KEY`.
 - **PostgREST corta en 1000 filas** (`max_rows`, `supabase/config.toml:10`), sin error y sin aviso.
   Toda lectura que agregue sobre una tabla entera tiene que ir por `traerTodo` (`lib/paginado.ts`).
-- **Los simuladores fallan fuerte en producción:** `EMAIL_PROVIDER`, `FIRMA_PROVIDER` y
-  `FACTURACION_PROVIDER` son obligatorias ahí (`lib/integraciones/seleccion.ts`, ADR 0018).
+- **Los simuladores fallan fuerte en producción:** `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,
+  `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER` y `CANAL_PROVIDER` son obligatorias ahí
+  (`lib/integraciones/seleccion.ts`, ADR 0018).
+- **`estadias.check_in` / `check_out` son columnas GENERADAS** desde `periodo` (migración 0037). No
+  se pueden escribir, y eso es la garantía de que no se desincronizan. Existen porque PostgREST no
+  expone `lower()`: sin ellas, «las que llegan hoy» había que escribirlo con operadores de rango
+  negados (`periodo=nxl.[hoy,hoy] & periodo=not.nxl.[mañana,mañana]`), donde un signo cambiado da un
+  resultado plausible y equivocado.
+- **Un filtro sobre tabla embebida solo acota la fila madre si el embed es `!inner`.** Con un embed
+  normal, PostgREST devuelve **todas** las filas madre con el array vacío: un filtro que no filtra y
+  no falla. Es la trampa más silenciosa de este stack (ver `SELECT_RESERVAS` en
+  `app/panel/reservas/consulta.ts` y el test que la detecta).
+- **`crear_reserva` deriva `estadias.huespedes` del desglose** (`adultos + menores`; los bebés no
+  cuentan). No hay `check` que lo garantice, a propósito: habría roto los `update` de mudanza (0028)
+  y reprogramación. Es el **único** lugar donde nacen estadías, así que la coherencia se garantiza
+  ahí. Si agregás otro camino de alta, replicá la derivación.
+- **La numeración de comandas es una secuencia y admite huecos** (`comandas_numero_seq`). Es lo
+  contrario de `puntos_venta.ultimo_numero`, que **no puede tenerlos** por exigencia fiscal. No
+  intercambiar los mecanismos.
+- **`departamentos` tiene jerarquía de dos niveles, con trigger que rechaza el tercero.** Un árbol
+  arbitrario pediría consultas recursivas en la cuenta del huésped y el hotel no lo necesita.
+- **La app no puede hacer backups de Postgres.** `/panel/respaldos` exporta datos operativos y lo
+  aclara. No convertirlo en un botón que diga «hacer backup»: sería la peor función del sistema.
+- **`rangoISO(hoy, hoy)` es un rango VACÍO** (`[hoy,hoy)`) y no se solapa con nada. «La noche de hoy» se escribe `rangoISO(hoy, sumarDias(hoy, 1))`. El punto de venta salía siempre en cero por esto y decía «no hay nadie alojado hoy».
+- **PostgREST NO sigue una clave foránea auto-referencial hacia el padre.** Un embed anidado como `departamento:departamentos(nombre, padre:departamentos(nombre))` devuelve `"padre": []` —los hijos, no el padre— y las pistas de FK no lo corrigen. La jerarquía se resuelve en la app con `lib/domain/departamentos.ts`.
+- **Los importes van por `formatearUSD`/`importe` de `lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Ya se migraron los 67 del panel; las cantidades (filas, puntos) sí van con `toLocaleString`.
+- **Booking es de solo lectura y NO evita el overbooking.** `capacidades()` lo declara y
+  `ResultadoEnvio.noSoportado` distingue «no puedo» de «fallé». No borrar esas advertencias (ADR 0021).
 
 ## Automatizaciones (hooks activos)
 
