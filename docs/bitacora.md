@@ -2176,3 +2176,138 @@ del método de captura —Edge headless en Windows no achica la ventana por deba
 **Verificación:** `npm run check` exit 0 · **499 tests** (eran 486; +13 de `moneda` y
 `senales`) · portada, catálogo, resultados y detalle revisados en escritorio y en
 móvil emulado.
+
+---
+
+## 2026-08-16 — Modernización WinPAX · Paso 1: cotización de divisas
+
+**Resumen:** se cerró la tarea que el ADR 0003 dejó abierta hace un año. El sistema
+ya sabe convertir USD a pesos (y a reales y euros), con fuente pública, respaldo
+manual y la garantía de que una API caída no frena un cobro.
+
+**Contexto:** el cliente venía de **WinPAX** (Oracle Forms, ~año 2000) y se está
+modernizando el sistema para cubrir sus funciones core. El recorrido inicial del
+repo produjo un inventario de 11 pasos, documentado en
+[`docs/modernizacion-winpax.md`](modernizacion-winpax.md), que es la lista viva del
+trabajo. Este es el primero.
+
+**Por qué este paso primero:** el [ADR 0003](decisiones/0003-moneda-usd-ars.md) decidió
+en julio «USD base + ARS a cotización configurable» y terminó anotando *«hace falta un
+mecanismo para cargar/actualizar la cotización (Fase 3/4)»*. Nunca se hizo. No era una
+función nueva: era una decisión de arquitectura abierta. El Tarifario manda cobrar a
+«la cotización oficial de venta billete del Banco Nación del día de pago» y ese número
+no existía en ninguna parte del código.
+
+**Detalle de lo realizado:**
+- `lib/domain/divisas.ts` — reglas puras: validación de la entrada externa, frescura
+  con dos umbrales, conversión en ambas direcciones y resolución de la vigente.
+- `lib/divisas/index.ts` — **sexto adapter** del proyecto (`CotizacionProvider`), con
+  DolarAPI, ArgentinaDatos y modo manual, elegidos por `COTIZACION_PROVIDER`.
+- `lib/divisas/servicio.ts` — la cadena de respaldo completa: caché en memoria →
+  fuente externa → última guardada → USD.
+- Migración `0036_cotizaciones_de_divisas.sql` — historial con idempotencia por clave
+  natural, RLS de solo lectura para staff e inserción reservada a admin/gerencia.
+- `app/api/cotizacion/route.ts` — endpoint interno propio, con sesión obligatoria.
+- Widget en el dashboard (en `Suspense`, para no demorar el panel) y carga manual en
+  la pantalla de configuración.
+- [ADR 0020](decisiones/0020-cotizacion-de-divisas.md).
+
+**Decisiones tomadas** (el detalle y el porqué de cada una están en el ADR):
+1. **Se cobra al valor de venta**, no al de compra: lo dice el Tarifario, y usar el de
+   compra le regalaría el spread (~4 %) a cada huésped que pague en pesos.
+2. **Una cotización vencida se usa igual, avisando.** Ningún camino del código bloquea
+   una operación por falta de cotización: si nada hay, se muestra USD, que es la moneda
+   real del sistema. Requisito explícito del usuario.
+3. **Un valor manual reciente le gana a uno automático viejo** — se elige por frescura,
+   sin privilegiar la fuente. La carga manual es una corrección deliberada de alguien
+   mirando el pizarrón del banco.
+4. **Historial, no valor mutable**: el ADR 0003 pide trazabilidad de la cotización usada
+   el día de pago. No hay `update` ni `delete`; se corrige cargando el valor correcto.
+5. **Se declara que DolarAPI no es el Banco Nación**, sino un tercero que replica su
+   valor. Para una tesis la precisión importa; el camino con respaldo documental del
+   banco es la carga manual.
+
+**Hallazgo del recorrido inicial, que vale registrar:** WinPAX guardaba número de
+tarjeta, vencimiento, autorización y **PIN**. Este sistema **no guarda nada de eso** en
+ninguna tabla: `pagos` tiene sólo `medio`, `monto`, `estado` y el `external_id` de la
+pasarela. No hay nada que migrar a un flujo tokenizado — el trabajo es *no agregarlo*.
+El único riesgo real es que alguien pegue un número de tarjeta en `pagos.nota` o
+`reservas.notas`, que son texto libre; quedó anotado como deuda.
+
+**Verificación:** `npm run check` exit 0 · **62 tests nuevos** (`tests/divisas.test.ts`
+38 y `tests/divisas-proveedor.test.ts` 24), 537 pasan y 43 saltean sin base local.
+Los tests del adapter cubren el borde que no controlamos: ceros, `null`, importes como
+texto, el par compra/venta invertido, 500, 429, timeout, HTML en vez de JSON y la caída
+de la segunda pata del cruce de monedas.
+
+---
+
+## 2026-08-16 — Modernización WinPAX · Pasos 2 a 11
+
+**Resumen:** se completaron los once pasos del inventario funcional contra WinPAX. Ocho
+migraciones nuevas (`0036`–`0043`), todas aplicadas y verificadas contra la base local.
+**882 tests verdes, cero salteados.**
+
+El plan completo, con las decisiones de cada paso y su porqué, está en
+[`docs/modernizacion-winpax.md`](modernizacion-winpax.md). Acá queda el registro de lo
+que cambió y las cuatro cosas que conviene recordar.
+
+**Lo hecho, en una línea por paso:**
+
+- **2 · Grilla de ocupación.** Fila resumen por día (ocupadas, libres, llegadas, salidas, pax, %)
+  y accesibilidad: cada estado con **letra + color**, no sólo color.
+- **3 · Toggles del listado.** Diez vistas operativas (en el hotel, llegadas hoy, salidas hoy…),
+  columna de saldo y totales al pie. Requirió columnas generadas en `estadias`.
+- **4 y 5 · Canales / Booking.** Se enchufó el puerto que estaba huérfano: cuatro tablas, lector
+  del informe CSV del extranet, feed iCal, y pantalla con las entrantes, los mensajes y las
+  reseñas. [ADR 0021](decisiones/0021-canales-de-venta-solo-lectura.md).
+- **6 · Ficha de reserva completa.** VIP, adultos/menores/bebés, camas extra, cunas, plan,
+  garantía, segmento, voucher, «no mover», descuento y desglose fiscal.
+- **7 · Punto de venta.** Grilla por departamento con buscador, total en vivo y número de comanda.
+- **8 · Folios y departamentos.** Folio A/B con split, jerarquía de departamentos, cargos en otra
+  moneda con la cotización registrada.
+- **9 · Housekeeping móvil.** «Mi trabajo»: las habitaciones ordenadas por prioridad real, con el
+  motivo escrito y un botón por tarjeta.
+- **10 · Piso y bloque.** Filtros y orden de recorrido en la grilla, más acciones rápidas.
+- **11 · Respaldos.** Exportación completa de los datos operativos, con el alcance declarado.
+
+**Cuatro cosas que conviene recordar:**
+
+1. **Sobre las tarjetas de crédito.** WinPAX guardaba PAN, vencimiento, autorización y **PIN**.
+   Este sistema no guarda nada de eso y no se agregó: `pagos` registra el medio y el `external_id`
+   de la pasarela. No había nada que migrar a un flujo tokenizado — el trabajo era *no agregarlo*.
+   Hay un test en el lector de CSV de Booking que lo fija como contrato.
+
+2. **La trampa del enum se esquivó.** El paso 8 iba a necesitar dos migraciones por el SQLSTATE
+   55P04. No hizo falta: el departamento/subdepartamento es una **jerarquía**, y un enum plano no
+   la representa por más valores que se le agreguen. Fue una tabla y una sola migración. La regla
+   de `AGENTS.md` sigue vigente para el futuro; acá no aplicaba.
+
+3. **La sincronización con Booking NO evita el overbooking, y el sistema lo dice.** Los dos
+   caminos disponibles sin ser partner certificado (CSV e iCal) son de solo lectura: nadie le
+   informa a Booking qué queda libre. La pantalla lo advierte con ícono y texto, el puerto lo
+   declara en `capacidades()` y `ResultadoEnvio.noSoportado` distingue «no puedo» de «fallé».
+   Callarlo habría generado confianza falsa sobre lo más caro que le puede pasar al hotel.
+
+4. **Los respaldos: la app no puede hacer un backup de Postgres.** Lo hace la plataforma y no hay
+   API para pedirlo desde acá. Un botón que dijera «hacer backup» sin hacerlo sería la peor
+   función del sistema. En su lugar, la pantalla explica quién es responsable de qué, exporta los
+   datos operativos a un archivo verificable y registra cuándo fue la última vez.
+
+**Bug preexistente corregido de paso:** `lib/pricing/cotizar.ts` siempre creaba su propio cliente
+con `cookies()`, así que `crearReservaEnUnidadLibre` —que recibe un cliente justamente para poder
+correr con `service_role`— quedaba atada a una petición HTTP. No se podía crear una reserva desde
+un webhook, un cron ni un test de integración, y el error (`cookies was called outside a request
+scope`) no dejaba adivinar la causa. Ahora el cliente se inyecta; sin pasarlo, el comportamiento
+es el de antes.
+
+**Áreas nuevas del panel:** `canales`, `punto_venta` y `respaldos`, las tres con su capítulo en la
+ayuda, su entrada en la navegación y su icono.
+
+**Verificación:** `npm run check` exit 0 · **882 tests** (66 archivos), cero salteados, con
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` exportadas. Las ocho
+migraciones se aplicaron con `npx supabase migration up --local` y se verificó a mano lo que un
+test no cubre: que la exclusión GiST del ADR 0002 siga en pie, que `crear_reserva` tenga **una
+sola** versión en `pg_proc` (no una sobrecarga), que el trigger de la jerarquía de departamentos
+rechace el tercer nivel, que `anon` no pueda leer ninguna de las tablas nuevas, y que las 22
+tablas del respaldo existan de verdad.
