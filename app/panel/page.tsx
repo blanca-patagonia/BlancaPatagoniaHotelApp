@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
@@ -9,6 +10,7 @@ import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { areasDe, type Area } from '@/lib/domain/permisos'
 import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
+import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
 import {
   Encabezado,
   EstadoUnidad,
@@ -301,19 +303,29 @@ export default async function DashboardPage() {
       )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <Tarjeta titulo="Estado de las unidades" className="lg:col-span-1">
-          <ul className="px-5 py-3">
-            {ESTADOS_HK.map((estado) => (
-              <li key={estado} className="flex items-center gap-2.5 py-1.5">
-                <EstadoUnidad estado={estado} />
-                <span className="tabular w-8 text-lg font-semibold text-stone-900">
-                  {porEstado.get(estado) ?? 0}
-                </span>
-                <span className="text-sm text-stone-500">{ETIQUETAS_ESTADO_HK[estado]}</span>
-              </li>
-            ))}
-          </ul>
-        </Tarjeta>
+        {/* Cotización y estado de unidades comparten columna: los dos son datos
+            de referencia que recepción consulta de un vistazo, no listados.
+            El widget va en Suspense porque puede tardar hasta 3 s si la fuente
+            externa está lenta, y el resto del dashboard no tiene por qué esperarlo. */}
+        <div className="space-y-4 lg:col-span-1">
+          <Suspense fallback={<WidgetCotizacionCargando />}>
+            <WidgetCotizacion />
+          </Suspense>
+
+          <Tarjeta titulo="Estado de las unidades">
+            <ul className="px-5 py-3">
+              {ESTADOS_HK.map((estado) => (
+                <li key={estado} className="flex items-center gap-2.5 py-1.5">
+                  <EstadoUnidad estado={estado} />
+                  <span className="tabular w-8 text-lg font-semibold text-stone-900">
+                    {porEstado.get(estado) ?? 0}
+                  </span>
+                  <span className="text-sm text-stone-500">{ETIQUETAS_ESTADO_HK[estado]}</span>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        </div>
 
         {/*
           Antes acá había una grilla «Módulos» que repetía, uno por uno, los
