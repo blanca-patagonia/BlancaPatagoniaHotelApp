@@ -2,8 +2,11 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ESTADOS_ACTIVOS } from '@/lib/domain/reservas'
-import { ETIQUETAS_PUNTO, type PuntoVenta } from '@/lib/domain/punto-venta'
-import { hoyISO, rangoISO } from '@/lib/fechas'
+import { hoyISO, rangoISO, sumarDias } from '@/lib/fechas'
+import {
+  resolutorDepartamentos,
+  type DepartamentoFila,
+} from '@/lib/domain/departamentos'
 import { BotonEnvio } from '../_components/boton-envio'
 import {
   Encabezado,
@@ -20,6 +23,7 @@ import {
 } from '../_components/ui'
 import { GrillaPos, type ProductoPos, type ReservaPos } from './grilla'
 import { anularComanda } from './actions'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 /**
  * Punto de venta.
@@ -43,7 +47,8 @@ const MENSAJES_ERROR: Record<string, string> = {
 interface ConsumoRow {
   id: string
   comanda: number | null
-  punto: string
+  folio: string
+  departamento_id: string | null
   cantidad: number
   precio_unitario: number | string
   nota: string
@@ -65,7 +70,7 @@ export default async function PuntoVentaPage({
   const supabase = await crearClienteServidor()
   const hoy = hoyISO()
 
-  const [{ data: productosData }, { data: estadiasData }, { data: consumosData }] =
+  const [{ data: productosData }, { data: estadiasData }, { data: consumosData }, { data: deptosData }] =
     await Promise.all([
       supabase
         .from('productos_servicios')
@@ -82,18 +87,29 @@ export default async function PuntoVentaPage({
           'reserva_id, unidad:unidades(nombre), reserva:reservas(codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre))',
         )
         .in('estado', [...ESTADOS_ACTIVOS])
-        .overlaps('periodo', rangoISO(hoy, hoy)),
+        // ⚠️ `rangoISO(hoy, hoy)` sería `[hoy,hoy)`, que es un rango **VACÍO** y no
+        // se solapa con nada: la lista salía siempre en cero y el POS quedaba
+        // inutilizable diciendo «no hay nadie alojado hoy». Los períodos son
+        // `[desde, hasta)`, así que «la noche de hoy» es `[hoy, mañana)`.
+        .overlaps('periodo', rangoISO(hoy, sumarDias(hoy, 1))),
 
       // Comandas recientes, para poder revisar y anular.
       supabase
         .from('consumos')
         .select(
-          'id, comanda, punto, cantidad, precio_unitario, nota, fecha, producto:productos_servicios(nombre), reserva:reservas(codigo, huesped:huespedes!reservas_huesped_id_fkey(apellido))',
+          'id, comanda, folio, cantidad, precio_unitario, nota, fecha, departamento_id, producto:productos_servicios(nombre), reserva:reservas(codigo, huesped:huespedes!reservas_huesped_id_fkey(apellido))',
         )
         .not('comanda', 'is', null)
         .order('comanda', { ascending: false })
         .limit(120),
+
+      // La tabla completa de departamentos, una vez. Son ~14 filas y sirven para
+      // resolver la jerarquía de todas las líneas sin un join por fila: el embed
+      // anidado de PostgREST no puede hacerlo (ver `lib/domain/departamentos.ts`).
+      supabase.from('departamentos').select('id, nombre, padre_id'),
     ])
+
+  const resolverDepto = resolutorDepartamentos((deptosData ?? []) as DepartamentoFila[])
 
   const productos = ((productosData ?? []) as ProductoPos[]).map((p) => ({
     ...p,
@@ -154,7 +170,7 @@ export default async function PuntoVentaPage({
         />
         <Kpi
           titulo="Vendido hoy"
-          valor={`USD ${vendidoHoy.toLocaleString('es-AR')}`}
+          valor={`${formatearUSD(vendidoHoy)}`}
           detalle="consumos con comanda"
           icono="reportes"
           tono="exito"
@@ -217,7 +233,7 @@ export default async function PuntoVentaPage({
                   <tr>
                     <th className={TH}>Comanda</th>
                     <th className={TH}>Habitación</th>
-                    <th className={TH}>Punto</th>
+                    <th className={TH}>Depto. / folio</th>
                     <th className={TH}>Líneas</th>
                     <th className={`${TH} text-right`}>Total</th>
                     <th className={TH}>Acción</th>
@@ -241,7 +257,12 @@ export default async function PuntoVentaPage({
                           </span>
                         </td>
                         <td className={`${TD} text-stone-600`}>
-                          {ETIQUETAS_PUNTO[primera.punto as PuntoVenta] ?? primera.punto}
+                          {resolverDepto(primera.departamento_id).etiqueta}
+                          {/* El folio con texto: es lo que decide a quién se le
+                              cobra, y no puede quedar solo insinuado. */}
+                          <span className="mt-0.5 block text-xs text-stone-500">
+                            Folio {primera.folio}
+                          </span>
                         </td>
                         <td className={`${TD} text-stone-600`}>
                           <ul className="text-xs">
@@ -258,7 +279,7 @@ export default async function PuntoVentaPage({
                           )}
                         </td>
                         <td className={`${TD} tabular text-right font-semibold text-stone-900`}>
-                          USD {total.toLocaleString('es-AR')}
+                          {formatearUSD(total)}
                         </td>
                         <td className={TD}>
                           <form action={anularComanda}>
@@ -266,7 +287,7 @@ export default async function PuntoVentaPage({
                             <BotonEnvio
                               variante="fantasma"
                               cargando="Anulando…"
-                              confirmar={`¿Anular la comanda #${numero}? Se quitan ${lineas.length} línea(s) por USD ${total.toLocaleString('es-AR')} de la cuenta del huésped.`}
+                              confirmar={`¿Anular la comanda #${numero}? Se quitan ${lineas.length} línea(s) por ${formatearUSD(total)} de la cuenta del huésped.`}
                             >
                               Anular
                             </BotonEnvio>

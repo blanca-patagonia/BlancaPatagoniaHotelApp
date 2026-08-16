@@ -14,6 +14,11 @@ import {
   type Folio,
   type LineaCuenta,
 } from '@/lib/domain/folios'
+import {
+  opcionesDepartamentos,
+  resolutorDepartamentos,
+  type DepartamentoFila,
+} from '@/lib/domain/departamentos'
 import { formatoFechaCorta, parsearPeriodo } from '@/lib/fechas'
 import { Icono } from '../../../_components/iconos'
 import { BotonEnvio } from '../../../_components/boton-envio'
@@ -29,6 +34,7 @@ import {
 } from '../../../_components/ui'
 import { CargoManual, type OpcionDepartamento } from './cargo-manual'
 import { guardarTitularB, moverAlojamientoDeFolio, moverConsumoDeFolio } from './actions'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 /**
  * Cuenta del huésped con folios, departamentos y split.
@@ -66,7 +72,7 @@ interface ConsumoRow {
   importe_origen: number | string | null
   cotizacion_usada: number | string | null
   producto: { nombre: string } | null
-  departamento: { nombre: string; padre: { nombre: string } | null } | null
+  departamento_id: string | null
 }
 
 interface PagoRow {
@@ -118,8 +124,9 @@ export default async function CuentaPage({
     supabase
       .from('consumos')
       .select(
-        'id, cantidad, precio_unitario, fecha, folio, comprobante, nota, moneda_origen, importe_origen, cotizacion_usada, ' +
-          'producto:productos_servicios(nombre), departamento:departamentos(nombre, padre:departamentos(nombre))',
+        'id, cantidad, precio_unitario, fecha, folio, comprobante, nota, moneda_origen, ' +
+          'importe_origen, cotizacion_usada, departamento_id, ' +
+          'producto:productos_servicios(nombre)',
       )
       .eq('reserva_id', id)
       .order('fecha'),
@@ -131,7 +138,7 @@ export default async function CuentaPage({
       .order('creado_en'),
     supabase
       .from('departamentos')
-      .select('id, nombre, orden, padre:departamentos(nombre, orden)')
+      .select('id, nombre, padre_id, orden')
       .eq('activo', true)
       .order('orden'),
   ])
@@ -139,12 +146,13 @@ export default async function CuentaPage({
   const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
   const pagos = (pagosData ?? []) as unknown as PagoRow[]
 
-  const departamentos: OpcionDepartamento[] = (
-    (deptosData ?? []) as unknown as { id: string; nombre: string; padre: { nombre: string } | null }[]
-  ).map((d) => ({
-    id: d.id,
-    etiqueta: d.padre ? `${d.padre.nombre} › ${d.nombre}` : d.nombre,
-  }))
+  // La jerarquía se resuelve en la app y no con un embed anidado: PostgREST no
+  // puede seguir una clave foránea auto-referencial hacia el padre —devuelve un
+  // array vacío— y la cuenta mostraba «undefined › Bebidas»
+  // (ver `lib/domain/departamentos.ts`).
+  const filasDepto = (deptosData ?? []) as DepartamentoFila[]
+  const resolverDepto = resolutorDepartamentos(filasDepto)
+  const departamentos: OpcionDepartamento[] = opcionesDepartamentos(filasDepto)
 
   const estadia = reserva.estadias?.[0]
   const periodo = estadia ? parsearPeriodo(estadia.periodo) : null
@@ -179,8 +187,8 @@ export default async function CuentaPage({
       // («Cargo manual») y el concepto real está en la nota.
       concepto: c.nota || c.producto?.nombre || 'Consumo',
       comprobante: c.comprobante,
-      departamento: c.departamento?.padre?.nombre ?? c.departamento?.nombre ?? '',
-      subdepartamento: c.departamento?.padre ? c.departamento.nombre : '',
+      departamento: resolverDepto(c.departamento_id).departamento,
+      subdepartamento: resolverDepto(c.departamento_id).subdepartamento,
       folio: (c.folio as Folio) ?? 'A',
       cantidad: c.cantidad,
       importeUnitario: Number(c.precio_unitario),
@@ -259,11 +267,11 @@ export default async function CuentaPage({
             <div key={f} className="rounded-xl border border-stone-200 bg-white p-4">
               <h2 className="text-sm font-medium text-stone-700">{ETIQUETAS_FOLIO[f]}</h2>
               <p className="tabular mt-1.5 text-2xl leading-none font-semibold text-stone-900">
-                USD {t.saldo.toLocaleString('es-AR')}
+                {formatearUSD(t.saldo)}
               </p>
               <p className="mt-1 text-xs text-stone-500">
-                {t.lineas} cargo(s) por USD {t.cargos.toLocaleString('es-AR')}
-                {t.anticipos > 0 && ` · anticipos USD ${t.anticipos.toLocaleString('es-AR')}`}
+                {t.lineas} cargo(s) por {formatearUSD(t.cargos)}
+                {t.anticipos > 0 && ` · anticipos ${formatearUSD(t.anticipos)}`}
               </p>
               {f === 'B' && reserva.folio_b_titular && (
                 <p className="mt-1 text-xs font-medium text-stone-700">
@@ -277,11 +285,11 @@ export default async function CuentaPage({
         <div className="rounded-xl border border-lago-300 bg-lago-50 p-4">
           <h2 className="text-sm font-medium text-lago-900">Total general</h2>
           <p className="tabular mt-1.5 text-2xl leading-none font-semibold text-lago-950">
-            USD {totales.saldo.toLocaleString('es-AR')}
+            {formatearUSD(totales.saldo)}
           </p>
           <p className="mt-1 text-xs text-lago-800">
-            cargos USD {totales.cargos.toLocaleString('es-AR')} · anticipos USD{' '}
-            {totales.anticipos.toLocaleString('es-AR')}
+            cargos {formatearUSD(totales.cargos)} · anticipos USD{' '}
+            {importe(totales.anticipos)}
           </p>
         </div>
       </div>
@@ -320,7 +328,7 @@ export default async function CuentaPage({
             <Tarjeta
               key={f}
               titulo={ETIQUETAS_FOLIO[f]}
-              descripcion={`Saldo USD ${t.saldo.toLocaleString('es-AR')}`}
+              descripcion={`Saldo ${formatearUSD(t.saldo)}`}
             >
               {grupos.length === 0 && anticipos.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-stone-600">
@@ -356,7 +364,7 @@ export default async function CuentaPage({
                             {g.departamento}
                           </th>
                           <td className="tabular px-4 py-1.5 text-right text-xs font-semibold text-stone-700">
-                            USD {g.total.toLocaleString('es-AR')}
+                            {formatearUSD(g.total)}
                           </td>
                           <td />
                         </tr>
@@ -393,7 +401,7 @@ export default async function CuentaPage({
                               {l.cantidad}
                             </td>
                             <td className="tabular px-4 py-2 text-right font-medium text-stone-900">
-                              USD {importeLinea(l).toLocaleString('es-AR')}
+                              {formatearUSD(importeLinea(l))}
                             </td>
                             <td className="px-4 py-2">
                               {mostrarB || l.folio === 'A' ? (
@@ -433,7 +441,7 @@ export default async function CuentaPage({
                             Anticipos y pagos
                           </th>
                           <td className="tabular px-4 py-1.5 text-right text-xs font-semibold text-emerald-900">
-                            −USD {t.anticipos.toLocaleString('es-AR')}
+                            −{formatearUSD(t.anticipos)}
                           </td>
                           <td />
                         </tr>
@@ -446,7 +454,7 @@ export default async function CuentaPage({
                             <td className="px-4 py-2 text-xs text-stone-500">—</td>
                             <td />
                             <td className="tabular px-4 py-2 text-right font-medium text-emerald-800">
-                              −USD {Math.abs(importeLinea(l)).toLocaleString('es-AR')}
+                              −{formatearUSD(Math.abs(importeLinea(l)))}
                             </td>
                             <td className="px-4 py-2">
                               <Etiqueta tono="neutro">no se mueve</Etiqueta>
@@ -462,7 +470,7 @@ export default async function CuentaPage({
                           Saldo del folio {f}
                         </th>
                         <td className="tabular px-4 py-2.5 text-right font-semibold text-stone-900">
-                          USD {t.saldo.toLocaleString('es-AR')}
+                          {formatearUSD(t.saldo)}
                         </td>
                         <td />
                       </tr>
