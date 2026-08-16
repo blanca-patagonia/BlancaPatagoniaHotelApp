@@ -602,6 +602,45 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     cae_solicitado_en: new Date().toISOString(),
     emitida_por: sesion?.userId ?? null,
   })
+  // ── Si el insert chocó con la restricción única, la reserva YA está facturada ──
+  //
+  // Esta acción es check-then-act: entre el `select` del principio y este `insert`
+  // no hay nada. Dos emisiones simultáneas —dos clics, o dos personas cerrando la
+  // misma reserva desde dos puestos— pasan las dos por el `select`, las dos ven que
+  // no hay factura, y las dos llegan hasta acá. La que pierde recibe 23505 de
+  // `facturas_una_por_reserva` (migración 0045), que es la garantía funcionando: en
+  // la base quedó un solo comprobante.
+  //
+  // Mandarla al error genérico sería mentirle a quien la usa: la reserva **está**
+  // facturada, solo que la emitió el otro pedido. Lo correcto es mostrarle el
+  // comprobante, igual que si hubiera llegado segunda en secuencia.
+  // ⚠️ Lo que este arreglo NO resuelve, y hay que decirlo:
+  //
+  // El pedido que pierde la carrera llegó hasta acá, o sea que **ya consumió un
+  // número correlativo** (`siguiente_numero_comprobante`, más arriba) y **ya le
+  // pidió un CAE al proveedor**. Con el proveedor simulado no pasa nada. Con AFIP de
+  // verdad quedaría un CAE emitido para un número que no tiene fila en `facturas`:
+  // un salto en la numeración, que es una obligación formal (ADR 0015).
+  //
+  // No se arregla acá. Pedir el CAE después de insertar no alcanza —el CAE va en la
+  // fila— y reservar la fila primero y completarla después choca con la
+  // inmutabilidad de `facturas` (migración 0034). La salida es una función SQL
+  // transaccional que numere, inserte y devuelva, con el CAE pedido dentro de la
+  // misma transacción. Queda anotado como pendiente.
+  //
+  // La ventana es chica (dos pedidos en vuelo sobre la misma reserva) y el daño de
+  // no tener la restricción era mucho peor: dos comprobantes fiscales de la misma
+  // estadía y una nota de crédito para arreglarlo.
+  if (eFactura?.code === '23505') {
+    // Al log igual: hubo una carrera y probablemente un número gastado.
+    console.error(
+      `Emisión simultánea sobre la reserva ${reservaId}: la restricción única rechazó el segundo comprobante. ` +
+        `Revisar si quedó un salto en la numeración del punto de venta ${PUNTO_VENTA}.`,
+      eFactura.message,
+    )
+    redirect(`/panel/reservas/${reservaId}/factura`)
+  }
+
   // El punto más caro del archivo: acá ya se pidió el CAE al proveedor y ya se
   // consumió el número correlativo del punto de venta. Si el insert se pierde en
   // silencio queda un CAE emitido y un número gastado SIN factura, y el usuario

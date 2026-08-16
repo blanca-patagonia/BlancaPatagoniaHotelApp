@@ -157,6 +157,55 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       ctx.aBorrar.push({ tabla: 'facturas', id: (data as { id: string }).id })
     })
 
+    /**
+     * El caso que el test de arriba NO cubre, y que es el que importa.
+     *
+     * Aquél emite dos veces **en secuencia**, así que la segunda encuentra la
+     * factura en la comprobación previa y se va a la pantalla del comprobante. Pasa
+     * sin que exista ninguna garantía: lo único que ejercita es un `if`.
+     *
+     * `emitirFactura` es check-then-act:
+     *
+     *     select id from facturas where reserva_id = X   -- ¿ya existe?
+     *     …
+     *     insert into facturas (…)                        -- no existía: se emite
+     *
+     * Entre las dos sentencias no hay nada. Dos clics simultáneos —o dos personas
+     * cerrando la misma reserva desde dos puestos— pasan los dos por el `select`,
+     * los dos ven que no hay nada, y los dos insertan. Con un CAE real serían dos
+     * documentos fiscales de la misma estadía, y arreglarlo exige una nota de
+     * crédito.
+     *
+     * Lo que se verifica acá es que la garantía **es de la base** y no del `if`: la
+     * restricción única `facturas_una_por_reserva` (migración 0045) rechaza el
+     * segundo insert aunque las dos emisiones corran a la vez.
+     */
+    it('con dos emisiones SIMULTÁNEAS, la base deja pasar una sola', async () => {
+      const id = await reservaEnEstado('checkout')
+
+      // Sin `await` entre las dos: las dos llamadas están en vuelo al mismo tiempo,
+      // así que las dos ejecutan su `select` antes de que cualquiera inserte.
+      const destinos = await Promise.all([
+        destinoDe(() => emitirFactura(formulario({ reserva_id: id }))),
+        destinoDe(() => emitirFactura(formulario({ reserva_id: id }))),
+      ])
+
+      const { data, count } = await ctx.db
+        .from('facturas')
+        .select('id', { count: 'exact' })
+        .eq('reserva_id', id)
+
+      const filas = (data ?? []) as { id: string }[]
+      for (const f of filas) ctx.aBorrar.push({ tabla: 'facturas', id: f.id })
+
+      expect(count, 'la reserva quedó con más de un comprobante fiscal').toBe(1)
+
+      // Las dos terminan en la pantalla del comprobante: la que ganó porque lo
+      // emitió, y la que perdió porque la reserva **está** facturada —por la otra—
+      // y mandarla a un error genérico sería mentirle.
+      for (const destino of destinos) expect(destino).toContain('/factura')
+    })
+
     it('asigna números correlativos distintos a cada comprobante', async () => {
       const ids = [await reservaEnEstado('checkout'), await reservaEnEstado('checkout')]
       for (const id of ids) await destinoDe(() => emitirFactura(formulario({ reserva_id: id })))
