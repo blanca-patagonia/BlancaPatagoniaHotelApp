@@ -1,5 +1,6 @@
 import 'server-only'
 import { seleccionarProveedor } from '@/lib/integraciones/seleccion'
+import { ProveedorBookingIcal } from './booking-ical'
 
 /**
  * Abstracción de canales de venta externos (OTA): `CanalVentaProvider`.
@@ -67,6 +68,78 @@ export interface ResultadoEnvio {
   /** Cuántas filas aceptó el canal. Sirve para detectar rechazos parciales. */
   aceptadas: number
   error?: string
+  /**
+   * `true` cuando el proveedor **no puede** hacer esta operación, en vez de
+   * haberla intentado y fallado.
+   *
+   * Distinguirlo importa: un `ok: false` por corte de red se reintenta; un
+   * `ok: false` porque el proveedor es de solo lectura no se reintenta nunca y
+   * significa algo distinto para el negocio — que el canal puede sobrevender.
+   * Sin este campo, la pantalla mostraría «error al publicar disponibilidad»
+   * cuando la verdad es «este proveedor no publica disponibilidad».
+   */
+  noSoportado?: boolean
+}
+
+/* ────────────────────────────────────────────────────────── capacidades ──── */
+
+/**
+ * Qué sabe hacer realmente un proveedor de canal.
+ *
+ * ── Por qué hace falta declararlo ───────────────────────────────────────────
+ *
+ * El contrato de abajo tiene cinco métodos, y **ningún proveedor real los cumple
+ * todos**. Los dos que se pueden implementar sin ser partner certificado de
+ * Booking —el informe CSV del extranet y el feed iCal— son de **solo lectura**:
+ * no hay forma de empujarles disponibilidad.
+ *
+ * Sin este descriptor había dos salidas y las dos malas: que
+ * `publicarDisponibilidad` no haga nada y devuelva `ok: true` (mentir), o que
+ * lance (romperle la operación a quien la llamó). Declarar la capacidad permite
+ * que la pantalla **no ofrezca** lo que no se puede hacer, y sobre todo que
+ * advierta la consecuencia.
+ *
+ * ⚠️ `publicaDisponibilidad: false` significa que **el canal puede sobrevender**.
+ * Nosotros no le decimos qué nos queda libre, así que Booking sigue ofreciendo
+ * una habitación que el mostrador ya vendió. La restricción de exclusión del
+ * ADR 0002 protege nuestra base, no el inventario publicado del otro lado. Es la
+ * limitación más importante de todo este módulo y la pantalla la dice con
+ * palabras.
+ */
+export interface CapacidadesCanal {
+  /**
+   * Empuja cupo y tarifas al canal. Si es `false`, el canal puede sobrevender.
+   */
+  publicaDisponibilidad: boolean
+  /** Trae reservas consultando al canal (sondeo). */
+  traeReservas: boolean
+  /** Recibe novedades por webhook. */
+  recibeWebhook: boolean
+  /** Puede acusar recibo de una reserva. */
+  confirmaRecepcion: boolean
+  /**
+   * Qué datos trae de cada reserva.
+   *
+   * El iCal, por ejemplo, no trae importes ni contacto: la pantalla necesita
+   * saberlo para no mostrar «USD 0» como si fuera un precio real.
+   */
+  trae: {
+    importes: boolean
+    contacto: boolean
+    /** Cantidad de huéspedes real (el iCal no la informa). */
+    huespedes: boolean
+    /** Qué tipo de unidad reservó (el iCal lo deduce de la URL del feed). */
+    tipoUnidad: boolean
+  }
+}
+
+/** Ningún proveedor puede nada. Base para declarar sólo lo que sí se soporta. */
+export const SIN_CAPACIDADES: CapacidadesCanal = {
+  publicaDisponibilidad: false,
+  traeReservas: false,
+  recibeWebhook: false,
+  confirmaRecepcion: false,
+  trae: { importes: false, contacto: false, huespedes: false, tipoUnidad: false },
 }
 
 /* ───────────────────────────────────────────────────── entrantes ──────── */
@@ -110,7 +183,18 @@ export interface CanalVentaProvider {
   /** `false` cuando es un simulador: no habla con ningún canal real. */
   esReal(): boolean
 
-  /** Empuja disponibilidad y tarifas al canal. */
+  /**
+   * Qué sabe hacer este proveedor. La pantalla lo usa para no ofrecer lo que no
+   * se puede y para advertir las consecuencias de lo que falta.
+   */
+  capacidades(): CapacidadesCanal
+
+  /**
+   * Empuja disponibilidad y tarifas al canal.
+   *
+   * Un proveedor de solo lectura devuelve `{ ok: false, noSoportado: true }`. No
+   * lanza y no miente diciendo `ok: true`.
+   */
   publicarDisponibilidad(filas: DisponibilidadCanal[]): Promise<ResultadoEnvio>
 
   /** Trae las reservas nuevas o modificadas desde el último sondeo. */
@@ -146,6 +230,24 @@ class CanalSimulado implements CanalVentaProvider {
     return false
   }
 
+  /**
+   * Declara que puede todo.
+   *
+   * Es deliberado y es lo correcto para un simulador: sirve para desarrollar y
+   * probar las pantallas de todas las operaciones, incluidas las que ningún
+   * proveedor real de solo lectura soporta. Que `esReal()` sea `false` ya avisa
+   * que nada de esto sale de verdad.
+   */
+  capacidades(): CapacidadesCanal {
+    return {
+      publicaDisponibilidad: true,
+      traeReservas: true,
+      recibeWebhook: true,
+      confirmaRecepcion: true,
+      trae: { importes: true, contacto: true, huespedes: true, tipoUnidad: true },
+    }
+  }
+
   async publicarDisponibilidad(filas: DisponibilidadCanal[]): Promise<ResultadoEnvio> {
     // Se validan las filas igual que lo haría un canal real: así los errores de
     // armado se descubren en desarrollo y no el día de la integración.
@@ -171,6 +273,9 @@ class CanalSimulado implements CanalVentaProvider {
 
 const PROVEEDORES: Record<string, CanalVentaProvider> = {
   simulado: new CanalSimulado(),
+  // Sincronización real y sin aprobación de nadie, pero de solo lectura: NO evita
+  // el overbooking. Se configura con `BOOKING_ICAL_FEEDS` (ver el ADR 0021).
+  'booking-ical': new ProveedorBookingIcal(),
 }
 
 /**

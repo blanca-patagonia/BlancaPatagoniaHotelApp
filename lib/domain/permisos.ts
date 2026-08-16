@@ -10,6 +10,7 @@ export const AREAS = [
   'dashboard',
   'ocupacion',
   'servicio',
+  'punto_venta',
   'reservas',
   'huespedes',
   'housekeeping',
@@ -20,10 +21,12 @@ export const AREAS = [
   'agencias',
   'proveedores',
   'contratos',
+  'canales',
   'auditoria',
   'reportes',
   'config',
   'usuarios',
+  'respaldos',
   'ayuda',
 ] as const
 
@@ -33,6 +36,7 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   dashboard: 'Inicio',
   ocupacion: 'Ocupación',
   servicio: 'Servicio de cocina',
+  punto_venta: 'Punto de venta',
   reservas: 'Reservas',
   huespedes: 'Huéspedes',
   housekeeping: 'Housekeeping',
@@ -43,10 +47,12 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   agencias: 'Agencias',
   proveedores: 'Proveedores',
   contratos: 'Contratos',
+  canales: 'Canales de venta',
   auditoria: 'Auditoría',
   reportes: 'Reportes',
   config: 'Configuración',
   usuarios: 'Usuarios',
+  respaldos: 'Respaldos',
   ayuda: 'Ayuda',
 }
 
@@ -60,13 +66,21 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
 export const PERMISOS: Record<Rol, readonly Area[]> = {
   admin: [...AREAS],
   gerencia: [
-    'dashboard', 'ocupacion', 'servicio', 'reservas', 'huespedes', 'housekeeping',
+    'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
-    'proveedores', 'contratos', 'reportes', 'config', 'ayuda',
+    'proveedores', 'contratos', 'canales', 'reportes', 'config',
+    // Gerencia **ve** el estado de los respaldos —saber que hace 40 días que nadie
+    // exporta es información de gestión— pero **no puede exportar**: eso lo
+    // restringe la propia pantalla y el endpoint, porque el archivo concentra los
+    // datos personales de todos los huéspedes del hotel.
+    'respaldos',
+    'ayuda',
   ],
+  // Recepción entra a `canales`: las reservas de Booking las importa y las
+  // atiende quien está en el mostrador, no gerencia. Es trabajo diario.
   recepcion: [
-    'dashboard', 'ocupacion', 'servicio', 'reservas', 'huespedes', 'objetos_perdidos',
-    'avisos', 'conversaciones', 'agencias', 'ayuda',
+    'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'objetos_perdidos',
+    'avisos', 'conversaciones', 'agencias', 'canales', 'ayuda',
   ],
   housekeeping: [
     'dashboard', 'housekeeping', 'mantenimiento', 'avisos', 'conversaciones', 'ayuda',
