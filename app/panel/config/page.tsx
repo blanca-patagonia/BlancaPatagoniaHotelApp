@@ -23,7 +23,21 @@ import { BotonEnvio } from '../_components/boton-envio'
 import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
 import { llevaStock, stockBajo, faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { obtenerProveedorEmail } from '@/lib/email'
-import { actualizarTarifa, reponerStock, crearProducto, alternarProducto } from './actions'
+import {
+  actualizarTarifa,
+  reponerStock,
+  crearProducto,
+  alternarProducto,
+  cargarCotizacion,
+  guardarUbicacionUnidad,
+} from './actions'
+import {
+  ETIQUETAS_MONEDA,
+  MONEDAS_EXTRANJERAS,
+  formatearLocal,
+  textoEstado,
+} from '@/lib/domain/divisas'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
 import { enviarPlantillaPrueba } from './plantillas-actions'
 
@@ -75,6 +89,12 @@ const MENSAJES_ERROR: Record<string, string> = {
   // `producto`, que ya significa «revisá los datos del alta».
   producto_estado: 'No se pudo activar ni desactivar el producto. Quedó como estaba.',
   stock: 'No se pudo registrar la reposición. El stock quedó con el valor anterior.',
+  // La acción manda además un `detalle` con el motivo exacto del dominio, que
+  // tiene prioridad sobre este texto. Éste es el respaldo por si falta.
+  cotizacion: 'No se pudo guardar la cotización. Quedó vigente la anterior.',
+  moneda: 'Esa moneda no está soportada.',
+  ubicacion: 'No se pudo guardar la ubicación. Quedó como estaba.',
+  unidad: 'Faltó indicar la unidad.',
 }
 
 export default async function ConfigPage({
@@ -158,6 +178,12 @@ export default async function ConfigPage({
       {sp.ok === 'tarifa' && <Mensaje tono="ok">Tarifa actualizada.</Mensaje>}
       {sp.ok === 'producto' && <Mensaje tono="ok">Producto agregado al catálogo.</Mensaje>}
       {sp.ok === 'envio' && <Mensaje tono="ok">{sp.detalle ?? 'Correo procesado.'}</Mensaje>}
+      {sp.ok === 'ubicacion' && (
+        <Mensaje tono="ok">Ubicación guardada. La grilla ya la usa para filtrar y ordenar.</Mensaje>
+      )}
+      {sp.ok === 'cotizacion' && (
+        <Mensaje tono="ok">Cotización guardada. Ya rige para los importes en esa moneda.</Mensaje>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="Tipos de unidad" valor={String(filas.length)} detalle="en el tarifario" icono="ocupacion" />
@@ -511,6 +537,252 @@ export default async function ConfigPage({
           </form>
         )}
       </Tarjeta>
+
+      <SeccionDivisas puedeEditar={puedeEditar} />
+      <SeccionUbicaciones puedeEditar={puedeEditar} />
     </Pagina>
+  )
+}
+
+/**
+ * Ubicación física de cada unidad: bloque, piso y orden de recorrido.
+ *
+ * Sin esta pantalla, las columnas de la migración 0042 quedarían vacías para
+ * siempre y los filtros de la grilla de ocupación no servirían de nada.
+ *
+ * El **orden** es el que define el recorrido de limpieza dentro del piso. Existe
+ * porque el alfabético pone «10» antes que «9», así que ordenar por nombre manda a
+ * la mucama a caminar el pasillo en zigzag.
+ */
+async function SeccionUbicaciones({ puedeEditar }: { puedeEditar: boolean }) {
+  const supabase = await crearClienteServidor()
+  const { data } = await supabase
+    .from('unidades')
+    .select('id, nombre, piso, bloque, orden, tipo:tipos_unidad(nombre)')
+    .eq('activo', true)
+    .order('bloque')
+    .order('piso')
+    .order('orden')
+
+  const unidades = (data ?? []) as unknown as {
+    id: string
+    nombre: string
+    piso: string
+    bloque: string
+    orden: number
+    tipo: { nombre: string } | null
+  }[]
+
+  const sinUbicar = unidades.filter((u) => !u.piso).length
+
+  return (
+    <Tarjeta
+      titulo="Ubicación de las unidades"
+      descripcion="Bloque, piso y orden de recorrido. Se usan para filtrar la grilla de ocupación y para ordenar el trabajo de limpieza."
+    >
+      <div id="ubicaciones" className="scroll-mt-20 px-5 py-4">
+        {sinUbicar > 0 && (
+          <p className="mb-3 rounded-lg bg-lenga-50 px-4 py-2 text-sm text-lenga-900 ring-1 ring-lenga-200">
+            {sinUbicar} unidad(es) sin piso cargado. La grilla las muestra igual, pero el filtro por
+            piso no las alcanza.
+          </p>
+        )}
+
+        <div className="overflow-x-auto">
+          <Tabla resumen="Unidades con su bloque, piso y orden de recorrido">
+            <thead>
+              <tr>
+                <th className={TH}>Unidad</th>
+                <th className={TH}>Bloque</th>
+                <th className={TH}>Piso</th>
+                <th className={TH}>Orden</th>
+                {puedeEditar && <th className={TH}>Guardar</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {unidades.map((u) => (
+                <tr key={u.id} className={FILA}>
+                  {puedeEditar ? (
+                    <>
+                      <td className={TD}>
+                        <span className="font-medium text-stone-800">{u.nombre}</span>
+                        <span className="block text-xs text-stone-500">{u.tipo?.nombre}</span>
+                      </td>
+                      <td className={TD} colSpan={4}>
+                        <form
+                          action={guardarUbicacionUnidad}
+                          className="flex flex-wrap items-end gap-2"
+                        >
+                          <input type="hidden" name="unidad_id" value={u.id} />
+                          <Campo etiqueta="Bloque">
+                            <input
+                              name="bloque"
+                              defaultValue={u.bloque}
+                              placeholder="Hostería"
+                              className={`${CAMPO} w-40`}
+                            />
+                          </Campo>
+                          <Campo etiqueta="Piso" ayuda="«PB», «1», «Entrepiso».">
+                            <input
+                              name="piso"
+                              defaultValue={u.piso}
+                              placeholder="PB"
+                              className={`${CAMPO} w-24`}
+                            />
+                          </Campo>
+                          <Campo etiqueta="Orden">
+                            <input
+                              name="orden"
+                              type="number"
+                              min={0}
+                              defaultValue={u.orden}
+                              className={`${CAMPO} w-20`}
+                            />
+                          </Campo>
+                          <BotonEnvio variante="secundario" cargando="Guardando…">
+                            Guardar
+                          </BotonEnvio>
+                        </form>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className={TD}>
+                        <span className="font-medium text-stone-800">{u.nombre}</span>
+                      </td>
+                      <td className={`${TD} text-stone-600`}>{u.bloque || '—'}</td>
+                      <td className={`${TD} text-stone-600`}>{u.piso || '—'}</td>
+                      <td className={`${TD} tabular text-stone-600`}>{u.orden}</td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        </div>
+      </div>
+    </Tarjeta>
+  )
+}
+
+/**
+ * Cotización de divisas: lo vigente y la carga manual.
+ *
+ * Cierra la tarea que el ADR 0003 dejó abierta («hace falta un mecanismo para
+ * cargar/actualizar la cotización»). Va al final de la configuración porque es
+ * mantenimiento ocasional: lo normal es que la fuente externa se refresque sola y
+ * nadie toque nada.
+ *
+ * Es un componente aparte y `async` por el mismo motivo que el widget del
+ * dashboard: resolver las tres monedas puede implicar llamadas externas, y no
+ * tiene por qué demorar el tarifario ni el inventario.
+ */
+async function SeccionDivisas({ puedeEditar }: { puedeEditar: boolean }) {
+  const vigentes = await Promise.all(
+    MONEDAS_EXTRANJERAS.map(async (m) => ({ moneda: m, vigente: await cotizacionVigente(m) })),
+  )
+
+  return (
+    <Tarjeta
+      titulo="Cotización de divisas"
+      descripcion="Se actualiza sola desde una fuente pública. El valor manual es el respaldo para cuando esa fuente no responde."
+    >
+      {/* El ancla la usan el widget del dashboard y los redirects de la acción. */}
+      <div id="divisas" className="scroll-mt-20 px-5 py-4">
+        <p className="mb-3 text-xs text-stone-600">
+          Los precios del sistema viven en <strong>USD</strong> (ADR 0003). Se cobra al valor de{' '}
+          <strong>venta</strong>, que es lo que fija el Tarifario: «cotización oficial de venta
+          billete del Banco Nación del día de pago».
+        </p>
+
+        <div className="overflow-x-auto">
+          <Tabla resumen="Cotización vigente de cada divisa, con su origen y antigüedad">
+            <thead>
+              <tr>
+                <th className={TH}>Moneda</th>
+                <th className={`${TH} text-right`}>Compra</th>
+                <th className={`${TH} text-right`}>Venta</th>
+                <th className={TH}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vigentes.map(({ moneda, vigente }) => (
+                <tr key={moneda} className={FILA}>
+                  <td className={TD}>
+                    <span className="font-medium text-stone-800">{moneda}</span>
+                    <span className="ml-2 text-xs text-stone-500">{ETIQUETAS_MONEDA[moneda]}</span>
+                  </td>
+                  <td className={`${TD} tabular text-right text-stone-600`}>
+                    {vigente ? formatearLocal(vigente.compra, moneda) : '—'}
+                  </td>
+                  <td className={`${TD} tabular text-right font-medium text-stone-900`}>
+                    {vigente ? formatearLocal(vigente.venta, moneda) : '—'}
+                  </td>
+                  <td className={TD}>
+                    {/* Estado con etiqueta de texto, no sólo color: es lo que
+                        distingue «sirve para cobrar» de «es de ayer». */}
+                    {vigente ? (
+                      <Etiqueta
+                        tono={
+                          vigente.requiereAdvertencia
+                            ? 'peligro'
+                            : vigente.vencida
+                              ? 'alerta'
+                              : 'exito'
+                        }
+                      >
+                        {textoEstado(vigente)}
+                      </Etiqueta>
+                    ) : (
+                      <Etiqueta tono="neutro">Sin cotización — se muestra en USD</Etiqueta>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        </div>
+
+        {puedeEditar ? (
+          <form action={cargarCotizacion} className="mt-4 grid gap-x-4 gap-y-3 sm:grid-cols-4">
+            <Campo etiqueta="Moneda">
+              <select name="moneda" defaultValue="ARS" className={CAMPO}>
+                {MONEDAS_EXTRANJERAS.map((m) => (
+                  <option key={m} value={m}>
+                    {m} — {ETIQUETAS_MONEDA[m]}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+            <Campo etiqueta="Compra" ayuda="Lo que el banco paga por un dólar.">
+              <input
+                name="compra"
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                className={CAMPO}
+              />
+            </Campo>
+            <Campo etiqueta="Venta" ayuda="El que se cobra.">
+              <input name="venta" type="number" step="0.01" min="0.01" required className={CAMPO} />
+            </Campo>
+            <div className="flex items-end">
+              <BotonEnvio variante="secundario" cargando="Guardando…" extra="w-full sm:w-auto">
+                Guardar cotización
+              </BotonEnvio>
+            </div>
+            <p className="text-xs text-stone-600 sm:col-span-4">
+              Un valor cargado ahora reemplaza al automático hasta que la fuente publique uno más
+              nuevo. Queda registrado quién lo cargó y cuándo.
+            </p>
+          </form>
+        ) : (
+          <p className="mt-4 text-xs text-stone-600">
+            Solo administración y gerencia pueden cargar una cotización a mano.
+          </p>
+        )}
+      </div>
+    </Tarjeta>
   )
 }
