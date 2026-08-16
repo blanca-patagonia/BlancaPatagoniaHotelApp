@@ -34,6 +34,7 @@ import {
   responderResena,
   sincronizarCanal,
 } from './actions'
+import { importe } from '@/lib/domain/moneda'
 
 /**
  * Canales de venta: el panel único de lo que llega de Booking.
@@ -504,7 +505,7 @@ export default async function CanalesPage({
                                 {e.moneda_canal} {Number(e.importe_canal).toLocaleString('es-AR')}
                                 {e.comision != null && (
                                   <span className="block text-xs text-stone-500">
-                                    comisión {Number(e.comision).toLocaleString('es-AR')}
+                                    comisión {importe(Number(e.comision))}
                                   </span>
                                 )}
                               </>

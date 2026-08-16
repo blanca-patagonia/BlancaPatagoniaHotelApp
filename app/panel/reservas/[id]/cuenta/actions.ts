@@ -7,8 +7,14 @@ import { obtenerSesion } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
 import { puedeAcceder } from '@/lib/domain/permisos'
 import { esFolio } from '@/lib/domain/folios'
-import { esMonedaExtranjera, convertirAUSD } from '@/lib/domain/divisas'
+import {
+  convertirAUSD,
+  esMonedaExtranjera,
+  formatearLocal,
+  type MonedaExtranjera,
+} from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 /**
  * Acciones de la cuenta del huésped: split entre folios y cargo manual.
@@ -147,7 +153,9 @@ export async function cargarManual(
 
   // ── Conversión ────────────────────────────────────────────────────────────
   let precioUSD = importe
-  let monedaOrigen: string | null = null
+  // Tipada como `MonedaExtranjera` y no como `string`: adentro del `if` ya pasó por
+  // `esMonedaExtranjera`, y así el compilador deja formatearla sin un cast.
+  let monedaOrigen: MonedaExtranjera | null = null
   let importeOrigen: number | null = null
   let cotizacionUsada: number | null = null
 
@@ -229,7 +237,11 @@ export async function cargarManual(
   return {
     ok:
       monedaOrigen
-        ? `Cargo agregado al folio ${folio}: ${monedaOrigen} ${importe.toLocaleString('es-AR')} = USD ${precioUSD.toLocaleString('es-AR')} (cotización ${cotizacionUsada}).`
-        : `Cargo de USD ${precioUSD.toLocaleString('es-AR')} agregado al folio ${folio}.`,
+        ? // El importe original va con `formatearLocal`, que pone el símbolo de la
+          // moneda en que se cobró; el convertido con `formatearUSD`. Los dos con
+          // dos decimales fijos: en un mensaje de cobro, «$ 12.000» y «USD 8,11»
+          // tienen que leerse como importes y no como números sueltos.
+          `Cargo agregado al folio ${folio}: ${formatearLocal(importe, monedaOrigen)} = ${formatearUSD(precioUSD)} (cotización ${cotizacionUsada}).`
+        : `Cargo de ${formatearUSD(precioUSD)} agregado al folio ${folio}.`,
   }
 }

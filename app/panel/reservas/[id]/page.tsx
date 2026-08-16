@@ -60,6 +60,7 @@ import {
   type EstadoPago,
   type Pago,
 } from '@/lib/domain/pagos'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 const MEDIOS_MANUALES: MedioPago[] = ['efectivo', 'transferencia', 'tarjeta']
 
@@ -433,7 +434,7 @@ export default async function DetalleReservaPage({
                 <div className="flex justify-between">
                   <span className="text-stone-500">Subtotal sin IVA</span>
                   <span className="tabular text-stone-700">
-                    USD {Number(reserva.subtotal).toLocaleString('es-AR')}
+                    {formatearUSD(Number(reserva.subtotal))}
                   </span>
                 </div>
                 {Number(reserva.descuento_pct) > 0 && (
@@ -452,19 +453,19 @@ export default async function DetalleReservaPage({
                 <div className="flex justify-between">
                   <span className="text-stone-500">Neto gravado</span>
                   <span className="tabular text-stone-700">
-                    USD {Number(reserva.total_neto).toLocaleString('es-AR')}
+                    {formatearUSD(Number(reserva.total_neto))}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-500">IVA</span>
                   <span className="tabular text-stone-700">
-                    USD {Number(reserva.iva).toLocaleString('es-AR')}
+                    {formatearUSD(Number(reserva.iva))}
                   </span>
                 </div>
                 <div className="flex justify-between border-t border-stone-100 pt-1 font-semibold text-stone-900">
                   <span>Total con IVA</span>
                   <span className="tabular">
-                    USD {Number(reserva.total).toLocaleString('es-AR')}
+                    {formatearUSD(Number(reserva.total))}
                   </span>
                 </div>
               </dd>
@@ -493,7 +494,7 @@ export default async function DetalleReservaPage({
                   cargando="Aplicando…"
                   confirmar={
                     t === 'cancelada'
-                      ? `¿Cancelar la reserva ${reserva.codigo}?${cargo && cargo.monto > 0 ? ` Corresponde un cargo de USD ${cargo.monto.toLocaleString('es-AR')}.` : ''} No se puede deshacer.`
+                      ? `¿Cancelar la reserva ${reserva.codigo}?${cargo && cargo.monto > 0 ? ` Corresponde un cargo de ${formatearUSD(cargo.monto)}.` : ''} No se puede deshacer.`
                       : t === 'no_show'
                         ? `¿Marcar ${reserva.codigo} como no-show? Se cobra la estadía completa y no se puede deshacer.`
                         : undefined
@@ -513,7 +514,7 @@ export default async function DetalleReservaPage({
               : 'check-in ya transcurrido'}
             ): cargo estimado{' '}
             <span className="font-medium text-stone-700">
-              USD {cargo.monto.toLocaleString('es-AR')}
+              {formatearUSD(cargo.monto)}
             </span>{' '}
             según la política estándar.
           </p>
@@ -631,19 +632,19 @@ export default async function DetalleReservaPage({
           <div className="rounded-lg bg-stone-50 px-4 py-3">
             <p className="text-xs text-stone-600">Total</p>
             <p className="text-lg font-semibold text-stone-900">
-              USD {Number(reserva.total).toLocaleString('es-AR')}
+              {formatearUSD(Number(reserva.total))}
             </p>
           </div>
           <div className="rounded-lg bg-emerald-50 px-4 py-3">
             <p className="text-xs text-emerald-600">Pagado</p>
             <p className="text-lg font-semibold text-emerald-700">
-              USD {resumen.pagado.toLocaleString('es-AR')}
+              {formatearUSD(resumen.pagado)}
             </p>
           </div>
           <div className="rounded-lg bg-lenga-50 px-4 py-3">
             <p className="text-xs text-lenga-600">Saldo</p>
             <p className="text-lg font-semibold text-lenga-700">
-              USD {resumen.saldo.toLocaleString('es-AR')}
+              {formatearUSD(resumen.saldo)}
             </p>
           </div>
         </div>
@@ -658,7 +659,7 @@ export default async function DetalleReservaPage({
                 <span
                   className={`font-medium ${p.tipo === 'reembolso' ? 'text-red-600' : 'text-stone-800'}`}
                 >
-                  {p.tipo === 'reembolso' ? '−' : ''}USD {Number(p.monto).toLocaleString('es-AR')}
+                  {p.tipo === 'reembolso' ? '−' : ''}{formatearUSD(Number(p.monto))}
                 </span>
               </li>
             ))}
@@ -716,7 +717,7 @@ export default async function DetalleReservaPage({
           </form>
         )}
         <p className="mt-3 text-xs text-stone-600">
-          Seña sugerida (primera noche): USD {senia.toLocaleString('es-AR')}. Las pasarelas
+          Seña sugerida (primera noche): {formatearUSD(senia)}. Las pasarelas
           (MercadoPago / Stripe) ingresan por webhook.
         </p>
       </div>
@@ -773,7 +774,7 @@ export default async function DetalleReservaPage({
                 </span>
                 <span className="flex items-center gap-3">
                   <span className="font-medium text-stone-800">
-                    USD {(c.cantidad * Number(c.precio_unitario)).toLocaleString('es-AR')}
+                    {formatearUSD((c.cantidad * Number(c.precio_unitario)))}
                   </span>
                   <form action={quitarConsumo}>
                     <input type="hidden" name="reserva_id" value={reserva.id} />
@@ -799,7 +800,7 @@ export default async function DetalleReservaPage({
             >
               {productos.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nombre} — USD {Number(p.precio).toLocaleString('es-AR')}
+                  {p.nombre} — {formatearUSD(Number(p.precio))}
                 </option>
               ))}
             </select>
@@ -822,15 +823,15 @@ export default async function DetalleReservaPage({
         <dl className="mt-4 border-t border-stone-100 pt-3 text-sm">
           <div className="flex justify-between">
             <dt className="text-stone-500">Alojamiento</dt>
-            <dd className="text-stone-700">USD {cuenta.alojamiento.toLocaleString('es-AR')}</dd>
+            <dd className="text-stone-700">{formatearUSD(cuenta.alojamiento)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-stone-500">Consumos</dt>
-            <dd className="text-stone-700">USD {cuenta.consumos.toLocaleString('es-AR')}</dd>
+            <dd className="text-stone-700">{formatearUSD(cuenta.consumos)}</dd>
           </div>
           <div className="mt-1 flex justify-between border-t border-stone-100 pt-1 font-semibold text-stone-900">
             <dt>Total cuenta</dt>
-            <dd>USD {cuenta.total.toLocaleString('es-AR')}</dd>
+            <dd>{formatearUSD(cuenta.total)}</dd>
           </div>
         </dl>
       </div>

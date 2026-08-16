@@ -33,6 +33,7 @@ import {
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { cambiarEtapaAgencia } from './actions'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 interface Agencia {
   id: string
@@ -142,7 +143,7 @@ export default async function AgenciasPage({
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi
           titulo="Total a cobrar"
-          valor={`USD ${totalACobrar.toLocaleString('es-AR')}`}
+          valor={`${formatearUSD(totalACobrar)}`}
           detalle="saldo pendiente de agencias"
           icono="agencias"
           tono={totalACobrar > 0 ? 'alerta' : 'exito'}
@@ -294,7 +295,7 @@ export default async function AgenciasPage({
                       a.saldo > 0 ? 'text-red-600' : 'text-stone-800'
                     }`}
                   >
-                    {a.saldo.toLocaleString('es-AR')}
+                    {importe(a.saldo)}
                   </td>
                 </tr>
               ))}

@@ -15,6 +15,7 @@ import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
 import { Encabezado, Etiqueta, Mensaje, Pagina, botonClases } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
 import { BotonEnvio } from '../../_components/boton-envio'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 interface Proveedor {
   id: string
@@ -132,7 +133,7 @@ export default async function ProveedorDetallePage({
         <div>
           <p className="text-xs uppercase tracking-wide text-stone-600">Saldo a pagar</p>
           <p className={`text-2xl font-semibold ${saldo > 0 ? 'text-red-600' : 'text-stone-900'}`}>
-            USD {saldo.toLocaleString('es-AR')}
+            {formatearUSD(saldo)}
           </p>
         </div>
         <form action={registrarMovimientoProveedor} className="flex flex-wrap items-end gap-2">
@@ -262,10 +263,10 @@ export default async function ProveedorDetallePage({
                   )}
                 </td>
                 <td className="px-4 py-2 text-right text-stone-800">
-                  {m.tipo === 'cargo' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                  {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
                 </td>
                 <td className="px-4 py-2 text-right text-emerald-700">
-                  {m.tipo === 'pago' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                  {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
                 </td>
               </tr>
             ))}

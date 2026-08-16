@@ -40,6 +40,7 @@ import {
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
 import { enviarPlantillaPrueba } from './plantillas-actions'
+import { importe } from '@/lib/domain/moneda'
 
 /** Datos de muestra para previsualizar cada plantilla. */
 const MUESTRA = {
@@ -391,7 +392,7 @@ export default async function ConfigPage({
                     <td className={`${TD} font-medium text-stone-800`}>{p.nombre}</td>
                     <td className={`${TD} text-stone-500 capitalize`}>{p.categoria}</td>
                     <td className={`${TD} tabular text-right text-stone-700`}>
-                      {Number(p.precio).toLocaleString('es-AR')}
+                      {importe(Number(p.precio))}
                     </td>
                     <td className={`${TD} tabular text-right`}>
                       {controla ? (

@@ -14,6 +14,7 @@ import {
 import { hoyISO } from '@/lib/fechas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { BotonImprimir } from './boton-imprimir'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 interface Reserva {
   codigo: string
@@ -196,7 +197,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
                     IVA {Number(fac!.alicuota_iva)}%
                   </td>
                   <td className="tabular py-1.5 text-right text-stone-700">
-                    {Number(fac!.iva).toLocaleString('es-AR')}
+                    {importe(Number(fac!.iva))}
                   </td>
                 </tr>
               </>
@@ -204,7 +205,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
             <tr className="border-t-2 border-stone-300">
               <td className="py-2 font-semibold text-stone-900">Total</td>
               <td className="tabular py-2 text-right text-lg font-bold text-stone-900">
-                USD {cuenta.total.toLocaleString('es-AR')}
+                {formatearUSD(cuenta.total)}
               </td>
             </tr>
             </tfoot>
