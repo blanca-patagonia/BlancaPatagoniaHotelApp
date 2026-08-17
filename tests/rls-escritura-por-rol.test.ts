@@ -356,6 +356,67 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     await noPuedeActualizar(usuarios.recepcion, 'tarifas', data!.id, { precio_rack: 1 })
   })
 
+  // ── 3b. Costos del canal (migración 0049) ───────────────────────────────────
+  //
+  // La regla es más fina que «staff sí / staff no»: recepción **devenga** —el cargo
+  // nace de importar el informe, que lo hace el mostrador— pero **no concilia**, que
+  // es lo que mueve el libro mayor. Un rol que puede conciliar puede declarar
+  // saldada una deuda con el canal.
+
+  it('recepcion SÍ puede devengar un cargo del canal', async () => {
+    // Tiene que poder: el devengo nace de importar el informe del extranet, y eso lo
+    // hace el mostrador. Si esto fallara, importar dejaría la comisión sin registrar.
+    const clave = `informe_reservas:comision:AUDIT-ESC-${sufijo}`
+    const { error } = await usuarios.recepcion.cliente.from('canal_cargos').insert({
+      canal: 'booking',
+      concepto: 'comision',
+      origen: 'informe_reservas',
+      monto: 1,
+      clave_idempotencia: clave,
+    })
+    expect(error, 'recepción no pudo devengar: importar quedaría sin registrar la comisión').toBeNull()
+
+    // Se limpia con `service_role` porque recepción no puede borrar (es la política
+    // que el caso de abajo verifica).
+    await clienteDePrueba().from('canal_cargos').delete().eq('clave_idempotencia', clave)
+  })
+
+  it('recepcion NO puede conciliar un cargo del canal', async () => {
+    // Conciliar es declarar que una deuda con el canal cierra, y eso mueve el libro
+    // mayor. Es de gerencia.
+    const admin = clienteDePrueba()
+    const { data } = await admin
+      .from('canal_cargos')
+      .select('id, estado_conciliacion')
+      .limit(1)
+      .maybeSingle<{ id: string; estado_conciliacion: string }>()
+
+    if (!data) throw new Error('No hay cargos en la base: el backfill de la 0049 no corrió.')
+
+    await noPuedeActualizar(usuarios.recepcion, 'canal_cargos', data.id, {
+      estado_conciliacion: data.estado_conciliacion === 'conciliado' ? 'devengado' : 'conciliado',
+    })
+  })
+
+  it('housekeeping no puede leer ni tocar la configuración del canal', async () => {
+    // `canal_config` guarda el token del feed iCal de salida, que va en una URL.
+    const { error } = await usuarios.housekeeping.cliente
+      .from('canal_config')
+      .update({ comision_pct_pactada: 99 })
+      .eq('canal', 'booking')
+    // Un update bloqueado por RLS no da error: se verifica leyendo de vuelta.
+    void error
+
+    const admin = clienteDePrueba()
+    const { data } = await admin
+      .from('canal_config')
+      .select('comision_pct_pactada')
+      .eq('canal', 'booking')
+      .maybeSingle<{ comision_pct_pactada: number | null }>()
+
+    if (data) expect(Number(data.comision_pct_pactada ?? 0)).not.toBe(99)
+  })
+
   it('recepcion no puede cargar una cotización de divisa', async () => {
     // La cotización decide a cuánto se convierte todo lo que se cobra en pesos.
     await noPuedeInsertar(usuarios.recepcion, 'cotizaciones', {

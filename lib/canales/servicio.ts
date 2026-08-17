@@ -9,6 +9,7 @@ import {
   tarifaDeCanal,
   validarReservaEntrante,
 } from '@/lib/domain/canales'
+import { devengarComision } from '@/lib/domain/canales-costos'
 import type { CanalVenta, ReservaDeCanal } from '.'
 
 /**
@@ -127,7 +128,11 @@ export async function guardarEntrantes(
       .maybeSingle<FilaGuardada>()
 
     if (!existente) {
-      const { error } = await client.from('canal_reservas').insert(fila)
+      const { data: creada, error } = await client
+        .from('canal_reservas')
+        .insert(fila)
+        .select('id')
+        .single<{ id: string }>()
       if (error) {
         // No corta: una fila que no entra no justifica abandonar las otras 39.
         registrarFalla(error, `guardar entrante ${e.canal}/${e.externalId}`)
@@ -137,6 +142,7 @@ export async function guardarEntrantes(
         continue
       }
       resumen.nuevas++
+      await devengarComisionDeEntrante(client, e, creada.id, contexto.perfilId)
       continue
     }
 
@@ -159,6 +165,12 @@ export async function guardarEntrantes(
       continue
     }
     resumen.actualizadas++
+
+    // También en la actualización: el canal puede corregir la comisión de una
+    // reserva que ya habíamos aterrizado, y el devengo tiene que reflejarlo. El
+    // `on conflict` de la clave de idempotencia hace que un reenvío sin cambios no
+    // duplique nada.
+    await devengarComisionDeEntrante(client, e, existente.id, contexto.perfilId)
   }
 
   // Se registra la corrida completa, incluso si no entró nada: «se sincronizó y
@@ -177,6 +189,68 @@ export async function guardarEntrantes(
   registrarFalla(error, 'registrar la sincronización de canal')
 
   return resumen
+}
+
+/**
+ * Devenga la comisión de una entrante en `canal_cargos`.
+ *
+ * ── Por qué acá y no al importar ────────────────────────────────────────────
+ *
+ * La comisión existe desde que el canal la informa, **independientemente de que la
+ * reserva se importe o no**. Una entrante que queda en `error` por choque de cupo
+ * igual va a aparecer en la factura del mes: si el devengo esperara a la
+ * importación, esa comisión no estaría en ninguna cuenta y la factura no cerraría
+ * sin que nadie supiera por qué.
+ *
+ * ── Por qué no corta la sincronización ──────────────────────────────────────
+ *
+ * Va por `registrarFalla` y no por `cortarSiFalla`: el devengo es una escritura
+ * **accesoria** respecto de aterrizar la reserva. Si falla, lo que no puede pasar es
+ * perder la reserva —que es la operación del hotel— por un problema de contabilidad.
+ * Queda en el log del servidor con su contexto, y el reporte de comisión lo va a
+ * mostrar como una reserva sin devengo, que es visible.
+ *
+ * ── Idempotencia ────────────────────────────────────────────────────────────
+ *
+ * `on conflict (canal, clave_idempotencia) do update` sobre el monto: un reenvío del
+ * mismo informe no duplica, y una corrección de la comisión por parte del canal sí
+ * se refleja. Lo que **no** se toca en el update es `estado_conciliacion`: si
+ * gerencia ya conció ese cargo, un reenvío del archivo no lo vuelve a «devengado».
+ */
+async function devengarComisionDeEntrante(
+  client: SupabaseClient,
+  entrante: ReservaDeCanal,
+  canalReservaId: string,
+  perfilId?: string,
+): Promise<void> {
+  const cargo = devengarComision({
+    comision: entrante.comision,
+    monedaCanal: entrante.monedaCanal,
+    operacion: entrante.operacion,
+    externalId: entrante.externalId,
+  })
+
+  // `null` es el caso normal, no un fallo: el feed iCal nunca informa comisión.
+  if (!cargo) return
+
+  const { error } = await client.from('canal_cargos').upsert(
+    {
+      canal: entrante.canal,
+      concepto: cargo.concepto,
+      origen: cargo.origen,
+      canal_reserva_id: canalReservaId,
+      monto: cargo.monto,
+      moneda: cargo.moneda,
+      // El default de `canal_config.imputa_por` es `salida`: la comisión se devenga
+      // cuando se consume la estadía, que es con qué criterio factura el canal.
+      imputado_el: entrante.checkOut,
+      clave_idempotencia: cargo.claveIdempotencia,
+      creado_por: perfilId ?? null,
+    },
+    { onConflict: 'canal,clave_idempotencia' },
+  )
+
+  registrarFalla(error, `devengar comisión de ${entrante.canal}/${entrante.externalId}`)
 }
 
 /* ──────────────────────────────────────────────────────────── importar ──── */
@@ -202,6 +276,13 @@ interface EntranteFila {
   huespedes: number
   importe_canal: number | string | null
   moneda_canal: string | null
+  /**
+   * Hasta la migración 0049 este campo **no estaba** —ni acá ni en el `select` de
+   * abajo—, así que la comisión se guardaba, se mostraba en la pantalla y se
+   * descartaba al importar. Era el único dato del canal que no llegaba a ninguna
+   * cuenta.
+   */
+  comision: number | string | null
   notas: string
   reserva_id: string | null
 }
@@ -230,7 +311,7 @@ export async function importarEntrante(
   const { data: e, error: eLectura } = await client
     .from('canal_reservas')
     .select(
-      'id, canal, external_id, operacion, estado, huesped_apellido, huesped_nombre, huesped_email, huesped_telefono, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, notas, reserva_id',
+      'id, canal, external_id, operacion, estado, huesped_apellido, huesped_nombre, huesped_email, huesped_telefono, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, notas, reserva_id',
     )
     .eq('id', entranteId)
     .maybeSingle<EntranteFila>()
@@ -344,6 +425,18 @@ export async function importarEntrante(
   // reintentar, el `estado !== 'importada'` haría un duplicado, así que el aviso
   // en el log es lo que permite detectarlo.
   registrarFalla(eMarca, `marcar como importada la entrante ${e.id}`)
+
+  // 5) El cargo de comisión ya existía desde que se aterrizó (con
+  //    `canal_reserva_id` pero sin `reserva_id`, porque la reserva no existía
+  //    todavía). Recién acá se puede completar el vínculo, y es lo que permite
+  //    responder «cuánto me costó ESTA venta» y cruzar comisión con ocupación.
+  const { error: eVinculo } = await client
+    .from('canal_cargos')
+    .update({ reserva_id: resultado.reserva.id })
+    .eq('canal_reserva_id', e.id)
+    .is('reserva_id', null)
+
+  registrarFalla(eVinculo, `vincular los cargos de la entrante ${e.id} a su reserva`)
 
   return { ok: true, reservaId: resultado.reserva.id, codigo: resultado.reserva.codigo, aviso }
 }

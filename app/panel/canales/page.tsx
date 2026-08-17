@@ -11,6 +11,7 @@ import {
   CAMPO,
   Campo,
   Chip,
+  COL_SECUNDARIA,
   Encabezado,
   EstadoVacio,
   Etiqueta,
@@ -30,11 +31,21 @@ import {
   ignorarEntrante,
   importarUna,
   marcarMensajeAtendido,
+  registrarFacturaComision,
   reintentarEntrante,
   responderResena,
   sincronizarCanal,
 } from './actions'
-import { importe } from '@/lib/domain/moneda'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
+import {
+  conciliarDevengoContraFactura,
+  ETIQUETAS_CONCEPTO,
+  ETIQUETAS_CONCILIACION,
+  ETIQUETAS_ORIGEN,
+  type ConceptoCargo,
+  type EstadoConciliacion,
+  type OrigenCargo,
+} from '@/lib/domain/canales-costos'
 
 /**
  * Canales de venta: el panel único de lo que llega de Booking.
@@ -50,11 +61,12 @@ import { importe } from '@/lib/domain/moneda'
  * está cubierto porque «el sistema sincroniza con Booking».
  */
 
-const VISTAS = ['entrantes', 'mensajes', 'resenas'] as const
+const VISTAS = ['entrantes', 'costos', 'mensajes', 'resenas'] as const
 type Vista = (typeof VISTAS)[number]
 
 const ETIQUETAS_VISTA: Record<Vista, string> = {
   entrantes: 'Reservas entrantes',
+  costos: 'Costos y comisión',
   mensajes: 'Mensajes y peticiones',
   resenas: 'Reseñas',
 }
@@ -91,6 +103,18 @@ const MENSAJES_ERROR: Record<string, string> = {
   resena_vacia: 'Escribí al menos lo positivo o lo negativo de la reseña.',
   respuesta: 'No se pudo guardar la respuesta.',
   respuesta_vacia: 'Escribí la respuesta antes de guardar.',
+  factura_rol: 'Registrar la factura del canal es de administración o gerencia: mueve la cuenta corriente del proveedor.',
+  factura_comprobante: 'Poné el número de la factura: es con lo que después se coteja contra el papel.',
+  factura_monto: 'El importe de la factura tiene que ser mayor que cero.',
+  factura_periodo: 'Elegí el mes que factura el canal.',
+  factura_config:
+    'No se pudo leer la configuración del canal. Probá de nuevo; si sigue, avisá a administración.',
+  factura_sin_proveedor:
+    'Falta decir con qué proveedor se contabiliza Booking. Creá el proveedor en el módulo Proveedores y vinculalo en la configuración del canal.',
+  factura_movimiento: 'No se pudo registrar la deuda con el proveedor. No se guardó nada.',
+  factura_cargo:
+    'La deuda con el proveedor SÍ se registró, pero no se pudo guardar la línea comparable contra lo devengado. Revisá el movimiento en Proveedores.',
+  factura_repetida: 'Ya hay una factura cargada con ese número de comprobante.',
 }
 
 interface EntranteRow {
@@ -146,6 +170,21 @@ interface ResenaRow {
   respuesta: string
 }
 
+interface CargoRow {
+  id: string
+  concepto: string
+  origen: string
+  monto: number | string
+  moneda: string
+  monto_usd: number | string | null
+  imputado_el: string | null
+  estado_conciliacion: string
+  detalle: string
+  /** Nulo cuando el cargo no se pudo atribuir a ninguna reserva del canal. */
+  entrante: { huesped_apellido: string; external_id: string } | null
+  reserva: { codigo: string } | null
+}
+
 export default async function CanalesPage({
   searchParams,
 }: {
@@ -184,8 +223,13 @@ export default async function CanalesPage({
     .limit(200)
   if (estado) consultaEntrantes = consultaEntrantes.eq('estado', estado)
 
-  const [{ data: entrantesData }, { data: sincroData }, { data: mensajesData }, { data: resenasData }] =
-    await Promise.all([
+  const [
+    { data: entrantesData },
+    { data: sincroData },
+    { data: mensajesData },
+    { data: resenasData },
+    { data: cargosData },
+  ] = await Promise.all([
       consultaEntrantes,
       supabase
         .from('canal_sincronizaciones')
@@ -204,12 +248,47 @@ export default async function CanalesPage({
         .select('id, autor, puntaje, positivo, negativo, publicada_en, respondida, respuesta')
         .order('publicada_en', { ascending: false, nullsFirst: false })
         .limit(100),
+      // Los cargos del canal (migración 0049). El embed trae el apellido para poder
+      // decir a qué venta pertenece cada costo, que es todo el punto de la tabla.
+      supabase
+        .from('canal_cargos')
+        .select(
+          'id, concepto, origen, monto, moneda, monto_usd, imputado_el, estado_conciliacion, detalle, entrante:canal_reservas(huesped_apellido, external_id), reserva:reservas(codigo)',
+        )
+        .order('imputado_el', { ascending: false, nullsFirst: false })
+        .limit(200),
     ])
 
   const entrantes = (entrantesData ?? []) as unknown as EntranteRow[]
   const sincronizaciones = (sincroData ?? []) as SincroRow[]
   const mensajes = (mensajesData ?? []) as unknown as MensajeRow[]
   const resenas = (resenasData ?? []) as unknown as ResenaRow[]
+  const cargos = (cargosData ?? []) as unknown as CargoRow[]
+
+  /*
+    La conciliación del mes: lo devengado desde el informe contra lo que facturó el
+    canal. Si difieren, el canal cobra distinto de lo que informó, y eso es
+    exactamente lo que hay que ver antes de pagar la factura.
+
+    Se agrupa en memoria y no con la vista `conciliacion_comision_canal` porque acá
+    ya están las filas cargadas para la tabla: una consulta más sería un viaje de
+    ida y vuelta para recalcular lo mismo. La vista existe para los reportes (B9),
+    donde el volumen sí lo justifica.
+  */
+  const comisiones = cargos.filter((c) => c.concepto === 'comision')
+  const devengado = comisiones
+    .filter((c) => c.origen === 'informe_reservas')
+    .reduce((a, c) => a + Number(c.monto), 0)
+  const facturado = comisiones
+    .filter((c) => c.origen === 'factura_comision')
+    .reduce((a, c) => a + Number(c.monto), 0)
+  const conciliacion = conciliarDevengoContraFactura(devengado, facturado)
+
+  // Entrantes que informaron comisión, para poder decir cuántas NO lo hicieron. Un
+  // neto calculado sobre datos incompletos no se presenta como definitivo.
+  const sinComision = entrantes.filter(
+    (e) => e.operacion !== 'cancelada' && (e.comision === null || Number(e.comision) <= 0),
+  ).length
 
   // Los contadores se cuentan sobre todo, no sobre lo filtrado: son la razón para
   // aplicar el filtro, así que no pueden depender de él.
@@ -595,6 +674,230 @@ export default async function CanalesPage({
             )}
           </Tarjeta>
         </>
+      )}
+
+      {vista === 'costos' && (
+        <div className="grid gap-4">
+          <Tarjeta
+            titulo="Conciliación de la comisión"
+            descripcion="Lo que el canal informó por reserva, contra lo que después facturó."
+          >
+            {/*
+              La advertencia que evita el error más caro de esta pantalla. `tarifa_tipo
+              = 'neto'` es un TIPO DE TARIFA (la de agencia, contra la rack de
+              mostrador) y no «importe al que ya se le descontó la comisión». Sin
+              decirlo acá, alguien resta la comisión de un total que creía ya neto y el
+              número queda mal sin que nadie lo note.
+            */}
+            <div className="mb-4 flex gap-2 rounded-lg bg-lago-50 p-3 text-sm text-stone-700">
+              <Icono nombre="ayuda" className="mt-0.5 size-4 shrink-0 text-lago-700" />
+              <p>
+                <strong>Neto de comisión = total − comisión.</strong> El total de la reserva es lo
+                que paga el huésped; la comisión es un gasto del hotel. Que la reserva vaya a tarifa{' '}
+                <em>neto</em> significa que se cobró a precio de agencia, <strong>no</strong> que ya
+                tenga la comisión descontada.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Kpi
+                titulo="Devengado"
+                valor={formatearUSD(conciliacion.devengado)}
+                detalle="según el informe de reservas"
+                icono="reportes"
+              />
+              <Kpi
+                titulo="Facturado por el canal"
+                valor={
+                  facturado > 0 ? formatearUSD(conciliacion.facturado) : '—'
+                }
+                detalle={
+                  facturado > 0
+                    ? 'según la factura de comisión'
+                    : 'todavía no se cargó ninguna factura'
+                }
+                icono="divisas"
+              />
+              <Kpi
+                titulo="Diferencia"
+                valor={
+                  facturado > 0 ? formatearUSD(Math.abs(conciliacion.diferencia)) : '—'
+                }
+                detalle={
+                  facturado === 0
+                    ? 'hace falta la factura para comparar'
+                    : conciliacion.cierra
+                      ? 'cierra'
+                      : 'revisar antes de pagar'
+                }
+                icono={conciliacion.cierra || facturado === 0 ? 'ok' : 'alerta'}
+                tono={facturado > 0 && !conciliacion.cierra ? 'peligro' : undefined}
+              />
+            </div>
+
+            {facturado > 0 && !conciliacion.cierra && (
+              <div className="mt-4">
+                <Mensaje tono="error">{conciliacion.detalle}</Mensaje>
+              </div>
+            )}
+
+            {sinComision > 0 && (
+              /*
+                No se presenta el devengado como definitivo si hay reservas sin
+                comisión informada: el feed iCal nunca la trae, así que este caso es
+                normal y hay que decirlo. Contarlas aparte es la diferencia entre «el
+                devengado es esto» y «es al menos esto».
+              */
+              <div className="mt-4 flex gap-2 rounded-lg bg-calafate-50 p-3 text-sm text-stone-700">
+                <Icono nombre="alerta" className="mt-0.5 size-4 shrink-0 text-calafate-700" />
+                <p>
+                  Hay <strong>{sinComision}</strong>{' '}
+                  {sinComision === 1 ? 'reserva entrante' : 'reservas entrantes'} sin comisión
+                  informada, así que el devengado es <strong>al menos</strong> ese importe y no el
+                  total. El feed iCal no informa comisión: para tenerla hay que subir el informe de
+                  reservas del extranet.
+                </p>
+              </div>
+            )}
+          </Tarjeta>
+
+          <Tarjeta
+            titulo="Cargar la factura de comisión"
+            descripcion="La que Booking emite por mes, desde Finanzas → Facturas del extranet."
+          >
+            <form action={registrarFacturaComision} className="grid gap-3 sm:grid-cols-5">
+              <Campo etiqueta="N.º de comprobante">
+                <input
+                                    name="comprobante"
+                  required
+                  maxLength={60}
+                  className={CAMPO}
+                  placeholder="1234567890"
+                />
+              </Campo>
+              <Campo etiqueta="Mes que factura">
+                <input id="periodo" name="periodo" type="month" required className={CAMPO} />
+              </Campo>
+              <Campo etiqueta="Importe (USD)">
+                <input
+                                    name="monto"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  className={CAMPO}
+                />
+              </Campo>
+              <Campo etiqueta="Vence el">
+                <input id="vencimiento" name="vencimiento" type="date" className={CAMPO} />
+              </Campo>
+              <div className="flex items-end">
+                <BotonEnvio cargando="Registrando…" extra="w-full sm:w-auto">
+                  Registrar
+                </BotonEnvio>
+              </div>
+            </form>
+            <p className="mt-3 text-xs text-stone-500">
+              Registrar la factura crea la deuda con el proveedor —con su vencimiento y su
+              antigüedad de saldos, en el módulo Proveedores— y la línea que se compara contra lo
+              devengado. <strong>No marca nada como conciliado</strong>: decidir si una diferencia
+              es aceptable es una decisión, no un efecto de cargar un número.
+            </p>
+          </Tarjeta>
+
+          <Tarjeta
+            titulo="Cargos del canal"
+            descripcion="Cada costo imputado a la venta que lo generó."
+          >
+            {cargos.length === 0 ? (
+              <EstadoVacio
+                titulo="Todavía no hay cargos"
+                descripcion="Los cargos se devengan al subir el informe de reservas del extranet: de ahí sale la comisión de cada reserva."
+                icono="reportes"
+              />
+            ) : (
+              <Tabla resumen="Cargos del canal: concepto, reserva, origen del dato, fecha de imputación, importe y estado de conciliación.">
+                  <thead>
+                    <tr className={FILA}>
+                      <th className={TH}>Concepto</th>
+                      <th className={TH}>Reserva</th>
+                      <th className={`${TH} ${COL_SECUNDARIA}`}>Origen</th>
+                      <th className={`${TH} ${COL_SECUNDARIA}`}>Imputado</th>
+                      <th className={TH}>Importe</th>
+                      <th className={TH}>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cargos.map((c) => (
+                      <tr key={c.id} className={FILA}>
+                        <td className={TD}>
+                          <span className="font-medium text-stone-800">
+                            {ETIQUETAS_CONCEPTO[c.concepto as ConceptoCargo] ?? c.concepto}
+                          </span>
+                          {/* En móvil el origen no tiene columna: se pliega acá. */}
+                          <span className="block text-xs text-stone-500 sm:hidden">
+                            {ETIQUETAS_ORIGEN[c.origen as OrigenCargo] ?? c.origen}
+                          </span>
+                        </td>
+                        <td className={TD}>
+                          {c.reserva?.codigo ? (
+                            <span className="font-mono text-xs">{c.reserva.codigo}</span>
+                          ) : c.entrante ? (
+                            <span className="text-stone-700">
+                              {c.entrante.huesped_apellido}
+                              <span className="block font-mono text-xs text-stone-500">
+                                {c.entrante.external_id}
+                              </span>
+                            </span>
+                          ) : (
+                            /*
+                              El caso que justifica que `canal_reserva_id` sea nullable:
+                              una línea de factura que no se atribuye a ninguna reserva
+                              significa que el canal cobró algo que no reconocemos. Se
+                              dice, no se esconde.
+                            */
+                            <span className="text-calafate-700">
+                              Sin reserva atribuida
+                              <span className="block text-xs text-stone-500">
+                                el canal cobró algo que no reconocemos
+                              </span>
+                            </span>
+                          )}
+                        </td>
+                        <td className={`${TD} ${COL_SECUNDARIA}`}>
+                          {ETIQUETAS_ORIGEN[c.origen as OrigenCargo] ?? c.origen}
+                        </td>
+                        <td className={`${TD} ${COL_SECUNDARIA}`}>
+                          {c.imputado_el ? formatoFechaCorta(c.imputado_el) : '—'}
+                        </td>
+                        <td className={TD}>
+                          {importe(Number(c.monto))}
+                          {c.moneda !== 'USD' && (
+                            <span className="block text-xs text-stone-500">{c.moneda}</span>
+                          )}
+                        </td>
+                        <td className={TD}>
+                          {/* Color + texto: nunca solo color (accesibilidad). */}
+                          <Etiqueta
+                            tono={
+                              c.estado_conciliacion === 'en_disputa'
+                                ? 'peligro'
+                                : c.estado_conciliacion === 'conciliado'
+                                  ? 'exito'
+                                  : 'neutro'
+                            }
+                          >
+                            {ETIQUETAS_CONCILIACION[c.estado_conciliacion as EstadoConciliacion] ??
+                              c.estado_conciliacion}
+                          </Etiqueta>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Tabla>
+            )}
+          </Tarjeta>
+        </div>
       )}
 
       {vista === 'mensajes' && (

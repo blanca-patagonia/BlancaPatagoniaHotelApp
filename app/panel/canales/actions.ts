@@ -270,6 +270,107 @@ export async function cargarMensaje(formData: FormData): Promise<void> {
   redirect(`${DESTINO}?vista=mensajes&ok=mensaje`)
 }
 
+/**
+ * Registra la factura de comisión del canal.
+ *
+ * ── Qué hace y qué NO hace ──────────────────────────────────────────────────
+ *
+ * Crea **dos** cosas: la línea en `canal_cargos` con `origen = 'factura_comision'`
+ * —que es la que se compara contra lo devengado— y el asiento en
+ * `movimientos_proveedor`, que es el que hereda la antigüedad de saldos, el
+ * vencimiento y el estado del comprobante (0022, 0026).
+ *
+ * **No concilia sola.** La pantalla muestra devengado, facturado y diferencia antes
+ * de que alguien apriete nada, y esta acción no marca los cargos como conciliados:
+ * decidir que una diferencia es aceptable es una decisión de gerencia, no un efecto
+ * secundario de cargar un número.
+ *
+ * ── Por qué exige el proveedor configurado ──────────────────────────────────
+ *
+ * Sin `canal_config.proveedor_id` no hay contra quién asentar la deuda. Se corta con
+ * un mensaje accionable en vez de crear la línea del cargo y dejar el asiento a
+ * medias, que es el estado del que después nadie se acuerda.
+ */
+export async function registrarFacturaComision(formData: FormData): Promise<void> {
+  const sesion = await exigirAcceso()
+
+  // Registrar una factura mueve el libro mayor: es de gerencia, no del mostrador.
+  // La política RLS de `movimientos_proveedor` ya lo impone; se verifica acá también
+  // para poder explicarlo en español en vez de mostrar un error de base.
+  if (sesion.rol !== 'admin' && sesion.rol !== 'gerencia') {
+    redirect(`${DESTINO}?vista=costos&error=factura_rol`)
+  }
+
+  const comprobante = String(formData.get('comprobante') ?? '').trim().slice(0, 60)
+  const monto = Number(formData.get('monto'))
+  const periodo = String(formData.get('periodo') ?? '').trim()
+  const vencimiento = String(formData.get('vencimiento') ?? '').trim()
+
+  if (!comprobante) redirect(`${DESTINO}?vista=costos&error=factura_comprobante`)
+  if (!Number.isFinite(monto) || monto <= 0) {
+    redirect(`${DESTINO}?vista=costos&error=factura_monto`)
+  }
+  // `periodo` llega como `YYYY-MM` de un `<input type="month">`: se normaliza al
+  // primer día, que es con qué la vista de conciliación agrupa (`date_trunc`).
+  if (!/^\d{4}-\d{2}$/.test(periodo)) redirect(`${DESTINO}?vista=costos&error=factura_periodo`)
+  const imputadoEl = `${periodo}-01`
+
+  const supabase = await crearClienteServidor()
+
+  const { data: config, error: eConfig } = await supabase
+    .from('canal_config')
+    .select('proveedor_id')
+    .eq('canal', 'booking')
+    .maybeSingle<{ proveedor_id: string | null }>()
+
+  cortarSiFalla(eConfig, `${DESTINO}?vista=costos`, 'factura_config')
+  if (!config?.proveedor_id) redirect(`${DESTINO}?vista=costos&error=factura_sin_proveedor`)
+
+  // 1) El asiento del libro mayor. Va primero: si falla, no queda una línea de
+  //    cargo sin contrapartida contable.
+  const { data: movimiento, error: eMov } = await supabase
+    .from('movimientos_proveedor')
+    .insert({
+      proveedor_id: config.proveedor_id,
+      tipo: 'cargo',
+      monto,
+      concepto: `Comisión Booking ${periodo}`,
+      comprobante,
+      vencimiento: vencimiento || null,
+      creado_por: sesion.userId,
+    })
+    .select('id')
+    .single<{ id: string }>()
+
+  cortarSiFalla(eMov, `${DESTINO}?vista=costos`, 'factura_movimiento')
+
+  // 2) La línea comparable contra lo devengado. `canal_reserva_id` queda nulo: es
+  //    el total del mes, no el costo de una reserva puntual.
+  const { error: eCargo } = await supabase.from('canal_cargos').insert({
+    canal: 'booking',
+    concepto: 'comision',
+    origen: 'factura_comision',
+    monto,
+    imputado_el: imputadoEl,
+    movimiento_proveedor_id: movimiento?.id ?? null,
+    clave_idempotencia: `factura_comision:comision:${comprobante}`,
+    detalle: `Factura ${comprobante} del período ${periodo}.`,
+    creado_por: sesion.userId,
+  })
+
+  // Si esto falla, el asiento contable ya existe. NO se deshace con `cortarSiFalla`
+  // encadenado —taparía cuál de las dos escrituras falló— y borrar el movimiento
+  // sería peor: la deuda con el canal es real y perderla es el fallo más caro.
+  // Queda el aviso y el movimiento visible en Proveedores.
+  if (eCargo?.code === '23505') {
+    redirect(`${DESTINO}?vista=costos&error=factura_repetida`)
+  }
+  cortarSiFalla(eCargo, `${DESTINO}?vista=costos`, 'factura_cargo')
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=costos&ok=factura`)
+}
+
 /** Carga a mano una reseña publicada en el canal. */
 export async function cargarResena(formData: FormData): Promise<void> {
   await exigirAcceso()

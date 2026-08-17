@@ -126,6 +126,13 @@ describe.skipIf(!hayDB)('capa de canales contra la base', () => {
       if (e.reserva_id) await db.from('reservas').delete().eq('id', e.reserva_id)
     }
 
+    // Los cargos de comisión que devenga `guardarEntrantes` desde la migración 0049.
+    // Van ANTES de borrar las entrantes: `canal_cargos.canal_reserva_id` es
+    // `on delete set null`, así que si se borra primero la entrante estos cargos
+    // quedan huérfanos y sin forma de identificarlos. La clave de idempotencia lleva
+    // el `external_id`, que sí tiene el sufijo del test.
+    await db.from('canal_cargos').delete().like('clave_idempotencia', `%BK-${sufijo}%`)
+
     await db.from('canal_reservas').delete().like('external_id', `BK-${sufijo}%`)
     await db.from('canal_sincronizaciones').delete().like('origen', `test-${sufijo}%`)
     await db.from('huespedes').delete().like('apellido', `Canal${sufijo}%`)

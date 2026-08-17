@@ -118,6 +118,15 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   canal_mensajes: { todos: 'si' },
   canal_resenas: { todos: 'si' },
 
+  // ── Costos del canal (migración 0049) ──
+  //
+  // `canal_cargos` lo lee todo el staff: es el volumen del canal, no un secreto.
+  // `canal_config` NO, y es deliberado: guarda el token del feed iCal de salida
+  // —que va en una URL— y el porcentaje pactado con el canal. Housekeeping no tiene
+  // ninguna razón para leer eso. Mismo criterio que el padrón de la 0045.
+  canal_cargos: { todos: 'si' },
+  canal_config: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
   // ── Divisas y respaldos ──
   cotizaciones: { todos: 'si' },
   respaldos: { todos: 'si' },
@@ -215,6 +224,16 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar la factura: ${error.message}`)
 
       sembradas.push({ tabla: 'facturas', columna: 'numero', valor: `AUDIT-${sufijo}` })
+    }
+
+    // ── canal_config ──────────────────────────────────────────────────────────
+    // Nace vacía (la migración 0049 no siembra: qué proveedor contabiliza el canal
+    // es una decisión del hotel). Sin una fila, «recepción no puede leer» pasaría
+    // por tabla vacía en vez de por la política.
+    if ((await contar('canal_config')) === 0) {
+      const { error } = await admin.from('canal_config').insert({ canal: 'booking' })
+      if (error) throw new Error(`No se pudo sembrar canal_config: ${error.message}`)
+      sembradas.push({ tabla: 'canal_config', columna: 'canal', valor: 'booking' })
     }
 
     // ── firmas ────────────────────────────────────────────────────────────────
