@@ -641,6 +641,31 @@ export async function emitirFactura(formData: FormData): Promise<void> {
 
 export interface EstadoReservaGrupal {
   error?: string
+  /**
+   * Éxito **parcial**: el grupo se creó, pero con menos unidades de las pedidas.
+   *
+   * ── Por qué no se aborta el lote entero ─────────────────────────────────────
+   *
+   * El pendiente original decía «`crearReservaGrupal` no es atómica». La
+   * no-atomicidad no es el problema: para un hotel, un grupo de 5 que sólo consigue
+   * 4 unidades **suele valer la pena igual** —se toman las 4 y se llama al cliente—,
+   * y abortar el lote perdería cuatro ventas reales por una que no entró.
+   *
+   * El problema es el **silencio**: `primerError` se calculaba y se descartaba
+   * cuando `creadas > 0`, así que quien pedía 5 y recibía 2 veía la misma pantalla
+   * de éxito que quien recibía las 5. Lo descubría el día de la llegada.
+   *
+   * Por eso el resultado parcial se devuelve como estado y **no** se redirige: el
+   * listado de reservas no renderiza mensajes de query, así que un
+   * `?parcial=…` se habría perdido en el camino.
+   */
+  parcial?: {
+    creadas: number
+    pedidas: number
+    /** Por qué no entraron las demás, en las palabras del motor de disponibilidad. */
+    motivo: string
+    grupoId: string
+  }
 }
 
 /**
@@ -724,6 +749,21 @@ export async function crearReservaGrupal(
   }
 
   if (creadas === 0) return { error: primerError ?? 'No se pudo crear el grupo.' }
+
+  // Cuántas unidades se habían pedido, para poder comparar contra lo que entró.
+  const pedidas = selecciones.reduce((a, s) => a + s.cantidad, 0)
+
+  if (creadas < pedidas) {
+    return {
+      parcial: {
+        creadas,
+        pedidas,
+        motivo: primerError ?? 'No había más unidades libres para esas fechas.',
+        grupoId,
+      },
+    }
+  }
+
   redirect(`/panel/reservas?grupo=${grupoId}`)
 }
 

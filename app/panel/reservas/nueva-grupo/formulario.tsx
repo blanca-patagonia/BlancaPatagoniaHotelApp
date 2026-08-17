@@ -101,6 +101,41 @@ export function FormularioGrupo({
 
       {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
 
+      {/*
+        El grupo entró a medias. NO es un error —las reservas creadas son válidas y
+        conviene quedarse con ellas— pero tampoco es el éxito que se pidió, así que
+        no se redirige como si nada: se dice cuántas entraron, cuántas faltan y por
+        qué, y se ofrece el link al grupo.
+
+        Antes esto era invisible: `primerError` se descartaba cuando había al menos
+        una reserva creada, y quien pedía 5 unidades y recibía 2 veía la misma
+        pantalla que quien recibía las 5.
+      */}
+      {estado.parcial && (
+        <div
+          role="status"
+          className="mb-4 rounded-xl bg-lenga-50 px-4 py-3 text-sm text-lenga-900 ring-1 ring-lenga-200"
+        >
+          <p className="font-semibold">
+            El grupo se creó con {estado.parcial.creadas} de las {estado.parcial.pedidas} unidades
+            pedidas.
+          </p>
+          <p className="mt-1 text-stone-700">
+            Faltan {estado.parcial.pedidas - estado.parcial.creadas}. {estado.parcial.motivo}
+          </p>
+          <p className="mt-2">
+            Las {estado.parcial.creadas} que entraron ya están confirmadas y agrupadas.{' '}
+            <Link
+              href={`/panel/reservas?grupo=${estado.parcial.grupoId}`}
+              className="font-semibold underline"
+            >
+              Ver el grupo
+            </Link>{' '}
+            para revisarlo, o cambiá las fechas y volvé a intentar por las que faltan.
+          </p>
+        </div>
+      )}
+
       <PieDeFormulario>
         <button
           type="submit"

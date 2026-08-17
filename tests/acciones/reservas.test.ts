@@ -46,6 +46,7 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
   let cambiarEstadoReserva: Acciones['cambiarEstadoReserva']
   let registrarPago: Acciones['registrarPago']
   let agregarConsumo: Acciones['agregarConsumo']
+  let crearReservaGrupal: Acciones['crearReservaGrupal']
 
   beforeAll(async () => {
     ctx = nuevoContexto()
@@ -55,6 +56,7 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
     cambiarEstadoReserva = acciones.cambiarEstadoReserva
     registrarPago = acciones.registrarPago
     agregarConsumo = acciones.agregarConsumo
+    crearReservaGrupal = acciones.crearReservaGrupal
 
     // El usuario de la sesión falsa tiene que existir: `emitirFactura` guarda
     // quién emitió, y hay una FK contra `perfiles`.
@@ -410,6 +412,85 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
         .maybeSingle()
       expect(enc).not.toBeNull()
       ctx.aBorrar.push({ tabla: 'encuestas_satisfaccion', id: (enc as { id: string }).id })
+    })
+  })
+
+  describe('crearReservaGrupal', () => {
+    /**
+     * El lote parcial dejaba de decirse, y era el pendiente P1 de la bitácora.
+     *
+     * `primerError` se calculaba y **se descartaba** cuando `creadas > 0`, así que
+     * quien pedía 5 unidades y recibía 2 veía la misma pantalla de éxito que quien
+     * recibía las 5. Lo descubría el día de la llegada.
+     *
+     * ⚠️ El arreglo NO es hacerlo atómico. Para un hotel, un grupo de 5 que sólo
+     * consigue 4 suele valer la pena igual —se toman las 4 y se llama al cliente— y
+     * abortar perdería cuatro ventas reales. El problema era el silencio.
+     */
+    it('pedir más unidades de las que hay avisa el faltante en vez de fingir éxito', async () => {
+      // Un tipo con UNA sola unidad, y se piden tres.
+      const { data: tipo } = await ctx.db
+        .from('tipos_unidad')
+        .insert({
+          codigo: `TEST-GRP-${ctx.sufijo}`,
+          nombre: 'Test grupal',
+          categoria: 'hosteria',
+          capacidad_max: 4,
+        })
+        .select('id')
+        .single()
+      const tipoId = (tipo as { id: string }).id
+      ctx.aBorrar.push({ tabla: 'tipos_unidad', id: tipoId })
+
+      const { data: unidad } = await ctx.db
+        .from('unidades')
+        .insert({ tipo_unidad_id: tipoId, nombre: `Test grupal ${ctx.sufijo}` })
+        .select('id')
+        .single()
+      ctx.aBorrar.push({ tabla: 'unidades', id: (unidad as { id: string }).id })
+
+      const { data: temporadaId } = await ctx.db.rpc('temporada_en', { f: '2027-05-10' })
+      const { data: tarifa } = await ctx.db
+        .from('tarifas')
+        .insert({
+          tipo_unidad_id: tipoId,
+          temporada_id: temporadaId as string,
+          precio_neto: 80,
+          precio_rack: 100,
+        })
+        .select('id')
+        .single()
+      ctx.aBorrar.push({ tabla: 'tarifas', id: (tarifa as { id: string }).id })
+
+      const fd = formulario({
+        check_in: '2027-05-10',
+        check_out: '2027-05-12',
+        canal: 'directo',
+        apellido: `Grupo${ctx.sufijo}`,
+        nombre: 'Titular',
+        [`qty_${tipoId}`]: 3,
+      })
+
+      const estado = await crearReservaGrupal({}, fd)
+
+      // Limpieza: las reservas creadas cuelgan del huésped titular.
+      const { data: creadas } = await ctx.db
+        .from('reservas')
+        .select('id')
+        .eq('grupo_id', estado.parcial?.grupoId ?? '00000000-0000-0000-0000-000000000000')
+      for (const r of (creadas ?? []) as { id: string }[]) {
+        await ctx.db.from('reservas').delete().eq('id', r.id)
+      }
+      await ctx.db.from('huespedes').delete().like('apellido', `Grupo${ctx.sufijo}%`)
+
+      // No es un error: la unidad que había SÍ se reservó.
+      expect(estado.error).toBeUndefined()
+      // Pero el faltante se dice, con números y motivo.
+      expect(estado.parcial, 'el lote parcial pasó como éxito completo').toBeDefined()
+      expect(estado.parcial!.pedidas).toBe(3)
+      expect(estado.parcial!.creadas).toBe(1)
+      expect(estado.parcial!.motivo).toBeTruthy()
+      expect(estado.parcial!.grupoId).toBeTruthy()
     })
   })
 
