@@ -125,6 +125,10 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // —que va en una URL— y el porcentaje pactado con el canal. Housekeeping no tiene
   // ninguna razón para leer eso. Mismo criterio que el padrón de la 0045.
   canal_cargos: { todos: 'si' },
+  // El mapeo de columnas lo lee todo el staff: es configuración del importador, no un
+  // secreto. Su `muestra` guarda valores reales del archivo —apellidos, correos— así
+  // que `anon` no lo lee, y eso lo verifica el borde público del mismo test.
+  canal_mapeos_columnas: { todos: 'si' },
   canal_config: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
   // ── Divisas y respaldos ──

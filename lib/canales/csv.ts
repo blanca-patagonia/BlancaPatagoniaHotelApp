@@ -30,6 +30,7 @@
 
 import type { CanalVenta, ReservaDeCanal } from '.'
 import { interpretarModalidadCobro } from '@/lib/domain/canales-cobro'
+import { muestraDeColumnas, resolverIndices } from '@/lib/domain/mapeo-columnas'
 
 /* ─────────────────────────────────────────────────────── partir el texto ──── */
 
@@ -208,6 +209,40 @@ export type CampoBooking =
  * más específicas van antes. `numero de reserva` antes que `reserva`, o el
  * segundo capturaría también «Fecha de reserva».
  */
+/**
+ * Todos los campos que el lector conoce, como lista.
+ *
+ * La pantalla de mapeo manual la recorre para ofrecer una fila por campo, y la
+ * validación la usa como **lista cerrada**: una clave que no esté acá se rechaza, en
+ * vez de guardarse y después no hacer nada —que es el peor resultado, porque el
+ * usuario cree que mapeó algo—.
+ */
+export const CAMPOS_BOOKING: readonly CampoBooking[] = [
+  'externalId', 'huesped', 'checkIn', 'checkOut', 'estado', 'personas', 'tipoUnidad',
+  'importe', 'moneda', 'comision', 'email', 'telefono', 'pais', 'notas', 'reservadaEn',
+  'modalidadCobro',
+]
+
+/** Nombre en español de cada campo, para la pantalla de mapeo. */
+export const ETIQUETAS_CAMPO: Record<CampoBooking, string> = {
+  externalId: 'Número de reserva',
+  huesped: 'Nombre del huésped',
+  checkIn: 'Fecha de entrada',
+  checkOut: 'Fecha de salida',
+  estado: 'Estado de la reserva',
+  personas: 'Cantidad de personas',
+  tipoUnidad: 'Tipo de unidad',
+  importe: 'Importe',
+  moneda: 'Moneda',
+  comision: 'Comisión del canal',
+  email: 'Correo electrónico',
+  telefono: 'Teléfono',
+  pais: 'País',
+  notas: 'Observaciones',
+  reservadaEn: 'Fecha en que reservó',
+  modalidadCobro: 'Quién cobra',
+}
+
 const ALIAS: Record<CampoBooking, readonly string[]> = {
   externalId: ['numero de reserva', 'n de reserva', 'id de reserva', 'book number', 'reservation number', 'booking number'],
   huesped: ['nombre del cliente', 'nombre del huesped', 'cliente', 'huesped', 'guest name', 'guest'],
@@ -453,6 +488,20 @@ export interface ResultadoCsv {
   fechasAmbiguas: number
   /** Total de filas de datos encontradas. */
   leidas: number
+  /**
+   * Encabezados tal como venían en el archivo, y hasta tres valores de ejemplo de
+   * cada columna.
+   *
+   * Se devuelven **siempre**, y sobre todo cuando el lector NO pudo interpretar el
+   * archivo: son el material con el que la pantalla de mapeo manual le pregunta al
+   * usuario qué columna es cuál. Sin ellos, «no se reconocieron las columnas» es un
+   * callejón sin salida.
+   *
+   * Las columnas prohibidas vienen con el encabezado en blanco y sin muestra: no se
+   * ofrecen para mapear ni se muestran, porque el sistema no guarda datos de tarjeta.
+   */
+  encabezados: string[]
+  muestra: string[][]
 }
 
 /**
@@ -466,6 +515,14 @@ export interface ResultadoCsv {
 export function interpretarCsvBooking(
   texto: string,
   canal: CanalVenta = 'booking',
+  /**
+   * Mapeo guardado por una persona: *campo → encabezado normalizado*.
+   *
+   * Gana sobre el diccionario de alias para los campos que menciona, y el diccionario
+   * sigue cubriendo el resto. Así un mapeo parcial —solo las columnas que la
+   * heurística erró— alcanza, que es el caso normal.
+   */
+  mapeoGuardado: Record<string, string> | null = null,
 ): ResultadoCsv {
   const vacio: ResultadoCsv = {
     reservas: [],
@@ -473,6 +530,8 @@ export function interpretarCsvBooking(
     faltantes: [],
     fechasAmbiguas: 0,
     leidas: 0,
+    encabezados: [],
+    muestra: [],
   }
 
   const filas = partirCsv(texto)
@@ -482,9 +541,25 @@ export function interpretarCsvBooking(
     return { ...vacio, faltantes: [...CAMPOS_OBLIGATORIOS] }
   }
 
-  const mapa = mapearColumnas(filas[0])
+  /*
+    Los encabezados y la muestra se calculan ANTES de decidir si el archivo se puede
+    leer, y se devuelven en los dos casos. Es lo que convierte «no se reconocieron las
+    columnas» en algo accionable: la pantalla de mapeo necesita saber qué columnas hay
+    y qué traen para poder preguntar.
+
+    Las prohibidas se blanquean acá también, no solo en el mapeo: no se muestran ni se
+    ofrecen. Una muestra de una columna de tarjetas sería exponer un PAN en pantalla.
+  */
+  const encabezados = filas[0].map((h) => (esColumnaProhibida(h) ? '' : h))
+  const muestraCruda = muestraDeColumnas(filas, filas[0].length)
+  const muestra = muestraCruda.map((m, i) => (encabezados[i] === '' ? [] : m))
+  const conContexto = { ...vacio, encabezados, muestra }
+
+  const propuesta = mapearColumnas(filas[0])
+  const { indices: mapa } = resolverIndices(propuesta, mapeoGuardado, filas[0], normalizarEncabezado)
+
   const faltantes = obligatoriosFaltantes(mapa)
-  if (faltantes.length > 0) return { ...vacio, faltantes }
+  if (faltantes.length > 0) return { ...conContexto, faltantes }
 
   const reservas: ReservaDeCanal[] = []
   const rechazadas: FilaRechazada[] = []
@@ -560,5 +635,13 @@ export function interpretarCsvBooking(
     })
   }
 
-  return { reservas, rechazadas, faltantes: [], fechasAmbiguas, leidas: filas.length - 1 }
+  return {
+    reservas,
+    rechazadas,
+    faltantes: [],
+    fechasAmbiguas,
+    leidas: filas.length - 1,
+    encabezados,
+    muestra,
+  }
 }

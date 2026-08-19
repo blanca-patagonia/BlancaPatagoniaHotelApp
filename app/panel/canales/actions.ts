@@ -7,7 +7,8 @@ import { obtenerSesion } from '@/lib/auth/session'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
 import { puedeAcceder } from '@/lib/domain/permisos'
 import { obtenerProveedorCanal } from '@/lib/canales'
-import { interpretarCsvBooking } from '@/lib/canales/csv'
+import { interpretarCsvBooking, normalizarEncabezado } from '@/lib/canales/csv'
+import { firmaEncabezados } from '@/lib/domain/mapeo-columnas'
 import { guardarEntrantes, importarEntrante } from '@/lib/canales/servicio'
 import { saldarSiCorresponde } from '@/lib/reservas/saldar'
 import { hoyISO } from '@/lib/fechas'
@@ -90,6 +91,12 @@ export interface EstadoImportacionCsv {
   /** Detalle de las filas que quedaron afuera, para mostrarlas una por una. */
   rechazadas?: { fila: number; motivos: string[] }[]
   advertencia?: string
+  /**
+   * Nombre del borrador de mapeo que quedó guardado, cuando el lector no pudo
+   * interpretar el archivo. La pantalla lo usa para ofrecer el link a mapear en vez
+   * de dejar al usuario con un error sin salida.
+   */
+  mapear?: string
 }
 
 /**
@@ -120,13 +127,76 @@ export async function importarCsvCanal(
   }
 
   const texto = await archivo.text()
-  const resultado = interpretarCsvBooking(texto)
+  const supabaseLectura = await crearClienteServidor()
+
+  /*
+    Se busca un mapeo guardado ANTES de leer. Si alguien ya dijo qué columna es cuál
+    para este formato, el diccionario de alias no tiene que volver a adivinar.
+
+    Se busca por `firma_encabezados`, pero la firma sale de los encabezados del
+    archivo… que todavía no leímos. Se resuelve leyendo dos veces: la primera pasada
+    sin mapeo devuelve los encabezados igual —eso es lo que cambió en el lector— y con
+    ellos se calcula la firma y se busca. La segunda pasada usa lo que se encontró.
+
+    Son dos pasadas sobre un archivo de unos cientos de kilobytes en memoria, sin
+    tocar la base de más. La alternativa —adivinar la firma o guardar el archivo entre
+    peticiones— es peor.
+  */
+  const primeraPasada = interpretarCsvBooking(texto)
+  const firma = firmaEncabezados(primeraPasada.encabezados, normalizarEncabezado)
+
+  const { data: mapeo } = await supabaseLectura
+    .from('canal_mapeos_columnas')
+    .select('asignaciones')
+    .eq('canal', 'booking')
+    .eq('tipo_informe', 'reservas')
+    .eq('firma_encabezados', firma)
+    .eq('activo', true)
+    .maybeSingle<{ asignaciones: Record<string, string> }>()
+
+  const resultado = mapeo
+    ? interpretarCsvBooking(texto, 'booking', mapeo.asignaciones)
+    : primeraPasada
 
   if (resultado.faltantes.length > 0) {
+    /*
+      Antes esto devolvía un texto y ahí moría: «bajá el informe sin modificarlo» es
+      inútil si el export de esta cuenta simplemente tiene otros encabezados.
+
+      Ahora se guarda un borrador con los encabezados y la muestra —el archivo NO se
+      guarda: son datos de huéspedes y no hay Storage— y se manda a la pantalla de
+      mapeo. El usuario asigna una vez, vuelve, y sube el archivo de nuevo. Es una
+      sola vez en la vida del formato.
+    */
+    const { error: eBorrador } = await supabaseLectura.from('canal_mapeos_columnas').upsert(
+      {
+        canal: 'booking',
+        tipo_informe: 'reservas',
+        nombre: archivo.name.slice(0, 80) || 'Formato sin nombre',
+        firma_encabezados: firma,
+        asignaciones: {},
+        muestra: { encabezados: resultado.encabezados, valores: resultado.muestra },
+        // Borrador: no se usa para importar hasta que alguien lo complete.
+        activo: false,
+        creado_por: sesion.userId,
+      },
+      { onConflict: 'canal,tipo_informe,nombre' },
+    )
+
+    if (eBorrador) {
+      // Si no se pudo guardar el borrador, al menos se dice qué falta. Perder el
+      // borrador es molesto; perder el mensaje sería dejar al usuario sin salida.
+      registrarFalla(eBorrador, 'guardar el borrador de mapeo de columnas')
+      return {
+        error:
+          `No se reconocieron las columnas del archivo. Faltan: ${resultado.faltantes.join(', ')}.`,
+      }
+    }
+
     return {
       error:
-        `No se reconocieron las columnas del archivo. Faltan: ${resultado.faltantes.join(', ')}. ` +
-        `Bajá el informe desde Administración → Informe de reservas, sin modificarlo.`,
+        `No se reconocieron las columnas de este archivo. Faltan: ${resultado.faltantes.join(', ')}.`,
+      mapear: archivo.name.slice(0, 80) || 'Formato sin nombre',
     }
   }
 
@@ -134,8 +204,7 @@ export async function importarCsvCanal(
     return { error: 'El archivo no tiene ninguna reserva.' }
   }
 
-  const supabase = await crearClienteServidor()
-  const resumen = await guardarEntrantes(supabase, resultado.reservas, {
+  const resumen = await guardarEntrantes(supabaseLectura, resultado.reservas, {
     canal: 'booking',
     proveedor: 'csv',
     origen: archivo.name,
