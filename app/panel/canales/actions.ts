@@ -10,6 +10,8 @@ import { obtenerProveedorCanal } from '@/lib/canales'
 import { interpretarCsvBooking, normalizarEncabezado } from '@/lib/canales/csv'
 import { firmaEncabezados } from '@/lib/domain/mapeo-columnas'
 import { guardarEntrantes, importarEntrante } from '@/lib/canales/servicio'
+import { interpretarCsvResenas } from '@/lib/canales/resenas-csv'
+import { guardarResenas } from '@/lib/canales/resenas-servicio'
 import { saldarSiCorresponde } from '@/lib/reservas/saldar'
 import { hoyISO } from '@/lib/fechas'
 import {
@@ -333,17 +335,139 @@ export async function cargarMensaje(formData: FormData): Promise<void> {
 
   const entranteId = String(formData.get('entrante_id') ?? '')
 
+  /*
+    El autor sale del formulario en vez de estar fijado en `'huesped'`.
+
+    El `check` de la base ya permitía `'hotel'` desde la migración 0038, pero el valor
+    nunca se usaba: no había forma de registrar la respuesta del hotel, así que el
+    módulo guardaba media conversación. Sin la respuesta, «mensaje sin atender» es la
+    única información disponible, y no se puede saber qué se le contestó al huésped.
+  */
+  const autor = String(formData.get('autor') ?? 'huesped')
+  if (autor !== 'huesped' && autor !== 'hotel') {
+    redirect(`${DESTINO}?vista=mensajes&error=autor`)
+  }
+
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('canal_mensajes').insert({
     canal: 'booking',
     cuerpo,
-    autor: 'huesped',
+    autor,
     canal_reserva_id: entranteId || null,
+    // Un mensaje que escribe el hotel nace atendido: es la respuesta, no un pedido
+    // pendiente. Sin esto, responder aumentaría el contador de «sin atender».
+    ...(autor === 'hotel' ? { atendido: true } : {}),
   })
 
   cortarSiFalla(error, `${DESTINO}?vista=mensajes`, 'mensaje')
   revalidatePath(DESTINO)
   redirect(`${DESTINO}?vista=mensajes&ok=mensaje`)
+}
+
+/* ──────────────────────────────────────────────── importar reseñas ──── */
+
+export interface EstadoImportacionResenas {
+  error?: string
+  ok?: string
+  rechazadas?: { fila: number; motivos: string[] }[]
+  /** Cuántas quedaron sin ligar, para ofrecer resolverlas. */
+  sinLigar?: number
+}
+
+/**
+ * Importa el export de reseñas del extranet.
+ *
+ * ── Lo que resuelve ────────────────────────────────────────────────────────
+ *
+ * Hasta acá `canal_resenas` existía con las columnas correctas y **sin ningún camino
+ * de ingesta**: solo un formulario manual que escribía cinco campos, así que
+ * `external_id`, `reserva_id`, `pais` y `titulo` nunca se llenaban y una reseña
+ * cargada a mano no quedaba ligada a nada.
+ *
+ * La API de reseñas de Booking es de partner, así que el export del extranet es el
+ * único camino disponible — y es suficiente: trae puntaje, texto, fecha y a veces el
+ * número de reserva.
+ */
+export async function importarResenasCanal(
+  _prev: EstadoImportacionResenas,
+  formData: FormData,
+): Promise<EstadoImportacionResenas> {
+  const sesion = await exigirAcceso()
+
+  const archivo = formData.get('archivo')
+  if (!(archivo instanceof File) || archivo.size === 0) {
+    return { error: 'Elegí el archivo de reseñas que bajaste del extranet.' }
+  }
+  if (archivo.size > MAX_BYTES) {
+    return { error: 'El archivo es demasiado grande. ¿Seguro que es el export de reseñas?' }
+  }
+
+  const resultado = interpretarCsvResenas(await archivo.text())
+
+  if (resultado.faltantes.length > 0) {
+    return {
+      error:
+        'No se reconoció la columna con el nombre de quien escribió la reseña, que es la única ' +
+        'imprescindible. Revisá que el archivo sea el export de reseñas y no otro.',
+    }
+  }
+
+  if (resultado.resenas.length === 0 && resultado.rechazadas.length === 0) {
+    return { error: 'El archivo no tiene ninguna reseña.' }
+  }
+
+  const supabase = await crearClienteServidor()
+  const resumen = await guardarResenas(supabase, resultado.resenas, {
+    canal: 'booking',
+    origen: archivo.name,
+    perfilId: sesion.userId,
+  })
+
+  revalidatePath(DESTINO)
+
+  return {
+    ok:
+      `Se leyeron ${resumen.leidas} reseña(s): ${resumen.nuevas} nueva(s), ` +
+      `${resumen.actualizadas} actualizada(s). ${resumen.ligadas} quedaron ligadas a su reserva.`,
+    rechazadas: resultado.rechazadas.length > 0 ? resultado.rechazadas : undefined,
+    sinLigar: resumen.sinLigar > 0 ? resumen.sinLigar : undefined,
+  }
+}
+
+/**
+ * Liga una reseña a una reserva, a mano.
+ *
+ * El vínculo queda marcado como `'manual'`, y eso importa: reimportar el archivo **no**
+ * lo pisa. Si alguien ya decidió a qué reserva pertenece, la heurística no tiene
+ * autoridad para cambiarlo.
+ */
+export async function vincularResena(formData: FormData): Promise<void> {
+  await exigirAcceso()
+
+  const resenaId = String(formData.get('resena_id') ?? '')
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  if (!resenaId) redirect(`${DESTINO}?vista=resenas&error=falta_id`)
+
+  const supabase = await crearClienteServidor()
+
+  // Cadena vacía = desvincular. Es un caso legítimo: alguien se dio cuenta de que la
+  // había ligado mal.
+  const { error } = await supabase
+    .from('canal_resenas')
+    .update(
+      reservaId
+        ? { reserva_id: reservaId, vinculo: 'manual', motivo_sin_vinculo: '' }
+        : {
+            reserva_id: null,
+            vinculo: 'sin_vincular',
+            motivo_sin_vinculo: 'Se desvinculó a mano.',
+          },
+    )
+    .eq('id', resenaId)
+
+  cortarSiFalla(error, `${DESTINO}?vista=resenas`, 'vincular')
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=resenas&ok=${reservaId ? 'vinculada' : 'desvinculada'}`)
 }
 
 /**

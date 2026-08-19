@@ -25,6 +25,7 @@ import {
   Tarjeta,
 } from '../_components/ui'
 import { ImportarCsv } from './importar-csv'
+import { ImportarResenas } from './importar-resenas'
 import {
   cargarMensaje,
   cargarResena,
@@ -34,6 +35,7 @@ import {
   fijarModalidadCobro,
   registrarFacturaComision,
   registrarTransferenciaCanal,
+  vincularResena,
   reintentarEntrante,
   responderResena,
   sincronizarCanal,
@@ -136,6 +138,8 @@ const MENSAJES_ERROR: Record<string, string> = {
   transf_sin_reserva: 'Primero hay que importar la reserva: sin reserva propia no hay a qué imputarle el pago.',
   transf_pago: 'No se pudo registrar la transferencia. No se guardó nada.',
   modalidad: 'No se pudo guardar quién cobra. Quedó como estaba.',
+  vincular: 'No se pudo ligar la reseña a la reserva. Quedó como estaba.',
+  autor: 'Elegí si el mensaje lo escribió el huésped o el hotel.',
   modalidad_invalida: 'Esa forma de cobro no existe.',
 }
 
@@ -193,6 +197,11 @@ interface ResenaRow {
   publicada_en: string | null
   respondida: boolean
   respuesta: string
+  pais: string | null
+  titulo: string
+  vinculo: string
+  motivo_sin_vinculo: string
+  reserva: { id: string; codigo: string } | null
 }
 
 interface CargoRow {
@@ -270,7 +279,7 @@ export default async function CanalesPage({
         .limit(100),
       supabase
         .from('canal_resenas')
-        .select('id, autor, puntaje, positivo, negativo, publicada_en, respondida, respuesta')
+        .select('id, autor, pais, puntaje, titulo, positivo, negativo, publicada_en, respondida, respuesta, vinculo, motivo_sin_vinculo, reserva:reservas(id, codigo)')
         .order('publicada_en', { ascending: false, nullsFirst: false })
         .limit(100),
       // Los cargos del canal (migración 0049). El embed trae el apellido para poder
@@ -1286,11 +1295,23 @@ export default async function CanalesPage({
             )}
           </Tarjeta>
 
-          <Tarjeta titulo="Cargar una petición">
+          <Tarjeta titulo="Cargar un mensaje">
             <form action={cargarMensaje} className="flex flex-col gap-3 p-5">
+              {/*
+                El autor era fijo en «huésped», así que el módulo guardaba media
+                conversación: no había forma de registrar qué se le contestó. El `check`
+                de la base ya permitía «hotel» desde el principio; solo faltaba
+                ofrecerlo.
+              */}
+              <Campo etiqueta="Quién lo escribió">
+                <select name="autor" defaultValue="huesped" className={CAMPO}>
+                  <option value="huesped">El huésped (un pedido)</option>
+                  <option value="hotel">El hotel (la respuesta)</option>
+                </select>
+              </Campo>
               <Campo
-                etiqueta="Qué pidió el huésped"
-                ayuda="Cuna, llegada tardía, habitación en planta baja…"
+                etiqueta="Qué dice"
+                ayuda="Cuna, llegada tardía, habitación en planta baja… o la respuesta que se le dio."
               >
                 <textarea name="cuerpo" rows={4} required className={CAMPO} />
               </Campo>
@@ -1322,7 +1343,7 @@ export default async function CanalesPage({
             {resenas.length === 0 ? (
               <EstadoVacio
                 titulo="No hay reseñas cargadas"
-                descripcion="Booking no las expone sin la API de partner: se cargan a mano acá al lado."
+                descripcion="Subí el export de reseñas del extranet acá al lado, o cargá una a mano. La API de reseñas de Booking es de partner, así que el archivo es el único camino."
                 icono="firma"
               />
             ) : (
@@ -1386,13 +1407,84 @@ export default async function CanalesPage({
                         </BotonEnvio>
                       </form>
                     )}
+
+                    {/*
+                      El vínculo con la reserva.
+
+                      Una reseña ligada sirve para bastante más que leerla: dice qué
+                      unidad la produjo, se cruza con el NPS propio y muestra si el
+                      huésped que se queja ya se había quejado.
+
+                      Cuando el emparejamiento fue ambiguo NO se adivinó, y acá se dice
+                      por qué: una reseña mal ligada ensucia el historial de alguien que
+                      no dijo eso, y eso es peor que una sin ligar.
+                    */}
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-100 pt-2">
+                      {r.reserva ? (
+                        <>
+                          <Etiqueta tono="exito">
+                            {r.vinculo === 'manual' ? 'Ligada a mano' : 'Ligada'}
+                          </Etiqueta>
+                          <Link
+                            href={`/panel/reservas/${r.reserva.id}`}
+                            className="font-mono text-xs text-lago-700 underline"
+                          >
+                            {r.reserva.codigo}
+                          </Link>
+                          <form action={vincularResena}>
+                            <input type="hidden" name="resena_id" value={r.id} />
+                            <input type="hidden" name="reserva_id" value="" />
+                            <BotonEnvio variante="fantasma" cargando="…" extra="px-2 py-1 text-xs">
+                              Desligar
+                            </BotonEnvio>
+                          </form>
+                        </>
+                      ) : (
+                        <>
+                          <Etiqueta tono="alerta">Sin ligar</Etiqueta>
+                          {r.motivo_sin_vinculo && (
+                            <span className="text-xs text-stone-600">{r.motivo_sin_vinculo}</span>
+                          )}
+                          <form action={vincularResena} className="flex items-center gap-1">
+                            <input type="hidden" name="resena_id" value={r.id} />
+                            <select
+                              name="reserva_id"
+                              defaultValue=""
+                              aria-label={`Reserva a la que corresponde la reseña de ${r.autor}`}
+                              className="rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
+                            >
+                              <option value="">— Elegí la reserva —</option>
+                              {entrantes
+                                .filter((e) => e.reserva_id && e.reserva?.codigo)
+                                .map((e) => (
+                                  <option key={e.id} value={e.reserva_id!}>
+                                    {e.huesped_apellido} · {e.reserva!.codigo} ·{' '}
+                                    {formatoFechaCorta(e.check_out)}
+                                  </option>
+                                ))}
+                            </select>
+                            <BotonEnvio variante="fantasma" cargando="…" extra="px-2 py-1 text-xs">
+                              Ligar
+                            </BotonEnvio>
+                          </form>
+                        </>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </Tarjeta>
 
-          <Tarjeta titulo="Cargar una reseña">
+          <div className="grid gap-4">
+            <Tarjeta
+              titulo="Importar el export de reseñas"
+              descripcion="Desde la sección Reseñas del extranet."
+            >
+              <ImportarResenas />
+            </Tarjeta>
+
+            <Tarjeta titulo="Cargar una reseña a mano">
             <form action={cargarResena} className="flex flex-col gap-3 p-5">
               <Campo etiqueta="Autor">
                 <input name="autor" className={CAMPO} placeholder="Nombre o «Anónimo»" />
@@ -1421,7 +1513,8 @@ export default async function CanalesPage({
                 Guardar reseña
               </BotonEnvio>
             </form>
-          </Tarjeta>
+            </Tarjeta>
+          </div>
         </div>
       )}
     </Pagina>
