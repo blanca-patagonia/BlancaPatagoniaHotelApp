@@ -522,4 +522,60 @@ describe.skipIf(!hayDB)('capa de canales contra la base', () => {
       expect((data as { modalidad_cobro: string }).modalidad_cobro).toBe('hotel')
     })
   })
+
+  describe('conflicto de cupo', () => {
+    /**
+     * El conflicto es una ADVERTENCIA, no un rechazo.
+     *
+     * El tipo de prueba tiene UNA sola unidad, así que dos entrantes en las mismas
+     * fechas no caben. Lo que hay que verificar no es solo que se detecte: es que la
+     * entrante marcada SIGA siendo importable, porque el conflicto se resuelve
+     * moviendo otra reserva o habilitando una unidad, y quien decide eso es quien
+     * atiende. Si el marcador cambiara el estado a 'error', el flujo de la pantalla se
+     * rompería.
+     */
+    const A = `BK-${sufijo}-cupoA`
+    const B = `BK-${sufijo}-cupoB`
+
+    it('dos entrantes sobre una sola unidad marcan la segunda', async () => {
+      await guardarEntrantes(
+        db,
+        [
+          entrante({ externalId: A, checkIn: '2027-03-20', checkOut: '2027-03-22' }),
+          entrante({ externalId: B, checkIn: '2027-03-20', checkOut: '2027-03-22' }),
+        ],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('external_id, conflicto, estado')
+        .in('external_id', [A, B])
+        .order('external_id')
+
+      const filas = (data ?? []) as { external_id: string; conflicto: boolean; estado: string }[]
+      expect(filas).toHaveLength(2)
+
+      // Una de las dos choca. Cuál, depende del orden del archivo.
+      expect(filas.filter((f) => f.conflicto)).toHaveLength(1)
+
+      // Y NINGUNA queda en error: las dos siguen siendo importables.
+      for (const f of filas) {
+        expect(f.estado, `${f.external_id} quedó en «${f.estado}» en vez de pendiente`).toBe(
+          'pendiente',
+        )
+      }
+    })
+
+    it('la entrante marcada se puede importar igual', async () => {
+      const { data } = await db
+        .from('canal_reservas')
+        .select('id')
+        .eq('external_id', A)
+        .single()
+
+      const r = await importarEntrante(db, (data as { id: string }).id, perfilId)
+      expect(r.ok, 'una entrante con conflicto no se pudo importar: ' + (r.ok ? '' : r.error)).toBe(true)
+    })
+  })
 })

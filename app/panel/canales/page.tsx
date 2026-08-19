@@ -159,6 +159,7 @@ interface EntranteRow {
   comision: number | string | null
   modalidad_cobro: string | null
   liquidado_en: string | null
+  conflicto: boolean
   notas: string
   reserva_id: string | null
   reserva: { codigo: string } | null
@@ -241,7 +242,7 @@ export default async function CanalesPage({
   let consultaEntrantes = supabase
     .from('canal_reservas')
     .select(
-      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, notas, reserva_id, reserva:reservas(codigo)',
+      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, reserva_id, reserva:reservas(codigo)',
     )
     .order('check_in', { ascending: true })
     .limit(200)
@@ -393,6 +394,10 @@ export default async function CanalesPage({
     conteo.set(r.estado, (conteo.get(r.estado) ?? 0) + 1)
   }
 
+  // Cuantas entrantes vigentes chocan con lo ya vendido. Es lo mas caro que le puede
+  // pasar al hotel, asi que va como KPI y no escondido en una fila de la tabla.
+  const conConflicto = entrantes.filter((e) => e.conflicto && e.estado !== 'ignorada').length
+
   const ultima = sincronizaciones[0]
   const hoy = hoyISO()
   const sinAtender = mensajes.filter((m) => !m.atendido).length
@@ -464,7 +469,7 @@ export default async function CanalesPage({
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Kpi
           titulo="Sin importar"
           valor={String(conteo.get('pendiente') ?? 0)}
@@ -480,6 +485,21 @@ export default async function CanalesPage({
           icono="alerta"
           tono="peligro"
           href={`/panel/canales${construirQuery({ estado: 'error' })}`}
+        />
+        {/*
+          El KPI que no existía y es el más caro del módulo.
+
+          NO evita el overbooking —eso exige publicarle disponibilidad a Booking, o sea
+          un channel manager (ADR 0021)— pero lo hace visible el mismo día en que el
+          informe entra, en vez de cuando alguien aprieta «Importar» o, peor, en el
+          check-in con el huésped en la puerta.
+        */}
+        <Kpi
+          titulo="Posible overbooking"
+          valor={String(conConflicto)}
+          detalle={conConflicto > 0 ? 'el canal vendió de más' : 'el cupo cierra'}
+          icono="alerta"
+          tono={conConflicto > 0 ? 'peligro' : undefined}
         />
         <Kpi
           titulo="Mensajes sin atender"
