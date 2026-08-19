@@ -571,4 +571,63 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       ).toBe('confirmada')
     })
   })
+
+  describe('puntos de fidelidad', () => {
+    /**
+     * El bug P1 de la bitacora: «cambiarEstadoReserva pisa los puntos en vez de
+     * sumarlos si falla la lectura previa».
+     *
+     * El codigo hacia read-then-write y descartaba el error de la lectura, asi que con
+     * la lectura fallada escribia SOLO los puntos de esa estadia y borraba todo lo
+     * acumulado. Ahora la suma la hace la base y no hay lectura que pueda fallar.
+     */
+    it('el check-out SUMA a lo que el huesped ya tenia', async () => {
+      const huespedId = await crearHuespedDePrueba(ctx)
+      await ctx.db.from('huespedes').update({ puntos: 120 }).eq('id', huespedId)
+
+      const { data } = await ctx.db
+        .from('reservas')
+        .insert({ huesped_id: huespedId, estado: 'in_house', total: 500 })
+        .select('id')
+        .single()
+      const id = (data as { id: string }).id
+      ctx.aBorrar.push({ tabla: 'reservas', id })
+
+      await destinoDe(() =>
+        cambiarEstadoReserva(formulario({ reserva_id: id, nuevo_estado: 'checkout' })),
+      )
+
+      const { data: h } = await ctx.db
+        .from('huespedes')
+        .select('puntos')
+        .eq('id', huespedId)
+        .single()
+
+      // 1 punto por cada USD 10: 500 da 50. Mas los 120 que ya tenia.
+      expect(
+        (h as { puntos: number }).puntos,
+        'los puntos previos se perdieron en vez de sumarse',
+      ).toBe(170)
+    })
+
+    it('la funcion de la base es atomica: dos sumas a la vez no se pisan', async () => {
+      // La segunda carrera que el arreglo cierra: dos check-outs simultaneos del mismo
+      // huesped leian el mismo valor previo y uno pisaba al otro.
+      const huespedId = await crearHuespedDePrueba(ctx)
+      await ctx.db.from('huespedes').update({ puntos: 0 }).eq('id', huespedId)
+
+      await Promise.all([
+        ctx.db.rpc('sumar_puntos_huesped', { p_huesped: huespedId, p_puntos: 10 }),
+        ctx.db.rpc('sumar_puntos_huesped', { p_huesped: huespedId, p_puntos: 25 }),
+      ])
+
+      const { data: h } = await ctx.db
+        .from('huespedes')
+        .select('puntos')
+        .eq('id', huespedId)
+        .single()
+
+      expect((h as { puntos: number }).puntos, 'una de las dos sumas se perdio').toBe(35)
+    })
+  })
 })

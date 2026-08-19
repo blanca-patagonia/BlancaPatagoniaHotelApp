@@ -24,9 +24,11 @@ import {
   cargoPorCancelacion,
   montoCancelacion,
   nochePromedioConIva,
+  primeraNocheRealConIva,
   type ReglaCancelacion,
 } from '@/lib/domain/cancelacion'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
+import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import {
   cambiarEstadoReserva,
   registrarPago,
@@ -172,7 +174,11 @@ interface Reserva {
     camas_extra: number
     cunas: number
     no_mover: boolean
-    unidad: { nombre: string; tipo: { nombre: string; capacidad_max: number } | null } | null
+    unidad: {
+      nombre: string
+      tipo_unidad_id: string
+      tipo: { nombre: string; capacidad_max: number } | null
+    } | null
   }[]
 }
 
@@ -200,7 +206,7 @@ export default async function DetalleReservaPage({
   const { data } = await supabase
     .from('reservas')
     .select(
-      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo:tipos_unidad(nombre, capacidad_max)))',
+      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
     )
     .eq('id', id)
     .single()
@@ -233,13 +239,37 @@ export default async function DetalleReservaPage({
     const reglas = (pol?.reglas ?? []) as ReglaCancelacion[]
     const dias = diasEntre(hoyISO(), periodo.desde)
     const tipoCargo = cargoPorCancelacion(reglas, dias)
-    // `estadia.precio_noche` está SIN IVA (es `totalNeto / noches`), mientras que
-    // `reserva.total` sí lo lleva. Pasarlos juntos mezclaba unidades y el cargo
-    // anunciado al huésped salía mal.
+    /*
+      La primera noche REAL, no el promedio.
+
+      `estadia.precio_noche` guarda `totalNeto / noches`: ya viene promediado, así que
+      no sirve para esto. Se piden las tarifas por noche del tramo y se reparte el
+      total **guardado** según esa proporción — el precio se fijó al reservar (ADR
+      0004), así que recotizar cobraría un número que el huésped nunca aceptó.
+
+      Si la estadía cruza un cambio de temporada, el promedio cobraba de más o de
+      menos según cuál de las dos fuera la primera noche. En los dos sentidos es plata
+      mal cobrada, y el huésped tiene el tarifario publicado para discutirlo.
+
+      Si no se pudieron leer las tarifas —temporada sin cargar, por ejemplo— se cae al
+      promedio, que es lo que había antes: peor que lo exacto, mejor que nada.
+    */
+    const cotizacion = await cotizarEstadia({
+      tipoUnidadId: estadia?.unidad?.tipo_unidad_id ?? '',
+      checkIn: periodo.desde,
+      checkOut: periodo.hasta,
+      tarifaTipo: reserva.tarifa_tipo as 'neto' | 'rack',
+    }).catch(() => null)
+
+    const preciosPorNoche = (cotizacion?.noches ?? []).map((n: { precio: number }) => n.precio)
+
     const monto = montoCancelacion({
       cargo: tipoCargo,
       totalEstadia: Number(reserva.total),
-      primeraNocheConIva: nochePromedioConIva(Number(reserva.total), noches),
+      primeraNocheConIva:
+        preciosPorNoche.length > 0
+          ? primeraNocheRealConIva(Number(reserva.total), preciosPorNoche)
+          : nochePromedioConIva(Number(reserva.total), noches),
     })
     cargo = { dias, monto }
   }

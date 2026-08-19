@@ -311,23 +311,33 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
   if (nuevo === 'checkout' && reserva.huesped_id) {
     const puntos = puntosPorEstadia(Number(reserva.total))
     if (puntos > 0) {
-      const { data: h } = await supabase
-        .from('huespedes')
-        .select('puntos')
-        .eq('id', reserva.huesped_id)
-        .single()
+      /*
+        La suma la hace la base (`sumar_puntos_huesped`, migración 0053), no la app.
 
-      const previos = h?.puntos ?? 0
-      const totales = previos + puntos
-      const { error: ePuntos } = await supabase
-        .from('huespedes')
-        .update({ puntos: totales })
-        .eq('id', reserva.huesped_id)
+        Antes esto era read-then-write y **descartaba el error de la lectura**: con la
+        lectura fallada, `previos` quedaba en 0 y el `update` escribía solo los puntos
+        de esta estadía, **borrando todo lo acumulado** del huésped. El check-out se
+        completaba igual y nadie se enteraba.
+
+        Arreglar solo el error de lectura habría dejado abierta una segunda carrera:
+        dos check-outs simultáneos del mismo huésped —dos reservas, dos personas en el
+        mostrador— leen el mismo valor previo y el segundo update pisa al primero.
+        `update ... set puntos = puntos + n` no tiene lectura que falle ni valor previo
+        que quede viejo.
+      */
+      const { data: totalesData, error: ePuntos } = await supabase.rpc('sumar_puntos_huesped', {
+        p_huesped: reserva.huesped_id,
+        p_puntos: puntos,
+      })
+
       // El check-out ya quedó hecho arriba. Se corta igual: perder los puntos de
       // un huésped en silencio es un problema real, y avisando se pueden cargar
       // a mano. El aviso de nivel no se manda, que es lo correcto si no se pudo
       // guardar el nivel nuevo.
       cortarSiFalla(ePuntos, `/panel/reservas/${id}`, 'puntos')
+
+      const totales = Number(totalesData ?? 0)
+      const previos = totales - puntos
 
       // Solo se avisa si la estadía lo hizo CAMBIAR de nivel; sumar puntos sin
       // cruzar el umbral no amerita un correo.
