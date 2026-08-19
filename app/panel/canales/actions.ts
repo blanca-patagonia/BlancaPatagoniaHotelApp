@@ -9,6 +9,13 @@ import { puedeAcceder } from '@/lib/domain/permisos'
 import { obtenerProveedorCanal } from '@/lib/canales'
 import { interpretarCsvBooking } from '@/lib/canales/csv'
 import { guardarEntrantes, importarEntrante } from '@/lib/canales/servicio'
+import { saldarSiCorresponde } from '@/lib/reservas/saldar'
+import { hoyISO } from '@/lib/fechas'
+import {
+  MODALIDADES_COBRO,
+  referenciaTransferenciaCanal,
+  type ModalidadCobro,
+} from '@/lib/domain/canales-cobro'
 
 /**
  * Acciones del área de canales de venta.
@@ -268,6 +275,131 @@ export async function cargarMensaje(formData: FormData): Promise<void> {
   cortarSiFalla(error, `${DESTINO}?vista=mensajes`, 'mensaje')
   revalidatePath(DESTINO)
   redirect(`${DESTINO}?vista=mensajes&ok=mensaje`)
+}
+
+/**
+ * Registra la transferencia que el canal hizo al hotel.
+ *
+ * ── Por qué esto es lo más cerca de una «notificación de pago» ──────────────
+ *
+ * Sin ser Connectivity Partner **no hay** aviso de «Booking te pagó»: no existe
+ * webhook ni push. Lo que sí se puede hacer es que, cuando alguien ve la
+ * transferencia en el extracto del banco o en la liquidación del extranet, la
+ * registre acá — y que eso cierre la fila en la lista de conciliación.
+ *
+ * ── Idempotencia sin tabla nueva ni enum nuevo ───────────────────────────────
+ *
+ * El pago se inserta con `external_id = 'booking-payout:<referencia>'`. Como
+ * `pagos.external_id` ya tiene restricción única (migración 0009, puesta para los
+ * webhooks de pasarela), registrar dos veces la misma liquidación **choca con la base
+ * en vez de duplicar la plata**. Y `medio` va como `'transferencia'` en lugar de
+ * agregarle un valor `'canal'` al enum: una transferencia de Booking **es** una
+ * transferencia, y tocar el enum habría exigido dos migraciones (SQLSTATE 55P04).
+ */
+export async function registrarTransferenciaCanal(formData: FormData): Promise<void> {
+  const sesion = await exigirAcceso()
+
+  const entranteId = String(formData.get('entrante_id') ?? '')
+  const referencia = String(formData.get('referencia') ?? '').trim().slice(0, 60)
+  const monto = Number(formData.get('monto'))
+
+  if (!entranteId) redirect(`${DESTINO}?vista=cobros&error=falta_id`)
+  if (!referencia) redirect(`${DESTINO}?vista=cobros&error=transf_referencia`)
+  if (!Number.isFinite(monto) || monto <= 0) {
+    redirect(`${DESTINO}?vista=cobros&error=transf_monto`)
+  }
+
+  const supabase = await crearClienteServidor()
+
+  const { data: entrante, error: eLectura } = await supabase
+    .from('canal_reservas')
+    .select('canal, reserva_id')
+    .eq('id', entranteId)
+    .maybeSingle<{ canal: string; reserva_id: string | null }>()
+
+  cortarSiFalla(eLectura, `${DESTINO}?vista=cobros`, 'transf_lectura')
+  if (!entrante) redirect(`${DESTINO}?vista=cobros&error=transf_no_existe`)
+
+  // Sin reserva propia no hay a qué imputarle el pago. Pasa si la entrante todavía
+  // no se importó, y el mensaje lo dice en vez de fallar por una FK.
+  if (!entrante.reserva_id) redirect(`${DESTINO}?vista=cobros&error=transf_sin_reserva`)
+
+  const { error: ePago } = await supabase.from('pagos').insert({
+    reserva_id: entrante.reserva_id,
+    medio: 'transferencia',
+    tipo: 'saldo',
+    monto,
+    estado: 'aprobado',
+    external_id: referenciaTransferenciaCanal(entrante.canal, referencia),
+    nota: `Liquidación de ${entrante.canal}, referencia ${referencia}.`,
+    creado_por: sesion.userId,
+  })
+
+  // 23505 = la misma liquidación ya se registró. NO es un error del usuario: es la
+  // idempotencia funcionando, y decirle «ya estaba» es más útil que un error genérico.
+  if (ePago?.code === '23505') {
+    redirect(`${DESTINO}?vista=cobros&ok=transf_repetida`)
+  }
+  cortarSiFalla(ePago, `${DESTINO}?vista=cobros`, 'transf_pago')
+
+  // Se anota cuándo se liquidó. Escritura accesoria: el pago ya está registrado y es
+  // lo que importa, así que un fallo acá no puede tapar el éxito del cobro.
+  const { error: eFecha } = await supabase
+    .from('canal_reservas')
+    .update({ liquidado_en: hoyISO() })
+    .eq('id', entranteId)
+  registrarFalla(eFecha, `anotar la fecha de liquidación de la entrante ${entranteId}`)
+
+  // Puede haber quedado saldada: se recalcula por el camino compartido.
+  const { error: eSaldada } = await saldarSiCorresponde(supabase, entrante.reserva_id)
+  registrarFalla(
+    eSaldada ? { message: eSaldada } : null,
+    `saldar la reserva ${entrante.reserva_id} tras la transferencia del canal`,
+  )
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=cobros&ok=transferencia`)
+}
+
+/**
+ * Fija quién cobra, en una entrante o en todas las que están sin determinar.
+ *
+ * ── Por qué existe la opción «todas» ────────────────────────────────────────
+ *
+ * Cuando el informe del extranet no trae la columna de forma de pago, **todas** las
+ * reservas quedan en `desconocida`. Obligar a tocar 40 filas de a una garantiza que
+ * nadie lo haga, y la lista queda inútil.
+ *
+ * En la práctica un hotel chico suele tener una sola modalidad activa por temporada,
+ * así que «todas las que no sabemos, cobra el hotel» resuelve el caso real en un clic.
+ * Sigue siendo una afirmación de una persona, no una suposición del sistema — que es
+ * la diferencia que importa.
+ */
+export async function fijarModalidadCobro(formData: FormData): Promise<void> {
+  await exigirAcceso()
+
+  const modalidad = String(formData.get('modalidad') ?? '')
+  if (!MODALIDADES_COBRO.includes(modalidad as ModalidadCobro)) {
+    redirect(`${DESTINO}?vista=cobros&error=modalidad_invalida`)
+  }
+
+  const entranteId = String(formData.get('entrante_id') ?? '')
+  const todas = String(formData.get('todas') ?? '') === '1'
+
+  if (!entranteId && !todas) redirect(`${DESTINO}?vista=cobros&error=falta_id`)
+
+  const supabase = await crearClienteServidor()
+
+  const consulta = supabase.from('canal_reservas').update({ modalidad_cobro: modalidad })
+  const { error } = todas
+    ? // Solo las que están sin determinar: no se pisan las que alguien ya resolvió.
+      await consulta.eq('canal', 'booking').eq('modalidad_cobro', 'desconocida')
+    : await consulta.eq('id', entranteId)
+
+  cortarSiFalla(error, `${DESTINO}?vista=cobros`, 'modalidad')
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=cobros&ok=modalidad`)
 }
 
 /**

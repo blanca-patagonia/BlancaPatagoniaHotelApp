@@ -445,4 +445,81 @@ describe.skipIf(!hayDB)('capa de canales contra la base', () => {
 
     expect(count).toBe(1)
   })
+
+  describe('modalidad de cobro', () => {
+    /**
+     * La guarda que evita una pérdida de datos silenciosa.
+     *
+     * Los dos caminos traen datos distintos: el informe CSV sabe quién cobra, el feed
+     * iCal **no** y manda `desconocida`. Como el iCal se sondea cada hora y el CSV se
+     * sube una vez por semana, un `update` que pise todos los campos haría que el
+     * primer sondeo posterior **borre** la modalidad que el informe estableció — y esa
+     * reserva desaparecería de la lista de cobros sin que nadie lo note.
+     *
+     * Un dato que llega vacío no es un dato que cambió a vacío.
+     */
+    const REF = `BK-${sufijo}-modalidad`
+
+    it('el informe guarda quién cobra', async () => {
+      await guardarEntrantes(
+        db,
+        [entrante({ externalId: REF, modalidadCobro: 'canal' })],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('modalidad_cobro')
+        .eq('external_id', REF)
+        .single()
+      expect((data as { modalidad_cobro: string }).modalidad_cobro).toBe('canal')
+    })
+
+    it('un evento POSTERIOR sin modalidad NO la borra', async () => {
+      // Es exactamente lo que hace el feed iCal cada hora.
+      await guardarEntrantes(
+        db,
+        [
+          entrante({
+            externalId: REF,
+            modalidadCobro: undefined,
+            emitidaEn: '2027-02-20T10:00:00.000Z',
+          }),
+        ],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('modalidad_cobro')
+        .eq('external_id', REF)
+        .single()
+      expect(
+        (data as { modalidad_cobro: string }).modalidad_cobro,
+        'el sondeo del iCal borró la modalidad que había traído el informe',
+      ).toBe('canal')
+    })
+
+    it('un evento posterior CON otra modalidad sí la corrige', async () => {
+      // Lo que sí tiene que pasar: si el informe se corrige, el dato se actualiza.
+      await guardarEntrantes(
+        db,
+        [
+          entrante({
+            externalId: REF,
+            modalidadCobro: 'hotel',
+            emitidaEn: '2027-02-25T10:00:00.000Z',
+          }),
+        ],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('modalidad_cobro')
+        .eq('external_id', REF)
+        .single()
+      expect((data as { modalidad_cobro: string }).modalidad_cobro).toBe('hotel')
+    })
+  })
 })

@@ -117,6 +117,9 @@ export async function guardarEntrantes(
       importe_canal: e.importeCanal,
       moneda_canal: e.monedaCanal,
       comision: e.comision ?? null,
+      // El feed iCal no informa la modalidad, así que llega `undefined`: cae en
+      // `'desconocida'`, que es el mismo default de la columna y la verdad del caso.
+      modalidad_cobro: e.modalidadCobro ?? 'desconocida',
       notas: e.notas ?? '',
     }
 
@@ -149,10 +152,23 @@ export async function guardarEntrantes(
     // Ya existe: sólo se pisa si el evento entrante es posterior.
     if (!esEventoMasReciente(e.emitidaEn, existente.emitida_en)) continue
 
+    /*
+      ⚠️ La modalidad de cobro NO se pisa con `'desconocida'`.
+
+      Los dos caminos traen datos distintos: el informe CSV sabe quién cobra, el feed
+      iCal no. Como el iCal se sondea cada hora y el CSV se sube una vez por semana,
+      un `...fila` a secas haría que el primer sondeo posterior **borrara** la
+      modalidad que el informe había establecido — y esa reserva desaparecería de la
+      lista de cobros sin que nadie lo note.
+
+      Un dato que llega vacío no es un dato que cambió a vacío.
+    */
+    const { modalidad_cobro: modalidadEntrante, ...resto } = fila
     const { error } = await client
       .from('canal_reservas')
       .update({
-        ...fila,
+        ...resto,
+        ...(modalidadEntrante !== 'desconocida' ? { modalidad_cobro: modalidadEntrante } : {}),
         // Si venía marcada como error, el dato nuevo merece otro intento.
         estado: existente.estado === 'error' ? 'pendiente' : existente.estado,
         motivo: '',

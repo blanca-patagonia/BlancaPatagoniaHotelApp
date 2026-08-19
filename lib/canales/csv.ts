@@ -29,6 +29,7 @@
  */
 
 import type { CanalVenta, ReservaDeCanal } from '.'
+import { interpretarModalidadCobro } from '@/lib/domain/canales-cobro'
 
 /* ─────────────────────────────────────────────────────── partir el texto ──── */
 
@@ -150,6 +151,33 @@ export function normalizarEncabezado(h: string): string {
     .trim()
 }
 
+/**
+ * Columnas que el importador **no lee nunca**, ni siquiera para mostrarlas.
+ *
+ * ── Por qué esto existe y por qué va acá y no en la pantalla ────────────────
+ *
+ * WinPAX guardaba número de tarjeta, vencimiento y PIN en texto plano. Este sistema
+ * no puede empezar a hacerlo, y menos por la puerta de atrás de una importación.
+ * Hay un test que lo fija como contrato.
+ *
+ * Hoy el informe de Booking no exporta datos de tarjeta, así que esto parece
+ * innecesario. Deja de parecerlo con el **mapeo manual de columnas**: en cuanto la
+ * pantalla le ofrezca al usuario elegir qué columna es cuál, alguien va a poder
+ * asignar «Tarjeta virtual» al campo de observaciones y meter un PAN en la base sin
+ * darse cuenta. Por eso la guarda vive en el lector —el único lugar por el que pasan
+ * todos los caminos— y no en el formulario.
+ *
+ * Una columna que matchea esto no se mapea, no se muestrea y no se ofrece: es como si
+ * no estuviera en el archivo.
+ */
+export const COLUMNAS_PROHIBIDAS =
+  /tarjeta|card|cvc|cvv|iban|\bpan\b|caducidad|expiry|titular de la tarjeta|cardholder/
+
+/** ¿Este encabezado trae datos que no se pueden guardar? */
+export function esColumnaProhibida(encabezado: string): boolean {
+  return COLUMNAS_PROHIBIDAS.test(normalizarEncabezado(encabezado))
+}
+
 /** Campos que el importador necesita encontrar. */
 export type CampoBooking =
   | 'externalId'
@@ -167,6 +195,7 @@ export type CampoBooking =
   | 'pais'
   | 'notas'
   | 'reservadaEn'
+  | 'modalidadCobro'
 
 /**
  * Nombres con los que cada campo puede aparecer.
@@ -195,6 +224,9 @@ const ALIAS: Record<CampoBooking, readonly string[]> = {
   pais: ['pais', 'country'],
   notas: ['observaciones', 'comentarios', 'peticiones especiales', 'remarks', 'notes', 'special requests'],
   reservadaEn: ['fecha de reserva', 'reservado el', 'booked on', 'booked date'],
+  // Quién cobra: el hotel en el mostrador, o el canal y después transfiere. En este
+  // hotel conviven las dos, así que el dato decide si hay algo que cobrar al salir.
+  modalidadCobro: ['forma de pago', 'tipo de pago', 'metodo de pago', 'modalidad de pago', 'payment type', 'payment method', 'payment'],
 }
 
 /**
@@ -204,7 +236,16 @@ const ALIAS: Record<CampoBooking, readonly string[]> = {
  * `CAMPOS_OBLIGATORIOS`); el resto puede faltar sin que el archivo sea inservible.
  */
 export function mapearColumnas(encabezados: readonly string[]): Record<CampoBooking, number | null> {
-  const normalizados = encabezados.map(normalizarEncabezado)
+  /*
+    Las columnas prohibidas se ponen en blanco ANTES de buscar, no se filtran de la
+    lista: los índices tienen que seguir alineados con las celdas del archivo. Si se
+    quitaran, todas las columnas posteriores quedarían corridas un lugar — el error
+    silencioso más caro que puede tener este lector.
+
+    Con el encabezado vacío, ningún alias coincide, así que la columna se vuelve
+    invisible para el mapeo sin mover a las demás.
+  */
+  const normalizados = encabezados.map((h) => (esColumnaProhibida(h) ? '' : normalizarEncabezado(h)))
   const mapa = {} as Record<CampoBooking, number | null>
 
   for (const campo of Object.keys(ALIAS) as CampoBooking[]) {
@@ -501,6 +542,10 @@ export function interpretarCsvBooking(
       importeCanal: importe ?? 0,
       monedaCanal: moneda || 'USD',
       comision: comision,
+      // Quién cobra. `interpretarModalidadCobro` es conservador: lo que no reconoce
+      // cae en `desconocida`, nunca en una suposición, porque adivinar mal termina
+      // en cobrarle dos veces a alguien o en dejarlo salir sin cobrarle.
+      modalidadCobro: interpretarModalidadCobro(celda(f, 'modalidadCobro')),
       notas: celda(f, 'notas') || null,
       operacion: interpretarOperacion(celda(f, 'estado')),
       // Si el informe trae la fecha de reserva se usa como momento del evento; si

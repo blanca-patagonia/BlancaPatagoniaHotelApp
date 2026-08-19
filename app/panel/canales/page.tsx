@@ -31,7 +31,9 @@ import {
   ignorarEntrante,
   importarUna,
   marcarMensajeAtendido,
+  fijarModalidadCobro,
   registrarFacturaComision,
+  registrarTransferenciaCanal,
   reintentarEntrante,
   responderResena,
   sincronizarCanal,
@@ -46,6 +48,17 @@ import {
   type EstadoConciliacion,
   type OrigenCargo,
 } from '@/lib/domain/canales-costos'
+import {
+  clasificarCobro,
+  contarCobros,
+  ETIQUETAS_MODALIDAD,
+  ETIQUETAS_SITUACION,
+  MODALIDADES_COBRO,
+  type ModalidadCobro,
+  type SituacionCobro,
+} from '@/lib/domain/canales-cobro'
+import { resumenPagos, type Pago } from '@/lib/domain/pagos'
+import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 
 /**
  * Canales de venta: el panel único de lo que llega de Booking.
@@ -61,11 +74,12 @@ import {
  * está cubierto porque «el sistema sincroniza con Booking».
  */
 
-const VISTAS = ['entrantes', 'costos', 'mensajes', 'resenas'] as const
+const VISTAS = ['entrantes', 'cobros', 'costos', 'mensajes', 'resenas'] as const
 type Vista = (typeof VISTAS)[number]
 
 const ETIQUETAS_VISTA: Record<Vista, string> = {
   entrantes: 'Reservas entrantes',
+  cobros: 'Cobros y conciliación',
   costos: 'Costos y comisión',
   mensajes: 'Mensajes y peticiones',
   resenas: 'Reseñas',
@@ -115,6 +129,14 @@ const MENSAJES_ERROR: Record<string, string> = {
   factura_cargo:
     'La deuda con el proveedor SÍ se registró, pero no se pudo guardar la línea comparable contra lo devengado. Revisá el movimiento en Proveedores.',
   factura_repetida: 'Ya hay una factura cargada con ese número de comprobante.',
+  transf_referencia: 'Poné la referencia de la liquidación: es lo que evita registrar dos veces la misma transferencia.',
+  transf_monto: 'El importe de la transferencia tiene que ser mayor que cero.',
+  transf_lectura: 'No se pudo leer la reserva. Probá de nuevo.',
+  transf_no_existe: 'Esa reserva entrante ya no existe.',
+  transf_sin_reserva: 'Primero hay que importar la reserva: sin reserva propia no hay a qué imputarle el pago.',
+  transf_pago: 'No se pudo registrar la transferencia. No se guardó nada.',
+  modalidad: 'No se pudo guardar quién cobra. Quedó como estaba.',
+  modalidad_invalida: 'Esa forma de cobro no existe.',
 }
 
 interface EntranteRow {
@@ -135,6 +157,8 @@ interface EntranteRow {
   importe_canal: number | string | null
   moneda_canal: string | null
   comision: number | string | null
+  modalidad_cobro: string | null
+  liquidado_en: string | null
   notas: string
   reserva_id: string | null
   reserva: { codigo: string } | null
@@ -217,7 +241,7 @@ export default async function CanalesPage({
   let consultaEntrantes = supabase
     .from('canal_reservas')
     .select(
-      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, notas, reserva_id, reserva:reservas(codigo)',
+      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, notas, reserva_id, reserva:reservas(codigo)',
     )
     .order('check_in', { ascending: true })
     .limit(200)
@@ -260,6 +284,77 @@ export default async function CanalesPage({
     ])
 
   const entrantes = (entrantesData ?? []) as unknown as EntranteRow[]
+
+  /*
+    El saldo de cada reserva importada, para la vista de cobros.
+
+    Tres consultas y no una por fila: con 200 entrantes, un `saldo` calculado dentro
+    del map serían 400 viajes a la base. Se traen los pagos y los consumos de todas
+    las reservas de una vez —acotados por `in(ids)`, así que el volumen está atado al
+    límite de 200 de arriba— y el cálculo se hace en memoria con el mismo dominio que
+    usa el mostrador.
+
+    ⚠️ La cuenta es alojamiento MÁS consumos. Compararla contra `reservas.total`
+    dejaría «al día» a quien consumió del frigobar y no lo pagó, que es el bug que la
+    Fase 20 ya arregló en el mostrador.
+  */
+  const idsReservas = entrantes.map((e) => e.reserva_id).filter((x): x is string => Boolean(x))
+
+  const [{ data: pagosData }, { data: consumosData }, { data: totalesData }] =
+    idsReservas.length > 0
+      ? await Promise.all([
+          supabase.from('pagos').select('reserva_id, tipo, monto, estado').in('reserva_id', idsReservas),
+          supabase
+            .from('consumos')
+            .select('reserva_id, cantidad, precio_unitario')
+            .in('reserva_id', idsReservas),
+          supabase.from('reservas').select('id, total').in('id', idsReservas),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }]
+
+  const totalPorReserva = new Map<string, number>()
+  for (const r of (totalesData ?? []) as { id: string; total: number | string }[]) {
+    totalPorReserva.set(r.id, Number(r.total))
+  }
+
+  const pagosPorReserva = new Map<string, Pago[]>()
+  for (const p of (pagosData ?? []) as (Pago & { reserva_id: string })[]) {
+    const lista = pagosPorReserva.get(p.reserva_id) ?? []
+    lista.push(p)
+    pagosPorReserva.set(p.reserva_id, lista)
+  }
+
+  const consumosPorReserva = new Map<string, Consumo[]>()
+  for (const c of (consumosData ?? []) as {
+    reserva_id: string
+    cantidad: number
+    precio_unitario: number | string
+  }[]) {
+    const lista = consumosPorReserva.get(c.reserva_id) ?? []
+    lista.push({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) })
+    consumosPorReserva.set(c.reserva_id, lista)
+  }
+
+  /** Filas de cobro: la entrante más su situación y su saldo. */
+  const cobros = entrantes.map((e) => {
+    const rid = e.reserva_id
+    const cuenta = cuentaConsolidada(
+      rid ? (totalPorReserva.get(rid) ?? 0) : 0,
+      rid ? (consumosPorReserva.get(rid) ?? []) : [],
+    )
+    const resumen = resumenPagos(cuenta.total, rid ? (pagosPorReserva.get(rid) ?? []) : [])
+
+    const entrada = {
+      modalidad: (e.modalidad_cobro ?? 'desconocida') as ModalidadCobro,
+      checkOut: e.check_out,
+      saldo: resumen.saldo,
+      importada: Boolean(rid),
+    }
+
+    return { entrante: e, ...entrada, situacion: clasificarCobro(entrada, hoyISO()) }
+  })
+
+  const conteoCobros = contarCobros(cobros, hoyISO())
   const sincronizaciones = (sincroData ?? []) as SincroRow[]
   const mensajes = (mensajesData ?? []) as unknown as MensajeRow[]
   const resenas = (resenasData ?? []) as unknown as ResenaRow[]
@@ -674,6 +769,233 @@ export default async function CanalesPage({
             )}
           </Tarjeta>
         </>
+      )}
+
+      {vista === 'cobros' && (
+        <div className="grid gap-4">
+          {/*
+            Lo primero que se dice, porque decide qué es esta pantalla.
+
+            Sin ser Connectivity Partner NO existe un aviso de «Booking te pagó»: no
+            hay webhook ni push. Prometer una notificación que nunca llega es peor que
+            no prometerla, así que esto se presenta por lo que es: una lista para
+            mirar, no una alerta que aparece sola.
+          */}
+          <div className="flex gap-2 rounded-lg bg-lago-50 p-3 text-sm text-stone-700">
+            <Icono nombre="ayuda" className="mt-0.5 size-4 shrink-0 text-lago-700" />
+            <p>
+              <strong>Esto no avisa solo: es una lista para revisar.</strong> Booking no manda
+              notificaciones de pago sin la API de partner, así que el sistema compara lo que el
+              canal informó contra lo que hay cobrado y muestra lo que no cierra. Conviene mirarla
+              una vez por día.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Kpi
+              titulo="Falta la transferencia"
+              valor={String(conteoCobros.faltaTransferencia)}
+              detalle="cobró el canal y no llegó"
+              icono="divisas"
+              tono={conteoCobros.faltaTransferencia > 0 ? 'alerta' : undefined}
+            />
+            <Kpi
+              titulo="Salió sin cobrar"
+              valor={String(conteoCobros.salioSinCobrar)}
+              detalle="ya se fue y quedó saldo"
+              icono="alerta"
+              tono={conteoCobros.salioSinCobrar > 0 ? 'peligro' : undefined}
+            />
+            <Kpi
+              titulo="No sabemos quién cobra"
+              valor={String(conteoCobros.sinDeterminar)}
+              detalle="el informe no lo dijo"
+              icono="ayuda"
+              tono={conteoCobros.sinDeterminar > 0 ? 'alerta' : undefined}
+            />
+            <Kpi
+              titulo="En riesgo"
+              valor={formatearUSD(conteoCobros.enRiesgo)}
+              detalle="suma de las tres de al lado"
+              icono="reportes"
+            />
+          </div>
+
+          {conteoCobros.sinDeterminar > 0 && (
+            <Tarjeta
+              titulo="Fijar quién cobra, de una vez"
+              descripcion="Cuando el informe del extranet no trae la columna de forma de pago, todo queda sin determinar."
+            >
+              <p className="mb-3 text-sm text-stone-600">
+                Hay <strong>{conteoCobros.sinDeterminar}</strong>{' '}
+                {conteoCobros.sinDeterminar === 1 ? 'reserva' : 'reservas'} sin determinar. Si en
+                esta temporada el hotel tiene una sola modalidad activa, se puede fijar de una vez y
+                después corregir las excepciones una por una.
+              </p>
+              <form action={fijarModalidadCobro} className="flex flex-wrap items-end gap-3">
+                <input type="hidden" name="todas" value="1" />
+                <Campo etiqueta="En todas las que no sabemos, cobra">
+                  <select name="modalidad" defaultValue="hotel" className={CAMPO}>
+                    {MODALIDADES_COBRO.filter((m) => m !== 'desconocida').map((m) => (
+                      <option key={m} value={m}>
+                        {ETIQUETAS_MODALIDAD[m]}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+                <BotonEnvio
+                  variante="secundario"
+                  cargando="Guardando…"
+                  confirmar={`Se va a fijar la forma de cobro en las ${conteoCobros.sinDeterminar} reservas sin determinar. Las que ya tienen una forma asignada no se tocan. ¿Seguir?`}
+                  extra="w-full sm:w-auto"
+                >
+                  Fijar en todas
+                </BotonEnvio>
+              </form>
+            </Tarjeta>
+          )}
+
+          <Tarjeta
+            titulo="Lo que hay que resolver"
+            descripcion="Reservas del canal cuyo cobro no cierra. Las que están al día y las que todavía no llegaron no aparecen."
+          >
+            {(() => {
+              // Solo las tres situaciones que piden acción, ordenadas por urgencia:
+              // primero las que ya se fueron, que es plata que se va caminando.
+              const orden: Record<SituacionCobro, number> = {
+                salio_sin_cobrar: 0,
+                falta_transferencia: 1,
+                sin_determinar: 2,
+                al_dia: 3,
+                pendiente_de_estadia: 4,
+              }
+              const pendientes = cobros
+                .filter((c) => orden[c.situacion] <= 2)
+                .sort((a, b) => orden[a.situacion] - orden[b.situacion] || a.checkOut.localeCompare(b.checkOut))
+
+              if (pendientes.length === 0) {
+                return (
+                  <EstadoVacio
+                    titulo="Todo el cobro del canal cierra"
+                    descripcion="No hay reservas con saldo sin explicación. Cuando entre un informe nuevo, lo que no cierre aparece acá."
+                    icono="ok"
+                  />
+                )
+              }
+
+              return (
+                <Tabla resumen="Reservas del canal con el cobro sin cerrar: huésped, estadía, quién cobra, situación y saldo.">
+                  <thead>
+                    <tr className={FILA}>
+                      <th className={TH}>Huésped</th>
+                      <th className={`${TH} ${COL_SECUNDARIA}`}>Estadía</th>
+                      <th className={TH}>Quién cobra</th>
+                      <th className={TH}>Situación</th>
+                      <th className={TH}>Saldo</th>
+                      <th className={TH}>Qué hacer</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendientes.map((c) => (
+                      <tr key={c.entrante.id} className={FILA}>
+                        <td className={TD}>
+                          <span className="font-medium text-stone-800">
+                            {c.entrante.huesped_apellido}
+                          </span>
+                          <span className="block font-mono text-xs text-stone-500">
+                            {c.entrante.reserva?.codigo ?? c.entrante.external_id}
+                          </span>
+                          {/* En móvil la estadía no tiene columna: se pliega acá. */}
+                          <span className="block text-xs text-stone-500 sm:hidden">
+                            {formatoFechaCorta(c.entrante.check_in)} →{' '}
+                            {formatoFechaCorta(c.entrante.check_out)}
+                          </span>
+                        </td>
+                        <td className={`${TD} ${COL_SECUNDARIA}`}>
+                          {formatoFechaCorta(c.entrante.check_in)} →{' '}
+                          {formatoFechaCorta(c.entrante.check_out)}
+                        </td>
+                        <td className={TD}>
+                          {/* Cambiar la modalidad de una sola fila, sin salir de acá. */}
+                          <form action={fijarModalidadCobro} className="flex items-center gap-1">
+                            <input type="hidden" name="entrante_id" value={c.entrante.id} />
+                            <select
+                              name="modalidad"
+                              defaultValue={c.modalidad}
+                              aria-label={`Quién cobra la reserva de ${c.entrante.huesped_apellido}`}
+                              className="rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
+                            >
+                              {MODALIDADES_COBRO.map((m) => (
+                                <option key={m} value={m}>
+                                  {ETIQUETAS_MODALIDAD[m]}
+                                </option>
+                              ))}
+                            </select>
+                            <BotonEnvio
+                              variante="fantasma"
+                              cargando="…"
+                              extra="px-2 py-1 text-xs"
+                            >
+                              Guardar
+                            </BotonEnvio>
+                          </form>
+                        </td>
+                        <td className={TD}>
+                          {/* Color + texto, nunca solo color. */}
+                          <Etiqueta
+                            tono={c.situacion === 'salio_sin_cobrar' ? 'peligro' : 'alerta'}
+                          >
+                            {ETIQUETAS_SITUACION[c.situacion]}
+                          </Etiqueta>
+                        </td>
+                        <td className={TD}>{importe(c.saldo)}</td>
+                        <td className={TD}>
+                          {c.situacion === 'falta_transferencia' ? (
+                            <form action={registrarTransferenciaCanal} className="flex flex-wrap items-end gap-1">
+                              <input type="hidden" name="entrante_id" value={c.entrante.id} />
+                              <input
+                                name="referencia"
+                                required
+                                maxLength={60}
+                                placeholder="N.º liquidación"
+                                aria-label={`Referencia de la liquidación de ${c.entrante.huesped_apellido}`}
+                                className="w-32 rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
+                              />
+                              <input
+                                name="monto"
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                required
+                                defaultValue={c.saldo.toFixed(2)}
+                                aria-label={`Importe transferido de ${c.entrante.huesped_apellido}`}
+                                className="w-24 rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
+                              />
+                              <BotonEnvio cargando="…" extra="px-2 py-1 text-xs">
+                                Llegó
+                              </BotonEnvio>
+                            </form>
+                          ) : c.situacion === 'salio_sin_cobrar' ? (
+                            <Link
+                              href={`/panel/reservas/${c.entrante.reserva_id}`}
+                              className="text-sm font-medium text-lago-700 underline"
+                            >
+                              Cobrar en la ficha
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-stone-500">
+                              Decidí quién cobra, a la izquierda
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Tabla>
+              )
+            })()}
+          </Tarjeta>
+        </div>
       )}
 
       {vista === 'costos' && (
