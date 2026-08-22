@@ -76,6 +76,11 @@ import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
  * está cubierto porque «el sistema sincroniza con Booking».
  */
 
+/** Horas transcurridas desde un timestamp ISO. */
+function horasDesde(iso: string): number {
+  return (Date.now() - Date.parse(iso)) / 3600000
+}
+
 const VISTAS = ['entrantes', 'cobros', 'costos', 'mensajes', 'resenas'] as const
 type Vista = (typeof VISTAS)[number]
 
@@ -581,6 +586,28 @@ export default async function CanalesPage({
                   {ultima.nuevas} nueva(s), {ultima.actualizadas} actualizada(s),{' '}
                   {ultima.rechazadas} rechazada(s)
                 </p>
+
+                {/*
+                  Aviso, NO acción.
+
+                  La tentación es sincronizar sola al abrir la pantalla, y está mal por
+                  tres razones: sería un GET que muta, se dispararía N veces con tres
+                  personas mirando, y sobre todo **no correría de noche** — que es
+                  justamente cuando entran las reservas que nadie ve hasta el lunes.
+                  Eso lo resuelve el cron; esto solo avisa que hace rato que no corre.
+                */}
+                {horasDesde(ultima.corrida_en) >= 12 && (
+                  <div className="mt-2 flex gap-2 rounded-lg bg-calafate-50 p-2 text-xs text-stone-700">
+                    <Icono nombre="alerta" tam={14} />
+                    <p>
+                      Hace más de {Math.floor(horasDesde(ultima.corrida_en))} horas que no se
+                      sincroniza.{' '}
+                      {capacidades.traeReservas
+                        ? 'Si la sincronización automática está configurada, algo la está impidiendo; si no, conviene correrla a mano.'
+                        : 'El proveedor configurado no sondea: hay que subir el informe del extranet.'}
+                    </p>
+                  </div>
+                )}
               </>
             ) : (
               <p className="text-stone-600">
