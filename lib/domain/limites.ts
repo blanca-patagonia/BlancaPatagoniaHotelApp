@@ -10,7 +10,7 @@
  * nadie real y sí frena a un script.
  */
 
-export type AccionLimitada = 'reserva_publica' | 'login' | 'encuesta'
+export type AccionLimitada = 'reserva_publica' | 'login' | 'encuesta' | 'ical'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -58,6 +58,23 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 3,
     minutos: 60,
     motivo: 'El NPS alimenta los reportes de gestión.',
+  },
+
+  /*
+    El feed iCal de salida. No filtra datos personales —el archivo dice «ocupado» y
+    nada más— pero cada lectura recorre un año de estadías, así que sin techo la URL
+    es un amplificador gratis para cualquiera que la tenga.
+
+    El techo es alto a propósito. El hotel tiene 11 tipos de unidad, y si Booking,
+    Airbnb y Expedia sondean cada uno todos los feeds una vez por hora son 33
+    lecturas legítimas: un límite ajustado cortaría la sincronización, que es
+    justamente el daño que este feed viene a evitar. Ciento veinte deja margen de
+    sobra y sigue cortando un bucle, que haría miles.
+  */
+  ical: {
+    maximo: 120,
+    minutos: 60,
+    motivo: 'Cada lectura recorre un año de estadías.',
   },
 }
 

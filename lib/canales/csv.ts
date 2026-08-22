@@ -399,8 +399,8 @@ function pad(n: number): string {
  * informe no trae hora, y mezclar `'2026-09-10'` con
  * `'2026-09-10T14:00:00.000Z'` en la misma comparación da un orden equivocado.
  */
-function aTimestamp(fecha: string | undefined): string {
-  if (!fecha) return new Date().toISOString()
+function aTimestamp(fecha: string | undefined, ahora: Date): string {
+  if (!fecha) return ahora.toISOString()
   return `${fecha}T00:00:00.000Z`
 }
 
@@ -523,6 +523,19 @@ export function interpretarCsvBooking(
    * heurística erró— alcanza, que es el caso normal.
    */
   mapeoGuardado: Record<string, string> | null = null,
+  /**
+   * El momento que se usa como `emitidaEn` para las filas cuyo informe **no trae**
+   * fecha de reserva.
+   *
+   * Entra por parámetro para que esta función sea de verdad pura, que es como está
+   * documentada y como la tratan sus 54 tests. Antes leía el reloj adentro, y eso
+   * hacía que el mismo CSV produjera una salida distinta en cada corrida: el
+   * test-contrato que verifica que **ningún dato de tarjeta** quede en el resultado
+   * serializa todo y busca subcadenas, así que fallaba una de cada mil veces cuando
+   * los milisegundos formaban «737», el CVC del caso de prueba. Un test de seguridad
+   * que falla al azar termina desactivado por molesto.
+   */
+  ahora: Date = new Date(),
 ): ResultadoCsv {
   const vacio: ResultadoCsv = {
     reservas: [],
@@ -631,7 +644,7 @@ export function interpretarCsvBooking(
       // comparación de `esEventoMasReciente` es de strings, y `'2026-09-10'` es
       // menor que `'2026-09-10T00:00:00.000Z'`. Mezclar los dos formatos haría
       // que una fila del CSV nunca le gane a una guardada del mismo día.
-      emitidaEn: aTimestamp(interpretarFecha(celda(f, 'reservadaEn'))?.iso),
+      emitidaEn: aTimestamp(interpretarFecha(celda(f, 'reservadaEn'))?.iso, ahora),
     })
   }
 

@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerProveedorCanal } from '@/lib/canales'
+import { describirUltimaLectura } from '@/lib/canales/ical-saliente'
+import { urlDelSitio } from '@/lib/env'
 import { formatoFechaCorta, hoyISO } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
 import { Icono } from '../_components/iconos'
@@ -76,7 +78,7 @@ import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
  * está cubierto porque «el sistema sincroniza con Booking».
  */
 
-const VISTAS = ['entrantes', 'cobros', 'costos', 'mensajes', 'resenas'] as const
+const VISTAS = ['entrantes', 'cobros', 'costos', 'mensajes', 'resenas', 'calendario'] as const
 type Vista = (typeof VISTAS)[number]
 
 const ETIQUETAS_VISTA: Record<Vista, string> = {
@@ -85,6 +87,7 @@ const ETIQUETAS_VISTA: Record<Vista, string> = {
   costos: 'Costos y comisión',
   mensajes: 'Mensajes y peticiones',
   resenas: 'Reseñas',
+  calendario: 'Calendario para el canal',
 }
 
 const ESTADOS_ENTRANTE = ['pendiente', 'importada', 'error', 'ignorada'] as const
@@ -263,6 +266,9 @@ export default async function CanalesPage({
     { data: mensajesData },
     { data: resenasData },
     { data: cargosData },
+    { data: tiposData },
+    { data: unidadesData },
+    { data: configData },
   ] = await Promise.all([
       consultaEntrantes,
       supabase
@@ -291,6 +297,29 @@ export default async function CanalesPage({
         )
         .order('imputado_el', { ascending: false, nullsFirst: false })
         .limit(200),
+      /*
+        El inventario, para armar las URLs del feed iCal de salida.
+
+        Las unidades se traen enteras y se cuentan acá en vez de pedirle el conteo a
+        la base: son quince filas. Y hace falta el conteo por tipo porque de él
+        depende lo único que hay que explicarle a quien lee la pantalla — un tipo con
+        tres unidades recién se cierra cuando se vendieron las tres.
+      */
+      supabase
+        .from('tipos_unidad')
+        .select('id, codigo, nombre')
+        .eq('activo', true)
+        .order('codigo'),
+      supabase
+        .from('unidades')
+        .select('id, nombre, tipo_unidad_id')
+        .eq('activo', true)
+        .order('nombre'),
+      supabase
+        .from('canal_config')
+        .select('canal, ical_token, ical_leido_en')
+        .eq('canal', 'booking')
+        .maybeSingle(),
     ])
 
   const entrantes = (entrantesData ?? []) as unknown as EntranteRow[]
@@ -408,6 +437,45 @@ export default async function CanalesPage({
   const conConflicto = entrantes.filter((e) => e.conflicto && e.estado !== 'ignorada').length
 
   const ultima = sincronizaciones[0]
+
+  /*
+    El feed iCal de SALIDA (ADR 0022): las URLs listas para pegar en el extranet.
+
+    Se arman acá y no en el cliente porque el token sale de `canal_config`, que ni
+    recepción puede leer (migración 0049). Y se muestran armadas —no «pedile la URL a
+    alguien»— porque copiarlas y pegarlas en Booking es la única acción que el hotel
+    tiene que hacer para que esto sirva.
+  */
+  const configIcal = configData as {
+    canal: string
+    ical_token: string
+    ical_leido_en: string | null
+  } | null
+
+  const tiposUnidad = (tiposData ?? []) as { id: string; codigo: string; nombre: string }[]
+  const unidadesFeed = (unidadesData ?? []) as {
+    id: string
+    nombre: string
+    tipo_unidad_id: string
+  }[]
+
+  const feeds = configIcal
+    ? tiposUnidad.map((t) => {
+        const propias = unidadesFeed.filter((u) => u.tipo_unidad_id === t.id)
+        const base = `${urlDelSitio()}/api/canales/ical/${configIcal.ical_token}`
+        return {
+          codigo: t.codigo,
+          nombre: t.nombre,
+          cuantas: propias.length,
+          url: `${base}?tipo=${encodeURIComponent(t.codigo)}`,
+          unidades: propias.map((u) => ({
+            nombre: u.nombre,
+            url: `${base}?unidad=${encodeURIComponent(u.nombre)}`,
+          })),
+        }
+      })
+    : []
+
   const hoy = hoyISO()
   const sinAtender = mensajes.filter((m) => !m.atendido).length
   const sinResponder = resenas.filter((r) => !r.respondida).length
@@ -469,10 +537,26 @@ export default async function CanalesPage({
             </p>
             <p className="mt-1 text-lenga-800">
               Traemos las reservas de Booking, pero <strong>no le informamos qué queda libre</strong>.
-              Booking puede vender una unidad que el mostrador ya vendió. Hay que seguir cerrando
-              fechas a mano en el extranet. Para sincronizar en las dos direcciones hace falta un{' '}
-              <em>channel manager</em> — es una contratación del hotel, no algo que se resuelva con
-              código.
+              Booking puede vender una unidad que el mostrador ya vendió. Para sincronizar en las
+              dos direcciones hace falta un <em>channel manager</em> — es una contratación del
+              hotel, no algo que se resuelva con código.
+            </p>
+            {/*
+              El matiz que suma el feed iCal de salida (ADR 0022), sin borrar nada de
+              lo anterior. Que exista un calendario publicado no cambia el hecho de
+              fondo: el canal lo lee cuando quiere y nadie confirma que lo aplicó.
+            */}
+            <p className="mt-1 text-lenga-800">
+              Lo que sí se puede hacer es{' '}
+              <Link
+                href={`/panel/canales${construirQuery({ vista: 'calendario' })}`}
+                className="font-semibold underline"
+              >
+                publicarle el calendario de ocupación
+              </Link>{' '}
+              para que cierre fechas solo en vez de cerrarlas a mano.{' '}
+              <strong>Angosta la ventana, no la cierra:</strong> el canal lo lee cada varias horas
+              y nadie avisa si dejó de leerlo.
             </p>
           </div>
         </div>
@@ -1515,6 +1599,116 @@ export default async function CanalesPage({
             </form>
             </Tarjeta>
           </div>
+        </div>
+      )}
+
+      {vista === 'calendario' && (
+        <div className="space-y-4">
+          <Tarjeta
+            titulo="Calendario de ocupación para el canal"
+            descripcion="Las direcciones que hay que pegar en el extranet para que cierre fechas solo."
+          >
+            <div className="space-y-3 text-sm text-stone-700">
+              <p>
+                Cada dirección de acá abajo es un calendario que Booking, Airbnb o Expedia pueden
+                leer. Se pega una vez en el extranet, en la sección de calendarios importados o
+                sincronización de calendarios, y a partir de ahí el canal cierra solo las fechas en
+                las que no queda lugar.
+              </p>
+              <p className="rounded-lg bg-lenga-50 px-3 py-2 text-lenga-900 ring-1 ring-lenga-200">
+                <strong>Esto angosta la ventana del overbooking, no la cierra.</strong> El canal
+                relee el calendario cada varias horas y no promete cada cuánto; entre que se vende
+                la última unidad y que se entera, puede vender de nuevo. Y nadie confirma que lo
+                aplicó: lo único que se sabe es si pasó a buscarlo.
+              </p>
+              <p>
+                <strong>Son direcciones secretas.</strong> Quien las tenga puede ver qué días está
+                lleno el hotel. No traen ningún dato de los huéspedes, pero conviene no publicarlas
+                ni mandarlas por fuera del extranet.
+              </p>
+            </div>
+          </Tarjeta>
+
+          {!configIcal ? (
+            <EstadoVacio
+              titulo="Todavía no hay configuración del canal"
+              descripcion="El calendario sale del token que se genera al configurar Booking en Costos y comisión. Sin esa fila no hay ninguna dirección que publicar."
+            />
+          ) : (
+            <>
+              <Tarjeta titulo="¿Lo están leyendo?">
+                <p className="text-sm text-stone-700">
+                  {describirUltimaLectura(configIcal.ical_leido_en, new Date())}.{' '}
+                  {configIcal.ical_leido_en ? (
+                    <span className="text-stone-500">
+                      Es lo más parecido a un acuse de recibo que permite este formato: dice que
+                      vinieron a buscar el archivo, no que hayan cerrado las fechas.
+                    </span>
+                  ) : (
+                    <span className="text-stone-500">
+                      Si ya se pegó la dirección en el extranet y sigue diciendo esto al día
+                      siguiente, lo más probable es que esté copiada de más o de menos.
+                    </span>
+                  )}
+                </p>
+              </Tarjeta>
+
+              {feeds.map((f) => (
+                <Tarjeta
+                  key={f.codigo}
+                  titulo={f.nombre}
+                  descripcion={`${f.cuantas} unidad(es) activa(s) · código ${f.codigo}`}
+                >
+                  <div className="space-y-3">
+                    <div>
+                      <Etiqueta>Calendario del tipo</Etiqueta>
+                      <p className="mt-1 break-all rounded-lg bg-stone-50 px-3 py-2 font-mono text-xs text-stone-800 ring-1 ring-stone-200">
+                        {f.url}
+                      </p>
+                    </div>
+
+                    {/*
+                      La limitación que hay que decir por tipo, no en general: con más
+                      de una unidad el calendario recién cierra cuando se vendieron
+                      todas. No es un defecto que se pueda arreglar acá —un calendario
+                      dice «ocupado», no «me queda una»— y cerrar antes le costaría
+                      ventas reales al hotel.
+                    */}
+                    {f.cuantas > 1 && (
+                      <div className="rounded-lg bg-lenga-50 px-3 py-2 text-sm text-lenga-900 ring-1 ring-lenga-200">
+                        <p>
+                          Este tipo tiene <strong>{f.cuantas} unidades</strong>, así que este
+                          calendario marca ocupado <strong>recién cuando se vendieron las {f.cuantas}</strong>.
+                          Antes de eso todavía hay lugar y cerrarlo sería perder ventas.
+                        </p>
+                        <p className="mt-1">
+                          Si en el extranet cada unidad figura como una habitación aparte, conviene
+                          usar el calendario de cada una:
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {f.unidades.map((u) => (
+                            <li key={u.nombre}>
+                              <span className="font-semibold">{u.nombre}</span>
+                              <p className="mt-0.5 break-all rounded bg-white/70 px-2 py-1 font-mono text-xs text-stone-800">
+                                {u.url}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </Tarjeta>
+              ))}
+
+              {feeds.length === 0 && (
+                <EstadoVacio
+                  titulo="No hay tipos de unidad activos"
+                  descripcion="Sin inventario cargado no hay calendario que publicar."
+                />
+              )}
+            </>
+          )}
         </div>
       )}
     </Pagina>

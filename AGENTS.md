@@ -177,6 +177,18 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **`rangoISO(hoy, hoy)` es un rango VACÍO** (`[hoy,hoy)`) y no se solapa con nada. «La noche de hoy» se escribe `rangoISO(hoy, sumarDias(hoy, 1))`. El punto de venta salía siempre en cero por esto y decía «no hay nadie alojado hoy».
 - **PostgREST NO sigue una clave foránea auto-referencial hacia el padre.** Un embed anidado como `departamento:departamentos(nombre, padre:departamentos(nombre))` devuelve `"padre": []` —los hijos, no el padre— y las pistas de FK no lo corrigen. La jerarquía se resuelve en la app con `lib/domain/departamentos.ts`.
 - **Los importes van por `formatearUSD`/`importe` de `lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Ya se migraron los 67 del panel; las cantidades (filas, puntos) sí van con `toLocaleString`.
+- **`[auth.email].enable_signup` NO es «no dejes que se registren»: es «habilitá el proveedor de
+  email».** En `false` desactiva **también el inicio de sesión con contraseña**, que es el único
+  camino de acceso del staff (`app/login/actions.ts` usa `signInWithPassword`), o sea que nadie
+  entra al panel. Quien cierra el auto-registro es `[auth].enable_signup = false`. Y no se nota en
+  local: un contenedor que ya está corriendo conserva la configuración con la que arrancó, así que
+  el síntoma aparece recién en un entorno nuevo — lo destapó el CI. `tests/auth-config.test.ts`
+  fija las dos garantías juntas.
+- **El feed iCal de salida marca ocupado sólo cuando NO queda ninguna unidad del tipo libre.** Un
+  calendario dice «ocupado», no «me queda una»: cerrar el tipo al vender la primera unidad le
+  costaría ventas reales al hotel. Y si la consulta de estadías se trunca, el handler responde
+  **503 en vez de servir un calendario parcial** — uno incompleto no se ve roto, se ve como uno con
+  menos bloqueos, o sea publicando como libres noches llenas (ADR 0022).
 - **Booking es de solo lectura y NO evita el overbooking.** `capacidades()` lo declara y
   `ResultadoEnvio.noSoportado` distingue «no puedo» de «fallé». No borrar esas advertencias (ADR 0021).
 

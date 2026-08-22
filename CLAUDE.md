@@ -199,13 +199,15 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 21 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
-  público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
-  simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
-  política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
-  `reservas.garantia` dice si hay de dónde cobrar un no-show) · **ADR 0020**
-  cotización de divisas, que **cierra el 0003** · **ADR 0021** canales de venta de
-  solo lectura, con la limitación declarada.
+- **Hay 23 ADRs.** Los últimos: **ADR 0017** el alta de usuario nace sin
+  privilegios · **ADR 0018** los simuladores fallan fuerte en producción ·
+  **ADR 0019** cobro efectivo de la política de cancelación (**sin decidir**, pero ya
+  tiene el dato que le faltaba: `reservas.garantia` dice si hay de dónde cobrar un
+  no-show) · **ADR 0020** cotización de divisas, que **cierra el 0003** ·
+  **ADR 0021** canales de venta de solo lectura, con la limitación declarada ·
+  **ADR 0022** feed iCal de salida: publica la ocupación y **angosta la ventana del
+  overbooking sin cerrarla**, por eso `publicaDisponibilidad` sigue en `false` ·
+  **ADR 0023** contabilidad de la comisión de canal.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.
