@@ -46,7 +46,6 @@ import {
   Mensaje,
   Pagina,
 } from '../_components/ui'
-import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 const RE_MES = /^\d{4}-\d{2}$/
 const ESTADOS_NO_VENDIDOS: EstadoReserva[] = ['cancelada', 'no_show']
