@@ -80,6 +80,14 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
   let otroTipoId: string
   /** Una reserva y un producto, para los intentos sobre dinero. */
   let reservaId: string
+
+  /**
+   * Lo que creó esta suite porque la base estaba vacía, para poder borrarlo al final.
+   *
+   * Queda en `null` cuando la reserva ya existía: ahí no hay nada que limpiar, y
+   * borrar una reserva ajena sería peor que no limpiar.
+   */
+  let creadoAca: { reservaId: string; huespedId: string } | null = null
   let productoId: string
 
   /**
@@ -120,10 +128,37 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     if (!tipos?.length) throw new Error('Hace falta más de un tipo de unidad para esta auditoría.')
     otroTipoId = tipos[0].id
 
+    /*
+      La reserva se CREA si no hay ninguna.
+
+      El seed siembra **solo catálogo** —tipos, unidades, temporadas, tarifas,
+      promociones, políticas—: ni una reserva ni un huésped. Así que «corré el seed»
+      era un consejo que no arreglaba nada, y en un entorno limpio como el del CI esta
+      auditoría entera abortaba antes del primer caso.
+    */
     const { data: reservas, error: eReservas } = await admin.from('reservas').select('id').limit(1)
     if (eReservas) throw new Error(`No se pudieron leer reservas: ${eReservas.message}`)
-    if (!reservas?.length) throw new Error('No hay reservas en la base. Corré el seed.')
-    reservaId = reservas[0].id
+
+    if (reservas?.length) {
+      reservaId = reservas[0].id
+    } else {
+      const { data: huesped, error: eHuesped } = await admin
+        .from('huespedes')
+        .insert({ nombre: 'Auditoría', apellido: `Escritura${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (eHuesped) throw new Error(`No se pudo crear el huésped: ${eHuesped.message}`)
+
+      const { data: creada, error: eReserva } = await admin
+        .from('reservas')
+        .insert({ huesped_id: huesped.id, estado: 'checkout', total: 100 })
+        .select('id')
+        .single<{ id: string }>()
+      if (eReserva) throw new Error(`No se pudo crear la reserva: ${eReserva.message}`)
+
+      reservaId = creada.id
+      creadoAca = { reservaId: creada.id, huespedId: huesped.id }
+    }
 
     const { data: productos, error: eProductos } = await admin
       .from('productos_servicios')
@@ -148,6 +183,26 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
       // próxima corrida, que es justamente lo que hizo fallar esta suite una vez.
       if (error) throw new Error(`No se pudo restaurar la unidad ${id}: ${error.message}`)
     }
+
+    // La reserva y el huésped, sólo si los creó esta suite. Primero los hijos: la
+    // mayoría de los intentos de esta auditoría tienen que fallar —son casos
+    // negativos— pero si alguno pasó, o sea si encontró un agujero, dejó una fila
+    // colgando que bloquearía el borrado.
+    if (creadoAca) {
+      for (const tabla of ['pagos', 'consumos', 'facturas']) {
+        await admin.from(tabla).delete().eq('reserva_id', creadoAca.reservaId)
+      }
+
+      const { error: eReserva } = await admin.from('reservas').delete().eq('id', creadoAca.reservaId)
+      if (eReserva) throw new Error(`No se pudo borrar la reserva de prueba: ${eReserva.message}`)
+
+      const { error: eHuesped } = await admin
+        .from('huespedes')
+        .delete()
+        .eq('id', creadoAca.huespedId)
+      if (eHuesped) throw new Error(`No se pudo borrar el huésped de prueba: ${eHuesped.message}`)
+    }
+
     await limpiarUsuarios()
   })
 
@@ -385,36 +440,82 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     // Conciliar es declarar que una deuda con el canal cierra, y eso mueve el libro
     // mayor. Es de gerencia.
     const admin = clienteDePrueba()
-    const { data } = await admin
+
+    /*
+      El cargo se CREA acá.
+
+      Antes se tomaba uno cualquiera y, si no había, se abortaba con «el backfill de
+      la 0049 no corrió». Ese mensaje era falso: el backfill sí corre, pero sólo
+      rellena los cargos de las comisiones **ya cargadas**, y en una base limpia no
+      hay ninguna. Así que en CI el caso reventaba culpando a una migración sana.
+    */
+    const clave = `manual:comision:AUDIT-CONCILIAR-${sufijo}`
+    const { data, error } = await admin
       .from('canal_cargos')
+      .insert({
+        canal: 'booking',
+        concepto: 'comision',
+        origen: 'manual',
+        monto: 1,
+        clave_idempotencia: clave,
+      })
       .select('id, estado_conciliacion')
-      .limit(1)
-      .maybeSingle<{ id: string; estado_conciliacion: string }>()
+      .single<{ id: string; estado_conciliacion: string }>()
+    if (error) throw new Error(`No se pudo sembrar el cargo: ${error.message}`)
 
-    if (!data) throw new Error('No hay cargos en la base: el backfill de la 0049 no corrió.')
-
-    await noPuedeActualizar(usuarios.recepcion, 'canal_cargos', data.id, {
-      estado_conciliacion: data.estado_conciliacion === 'conciliado' ? 'devengado' : 'conciliado',
-    })
+    try {
+      await noPuedeActualizar(usuarios.recepcion, 'canal_cargos', data.id, {
+        estado_conciliacion: data.estado_conciliacion === 'conciliado' ? 'devengado' : 'conciliado',
+      })
+    } finally {
+      await admin.from('canal_cargos').delete().eq('clave_idempotencia', clave)
+    }
   })
 
   it('housekeeping no puede leer ni tocar la configuración del canal', async () => {
     // `canal_config` guarda el token del feed iCal de salida, que va en una URL.
-    const { error } = await usuarios.housekeeping.cliente
-      .from('canal_config')
-      .update({ comision_pct_pactada: 99 })
-      .eq('canal', 'booking')
-    // Un update bloqueado por RLS no da error: se verifica leyendo de vuelta.
-    void error
-
     const admin = clienteDePrueba()
-    const { data } = await admin
-      .from('canal_config')
-      .select('comision_pct_pactada')
-      .eq('canal', 'booking')
-      .maybeSingle<{ comision_pct_pactada: number | null }>()
 
-    if (data) expect(Number(data.comision_pct_pactada ?? 0)).not.toBe(99)
+    /*
+      La fila se asegura antes de probar nada.
+
+      `canal_config` nace vacía —qué proveedor contabiliza el canal es una decisión
+      del hotel, no algo que siembre una migración—. Este caso terminaba en
+      `if (data) expect(...)`, así que en una base limpia **no verificaba nada y pasaba
+      igual**: el peor resultado posible en una auditoría, porque queda registrado
+      como comprobado.
+    */
+    const { count, error: eContar } = await admin
+      .from('canal_config')
+      .select('*', { count: 'exact', head: true })
+      .eq('canal', 'booking')
+    if (eContar) throw new Error(`No se pudo contar canal_config: ${eContar.message}`)
+
+    const laCreoEsteTest = (count ?? 0) === 0
+    if (laCreoEsteTest) {
+      const { error } = await admin.from('canal_config').insert({ canal: 'booking' })
+      if (error) throw new Error(`No se pudo sembrar canal_config: ${error.message}`)
+    }
+
+    try {
+      const { error } = await usuarios.housekeeping.cliente
+        .from('canal_config')
+        .update({ comision_pct_pactada: 99 })
+        .eq('canal', 'booking')
+      // Un update bloqueado por RLS no da error: se verifica leyendo de vuelta.
+      void error
+
+      const { data } = await admin
+        .from('canal_config')
+        .select('comision_pct_pactada')
+        .eq('canal', 'booking')
+        .maybeSingle<{ comision_pct_pactada: number | null }>()
+
+      expect(data, 'sin la fila el caso no verifica nada').not.toBeNull()
+      expect(Number(data!.comision_pct_pactada ?? 0)).not.toBe(99)
+    } finally {
+      if (laCreoEsteTest) await admin.from('canal_config').delete().eq('canal', 'booking')
+    }
   })
 
   it('recepcion no puede cargar una cotización de divisa', async () => {
