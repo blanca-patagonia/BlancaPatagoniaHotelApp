@@ -80,6 +80,14 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
   let otroTipoId: string
   /** Una reserva y un producto, para los intentos sobre dinero. */
   let reservaId: string
+
+  /**
+   * Lo que creó esta suite porque la base estaba vacía, para poder borrarlo al final.
+   *
+   * Queda en `null` cuando la reserva ya existía: ahí no hay nada que limpiar, y
+   * borrar una reserva ajena sería peor que no limpiar.
+   */
+  let creadoAca: { reservaId: string; huespedId: string } | null = null
   let productoId: string
 
   /**
@@ -120,10 +128,37 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     if (!tipos?.length) throw new Error('Hace falta más de un tipo de unidad para esta auditoría.')
     otroTipoId = tipos[0].id
 
+    /*
+      La reserva se CREA si no hay ninguna.
+
+      El seed siembra **solo catálogo** —tipos, unidades, temporadas, tarifas,
+      promociones, políticas—: ni una reserva ni un huésped. Así que «corré el seed»
+      era un consejo que no arreglaba nada, y en un entorno limpio como el del CI esta
+      auditoría entera abortaba antes del primer caso.
+    */
     const { data: reservas, error: eReservas } = await admin.from('reservas').select('id').limit(1)
     if (eReservas) throw new Error(`No se pudieron leer reservas: ${eReservas.message}`)
-    if (!reservas?.length) throw new Error('No hay reservas en la base. Corré el seed.')
-    reservaId = reservas[0].id
+
+    if (reservas?.length) {
+      reservaId = reservas[0].id
+    } else {
+      const { data: huesped, error: eHuesped } = await admin
+        .from('huespedes')
+        .insert({ nombre: 'Auditoría', apellido: `Escritura${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (eHuesped) throw new Error(`No se pudo crear el huésped: ${eHuesped.message}`)
+
+      const { data: creada, error: eReserva } = await admin
+        .from('reservas')
+        .insert({ huesped_id: huesped.id, estado: 'checkout', total: 100 })
+        .select('id')
+        .single<{ id: string }>()
+      if (eReserva) throw new Error(`No se pudo crear la reserva: ${eReserva.message}`)
+
+      reservaId = creada.id
+      creadoAca = { reservaId: creada.id, huespedId: huesped.id }
+    }
 
     const { data: productos, error: eProductos } = await admin
       .from('productos_servicios')
@@ -148,6 +183,26 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
       // próxima corrida, que es justamente lo que hizo fallar esta suite una vez.
       if (error) throw new Error(`No se pudo restaurar la unidad ${id}: ${error.message}`)
     }
+
+    // La reserva y el huésped, sólo si los creó esta suite. Primero los hijos: la
+    // mayoría de los intentos de esta auditoría tienen que fallar —son casos
+    // negativos— pero si alguno pasó, o sea si encontró un agujero, dejó una fila
+    // colgando que bloquearía el borrado.
+    if (creadoAca) {
+      for (const tabla of ['pagos', 'consumos', 'facturas']) {
+        await admin.from(tabla).delete().eq('reserva_id', creadoAca.reservaId)
+      }
+
+      const { error: eReserva } = await admin.from('reservas').delete().eq('id', creadoAca.reservaId)
+      if (eReserva) throw new Error(`No se pudo borrar la reserva de prueba: ${eReserva.message}`)
+
+      const { error: eHuesped } = await admin
+        .from('huespedes')
+        .delete()
+        .eq('id', creadoAca.huespedId)
+      if (eHuesped) throw new Error(`No se pudo borrar el huésped de prueba: ${eHuesped.message}`)
+    }
+
     await limpiarUsuarios()
   })
 

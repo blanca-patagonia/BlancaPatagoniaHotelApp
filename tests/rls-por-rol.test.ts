@@ -238,12 +238,35 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       const { data: reservas, error: eReservas } = await admin.from('reservas').select('id').limit(1)
       if (eReservas) throw new Error(`No se pudieron leer reservas: ${eReservas.message}`)
 
-      const reservaId = (reservas ?? [])[0]?.id
+      /*
+        La reserva se CREA si no hay ninguna, en vez de exigir que exista.
+
+        El seed del proyecto siembra **solo catálogo** —tipos, unidades, temporadas,
+        tarifas, promociones, políticas— y ni una reserva ni un huésped. Así que en un
+        entorno limpio, que es el del CI, esta auditoría abortaba entera con un
+        «corré db reset» que además no habría arreglado nada. Un test tiene que traer
+        lo que necesita.
+      */
+      let reservaId = (reservas ?? [])[0]?.id
+
       if (!reservaId) {
-        throw new Error(
-          'No hay ninguna reserva en la base, así que no se puede sembrar una factura. ' +
-            'La auditoría necesita datos: corré `npx supabase db reset` para aplicar el seed.',
-        )
+        const { data: huesped, error: eHuesped } = await admin
+          .from('huespedes')
+          .insert({ nombre: 'Auditoría', apellido: `RLS${sufijo}` })
+          .select('id')
+          .single<{ id: string }>()
+        if (eHuesped) throw new Error(`No se pudo crear el huésped: ${eHuesped.message}`)
+        sembradas.push({ tabla: 'huespedes', columna: 'id', valor: huesped.id })
+
+        const { data: creada, error: eReserva } = await admin
+          .from('reservas')
+          .insert({ huesped_id: huesped.id, estado: 'checkout', total: 100 })
+          .select('id')
+          .single<{ id: string }>()
+        if (eReserva) throw new Error(`No se pudo crear la reserva: ${eReserva.message}`)
+        sembradas.push({ tabla: 'reservas', columna: 'id', valor: creada.id })
+
+        reservaId = creada.id
       }
 
       const { error } = await admin
