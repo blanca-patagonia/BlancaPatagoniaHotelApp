@@ -53,7 +53,22 @@ describe.skipIf(!hayDB)('ingesta de reseñas', () => {
   })
 
   afterAll(async () => {
+    // Las reseñas primero: `reserva_id` es `on delete set null`, pero borrar antes la
+    // reserva dejaría la reseña apuntando a nada y el sufijo es lo único que las
+    // identifica.
     await db.from('canal_resenas').delete().like('autor', `%${sufijo}%`)
+
+    // La reserva y el huésped que crea el test del vínculo manual. En orden: la
+    // reserva tiene FK `on delete restrict` contra el huésped.
+    const { data: huespedes } = await db
+      .from('huespedes')
+      .select('id')
+      .like('apellido', `ResenaVinculo${sufijo}%`)
+
+    for (const h of (huespedes ?? []) as { id: string }[]) {
+      await db.from('reservas').delete().eq('huesped_id', h.id)
+      await db.from('huespedes').delete().eq('id', h.id)
+    }
   })
 
   it('guarda una reseña con identificador, con las columnas que antes no se escribían', async () => {
@@ -148,8 +163,31 @@ describe.skipIf(!hayDB)('ingesta de reseñas', () => {
   it('NO pisa un vínculo hecho a mano, pero SÍ actualiza el contenido', async () => {
     // Si alguien ya decidió a qué reserva pertenece, la heurística no tiene autoridad
     // para cambiarlo: reimportar borraría el trabajo de esa persona.
-    const { data: r } = await db.from('reservas').select('id').limit(1).single()
-    const reservaId = (r as { id: string }).id
+
+    /*
+      La reserva se CREA acá en vez de tomar una cualquiera con
+      `from('reservas').limit(1).single()`.
+
+      Esa versión pasaba en local —donde el seed y los datos de demo dejan reservas— y
+      reventaba en CI con «Cannot read properties of null», porque ahí la tabla arranca
+      vacía. Es el mismo error que ya se cometió dos veces en esta suite: depender de
+      datos que el test no creó. Un test tiene que traer lo que necesita.
+    */
+    const { data: huesped, error: eHuesped } = await db
+      .from('huespedes')
+      .insert({ nombre: 'Titular', apellido: `ResenaVinculo${sufijo}` })
+      .select('id')
+      .single<{ id: string }>()
+    if (eHuesped) throw new Error(`No se pudo crear el huésped: ${eHuesped.message}`)
+
+    const { data: creada, error: eReserva } = await db
+      .from('reservas')
+      .insert({ huesped_id: huesped.id, estado: 'checkout', total: 100 })
+      .select('id')
+      .single<{ id: string }>()
+    if (eReserva) throw new Error(`No se pudo crear la reserva: ${eReserva.message}`)
+
+    const reservaId = creada.id
 
     await db
       .from('canal_resenas')

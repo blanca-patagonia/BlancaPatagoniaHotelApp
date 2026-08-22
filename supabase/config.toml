@@ -35,7 +35,24 @@ jwt_expiry = 3600
 enable_signup = false
 
 [auth.email]
-enable_signup = false
+# ⚠️ ESTA LÍNEA NO ES «no dejes que se registren»: eso ya lo hace
+# `[auth].enable_signup = false` de arriba, que bloquea el alta por CUALQUIER
+# proveedor.
+#
+# `[auth.email].enable_signup` controla si el proveedor de email está habilitado, y
+# ponerlo en `false` desactiva **también el inicio de sesión con contraseña**. Es
+# decir: con `false`, NADIE PUEDE ENTRAR AL PANEL. `app/login/actions.ts` usa
+# `signInWithPassword`, que es el único camino de acceso del staff.
+#
+# El error que devuelve GoTrue es «Email logins are disabled», y no aparece hasta que
+# alguien levanta el entorno desde cero — por eso pasó desapercibido: un contenedor
+# que ya estaba corriendo conserva la configuración con la que arrancó. Lo detectó el
+# CI, que hace `supabase start` limpio en cada corrida.
+#
+# Las dos cosas que hay que sostener a la vez, y que tienen su test:
+#   · el staff SÍ inicia sesión con email y contraseña
+#   · nadie se auto-registra  (ADR 0017, migraciones 0032 + 0035)
+enable_signup = true
 enable_confirmations = false
 
 [storage]

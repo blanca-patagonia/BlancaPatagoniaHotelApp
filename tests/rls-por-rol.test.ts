@@ -231,27 +231,83 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       return count ?? 0
     }
 
-    // ── facturas ──────────────────────────────────────────────────────────────
-    // Necesita una reserva, y desde la 0045 solo una factura por reserva. Se toma
-    // una reserva sin factura para no chocar con la restricción única.
-    if ((await contar('facturas')) === 0) {
-      const { data: reservas, error: eReservas } = await admin.from('reservas').select('id').limit(1)
-      if (eReservas) throw new Error(`No se pudieron leer reservas: ${eReservas.message}`)
+    /*
+      Una reserva sobre la que colgar lo que haga falta, creándola si no hay ninguna.
 
-      const reservaId = (reservas ?? [])[0]?.id
-      if (!reservaId) {
-        throw new Error(
-          'No hay ninguna reserva en la base, así que no se puede sembrar una factura. ' +
-            'La auditoría necesita datos: corré `npx supabase db reset` para aplicar el seed.',
-        )
+      El seed del proyecto siembra **solo catálogo** —tipos, unidades, temporadas,
+      tarifas, promociones, políticas— y ni una reserva ni un huésped. Así que en un
+      entorno limpio, que es el del CI, esto abortaba con un «corré db reset» que
+      además no habría arreglado nada. Un test tiene que traer lo que necesita.
+
+      Memoizada: facturas y pagos cuelgan de la misma, y crear dos reservas para eso
+      dejaría basura de más.
+    */
+    let reservaSembrada: string | null = null
+
+    const reservaParaSembrar = async (): Promise<string> => {
+      if (reservaSembrada) return reservaSembrada
+
+      const { data: reservas, error } = await admin.from('reservas').select('id').limit(1)
+      if (error) throw new Error(`No se pudieron leer reservas: ${error.message}`)
+
+      const existente = (reservas ?? [])[0]?.id
+      if (existente) {
+        reservaSembrada = existente
+        return existente
       }
 
+      const { data: huesped, error: eHuesped } = await admin
+        .from('huespedes')
+        .insert({ nombre: 'Auditoría', apellido: `RLS${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (eHuesped) throw new Error(`No se pudo crear el huésped: ${eHuesped.message}`)
+      sembradas.push({ tabla: 'huespedes', columna: 'id', valor: huesped.id })
+
+      const { data: creada, error: eReserva } = await admin
+        .from('reservas')
+        .insert({ huesped_id: huesped.id, estado: 'checkout', total: 100 })
+        .select('id')
+        .single<{ id: string }>()
+      if (eReserva) throw new Error(`No se pudo crear la reserva: ${eReserva.message}`)
+      sembradas.push({ tabla: 'reservas', columna: 'id', valor: creada.id })
+
+      reservaSembrada = creada.id
+      return creada.id
+    }
+
+    // ── facturas ──────────────────────────────────────────────────────────────
+    // Desde la 0045 solo hay una factura por reserva; si no hay ninguna factura,
+    // ninguna reserva la tiene y no se puede chocar con la restricción única.
+    if ((await contar('facturas')) === 0) {
       const { error } = await admin
         .from('facturas')
-        .insert({ reserva_id: reservaId, numero: `AUDIT-${sufijo}`, total: 1 })
+        .insert({ reserva_id: await reservaParaSembrar(), numero: `AUDIT-${sufijo}`, total: 1 })
       if (error) throw new Error(`No se pudo sembrar la factura: ${error.message}`)
 
       sembradas.push({ tabla: 'facturas', columna: 'numero', valor: `AUDIT-${sufijo}` })
+    }
+
+    /*
+      ── pagos ─────────────────────────────────────────────────────────────────
+
+      Housekeeping no debe leer `pagos` (ADR 0005, migración 0045), y sobre una tabla
+      vacía ese caso pasa solo: cero filas es la respuesta tanto de una política que
+      niega como de una tabla sin datos.
+
+      Lo detectó el propio guardián de esta auditoría —el test que denuncia lo que no
+      se pudo verificar— corriendo en CI, que es el único lugar donde la base arranca
+      vacía. En local pasaba de verdad, por los datos de demo, y por eso nadie lo vio.
+    */
+    if ((await contar('pagos')) === 0) {
+      const { data, error } = await admin
+        .from('pagos')
+        .insert({ reserva_id: await reservaParaSembrar(), monto: 1, nota: `AUDIT-${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar el pago: ${error.message}`)
+
+      sembradas.push({ tabla: 'pagos', columna: 'id', valor: data.id })
     }
 
     // ── canal_config ──────────────────────────────────────────────────────────
