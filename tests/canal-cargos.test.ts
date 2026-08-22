@@ -307,4 +307,124 @@ describe.skipIf(!hayDB)('contabilidad de la comisión del canal', () => {
     expect(Number(informe!.total)).toBe(52.75)
     expect(Number(factura!.total)).toBe(55.3)
   })
+
+  describe('vista de rentabilidad por canal', () => {
+    /**
+     * `resumen_canal_mes` agrega en la BASE, no en memoria.
+     *
+     * Importa por dos razones. La primera es que responde la pregunta que el sistema
+     * no podía responder: el «ranking de canales» de reportes sumaba `reservas.total`
+     * —bruto y con IVA— como si fuera lo que le queda al hotel.
+     *
+     * La segunda es la truncación: la pantalla leía las reservas y agregaba en
+     * memoria, y PostgREST corta en 1000 filas **sin avisar**. Un reporte de
+     * rentabilidad calculado sobre una parte del historial es peor que no tenerlo.
+     *
+     * Estos tests corren después de los de arriba, así que la reserva del test ya
+     * existe y su cargo ya quedó ligado por `importarEntrante`.
+     */
+    const MES = '2027-04-01' // el check_out del fixture cae en abril
+
+    it('suma la comisión del devengo cuando el cargo está ligado a la reserva', async () => {
+      const { data, error } = await db
+        .from('resumen_canal_mes')
+        .select('bruto, comision_informada, sin_comision_informada, reservas_vendidas, noches')
+        .eq('canal', 'booking')
+        .eq('mes', MES)
+        .maybeSingle<{
+          bruto: number | string
+          comision_informada: number | string
+          sin_comision_informada: number
+          reservas_vendidas: number
+          noches: number
+        }>()
+
+      if (error) throw new Error(`No se pudo leer la vista: ${error.message}`)
+      if (!data) throw new Error('La vista no devolvió la fila de booking: el fixture cambió.')
+
+      // La comisión del test es 52.75 (el canal la corrigió en un test anterior).
+      expect(Number(data.comision_informada)).toBe(52.75)
+      // Y esa reserva SÍ informó comisión, así que no cuenta como faltante.
+      expect(data.sin_comision_informada).toBe(0)
+      expect(data.reservas_vendidas).toBeGreaterThan(0)
+      // 3 noches: del 12 al 15 de abril.
+      expect(data.noches).toBe(3)
+    })
+
+    it('NO suma la línea de la factura mensual: se contaría dos veces', async () => {
+      // La factura se compara CONTRA el devengo, no se acumula con él. Sumarlas juntas
+      // duplicaría la comisión del mes.
+      const { data } = await db
+        .from('resumen_canal_mes')
+        .select('comision_informada')
+        .eq('canal', 'booking')
+        .eq('mes', MES)
+        .single<{ comision_informada: number | string }>()
+
+      if (!data) throw new Error('La vista no devolvió la fila de booking: el fixture cambió.')
+
+      // Si sumara las dos daría 52.75 + 55.30 = 108.05.
+      expect(Number(data.comision_informada)).not.toBeCloseTo(108.05, 1)
+    })
+
+    it('una cancelada cuenta en el volumen pero NO en el importe', async () => {
+      // El canal la trajo —es información de volumen— pero no se vendió.
+      const { data: antes } = await db
+        .from('resumen_canal_mes')
+        .select('reservas_totales, reservas_vendidas, bruto')
+        .eq('canal', 'booking')
+        .eq('mes', MES)
+        .single<{ reservas_totales: number; reservas_vendidas: number; bruto: number | string }>()
+
+      const admin = clienteDePrueba()
+
+      /*
+        La reserva se busca por la entrante de ESTE test, no con un
+        `from('reservas').eq('canal','booking').limit(1)`.
+
+        Esa versión pasaba el archivo solo y fallaba con `npm test`: sin `order by`,
+        `limit(1)` devuelve una fila cualquiera, y en la suite completa hay reservas de
+        booking de otros tests cuyo check-out no cae en este mes — así que cancelarlas
+        no movía ningún número de abril y la afirmación quedaba sin base.
+
+        Es el mismo error que ya se cometió con `unidades.piso`.
+      */
+      const { data: entranteFila } = await admin
+        .from('canal_reservas')
+        .select('reserva_id')
+        .eq('external_id', REF)
+        .single<{ reserva_id: string | null }>()
+
+      const reservaId = entranteFila?.reserva_id
+      if (!reservaId) throw new Error('La entrante del fixture no tiene reserva: se importa antes.')
+
+      await admin.from('reservas').update({ estado: 'cancelada' }).eq('id', reservaId)
+
+      const { data: despues } = await db
+        .from('resumen_canal_mes')
+        .select('reservas_totales, reservas_vendidas, bruto')
+        .eq('canal', 'booking')
+        .eq('mes', MES)
+        .single<{ reservas_totales: number; reservas_vendidas: number; bruto: number | string }>()
+
+      if (!antes || !despues) throw new Error('La vista no devolvio la fila de booking.')
+
+      // El volumen no cambia: la reserva sigue existiendo.
+      expect(despues.reservas_totales).toBe(antes.reservas_totales)
+      // Pero deja de contarse como vendida y sale del importe.
+      expect(despues.reservas_vendidas).toBe(antes.reservas_vendidas - 1)
+      expect(Number(despues.bruto)).toBeLessThan(Number(antes.bruto))
+
+      // Se deja como estaba para no ensuciar los tests que sigan.
+      await admin.from('reservas').update({ estado: 'confirmada' }).eq('id', reservaId)
+    })
+
+    it('anon no puede leer la vista', async () => {
+      // Una vista hereda el `grant select to anon` por omisión igual que una tabla, y
+      // ésta revela cuánto vende el hotel y cuánto paga de comisión.
+      const { anon } = await import('./db').then((m) => ({ anon: m.clienteAnonimo }))
+      const { error } = await anon().from('resumen_canal_mes').select('canal').limit(1)
+      expect(error, 'anon pudo leer la rentabilidad por canal').not.toBeNull()
+    })
+  })
 })

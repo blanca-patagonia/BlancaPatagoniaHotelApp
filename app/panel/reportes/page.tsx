@@ -25,12 +25,17 @@ import {
   CATEGORIAS_NPS,
 } from '@/lib/domain/encuestas'
 import { TONO_ESTADO } from '../_components/estilos'
+import { Icono } from '../_components/iconos'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
+import { comisionEfectivaPct, netoDeComision } from '@/lib/domain/canales-costos'
+import { costoAdquisicion, totalesDeCanales } from '@/lib/domain/metricas-canal'
 import {
   BarraHerramientas,
   BotonExportar,
   Encabezado,
   EstadoVacio,
   Etiqueta,
+  COL_SECUNDARIA,
   FILA,
   Kpi,
   TD,
@@ -41,12 +46,21 @@ import {
   Mensaje,
   Pagina,
 } from '../_components/ui'
-import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 const RE_MES = /^\d{4}-\d{2}$/
 const ESTADOS_NO_VENDIDOS: EstadoReserva[] = ['cancelada', 'no_show']
 /** Cantidad de meses del gráfico de evolución. */
 const MESES_GRAFICO = 6
+
+interface FilaResumenCanal {
+  canal: string
+  reservas_totales: number
+  reservas_vendidas: number
+  bruto: number | string
+  noches: number
+  comision_informada: number | string
+  sin_comision_informada: number
+}
 
 interface ReservaRow {
   canal: string
@@ -162,6 +176,58 @@ export default async function ReportesPage({
   }
   const canales = [...porCanal.entries()].sort((a, b) => b[1].cantidad - a[1].cantidad)
   const maxEstado = Math.max(1, ...[...porEstado.values()])
+
+  /*
+    Rentabilidad por canal, del mes elegido.
+
+    Sale de la vista `resumen_canal_mes` (migración 0055) y NO de las reservas
+    cargadas arriba, por dos razones. La agregación en memoria depende del límite de
+    1000 filas de PostgREST —que es de lo que avisa el cartel de datos incompletos de
+    esta misma pantalla— y además la comisión vive en `canal_cargos`, que no está en
+    esa consulta.
+
+    La vista imputa por fecha de SALIDA: es cuando se consume la estadía, y el
+    criterio con el que el canal factura el mes siguiente. La pantalla lo dice.
+  */
+  const { data: rentabilidadData } = await supabase
+    .from('resumen_canal_mes')
+    .select(
+      'canal, reservas_totales, reservas_vendidas, bruto, noches, comision_informada, sin_comision_informada',
+    )
+    .eq('mes', `${mes}-01`)
+
+  /*
+    La vista ya viene agregada por canal, así que NO se pasa por `metricasPorCanal`
+    —que espera una fila por reserva y además reordena, con lo cual cualquier
+    correspondencia por índice quedaría cruzada—. Se arma la métrica de cada canal con
+    los mismos ayudantes puros del dominio, y se ordena por neto al final.
+  */
+  const metricasCanal = ((rentabilidadData ?? []) as unknown as FilaResumenCanal[])
+    .map((f) => {
+      const bruto = Number(f.bruto)
+      const comision = Number(f.comision_informada)
+      const noches = Number(f.noches)
+      const neto = netoDeComision(bruto, comision)
+
+      return {
+        canal: f.canal,
+        reservas: Number(f.reservas_vendidas),
+        noches,
+        bruto,
+        comision,
+        neto,
+        comisionPct: comisionEfectivaPct(bruto, comision),
+        adrBruto: noches > 0 ? Math.round((bruto / noches) * 100) / 100 : null,
+        adrNeto: noches > 0 ? Math.round((neto / noches) * 100) / 100 : null,
+        sinComisionInformada: Number(f.sin_comision_informada),
+      }
+    })
+    // Por neto, no por bruto: la pregunta del hotel es cuál le deja más plata, y
+    // ordenar por bruto pondría primero al que más factura aunque se lleve la mayor
+    // comisión.
+    .sort((a, b) => b.neto - a.neto)
+
+  const totalesCanal = totalesDeCanales(metricasCanal)
 
   // Satisfacción del huésped (NPS). Las encuestas sin responder no se cuentan
   // como cero: eso hundiría el índice (ver `lib/domain/encuestas.ts`).
@@ -355,6 +421,155 @@ export default async function ReportesPage({
       </Tarjeta>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Tarjeta
+          titulo="Rentabilidad por canal"
+          descripcion={`Qué deja cada canal en ${etiquetaMes(mes)}, después de su comisión.`}
+        >
+          {/*
+            La advertencia que evita el error más caro de esta pantalla.
+
+            `tarifa_tipo = 'neto'` es un TIPO DE TARIFA —la de agencia, contra la rack
+            de mostrador— y NO «importe al que ya se le descontó la comisión». Sin
+            decirlo acá, alguien resta la comisión de un total que creía ya neto y el
+            número queda más bajo sin que nadie lo note.
+          */}
+          <div className="mb-4 flex gap-2 rounded-lg bg-lago-50 p-3 text-sm text-stone-700">
+            <Icono nombre="ayuda" tam={16} />
+            <p>
+              <strong>Neto = lo que paga el huésped menos la comisión del canal.</strong> Que una
+              reserva vaya a tarifa <em>neto</em> significa que se cobró a precio de agencia,{' '}
+              <strong>no</strong> que ya tenga la comisión descontada. Se imputa por la fecha de{' '}
+              <strong>salida</strong>, que es cuando se consume la estadía y con qué criterio
+              factura el canal.
+            </p>
+          </div>
+
+          {metricasCanal.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-stone-600">
+              No hubo salidas en {etiquetaMes(mes)}.
+            </p>
+          ) : (
+            <>
+              {totalesCanal.incompleto && (
+                /*
+                  El neto es un PISO, no un dato cerrado. El feed iCal nunca informa
+                  comisión, así que este caso es normal — y presentar el número como
+                  definitivo llevaría a concluir que el canal deja más de lo que deja.
+                */
+                <div className="mb-4 flex gap-2 rounded-lg bg-calafate-50 p-3 text-sm text-stone-700">
+                  <Icono nombre="alerta" tam={16} />
+                  <p>
+                    Hay <strong>{totalesCanal.sinComisionInformada}</strong>{' '}
+                    {totalesCanal.sinComisionInformada === 1 ? 'reserva' : 'reservas'} sin comisión
+                    informada, así que el neto es <strong>al menos</strong> este importe y no el
+                    total. Para tenerla hay que subir el informe de reservas del extranet: el feed
+                    iCal no la trae.
+                  </p>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <Tabla resumen="Rentabilidad por canal: reservas, bruto, comisión, neto y costo por reserva.">
+                  <thead>
+                    <tr className={FILA}>
+                      <th className={TH}>Canal</th>
+                      <th className={`${TH} ${COL_SECUNDARIA}`}>Reservas</th>
+                      <th className={TH}>Bruto</th>
+                      <th className={TH}>Comisión</th>
+                      <th className={TH}>Neto</th>
+                      <th className={`${TH} ${COL_SECUNDARIA}`}>Costo por reserva</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metricasCanal.map((m) => {
+                      const costo = costoAdquisicion(m)
+                      return (
+                        <tr key={m.canal} className={FILA}>
+                          <td className={TD}>
+                            <span className="font-medium text-stone-800">
+                              {ETIQUETAS_CANAL[m.canal as Canal] ?? m.canal}
+                            </span>
+                            <span className="block text-xs text-stone-500 sm:hidden">
+                              {m.reservas} reserva(s)
+                            </span>
+                          </td>
+                          <td className={`${TD} ${COL_SECUNDARIA}`}>
+                            {m.reservas.toLocaleString('es-AR')}
+                          </td>
+                          <td className={TD}>{importe(m.bruto)}</td>
+                          <td className={TD}>
+                            {m.comision > 0 ? (
+                              <>
+                                {importe(m.comision)}
+                                {m.comisionPct !== null && (
+                                  <span className="block text-xs text-stone-500">
+                                    {m.comisionPct.toFixed(1)} % efectivo
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              /*
+                                Sin comisión informada NO se muestra «USD 0»: eso
+                                afirmaría que el canal no cobró nada.
+                              */
+                              <span className="text-stone-500">sin informar</span>
+                            )}
+                          </td>
+                          <td className={TD}>
+                            <span className="font-medium">{importe(m.neto)}</span>
+                            {m.sinComisionInformada > 0 && (
+                              <span className="block text-xs text-calafate-700">
+                                al menos ({m.sinComisionInformada} sin informar)
+                              </span>
+                            )}
+                          </td>
+                          <td className={`${TD} ${COL_SECUNDARIA}`}>
+                            {costo === null ? (
+                              /*
+                                `—` y NUNCA `USD 0`. Para directo y web el costo no es
+                                cero —hay Google Ads y tiempo de mostrador— pero el
+                                sistema no los conoce, y eso es distinto de que no
+                                existan. Mostrar cero haría concluir que el directo es
+                                gratis, y llevaría a bajar la inversión en los canales
+                                pagos sin saber qué cuesta el propio.
+                              */
+                              <span
+                                className="text-stone-400"
+                                title="No hay gasto de adquisición registrado para este canal"
+                              >
+                                —
+                              </span>
+                            ) : (
+                              importe(costo)
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </Tabla>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-stone-100 px-5 pt-3 text-sm">
+                <span className="text-stone-600">
+                  Bruto <strong className="text-stone-800">{formatearUSD(totalesCanal.bruto)}</strong>
+                </span>
+                <span className="text-stone-600">
+                  Comisión{' '}
+                  <strong className="text-stone-800">{formatearUSD(totalesCanal.comision)}</strong>
+                </span>
+                <span className="text-stone-600">
+                  Neto{' '}
+                  <strong className="text-stone-800">
+                    {totalesCanal.incompleto ? 'al menos ' : ''}
+                    {formatearUSD(totalesCanal.neto)}
+                  </strong>
+                </span>
+              </div>
+            </>
+          )}
+        </Tarjeta>
+
         <Tarjeta titulo="Ranking de canales" descripcion="Reservas históricas por origen">
           {canales.length === 0 ? (
             <EstadoVacio titulo="Sin datos de canales" icono="reportes" />

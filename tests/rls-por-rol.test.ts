@@ -140,6 +140,30 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
 
   // ── Sin política de lectura a propósito: la maneja una función `definer` ──
   intentos_limitados: { todos: 'no' },
+
+  /*
+    ── VISTAS (desde la migración 0056) ──────────────────────────────────────
+
+    Hasta la 0056 quedaban fuera de esta auditoría, y era un agujero real: la lista de
+    objetos salía de `pg_tables`, que **no devuelve vistas**. Agregar una vista nueva no
+    hacía fallar el test de cobertura, o sea que la garantía que este archivo promete
+    tenía una excepción que nadie había declarado.
+
+    Importa porque una vista hereda el `grant select to anon` por omisión igual que una
+    tabla, y además puede exponer datos de tablas que sí están protegidas — es el camino
+    por el que se filtra algo sin que ninguna política se vea mal escrita.
+
+    Apenas se arregló, encontró que `saldos_agencias` y `saldos_proveedores` tenían ese
+    grant (migración 0057). No era una fuga: las cuatro son `security_invoker`, así que
+    RLS de las tablas de abajo aplica igual y `anon` veía cero filas. Pero el grant
+    estaba.
+
+    Las cuatro las lee todo el staff: son agregados de tablas que el staff ya puede leer.
+  */
+  saldos_agencias: { todos: 'si' },
+  saldos_proveedores: { todos: 'si' },
+  conciliacion_comision_canal: { todos: 'si' },
+  resumen_canal_mes: { todos: 'si' },
 }
 
 function esperado(tabla: string, rol: Rol): Expectativa {
