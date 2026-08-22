@@ -44,6 +44,9 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
   let emitirFactura: Acciones['emitirFactura']
   let crearReservaAction: Acciones['crearReservaAction']
   let cambiarEstadoReserva: Acciones['cambiarEstadoReserva']
+  let registrarPago: Acciones['registrarPago']
+  let agregarConsumo: Acciones['agregarConsumo']
+  let crearReservaGrupal: Acciones['crearReservaGrupal']
 
   beforeAll(async () => {
     ctx = nuevoContexto()
@@ -51,6 +54,9 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
     emitirFactura = acciones.emitirFactura
     crearReservaAction = acciones.crearReservaAction
     cambiarEstadoReserva = acciones.cambiarEstadoReserva
+    registrarPago = acciones.registrarPago
+    agregarConsumo = acciones.agregarConsumo
+    crearReservaGrupal = acciones.crearReservaGrupal
 
     // El usuario de la sesión falsa tiene que existir: `emitirFactura` guarda
     // quién emitió, y hay una FK contra `perfiles`.
@@ -155,6 +161,55 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
 
       const { data } = await ctx.db.from('facturas').select('id').eq('reserva_id', id).single()
       ctx.aBorrar.push({ tabla: 'facturas', id: (data as { id: string }).id })
+    })
+
+    /**
+     * El caso que el test de arriba NO cubre, y que es el que importa.
+     *
+     * Aquél emite dos veces **en secuencia**, así que la segunda encuentra la
+     * factura en la comprobación previa y se va a la pantalla del comprobante. Pasa
+     * sin que exista ninguna garantía: lo único que ejercita es un `if`.
+     *
+     * `emitirFactura` es check-then-act:
+     *
+     *     select id from facturas where reserva_id = X   -- ¿ya existe?
+     *     …
+     *     insert into facturas (…)                        -- no existía: se emite
+     *
+     * Entre las dos sentencias no hay nada. Dos clics simultáneos —o dos personas
+     * cerrando la misma reserva desde dos puestos— pasan los dos por el `select`,
+     * los dos ven que no hay nada, y los dos insertan. Con un CAE real serían dos
+     * documentos fiscales de la misma estadía, y arreglarlo exige una nota de
+     * crédito.
+     *
+     * Lo que se verifica acá es que la garantía **es de la base** y no del `if`: la
+     * restricción única `facturas_una_por_reserva` (migración 0045) rechaza el
+     * segundo insert aunque las dos emisiones corran a la vez.
+     */
+    it('con dos emisiones SIMULTÁNEAS, la base deja pasar una sola', async () => {
+      const id = await reservaEnEstado('checkout')
+
+      // Sin `await` entre las dos: las dos llamadas están en vuelo al mismo tiempo,
+      // así que las dos ejecutan su `select` antes de que cualquiera inserte.
+      const destinos = await Promise.all([
+        destinoDe(() => emitirFactura(formulario({ reserva_id: id }))),
+        destinoDe(() => emitirFactura(formulario({ reserva_id: id }))),
+      ])
+
+      const { data, count } = await ctx.db
+        .from('facturas')
+        .select('id', { count: 'exact' })
+        .eq('reserva_id', id)
+
+      const filas = (data ?? []) as { id: string }[]
+      for (const f of filas) ctx.aBorrar.push({ tabla: 'facturas', id: f.id })
+
+      expect(count, 'la reserva quedó con más de un comprobante fiscal').toBe(1)
+
+      // Las dos terminan en la pantalla del comprobante: la que ganó porque lo
+      // emitió, y la que perdió porque la reserva **está** facturada —por la otra—
+      // y mandarla a un error genérico sería mentirle.
+      for (const destino of destinos) expect(destino).toContain('/factura')
     })
 
     it('asigna números correlativos distintos a cada comprobante', async () => {
@@ -357,6 +412,222 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
         .maybeSingle()
       expect(enc).not.toBeNull()
       ctx.aBorrar.push({ tabla: 'encuestas_satisfaccion', id: (enc as { id: string }).id })
+    })
+  })
+
+  describe('crearReservaGrupal', () => {
+    /**
+     * El lote parcial dejaba de decirse, y era el pendiente P1 de la bitácora.
+     *
+     * `primerError` se calculaba y **se descartaba** cuando `creadas > 0`, así que
+     * quien pedía 5 unidades y recibía 2 veía la misma pantalla de éxito que quien
+     * recibía las 5. Lo descubría el día de la llegada.
+     *
+     * ⚠️ El arreglo NO es hacerlo atómico. Para un hotel, un grupo de 5 que sólo
+     * consigue 4 suele valer la pena igual —se toman las 4 y se llama al cliente— y
+     * abortar perdería cuatro ventas reales. El problema era el silencio.
+     */
+    it('pedir más unidades de las que hay avisa el faltante en vez de fingir éxito', async () => {
+      // Un tipo con UNA sola unidad, y se piden tres.
+      const { data: tipo } = await ctx.db
+        .from('tipos_unidad')
+        .insert({
+          codigo: `TEST-GRP-${ctx.sufijo}`,
+          nombre: 'Test grupal',
+          categoria: 'hosteria',
+          capacidad_max: 4,
+        })
+        .select('id')
+        .single()
+      const tipoId = (tipo as { id: string }).id
+      ctx.aBorrar.push({ tabla: 'tipos_unidad', id: tipoId })
+
+      const { data: unidad } = await ctx.db
+        .from('unidades')
+        .insert({ tipo_unidad_id: tipoId, nombre: `Test grupal ${ctx.sufijo}` })
+        .select('id')
+        .single()
+      ctx.aBorrar.push({ tabla: 'unidades', id: (unidad as { id: string }).id })
+
+      const { data: temporadaId } = await ctx.db.rpc('temporada_en', { f: '2027-05-10' })
+      const { data: tarifa } = await ctx.db
+        .from('tarifas')
+        .insert({
+          tipo_unidad_id: tipoId,
+          temporada_id: temporadaId as string,
+          precio_neto: 80,
+          precio_rack: 100,
+        })
+        .select('id')
+        .single()
+      ctx.aBorrar.push({ tabla: 'tarifas', id: (tarifa as { id: string }).id })
+
+      const fd = formulario({
+        check_in: '2027-05-10',
+        check_out: '2027-05-12',
+        canal: 'directo',
+        apellido: `Grupo${ctx.sufijo}`,
+        nombre: 'Titular',
+        [`qty_${tipoId}`]: 3,
+      })
+
+      const estado = await crearReservaGrupal({}, fd)
+
+      // Limpieza: las reservas creadas cuelgan del huésped titular.
+      const { data: creadas } = await ctx.db
+        .from('reservas')
+        .select('id')
+        .eq('grupo_id', estado.parcial?.grupoId ?? '00000000-0000-0000-0000-000000000000')
+      for (const r of (creadas ?? []) as { id: string }[]) {
+        await ctx.db.from('reservas').delete().eq('id', r.id)
+      }
+      await ctx.db.from('huespedes').delete().like('apellido', `Grupo${ctx.sufijo}%`)
+
+      // No es un error: la unidad que había SÍ se reservó.
+      expect(estado.error).toBeUndefined()
+      // Pero el faltante se dice, con números y motivo.
+      expect(estado.parcial, 'el lote parcial pasó como éxito completo').toBeDefined()
+      expect(estado.parcial!.pedidas).toBe(3)
+      expect(estado.parcial!.creadas).toBe(1)
+      expect(estado.parcial!.motivo).toBeTruthy()
+      expect(estado.parcial!.grupoId).toBeTruthy()
+    })
+  })
+
+  describe('registrarPago', () => {
+    /** Carga un consumo y devuelve lo que suma a la cuenta. */
+    async function consumoDePrueba(reservaId: string, cantidad: number): Promise<number> {
+      const { data: producto } = await ctx.db
+        .from('productos_servicios')
+        .select('id, precio')
+        .limit(1)
+        .single()
+      const p = producto as { id: string; precio: number }
+
+      await destinoDe(() =>
+        agregarConsumo(
+          formulario({ reserva_id: reservaId, producto_id: p.id, cantidad: String(cantidad) }),
+        ),
+      )
+
+      const { data: filas } = await ctx.db
+        .from('consumos')
+        .select('id')
+        .eq('reserva_id', reservaId)
+      for (const c of (filas ?? []) as { id: string }[]) {
+        ctx.aBorrar.push({ tabla: 'consumos', id: c.id })
+      }
+
+      return Number(p.precio) * cantidad
+    }
+
+    /** Los pagos que la acción crea no tienen id conocido: se limpian por reserva. */
+    async function borrarPagosDe(reservaId: string): Promise<void> {
+      const { data } = await ctx.db.from('pagos').select('id').eq('reserva_id', reservaId)
+      for (const p of (data ?? []) as { id: string }[]) {
+        ctx.aBorrar.push({ tabla: 'pagos', id: p.id })
+      }
+    }
+
+    it('marca pagada la reserva cuando el cobro cubre alojamiento y consumos', async () => {
+      const id = await reservaEnEstado('confirmada')
+      const consumos = await consumoDePrueba(id, 2)
+
+      await destinoDe(() =>
+        registrarPago(formulario({ reserva_id: id, monto: String(121 + consumos) })),
+      )
+      await borrarPagosDe(id)
+
+      const { data } = await ctx.db.from('reservas').select('estado').eq('id', id).single()
+      expect((data as { estado: string }).estado).toBe('pagada')
+    })
+
+    /**
+     * El bug que este test denuncia, y que estaba vivo.
+     *
+     * `registrarPago` comparaba lo cobrado contra `reservas.total`, que cubre **solo
+     * el alojamiento**. Quien había consumido del frigobar y pagaba la estadía en
+     * efectivo quedaba marcado «pagada» debiendo esa parte, y en el mostrador nadie
+     * se lo cobraba porque el sistema decía que estaba al día. Se descubría al
+     * cerrar caja, o no se descubría.
+     *
+     * Lo peor no es el bug sino que **ya estaba arreglado en el webhook de pagos**:
+     * las dos rutas tenían la misma secuencia duplicada y solo se corrigió una. Por
+     * eso la regla ahora vive en `lib/reservas/saldar.ts` y las dos la llaman.
+     */
+    it('NO la marca pagada si se cobró el alojamiento pero quedan consumos', async () => {
+      const id = await reservaEnEstado('confirmada')
+      const consumos = await consumoDePrueba(id, 2)
+      expect(consumos, 'el producto del seed tiene precio 0: el test no probaría nada').toBeGreaterThan(0)
+
+      // Se cobra exactamente el alojamiento, ni un peso de los consumos.
+      await destinoDe(() => registrarPago(formulario({ reserva_id: id, monto: '121' })))
+      await borrarPagosDe(id)
+
+      const { data } = await ctx.db.from('reservas').select('estado').eq('id', id).single()
+      expect(
+        (data as { estado: string }).estado,
+        'quedó «pagada» debiendo los consumos: el saldo se calculó sin ellos',
+      ).toBe('confirmada')
+    })
+  })
+
+  describe('puntos de fidelidad', () => {
+    /**
+     * El bug P1 de la bitacora: «cambiarEstadoReserva pisa los puntos en vez de
+     * sumarlos si falla la lectura previa».
+     *
+     * El codigo hacia read-then-write y descartaba el error de la lectura, asi que con
+     * la lectura fallada escribia SOLO los puntos de esa estadia y borraba todo lo
+     * acumulado. Ahora la suma la hace la base y no hay lectura que pueda fallar.
+     */
+    it('el check-out SUMA a lo que el huesped ya tenia', async () => {
+      const huespedId = await crearHuespedDePrueba(ctx)
+      await ctx.db.from('huespedes').update({ puntos: 120 }).eq('id', huespedId)
+
+      const { data } = await ctx.db
+        .from('reservas')
+        .insert({ huesped_id: huespedId, estado: 'in_house', total: 500 })
+        .select('id')
+        .single()
+      const id = (data as { id: string }).id
+      ctx.aBorrar.push({ tabla: 'reservas', id })
+
+      await destinoDe(() =>
+        cambiarEstadoReserva(formulario({ reserva_id: id, nuevo_estado: 'checkout' })),
+      )
+
+      const { data: h } = await ctx.db
+        .from('huespedes')
+        .select('puntos')
+        .eq('id', huespedId)
+        .single()
+
+      // 1 punto por cada USD 10: 500 da 50. Mas los 120 que ya tenia.
+      expect(
+        (h as { puntos: number }).puntos,
+        'los puntos previos se perdieron en vez de sumarse',
+      ).toBe(170)
+    })
+
+    it('la funcion de la base es atomica: dos sumas a la vez no se pisan', async () => {
+      // La segunda carrera que el arreglo cierra: dos check-outs simultaneos del mismo
+      // huesped leian el mismo valor previo y uno pisaba al otro.
+      const huespedId = await crearHuespedDePrueba(ctx)
+      await ctx.db.from('huespedes').update({ puntos: 0 }).eq('id', huespedId)
+
+      await Promise.all([
+        ctx.db.rpc('sumar_puntos_huesped', { p_huesped: huespedId, p_puntos: 10 }),
+        ctx.db.rpc('sumar_puntos_huesped', { p_huesped: huespedId, p_puntos: 25 }),
+      ])
+
+      const { data: h } = await ctx.db
+        .from('huespedes')
+        .select('puntos')
+        .eq('id', huespedId)
+        .single()
+
+      expect((h as { puntos: number }).puntos, 'una de las dos sumas se perdio').toBe(35)
     })
   })
 })

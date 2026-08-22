@@ -16,6 +16,7 @@ import { type CondicionIva } from '@/lib/domain/facturacion'
 import { Encabezado, Mensaje, Pagina, botonClases } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
 import { BotonEnvio } from '../../_components/boton-envio'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 interface Agencia {
   id: string
@@ -128,7 +129,7 @@ export default async function AgenciaDetallePage({
         <div>
           <p className="text-xs uppercase tracking-wide text-stone-600">Saldo</p>
           <p className={`text-2xl font-semibold ${saldo > 0 ? 'text-red-600' : 'text-stone-900'}`}>
-            USD {saldo.toLocaleString('es-AR')}
+            {formatearUSD(saldo)}
           </p>
           <p className="text-xs text-stone-600">{saldo > 0 ? 'adeuda al hotel' : 'sin deuda'}</p>
         </div>
@@ -209,10 +210,10 @@ export default async function AgenciaDetallePage({
                   {m.reserva && <span className="ml-2 text-xs text-stone-600">{m.reserva.codigo}</span>}
                 </td>
                 <td className="px-4 py-2 text-right text-stone-800">
-                  {m.tipo === 'cargo' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                  {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
                 </td>
                 <td className="px-4 py-2 text-right text-emerald-700">
-                  {m.tipo === 'pago' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                  {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
                 </td>
               </tr>
             ))}

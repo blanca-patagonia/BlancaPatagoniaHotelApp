@@ -3,7 +3,7 @@ import { puedeAcceder, type Area } from '@/lib/domain/permisos'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { aCsv, respuestaCsv, type Columna } from '@/lib/csv'
 import { traerTodo } from '@/lib/paginado'
-import { parsearPeriodo, mesActual } from '@/lib/fechas'
+import { parsearPeriodo, mesActual, hoyISO } from '@/lib/fechas'
 import {
   metricasDeMes,
   ultimosMeses,
@@ -11,6 +11,16 @@ import {
   type MetricasMes,
 } from '@/lib/domain/metricas'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
+import { resumenPagos, type EstadoPago, type TipoPago } from '@/lib/domain/pagos'
+import { esVista, type VistaReservas } from '@/lib/domain/vistas-reservas'
+import {
+  ETIQUETAS_GARANTIA,
+  ETIQUETAS_PLAN,
+  ETIQUETAS_SEGMENTO,
+  type Garantia,
+  type Plan,
+  type Segmento,
+} from '@/lib/domain/reservas'
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
 
 /**
@@ -72,6 +82,22 @@ interface FilaReserva {
   creada_en: string
   huesped: { apellido: string; nombre: string; email: string | null } | null
   estadias: { periodo: string }[]
+  /** Para el saldo. Llega del `SELECT_RESERVAS` compartido con la pantalla. */
+  pagos: { tipo: TipoPago; monto: number | string; estado: EstadoPago }[]
+  /* Desglose comercial y fiscal (paso 6). */
+  plan: string
+  garantia: string
+  segmento: string
+  total_neto: number | string
+  iva: number | string
+}
+
+/** Saldo de una fila, con el mismo cálculo que usa la pantalla. */
+function saldoDe(r: FilaReserva) {
+  return resumenPagos(
+    Number(r.total),
+    (r.pagos ?? []).map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado })),
+  )
 }
 
 const RECURSOS: Record<string, Definicion> = {
@@ -90,6 +116,19 @@ const RECURSOS: Record<string, Definicion> = {
           desde: params.get('desde') ?? undefined,
           hasta: params.get('hasta') ?? undefined,
           grupo: params.get('grupo') ?? undefined,
+          // La vista tiene que viajar o el CSV bajaría todas las reservas
+          // mientras la pantalla muestra sólo las llegadas de hoy. El botón de
+          // exportar ya conserva los filtros vigentes en la URL.
+          vista: esVista(params.get('vista') ?? undefined)
+            ? (params.get('vista') as VistaReservas)
+            : undefined,
+          plan: params.get('plan') ?? undefined,
+          garantia: params.get('garantia') ?? undefined,
+          segmento: params.get('segmento') ?? undefined,
+          contrato: params.get('contrato') ?? undefined,
+          unidad: params.get('unidad') ?? undefined,
+          tipoUnidad: params.get('tipo') ?? undefined,
+          hoy: hoyISO(),
         },
         orTermino,
       )
@@ -119,7 +158,30 @@ const RECURSOS: Record<string, Definicion> = {
         },
         { titulo: 'Canal', valor: (r) => r.canal },
         { titulo: 'Estado', valor: (r) => ETIQUETAS_ESTADO_RESERVA[r.estado] ?? r.estado },
-        { titulo: 'Total USD', valor: (r) => Number(r.total).toFixed(2) },
+        { titulo: 'Plan', valor: (r) => ETIQUETAS_PLAN[r.plan as Plan] ?? r.plan ?? '' },
+        {
+          titulo: 'Garantía',
+          valor: (r) => ETIQUETAS_GARANTIA[r.garantia as Garantia] ?? r.garantia ?? '',
+        },
+        {
+          titulo: 'Segmento',
+          valor: (r) => ETIQUETAS_SEGMENTO[r.segmento as Segmento] ?? r.segmento ?? '',
+        },
+        // Neto e IVA discriminados: es lo que administración necesita para
+        // conciliar, y antes del paso 6 no se podía sacar del total.
+        { titulo: 'Neto sin IVA USD', valor: (r) => Number(r.total_neto ?? 0).toFixed(2) },
+        { titulo: 'IVA USD', valor: (r) => Number(r.iva ?? 0).toFixed(2) },
+        { titulo: 'Total con IVA USD', valor: (r) => Number(r.total).toFixed(2) },
+        // Pagado y saldo salen de `resumenPagos`, el mismo cálculo que muestra la
+        // pantalla: el CSV y el listado no pueden decir cosas distintas.
+        {
+          titulo: 'Pagado USD',
+          valor: (r) => saldoDe(r).pagado.toFixed(2),
+        },
+        {
+          titulo: 'Saldo USD',
+          valor: (r) => saldoDe(r).saldo.toFixed(2),
+        },
         { titulo: 'Creada', valor: (r) => r.creada_en?.slice(0, 10) ?? '' },
       ])
     },

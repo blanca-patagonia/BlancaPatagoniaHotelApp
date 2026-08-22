@@ -41,6 +41,7 @@ import {
   Mensaje,
   Pagina,
 } from '../_components/ui'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 const RE_MES = /^\d{4}-\d{2}$/
 const ESTADOS_NO_VENDIDOS: EstadoReserva[] = ['cancelada', 'no_show']
@@ -237,7 +238,7 @@ export default async function ReportesPage({
             ADR (tarifa media)
           </p>
           <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
-            USD {actual.adr.toLocaleString('es-AR')}
+            {formatearUSD(actual.adr)}
           </p>
           <p className="mt-1.5 text-xs text-stone-600">por noche vendida (neto)</p>
           <p className="mt-1">
@@ -248,7 +249,7 @@ export default async function ReportesPage({
         <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">RevPAR</p>
           <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
-            USD {actual.revpar.toLocaleString('es-AR')}
+            {formatearUSD(actual.revpar)}
           </p>
           <p className="mt-1.5 text-xs text-stone-600">por unidad disponible (neto)</p>
           <p className="mt-1">
@@ -258,20 +259,20 @@ export default async function ReportesPage({
 
         <Kpi
           titulo="Ingreso alojamiento"
-          valor={`USD ${Math.round(actual.ingreso).toLocaleString('es-AR')}`}
+          valor={`${formatearUSD(Math.round(actual.ingreso))}`}
           detalle={`imputado a ${etiquetaMes(mes)}`}
           icono="reportes"
         />
         <Kpi
           titulo="Ingresos cobrados"
-          valor={`USD ${ingresos.toLocaleString('es-AR')}`}
+          valor={`${formatearUSD(ingresos)}`}
           detalle="pagos aprobados (histórico)"
           icono="ok"
           tono="exito"
         />
         <Kpi
           titulo="Facturado"
-          valor={`USD ${facturado.toLocaleString('es-AR')}`}
+          valor={`${formatearUSD(facturado)}`}
           detalle="comprobantes emitidos"
           icono="agencias"
           tono="calafate"
@@ -374,7 +375,7 @@ export default async function ReportesPage({
                     </td>
                     <td className={`${TD} tabular text-right text-stone-800`}>{v.cantidad}</td>
                     <td className={`${TD} tabular text-right text-stone-800`}>
-                      {v.monto.toLocaleString('es-AR')}
+                      {importe(v.monto)}
                     </td>
                   </tr>
                 ))}

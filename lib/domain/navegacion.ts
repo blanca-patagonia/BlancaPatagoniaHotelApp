@@ -44,11 +44,11 @@ export interface GrupoNavegacion {
  * silencio del menú.
  */
 export const GRUPOS: readonly GrupoNavegacion[] = [
-  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'huespedes'] },
+  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
-  { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos'] },
+  { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
   { titulo: 'Equipo', areas: ['avisos', 'conversaciones'] },
-  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'config', 'usuarios'] },
+  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'config', 'usuarios', 'respaldos'] },
   { titulo: null, areas: ['ayuda'] },
 ]
 

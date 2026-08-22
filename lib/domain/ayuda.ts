@@ -133,6 +133,31 @@ export const CAPITULOS: Capitulo[] = [
         detalle:
           'Usalo cuando la habitación no se puede vender —una avería seria, una refacción—. Deja de ofrecerse al cargar reservas.',
       },
+      {
+        titulo: 'Desde el celular: "Mi trabajo"',
+        detalle:
+          'El botón "Vista para el celular" abre una pantalla pensada para usar de pie, en el pasillo: tus habitaciones ordenadas por urgencia, una tarjeta por habitación y un solo botón grande para marcarla limpia. No hay filtros ni tablas.',
+      },
+      {
+        titulo: 'Por qué una habitación aparece primero',
+        detalle:
+          'La lista se ordena por urgencia y dice el motivo al lado. "Urgente" significa que llega alguien hoy y la habitación todavía no está lista. "Prioridad alta" es que se desocupó hoy y hay que prepararla. Si dice "Normal", se puede dejar para después.',
+      },
+      {
+        titulo: 'Las que están en reparación no se limpian',
+        detalle:
+          'Si hay una orden de mantenimiento abierta, la habitación aparece como "sin tarea" aunque esté sucia. Es a propósito: no tiene sentido limpiar algo que todavía están arreglando.',
+      },
+      {
+        titulo: 'La inspección no la hace la mucama',
+        detalle:
+          'Desde el celular sólo se puede marcar "limpia". Pasar a "inspeccionada" lo hace la gobernanta o gerencia desde el tablero: es el control de calidad, y no lo puede firmar quien hizo el trabajo.',
+      },
+      {
+        titulo: 'El avance del turno',
+        detalle:
+          'Arriba se ve el porcentaje y cuántas faltan. Las habitaciones bloqueadas o en reparación no se cuentan, así que el 100% significa de verdad que terminaste.',
+      },
     ],
   },
   {
@@ -202,6 +227,109 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Cómo firma la otra parte',
         detalle:
           'Recibe un enlace propio. No necesita usuario ni contraseña: entra, lee y acepta. Queda registrado cuándo lo hizo.',
+      },
+    ],
+  },
+  {
+    area: 'respaldos',
+    resumen: 'Cómo bajar una copia de los datos, y quién se ocupa de los backups.',
+    pasos: [
+      {
+        titulo: 'Son dos cosas distintas',
+        detalle:
+          'El backup completo de la base lo hace automáticamente la empresa donde está alojado el sistema. Este sistema NO lo puede disparar ni comprobar: no existe forma de pedirlo desde acá, y un botón que dijera que sí estaría mintiendo.',
+      },
+      {
+        titulo: 'Lo que sí podés hacer',
+        detalle:
+          'Bajar un archivo con todas las reservas, los huéspedes, los pagos, las facturas y el tarifario. Se guarda donde quieras —un pendrive, la nube, el correo— y se puede abrir para comprobar que está. Es la respuesta a «si esto se cae, ¿tengo mis reservas?».',
+      },
+      {
+        titulo: 'Cada cuánto',
+        detalle:
+          'Una vez por semana. La pantalla avisa cuando pasaron más de siete días y avisa más fuerte pasado el mes: con un mes de hueco, rehacer las reservas de memoria ya no es posible.',
+      },
+      {
+        titulo: 'El archivo es confidencial',
+        detalle:
+          'Tiene el nombre, el email y el teléfono de todos los huéspedes que pasaron por el hotel. Guardalo como guardarías el libro de pasajeros: no lo dejes en una carpeta compartida ni lo mandes por correo sin pensarlo.',
+      },
+      {
+        titulo: 'Solo administración exporta',
+        detalle:
+          'Gerencia puede ver cuándo fue la última vez —para controlar que se esté haciendo— pero no puede bajar el archivo. Es por lo del punto anterior.',
+      },
+    ],
+  },
+  {
+    area: 'punto_venta',
+    resumen: 'Cargar frigobar, room service y extras a la habitación.',
+    pasos: [
+      {
+        titulo: 'Se carga todo junto, no de a uno',
+        detalle:
+          'Elegís la habitación, escribís las cantidades en la grilla y apretás "Cerrar comanda" una sola vez. El total se va sumando abajo mientras escribís, así lo podés decir en voz alta antes de guardar.',
+      },
+      {
+        titulo: 'Buscar sin acentos',
+        detalle:
+          'El buscador encuentra "cafe" y te muestra "Café". También funciona con el código del producto, por ejemplo FRI- para ver todo el frigobar.',
+      },
+      {
+        titulo: 'Sólo aparecen los que están alojados hoy',
+        detalle:
+          'La lista de habitaciones muestra únicamente las reservas en curso. No se le puede cargar un frigobar a alguien que llega el mes que viene, y eso evita elegir la habitación equivocada.',
+      },
+      {
+        titulo: 'El número de comanda sirve para corregir',
+        detalle:
+          'Cada carga recibe un número. Si te equivocaste de habitación, buscás la comanda en la lista de abajo y la anulás completa: se quitan todas sus líneas de la cuenta de una vez, sin tener que borrarlas una por una.',
+      },
+      {
+        titulo: 'Anular no repone el stock',
+        detalle:
+          'A propósito: la botella igual salió del frigobar. Lo que se corrige al anular es a quién se le cobra. Si además hay que ajustar el inventario, se hace desde Configuración.',
+      },
+      {
+        titulo: 'El stock avisa antes de cobrar',
+        detalle:
+          'Si un producto lleva control de stock, se muestra cuántos quedan y no deja cargar más. Cuando llega a cero, el campo queda deshabilitado.',
+      },
+    ],
+  },
+  {
+    area: 'canales',
+    resumen: 'Las reservas que llegan de Booking, y qué hacer con ellas.',
+    pasos: [
+      {
+        titulo: 'Lo que llega no es todavía una reserva',
+        detalle:
+          'Las reservas de Booking aterrizan en una lista aparte y no ocupan habitación hasta que alguien aprieta "Importar". Es a propósito: Booking llama a las habitaciones con sus propios nombres, y hay que confirmar a qué tipo corresponde antes de darla por buena.',
+      },
+      {
+        titulo: 'Cómo traerlas',
+        detalle:
+          'En el extranet de Booking: Administración → Informe de reservas. Se descarga el CSV y se sube en esta pantalla. No hay que abrirlo en Excel antes: si se abre y se guarda, las fechas y los precios cambian de formato y algunas filas dejan de leerse.',
+      },
+      {
+        titulo: 'Ojo: esto NO evita el overbooking',
+        detalle:
+          'Traemos las reservas de Booking, pero no le avisamos a Booking qué nos queda libre. Booking puede vender una habitación que ustedes ya vendieron por teléfono. Hay que seguir cerrando fechas a mano en el extranet. Para que se sincronice en las dos direcciones el hotel tiene que contratar un channel manager.',
+      },
+      {
+        titulo: 'Cuando una queda "Con problema"',
+        detalle:
+          'Significa que no se pudo crear. El motivo aparece escrito en la misma fila: casi siempre es que la habitación ya estaba ocupada esas fechas, o que el tipo de habitación que informó Booking no existe en el sistema. Se resuelve y se aprieta "Importar" de nuevo.',
+      },
+      {
+        titulo: 'El precio lo pone el hotel, no Booking',
+        detalle:
+          'Al importar, el total se calcula con el tarifario propio a precio de agencia. Lo que informa Booking se guarda al lado para comparar: si hay diferencia, el sistema lo avisa, pero no cambia el precio.',
+      },
+      {
+        titulo: 'Mensajes y reseñas se cargan a mano',
+        detalle:
+          'El informe de Booking no los trae. Se cargan acá para que no queden sólo en la memoria de quien los leyó: un pedido de cuna sin atender termina siendo una queja en la reseña.',
       },
     ],
   },

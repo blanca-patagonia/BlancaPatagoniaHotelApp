@@ -118,6 +118,36 @@ Tarifario 2025/2026 (Anexo A).
   cargadas) · **Fase 19** buscador global por rol, confirmaciones y encabezado ·
   **Fase 20** ningún fallo de escritura en silencio (ver `lib/acciones.ts`) ·
   **Fase 21** catálogo público de alojamientos (`/alojamientos` + detalle).
+- **Modernización WinPAX ✅ (2026-08-16, numeración propia de 11 pasos).** El cliente
+  venía de WinPAX (Oracle Forms, ~año 2000) y se cubrieron sus funciones core.
+  **El plan completo, con el porqué de cada decisión, está en
+  `docs/modernizacion-winpax.md`** — leerlo antes de tocar cualquiera de estos
+  módulos. Resumen: **1** cotización de divisas (cierra el ADR 0003) · **2** fila
+  resumen de la grilla + estados legibles sin color · **3** diez vistas operativas
+  del listado de reservas, con saldo · **4-5** canales de venta: se enchufó el
+  puerto que estaba huérfano, con importación del informe CSV de Booking y feed
+  iCal · **6** ficha de reserva completa (VIP, adultos/menores/bebés, cunas, plan,
+  garantía, segmento, voucher, «no mover», desglose fiscal) · **7** punto de venta
+  con grilla por departamento y número de comanda · **8** folios A/B con split y
+  jerarquía de departamentos · **9** housekeeping móvil ordenado por prioridad ·
+  **10** piso y bloque en `unidades` · **11** respaldos verificables.
+  Migraciones `0036`–`0043`. Tres áreas nuevas del panel: `canales`, `punto_venta`
+  y `respaldos`.
+  ⚠️ **Tres cosas de este trabajo que hay que saber antes de tocarlo:**
+  1. **La sincronización con Booking NO evita el overbooking.** Los dos caminos
+     posibles sin ser Connectivity Partner (informe CSV y feed iCal) son de **solo
+     lectura**: nadie le informa a Booking qué queda libre, así que puede vender una
+     unidad ya vendida. Se declara en `capacidades()`, en `ResultadoEnvio.noSoportado`
+     y en la pantalla. **No quitar esas advertencias**: la solución real es un
+     channel manager y es una contratación del hotel (ADR 0021).
+  2. **`crear_reserva` deriva `estadias.huespedes` del desglose** (`adultos +
+     menores`; los bebés **no** cuentan, no ocupan plaza). No hay `check` en la base
+     que lo garantice, y fue deliberado: habría roto los `update` de mudanza (0028) y
+     reprogramación. La coherencia se garantiza en esa función, que es el **único**
+     lugar donde nacen estadías.
+  3. **La app no puede hacer un backup de Postgres.** Lo hace la plataforma. Lo que
+     hay en `/panel/respaldos` es una exportación de los datos operativos, y la
+     pantalla lo explica. **No convertirlo en un botón que diga «hacer backup».**
 - **Auditoría de seguridad (numeración propia, empieza de nuevo en Fase 0):**
   **Fase 0 ✅** reconocimiento sin tocar código (`docs/AUDITORIA_INICIAL.md`) ·
   **Fase 1 ✅** límite de tasa en las entradas públicas y en el login
@@ -131,8 +161,12 @@ Tarifario 2025/2026 (Anexo A).
   `cotizar_estadia` ni leer la columna `precio_neto`. ⚠️ **No hacer
   `cotizar_estadia` `security definer`**: ahí `current_user` es el dueño de la
   función y la guarda quedaría siempre en verdadero.
-  **Pendiente:** auditar las ~60 políticas RLS una por una — que estén activadas en
-  las 33 tablas no dice qué permite cada una. ⚠️ **No se puede hacer en un entorno
+  **Pendiente:** auditar las ~75 políticas RLS una por una — que estén activadas en
+  las 40 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
+  tablas y 14 políticas** a ese pendiente (`cotizaciones`, `canal_reservas`,
+  `canal_sincronizaciones`, `canal_mensajes`, `canal_resenas`, `departamentos`,
+  `respaldos`); todas revocan `select` a `anon` explícitamente, pero eso no
+  reemplaza la auditoría. ⚠️ **No se puede hacer en un entorno
   sin Docker**: exige ejecutar las políticas contra una base con los cuatro roles, y
   el *pull* de las imágenes de Supabase está bloqueado por política de egreso en el
   entorno remoto (403 contra las CDN de los registries). Hay que hacerlo en local.
@@ -148,24 +182,30 @@ Tarifario 2025/2026 (Anexo A).
   envuelve cada migración en una transacción y Postgres corta con SQLSTATE 55P04;
   el `db reset` falla ahí y **no aplica nada de lo que sigue**. Es lo que le pasó a
   la `0032` y por eso existe la `0035`.
-- **486 tests verdes** (47 archivos), **cero salteados** contra la base local. Para
+- **882 tests verdes** (66 archivos), **cero salteados** contra la base local. Para
   que no salteen hay que exportar `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` **y**
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: vitest no lee `.env.local`, y `EXIGIR_DB=1`
   protege `hayDB` pero **no** `hayAnon` (`tests/db.ts:40`), así que sin la clave
   publicable los 4 tests del borde público del ADR 0016 saltean en silencio. En CI
   no pasa: el workflow la exporta (`ci.yml:72`).
-- **Cinco adapters** con el mismo patrón (interfaz + stub, se cambia por env):
+- **Siete adapters** con el mismo patrón (interfaz + simulador, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
-  `FacturacionElectronicaProvider` y `EmailProvider` (`lib/email/index.ts`, el
-  único camino para mandar correo). Ningún borde externo es real.
+  `FacturacionElectronicaProvider`, `EmailProvider` (`lib/email/index.ts`, el único
+  camino para mandar correo), `CanalVentaProvider` (`lib/canales/`, OTA) y
+  `CotizacionProvider` (`lib/divisas/`, tipo de cambio).
+  ⚠️ Los dos últimos son distintos de los cinco primeros: **no tienen simulador que
+  mienta**, porque sus fuentes son públicas y sin credenciales. El respaldo de
+  divisas es `manual` (no inventa: usa lo que un admin cargó) y el de canales es
+  `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 19 ADRs.** Los últimos: **ADR 0014** portal de agencias y proveedores por
-  token · **ADR 0015** qué se verifica y qué se garantiza (los hallazgos de la
-  revisión crítica de la Fase 12) · **ADR 0016** el precio neto fuera del alcance
+- **Hay 21 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
-  política de cancelación (**sin decidir**: espera una definición de producto).
+  política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
+  `reservas.garantia` dice si hay de dónde cobrar un no-show) · **ADR 0020**
+  cotización de divisas, que **cierra el 0003** · **ADR 0021** canales de venta de
+  solo lectura, con la limitación declarada.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.
@@ -227,6 +267,11 @@ Tarifario 2025/2026 (Anexo A).
 - **Deploy** (Vercel + Supabase cloud) pendiente — requiere cuentas del usuario.
 - No se integran pasarelas reales ni envío de email real (credenciales/dinero);
   stubs listos para enchufar (`lib/payments`, `lib/email`).
+- ⚠️ **Variables obligatorias en producción** (ADR 0018: si faltan, el sistema falla
+  al arrancar, a propósito): `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,
+  `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER` y `CANAL_PROVIDER`. Opcionales:
+  `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL` y
+  `ARGENTINADATOS_URL`. Revisarlas **antes** del deploy.
 - Admin de dev: `admin@blancapatagonia.local` / `blancadev1234` (`npm run seed:usuarios`).
 - Al embeber `huespedes` desde `reservas` usar `huespedes!reservas_huesped_id_fkey` (hay 2 FKs).
 - Pendiente de confirmar con el hotel: **inventario físico real** de unidades y

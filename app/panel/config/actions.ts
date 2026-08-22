@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerSesion } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
+import { puedeAcceder } from '@/lib/domain/permisos'
+import { esMonedaExtranjera, validarCotizacionManual } from '@/lib/domain/divisas'
+import { registrarCotizacionManual } from '@/lib/divisas/servicio'
 
 /**
  * Actualiza el precio neto y rack de una tarifa (tipo de unidad × temporada).
@@ -130,4 +133,86 @@ export async function alternarProducto(formData: FormData): Promise<void> {
   }
   revalidatePath('/panel/config')
   redirect('/panel/config')
+}
+
+/**
+ * Carga a mano la cotización de una divisa.
+ *
+ * Es el respaldo del que habla el ADR 0020: cuando la fuente externa no responde
+ * o viene dando cualquier cosa, alguien mira el pizarrón del banco y lo escribe
+ * acá. Por eso el valor cargado **le gana** a uno automático más viejo
+ * (`resolverVigente` elige por frescura, no por fuente): es una corrección
+ * deliberada de una persona, no un dato de segunda.
+ *
+ * Solo admin/gerencia, y no por prolijidad: fijar la cotización es fijar a qué
+ * precio cobra el hotel ese día. Un valor mal tipeado en el mostrador se traduce
+ * en cobrarle de menos a todo el que pague en pesos hasta que alguien lo note.
+ *
+ * A diferencia del resto de este archivo, la comprobación de rol usa
+ * `puedeAcceder(rol, 'config')` en lugar del literal `['admin','gerencia']`.
+ * `AGENTS.md` pide migrar esos literales al tocarlos; el área `config` ya está
+ * restringida a esos dos roles en `lib/domain/permisos.ts`, así que el resultado
+ * es el mismo y deja de haber dos fuentes de verdad.
+ */
+export async function cargarCotizacion(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const moneda = String(formData.get('moneda') ?? '')
+  if (!esMonedaExtranjera(moneda)) redirect('/panel/config?error=moneda#divisas')
+
+  const compra = formData.get('compra')
+  const venta = formData.get('venta')
+
+  // El dominio decide si el par sirve: un cero, un negativo o una venta por
+  // debajo de la compra (que significaría regalar el spread) no llegan a la base.
+  const problema = validarCotizacionManual(compra, venta)
+  if (problema) {
+    redirect(`/panel/config?error=cotizacion&detalle=${encodeURIComponent(problema)}#divisas`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await registrarCotizacionManual(supabase, {
+    moneda,
+    compra: Number(compra),
+    venta: Number(venta),
+    perfilId: sesion.userId,
+  })
+
+  if (error) redirect(`/panel/config?error=cotizacion&detalle=${encodeURIComponent(error)}#divisas`)
+
+  revalidatePath('/panel/config')
+  revalidatePath('/panel')
+  redirect('/panel/config?ok=cotizacion#divisas')
+}
+
+/**
+ * Guarda la ubicación física de una unidad: bloque, piso y orden de recorrido.
+ *
+ * Sin una pantalla para cargarlos, las columnas de la migración 0042 quedarían
+ * vacías para siempre y los filtros de la grilla no servirían para nada.
+ *
+ * `orden` es el que define el recorrido de limpieza dentro del piso. Existe porque
+ * el alfabético pone «10» antes que «9», así que ordenar por nombre manda a la
+ * mucama a caminar el pasillo en zigzag.
+ */
+export async function guardarUbicacionUnidad(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const id = String(formData.get('unidad_id') ?? '')
+  if (!id) redirect('/panel/config?error=unidad#ubicaciones')
+
+  const bloque = String(formData.get('bloque') ?? '').trim().slice(0, 60)
+  const piso = String(formData.get('piso') ?? '').trim().slice(0, 20)
+  const ordenCrudo = Number(formData.get('orden'))
+  const orden = Number.isFinite(ordenCrudo) ? Math.max(0, Math.trunc(ordenCrudo)) : 0
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('unidades').update({ bloque, piso, orden }).eq('id', id)
+
+  cortarSiFalla(error, '/panel/config', 'ubicacion')
+  revalidatePath('/panel/config')
+  revalidatePath('/panel/ocupacion')
+  redirect('/panel/config?ok=ubicacion#ubicaciones')
 }

@@ -1,4 +1,5 @@
 import 'server-only'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import {
   calcularEstadia,
@@ -12,6 +13,21 @@ import {
  * Cotización de una estadía: combina las tarifas por noche (RPC `cotizar_estadia`)
  * con el motor de precios puro (`calcularEstadia`) para obtener el total con IVA
  * y descuentos.
+ *
+ * ── Por qué el cliente es un parámetro (opcional) ───────────────────────────
+ *
+ * Antes esta función **siempre** creaba su propio cliente con
+ * `crearClienteServidor()`, que por dentro llama a `cookies()`. Eso la ataba a un
+ * contexto de petición HTTP y tenía una consecuencia que no era evidente:
+ * `crearReservaEnUnidadLibre` recibe un cliente por parámetro —justamente para
+ * poder correr con `service_role`— pero al cotizar se salteaba ese cliente y
+ * pedía cookies. Resultado: el alta de reserva **no se podía ejecutar fuera de
+ * una petición**, ni desde un webhook, ni desde una tarea programada, ni desde un
+ * test de integración. El error que daba (`cookies was called outside a request
+ * scope`) no dejaba adivinar la causa.
+ *
+ * Ahora el cliente se puede inyectar. Si no se pasa, el comportamiento es
+ * exactamente el de antes, así que ningún llamador existente cambia.
  */
 
 export interface Cotizacion {
@@ -33,8 +49,18 @@ export async function cotizarEstadia(params: {
   tarifaTipo: TarifaTipo
   promocion?: Promocion | null
   anticipacionDias?: number
+  /**
+   * Cliente a usar. Si se omite, se crea uno con la sesión de la petición
+   * (comportamiento histórico).
+   *
+   * ⚠️ Con un cliente `service_role` la guarda del precio neto del ADR 0016 no
+   * aplica, porque ese rol saltea RLS. Es correcto para una importación de canal
+   * —una venta por OTA va a tarifa neto por definición— pero **nunca** se debe
+   * pasar un cliente privilegiado en un camino alcanzable desde el portal público.
+   */
+  cliente?: SupabaseClient
 }): Promise<Cotizacion> {
-  const supabase = await crearClienteServidor()
+  const supabase = params.cliente ?? (await crearClienteServidor())
 
   // Dos funciones y no una con parámetro (migración 0031). `cotizar_estadia`
   // menciona `precio_neto`, así que el rol `anon` no puede ni ejecutarla ni leer

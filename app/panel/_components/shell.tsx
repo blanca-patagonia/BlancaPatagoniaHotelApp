@@ -14,6 +14,7 @@ const NAV: Record<Area, { href: string; icono: NombreIcono }> = {
   ocupacion: { href: '/panel/ocupacion', icono: 'ocupacion' },
   servicio: { href: '/panel/servicio', icono: 'reportes' },
   reservas: { href: '/panel/reservas', icono: 'reservas' },
+  punto_venta: { href: '/panel/punto-venta', icono: 'objetos' },
   huespedes: { href: '/panel/huespedes', icono: 'huespedes' },
   housekeeping: { href: '/panel/housekeeping', icono: 'housekeeping' },
   mantenimiento: { href: '/panel/mantenimiento', icono: 'mantenimiento' },
@@ -23,10 +24,12 @@ const NAV: Record<Area, { href: string; icono: NombreIcono }> = {
   agencias: { href: '/panel/agencias', icono: 'agencias' },
   proveedores: { href: '/panel/proveedores', icono: 'proveedores' },
   contratos: { href: '/panel/contratos', icono: 'contratos' },
+  canales: { href: '/panel/canales', icono: 'canales' },
   auditoria: { href: '/panel/auditoria', icono: 'auditoria' },
   reportes: { href: '/panel/reportes', icono: 'reportes' },
   config: { href: '/panel/config', icono: 'config' },
   usuarios: { href: '/panel/usuarios', icono: 'usuarios' },
+  respaldos: { href: '/panel/respaldos', icono: 'descargar' },
   ayuda: { href: '/panel/ayuda', icono: 'ayuda' },
 }
 

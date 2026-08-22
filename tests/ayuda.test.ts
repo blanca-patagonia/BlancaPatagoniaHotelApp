@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { CAPITULOS, GLOSARIO, guiaPara, tituloCapitulo } from '@/lib/domain/ayuda'
 import { ROLES } from '@/lib/domain/roles'
-import { puedeAcceder, ETIQUETAS_AREA } from '@/lib/domain/permisos'
+import { puedeAcceder, estaOculta, ETIQUETAS_AREA } from '@/lib/domain/permisos'
 
 describe('ayuda · la guía no promete lo que el rol no puede hacer', () => {
   it('a cada rol solo le muestra capítulos de áreas a las que accede', () => {
@@ -31,8 +31,13 @@ describe('ayuda · la guía no promete lo que el rol no puede hacer', () => {
     expect(areas).toContain('mantenimiento')
   })
 
-  it('el administrador ve todos los capítulos escritos', () => {
-    expect(guiaPara('admin')).toHaveLength(CAPITULOS.length)
+  it('el administrador ve todos los capítulos de las áreas encendidas', () => {
+    // La guía se filtra con `puedeAcceder`, así que el capítulo de un módulo apagado
+    // desaparece solo. Es lo que se quiere: la Ayuda no puede explicar una pantalla
+    // que no está en el menú.
+    const encendidos = CAPITULOS.filter((c) => !estaOculta(c.area))
+    expect(guiaPara('admin')).toHaveLength(encendidos.length)
+    expect(encendidos.length, 'se apagaron todos los capítulos').toBeGreaterThan(0)
   })
 
   it('recepción ve reservas pero no usuarios ni proveedores', () => {

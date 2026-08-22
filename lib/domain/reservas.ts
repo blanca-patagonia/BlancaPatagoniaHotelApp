@@ -84,3 +84,76 @@ export function transicionesPosibles(estado: EstadoReserva): readonly EstadoRese
 export function puedeTransicionar(desde: EstadoReserva, hacia: EstadoReserva): boolean {
   return TRANSICIONES[desde].includes(hacia)
 }
+
+/* ───────────────────────────────────────────── datos comerciales (paso 6) ──── */
+
+/**
+ * Plan de comidas incluido en la tarifa.
+ *
+ * Es lo que WinPAX llamaba indistintamente «plan» y «pensión»: son el mismo dato.
+ * El valor por omisión es `desayuno` porque es lo que incluye el Tarifario del
+ * hotel; poner `solo_alojamiento` por defecto haría que toda reserva nueva
+ * prometiera menos de lo que el hotel da.
+ */
+export const PLANES = ['solo_alojamiento', 'desayuno', 'media_pension', 'pension_completa'] as const
+export type Plan = (typeof PLANES)[number]
+
+export const ETIQUETAS_PLAN: Record<Plan, string> = {
+  solo_alojamiento: 'Solo alojamiento',
+  desayuno: 'Habitación y desayuno',
+  media_pension: 'Media pensión',
+  pension_completa: 'Pensión completa',
+}
+
+/**
+ * Cómo está garantizada la reserva.
+ *
+ * No es un dato administrativo: es **lo que decide si un no-show se puede
+ * cobrar**. Sin garantía no hay nada de dónde cobrar, y la política de
+ * cancelación del Tarifario (no-show 100 %) queda en letra muerta. El ADR 0019
+ * dejó pendiente cómo se ejecuta ese cobro; esta columna es el dato que va a
+ * necesitar cuando se decida.
+ */
+export const GARANTIAS = ['sin_garantia', 'tarjeta', 'deposito', 'agencia', 'contrato'] as const
+export type Garantia = (typeof GARANTIAS)[number]
+
+export const ETIQUETAS_GARANTIA: Record<Garantia, string> = {
+  sin_garantia: 'Sin garantía',
+  tarjeta: 'Tarjeta',
+  deposito: 'Depósito',
+  agencia: 'Cuenta de agencia',
+  contrato: 'Contrato',
+}
+
+/** Garantías con las que un no-show tiene de dónde cobrarse. */
+export const GARANTIAS_COBRABLES: readonly Garantia[] = ['tarjeta', 'deposito', 'agencia', 'contrato']
+
+export function noShowEsCobrable(g: Garantia): boolean {
+  return GARANTIAS_COBRABLES.includes(g)
+}
+
+/** Segmento de mercado, para los reportes de gerencia. */
+export const SEGMENTOS = ['particular', 'corporativo', 'grupo', 'ota', 'agencia'] as const
+export type Segmento = (typeof SEGMENTOS)[number]
+
+export const ETIQUETAS_SEGMENTO: Record<Segmento, string> = {
+  particular: 'Particular',
+  corporativo: 'Corporativo',
+  grupo: 'Grupo',
+  ota: 'OTA / Booking',
+  agencia: 'Agencia',
+}
+
+/**
+ * Segmento que corresponde a cada canal de venta.
+ *
+ * Se deriva en lugar de pedirlo dos veces: si la reserva entra por Booking, el
+ * segmento es OTA por definición, y hacer que recepción lo elija a mano sólo
+ * habilita que los dos datos se contradigan. Cuando entra por un canal directo el
+ * segmento sí es una decisión —puede ser un particular o una empresa— y ahí la
+ * pantalla lo deja elegir.
+ */
+export function segmentoDeCanal(canal: string): Segmento {
+  if (canal === 'booking' || canal === 'expedia') return 'ota'
+  return 'particular'
+}

@@ -4,6 +4,14 @@ import { useActionState } from 'react'
 import Link from 'next/link'
 import { crearReservaAction, type EstadoNuevaReserva } from '../actions'
 import {
+  ETIQUETAS_GARANTIA,
+  ETIQUETAS_PLAN,
+  ETIQUETAS_SEGMENTO,
+  GARANTIAS,
+  PLANES,
+  SEGMENTOS,
+} from '@/lib/domain/reservas'
+import {
   CAMPO,
   Campo,
   Mensaje,
@@ -11,6 +19,7 @@ import {
   Tarjeta,
   botonClases,
 } from '../../_components/ui'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 export interface OpcionAgencia {
   id: string
@@ -117,7 +126,7 @@ export function FormularioReserva({
                   ) : (
                     <>
                       <span className="tabular font-semibold text-stone-900">
-                        USD {o.total.toLocaleString('es-AR')}
+                        {formatearUSD(o.total)}
                       </span>
                       <span className="block text-xs text-stone-500">total de referencia</span>
                     </>
@@ -173,6 +182,145 @@ export function FormularioReserva({
                 </option>
               ))}
             </select>
+          </Campo>
+        </div>
+      </Tarjeta>
+
+      {/* ── Paso 4: cómo se ocupa la habitación ──────────────────────────────
+          Es lo que recepción necesita para prepararla. Un `2` en «huéspedes» no
+          dice si hacen falta dos camas o una cama y una cuna, y eso se descubre
+          cuando el huésped llega. Los bebés se registran aparte porque **no
+          ocupan plaza**: contarlos daría «completo» de más. */}
+      <Tarjeta
+        titulo="4 · ¿Quiénes se alojan?"
+        descripcion="Los bebés en cuna no cuentan para la capacidad de la unidad."
+      >
+        <div className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-5">
+          <Campo etiqueta="Adultos" requerido>
+            <input
+              name="adultos"
+              type="number"
+              min={1}
+              max={10}
+              defaultValue={v.adultos ?? String(huespedes)}
+              required
+              className={CAMPO}
+            />
+          </Campo>
+          <Campo etiqueta="Menores">
+            <input
+              name="menores"
+              type="number"
+              min={0}
+              max={10}
+              defaultValue={v.menores ?? '0'}
+              className={CAMPO}
+            />
+          </Campo>
+          <Campo etiqueta="Bebés">
+            <input
+              name="bebes"
+              type="number"
+              min={0}
+              max={10}
+              defaultValue={v.bebes ?? '0'}
+              className={CAMPO}
+            />
+          </Campo>
+          <Campo etiqueta="Camas extra">
+            <input
+              name="camas_extra"
+              type="number"
+              min={0}
+              max={4}
+              defaultValue={v.camas_extra ?? '0'}
+              className={CAMPO}
+            />
+          </Campo>
+          <Campo etiqueta="Cunas">
+            <input
+              name="cunas"
+              type="number"
+              min={0}
+              max={4}
+              defaultValue={v.cunas ?? '0'}
+              className={CAMPO}
+            />
+          </Campo>
+
+          <label className="flex items-center gap-2 text-sm text-stone-700 sm:col-span-5">
+            <input
+              type="checkbox"
+              name="no_mover"
+              value="1"
+              defaultChecked={v.no_mover === '1'}
+              className="size-4 accent-lago-600"
+            />
+            <span className="font-medium">No mover de habitación</span>
+            <span className="text-stone-500">
+              (el huésped pidió esta unidad en particular: vista, planta baja, la de siempre)
+            </span>
+          </label>
+        </div>
+      </Tarjeta>
+
+      {/* ── Paso 5: datos comerciales ────────────────────────────────────────
+          El plan y la garantía no son burocracia: el plan es lo que el hotel
+          promete darle de comer, y la garantía es lo que decide si un no-show se
+          puede cobrar. */}
+      <Tarjeta titulo="5 · Condiciones comerciales">
+        <div className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
+          <Campo etiqueta="Plan" ayuda="Qué incluye la tarifa además del alojamiento.">
+            <select name="plan" defaultValue={v.plan ?? 'desayuno'} className={CAMPO}>
+              {PLANES.map((p) => (
+                <option key={p} value={p}>
+                  {ETIQUETAS_PLAN[p]}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo
+            etiqueta="Garantía"
+            ayuda="Sin garantía, un no-show no se puede cobrar."
+          >
+            <select name="garantia" defaultValue={v.garantia ?? 'sin_garantia'} className={CAMPO}>
+              {GARANTIAS.map((g) => (
+                <option key={g} value={g}>
+                  {ETIQUETAS_GARANTIA[g]}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo etiqueta="Segmento" ayuda="Se usa en los reportes de gerencia.">
+            <select name="segmento" defaultValue={v.segmento ?? ''} className={CAMPO}>
+              <option value="">Según el canal</option>
+              {SEGMENTOS.map((s) => (
+                <option key={s} value={s}>
+                  {ETIQUETAS_SEGMENTO[s]}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo etiqueta="Voucher" ayuda="Número que dio la agencia o el canal, si hay.">
+            <input name="voucher" defaultValue={v.voucher ?? ''} className={CAMPO} />
+          </Campo>
+
+          <Campo
+            etiqueta="Descuento adicional (%)"
+            ayuda="Se aplica sobre la tarifa. El descuento del convenio de la agencia va aparte."
+          >
+            <input
+              name="descuento_pct"
+              type="number"
+              min={0}
+              max={100}
+              step="0.5"
+              defaultValue={v.descuento_pct ?? '0'}
+              className={CAMPO}
+            />
           </Campo>
         </div>
       </Tarjeta>
