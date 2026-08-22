@@ -15,9 +15,22 @@ insert into temporadas (codigo, nombre, orden) values
   ('media', 'Temporada Media', 2),
   ('alta',  'Temporada Alta',  3);
 
+-- ⚠️ El calendario del tarifario va de SEPTIEMBRE a MAYO. Junio, julio y agosto
+-- quedan sin temporada a propósito: el Anexo A no publica tarifa de invierno.
+-- Consecuencia operativa, que hay que tener presente: **en esos tres meses el
+-- sistema no puede cotizar** y el portal ofrece «consultar» en vez de un precio.
+-- No es una falla; si el hotel decide vender el invierno, hay que cargar esos
+-- rangos y sus tarifas desde Configuración → Temporadas.
+--
+-- ⚠️ Y el calendario CADUCA: es de un ciclo concreto, no una regla anual. Cuando
+-- la fecha del sistema pasa el último rango cargado, deja de poder cotizarse
+-- **cualquier** fecha futura y el alta de reservas queda bloqueada. Abajo va el
+-- ciclo 2026/2027 por eso mismo. Cargar el siguiente es tarea del hotel, desde
+-- esa misma pantalla.
 insert into temporada_rangos (temporada_id, rango)
 select tp.id, r.rango
 from (values
+  -- Ciclo 2025/2026 — Anexo A, tarifario oficial.
   ('baja',  daterange('2025-09-01','2025-10-01','[)')),
   ('baja',  daterange('2026-04-05','2026-06-01','[)')),
   ('media', daterange('2025-10-01','2025-11-01','[)')),
@@ -25,7 +38,21 @@ from (values
   ('media', daterange('2026-03-01','2026-03-29','[)')),
   ('alta',  daterange('2025-11-01','2025-12-01','[)')),
   ('alta',  daterange('2025-12-20','2026-03-01','[)')),
-  ('alta',  daterange('2026-03-29','2026-04-05','[)'))
+  ('alta',  daterange('2026-03-29','2026-04-05','[)')),
+  -- Ciclo 2026/2027 — misma estructura, proyectada. Las tarifas asociadas son
+  -- las mismas (`tarifas` cuelga de la temporada, no del rango), así que esto
+  -- alcanza para que el sistema vuelva a cotizar.
+  -- PENDIENTE DE CONFIRMAR CON EL HOTEL: los precios del ciclo nuevo y la
+  -- semana de Semana Santa, que se corre todos los años (en 2027 cae el 28/03,
+  -- así que el bloque de alta de fin de marzo probablemente haya que moverlo).
+  ('baja',  daterange('2026-09-01','2026-10-01','[)')),
+  ('baja',  daterange('2027-04-05','2027-06-01','[)')),
+  ('media', daterange('2026-10-01','2026-11-01','[)')),
+  ('media', daterange('2026-12-01','2026-12-20','[)')),
+  ('media', daterange('2027-03-01','2027-03-29','[)')),
+  ('alta',  daterange('2026-11-01','2026-12-01','[)')),
+  ('alta',  daterange('2026-12-20','2027-03-01','[)')),
+  ('alta',  daterange('2027-03-29','2027-04-05','[)'))
 ) as r(temp_codigo, rango)
 join temporadas tp on tp.codigo = r.temp_codigo;
 

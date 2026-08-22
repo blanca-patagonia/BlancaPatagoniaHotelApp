@@ -24,11 +24,18 @@ export function PortadaAlojamiento({
   codigo: string
   nombre: string
   categoria: CategoriaUnidad
-  /** `hero` para la pantalla de detalle, más alta. */
-  alto?: 'tarjeta' | 'hero'
+  /**
+   * `hero` para la pantalla de detalle · `resultado` para la tarjeta ancha del
+   * buscador, donde la foto ocupa la columna izquierda y tiene que llenarla.
+   */
+  alto?: 'tarjeta' | 'hero' | 'resultado'
 }) {
   const foto = fotoDe(codigo)
-  const clases = alto === 'hero' ? 'h-56 sm:h-80' : 'h-40'
+  const clases = {
+    hero: 'h-56 sm:h-80',
+    resultado: 'h-44 sm:h-full sm:min-h-44',
+    tarjeta: 'h-40',
+  }[alto]
 
   if (foto) {
     return (
@@ -38,7 +45,11 @@ export function PortadaAlojamiento({
           alt={`${nombre} — ${ETIQUETAS_CATEGORIA[categoria]}`}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="object-cover"
+          /* Microinteracción: el acercamiento al pasar el mouse confirma que la
+             tarjeta entera es un enlace. Es de 3 % y de 300 ms a propósito —lo
+             suficiente para notarse, no tanto como para distraer— y
+             `prefers-reduced-motion` ya lo desactiva desde `globals.css`. */
+          className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
       </div>
     )
@@ -46,7 +57,7 @@ export function PortadaAlojamiento({
 
   return (
     <div
-      className={`flex w-full shrink-0 flex-col items-center justify-center gap-2 bg-gradient-to-br from-lago-100 via-lago-50 to-stone-100 ${clases}`}
+      className={`flex w-full shrink-0 flex-col items-center justify-center gap-2 bg-linear-to-br from-lago-100 via-lago-50 to-stone-100 ${clases}`}
     >
       {/* Decorativo: el nombre del alojamiento ya está en el encabezado que
           sigue, así que repetirlo acá solo alargaría el lector de pantalla. */}

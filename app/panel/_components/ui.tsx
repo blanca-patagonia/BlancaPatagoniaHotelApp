@@ -2,6 +2,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Icono, type NombreIcono } from './iconos'
 import { construirQuery, resumenRango, totalPaginas } from '@/lib/listados'
+import { ETIQUETAS_ESTADO_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
+import { PUNTO_HK, SIMBOLO_HK } from './estilos'
 
 /*
   Componentes de interfaz compartidos por todo el panel.
@@ -164,7 +166,7 @@ export function Kpi({ titulo, valor, detalle, icono, tono = 'lago', href }: KpiP
       <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
         {valor}
       </p>
-      {detalle && <p className="mt-1.5 text-xs text-stone-400">{detalle}</p>}
+      {detalle && <p className="mt-1.5 text-xs text-stone-600">{detalle}</p>}
     </>
   )
 
@@ -214,7 +216,7 @@ export function EstadoVacio({
 }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
-      <span className="flex size-11 items-center justify-center rounded-2xl bg-stone-100 text-stone-400">
+      <span className="flex size-11 items-center justify-center rounded-2xl bg-stone-100 text-stone-600">
         <Icono nombre={icono} tam={22} />
       </span>
       <p className="font-medium text-stone-700">{titulo}</p>
@@ -224,15 +226,61 @@ export function EstadoVacio({
   )
 }
 
+/* ------------------------------------------------------- estado de unidad -- */
+
+/**
+ * Indicador del estado de limpieza de una unidad: color **y** símbolo.
+ *
+ * Reemplaza al punto de color suelto que había en las tres pantallas que lo
+ * mostraban (inicio, ocupación y housekeeping). El color solo no alcanza —ver
+ * `SIMBOLO_HK` en `estilos.ts`—, así que acá van juntos, más el nombre del
+ * estado accesible.
+ *
+ * `conTexto` para cuando al lado no hay una etiqueta que ya lo diga; si la hay,
+ * el nombre viaja igual por `title` y por el texto solo-lectores.
+ */
+export function EstadoUnidad({
+  estado,
+  conTexto = false,
+}: {
+  estado: EstadoHousekeeping
+  conTexto?: boolean
+}) {
+  const etiqueta = ETIQUETAS_ESTADO_HK[estado]
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5" title={etiqueta}>
+      <span
+        aria-hidden="true"
+        className={`flex size-4 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white ${PUNTO_HK[estado]}`}
+      >
+        {SIMBOLO_HK[estado]}
+      </span>
+      {conTexto ? (
+        <span className="text-sm text-stone-700">{etiqueta}</span>
+      ) : (
+        <span className="sr-only">{etiqueta}</span>
+      )}
+    </span>
+  )
+}
+
 /* ----------------------------------------------------------------- tabla -- */
 
 /**
  * Envoltorio de tabla con scroll horizontal propio: en pantallas chicas la
  * tabla se desplaza sola en lugar de desbordar la página entera.
+ *
+ * `overscroll-x-contain` está por un motivo concreto. Un contenedor con scroll
+ * propio **atrapa la rueda del mouse**: al llegar a su borde horizontal, el
+ * navegador seguía aplicando el gesto al contenedor en vez de devolvérselo a la
+ * página, así que bajar la pantalla con el cursor sobre una tabla ancha —el
+ * tarifario de Configuración es la peor— se trababa. `contain` corta esa
+ * propagación hacia adentro y deja que el scroll vertical siga siendo de la
+ * página.
  */
 export function Tabla({ children, resumen }: { children: ReactNode; resumen: string }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto overscroll-x-contain">
       <table className="min-w-full text-sm">
         <caption className="sr-only">{resumen}</caption>
         {children}
@@ -289,7 +337,7 @@ export function Buscador({ accion, valor, etiqueta, placeholder, ocultos = {} }:
       {/* En el teléfono el campo ocupa lo que sobra; en escritorio vuelve a su
           ancho fijo, que era lo único contemplado antes. */}
       <div className="relative min-w-0 flex-1 sm:flex-none">
-        <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-stone-400">
+        <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-stone-600">
           <Icono nombre="buscar" tam={16} />
         </span>
         <input
@@ -298,7 +346,7 @@ export function Buscador({ accion, valor, etiqueta, placeholder, ocultos = {} }:
           defaultValue={valor ?? ''}
           placeholder={placeholder}
           aria-label={etiqueta}
-          className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-8 text-sm text-stone-800 placeholder:text-stone-400 focus:border-lago-500 focus:outline-none sm:w-56"
+          className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-8 text-sm text-stone-800 placeholder:text-stone-500 focus:border-lago-500 focus:outline-none sm:w-56"
         />
       </div>
       <button type="submit" className={botonClases('secundario')}>
@@ -418,7 +466,7 @@ export function BotonExportar({ href, titulo = 'Exportar CSV' }: { href: string;
 
 /** Clases de un campo de formulario. Una sola definición para todo el panel. */
 export const CAMPO =
-  'w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-lago-600 disabled:bg-stone-100'
+  'w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-800 outline-none transition placeholder:text-stone-500 focus:border-lago-600 disabled:bg-stone-100'
 
 /**
  * Campo con etiqueta **visible** y ayuda opcional.

@@ -32,11 +32,33 @@ function helpersConRol(fuente: string): string[] {
     .map((m) => m[1])
 }
 
+/**
+ * Excepciones declaradas, con su motivo.
+ *
+ * Una acción entra acá **solo** si no hay ningún área que le corresponda porque
+ * opera sobre la cuenta de quien la invoca, y por lo tanto la tiene que poder
+ * usar cualquier rol. Exigirle `requerirAcceso(area)` obligaría a inventar un
+ * área o a dejar afuera a housekeeping de cambiar su propia contraseña.
+ *
+ * No es una puerta para «esta todavía no la hice»: la lista se revisa en el test
+ * de abajo, que verifica que cada entrada exista de verdad y que la acción
+ * exenta al menos exija sesión. Si una exención queda huérfana porque se renombró
+ * o se borró la acción, la suite avisa en vez de dejar el agujero abierto.
+ */
+const EXENTAS: Record<string, string> = {
+  'app/panel/cuenta/actions.ts:cambiarMiPassword':
+    'Opera sobre la cuenta de quien la invoca (updateUser trabaja sobre el usuario del token), ' +
+    'así que no hay área que verificar y la necesitan los cuatro roles. Exige sesión y, además, ' +
+    'la contraseña actual.',
+}
+
 interface Accion {
   archivo: string
   nombre: string
   linea: number
   verifica: boolean
+  /** Cuerpo de la acción, para poder afirmar cosas sobre las exentas. */
+  cuerpo: string
 }
 
 function accionesDelPanel(): Accion[] {
@@ -47,7 +69,11 @@ function accionesDelPanel(): Accion[] {
   const acciones: Accion[] = []
 
   for (const relativo of archivos) {
-    const ruta = `app/panel/${relativo}`
+    // `readdirSync` devuelve separadores del sistema: en Windows sería
+    // `cuenta\actions.ts` y en Linux `cuenta/actions.ts`. Se normaliza para que
+    // las claves y los mensajes de error sean los mismos en la máquina de
+    // cualquiera y en el runner del CI.
+    const ruta = `app/panel/${relativo.split('\\').join('/')}`
     const fuente = readFileSync(`${RAIZ}${ruta}`, 'utf8')
     const lineas = fuente.split('\n')
     const helpers = helpersConRol(fuente)
@@ -67,6 +93,7 @@ function accionesDelPanel(): Accion[] {
         nombre,
         linea: i + 1,
         verifica: VERIFICA_ROL.test(cuerpo) || usaHelper,
+        cuerpo,
       })
     })
   }
@@ -84,7 +111,7 @@ describe('autorización de las Server Actions', () => {
   })
 
   it('TODAS verifican el rol, no solo que haya sesión', () => {
-    const sinGuarda = acciones.filter((a) => !a.verifica)
+    const sinGuarda = acciones.filter((a) => !a.verifica && !(`${a.archivo}:${a.nombre}` in EXENTAS))
 
     // El mensaje lista las culpables: un test que solo dice «falló» obliga a
     // rehacer la investigación entera.
@@ -104,6 +131,38 @@ describe('las guardas de sesión distinguen autenticar de autorizar', () => {
     const acciones = accionesDelPanel()
     // Redundante con el test anterior a propósito: si alguien afloja el detector
     // de arriba, este sigue afirmando la propiedad que de verdad importa.
-    expect(acciones.every((a) => a.verifica)).toBe(true)
+    const sinExentas = acciones.filter((a) => !(`${a.archivo}:${a.nombre}` in EXENTAS))
+    expect(sinExentas.every((a) => a.verifica)).toBe(true)
+  })
+})
+
+describe('las excepciones declaradas', () => {
+  const acciones = accionesDelPanel()
+
+  it('se mantienen pocas: una lista larga es la regla desactivada', () => {
+    expect(Object.keys(EXENTAS).length).toBeLessThanOrEqual(3)
+  })
+
+  it('todas apuntan a una acción que existe', () => {
+    // Sin esto, renombrar o borrar una acción deja la exención huérfana, y la
+    // próxima acción que se llame igual heredaría el permiso sin que nadie lo
+    // decidiera.
+    const existentes = new Set(acciones.map((a) => `${a.archivo}:${a.nombre}`))
+    const huerfanas = Object.keys(EXENTAS).filter((k) => !existentes.has(k))
+    expect(huerfanas, `Exenciones que ya no corresponden a ninguna acción:\n${huerfanas.join('\n')}`).toEqual([])
+  })
+
+  it('aunque no verifiquen rol, exigen sesión', () => {
+    // Es el piso que no se negocia: sin área que comprobar, pero nunca abierta.
+    for (const clave of Object.keys(EXENTAS)) {
+      const accion = acciones.find((a) => `${a.archivo}:${a.nombre}` === clave)
+      expect(accion?.cuerpo, `${clave} no exige sesión`).toMatch(/requerirSesion\(/)
+    }
+  })
+
+  it('cada exención dice por qué', () => {
+    for (const [clave, motivo] of Object.entries(EXENTAS)) {
+      expect(motivo.length, `${clave} no explica el motivo`).toBeGreaterThan(40)
+    }
   })
 })

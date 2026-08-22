@@ -146,7 +146,7 @@ export default async function AuditoriaPage({
             Limpiar
           </Link>
         )}
-        <p className="ml-auto text-xs text-stone-400">
+        <p className="ml-auto text-xs text-stone-600">
           Registro de solo lectura: ni el staff puede editarlo.
         </p>
       </BarraHerramientas>
@@ -181,7 +181,7 @@ export default async function AuditoriaPage({
                       <td className={`${TD} text-stone-700`}>
                         {r.usuario_id ? (nombres.get(r.usuario_id) ?? 'Usuario dado de baja') : 'Sistema'}
                         {r.rol && (
-                          <span className="ml-1.5 text-xs text-stone-400">
+                          <span className="ml-1.5 text-xs text-stone-600">
                             {ETIQUETAS_ROL[r.rol]}
                           </span>
                         )}
@@ -194,7 +194,7 @@ export default async function AuditoriaPage({
                       </td>
                       <td className={`${TD} text-xs`}>
                         {cambios.length === 0 ? (
-                          <span className="text-stone-400">
+                          <span className="text-stone-600">
                             {r.accion === 'INSERT' ? 'alta del registro' : 'baja del registro'}
                           </span>
                         ) : (
@@ -202,13 +202,13 @@ export default async function AuditoriaPage({
                             {cambios.slice(0, 4).map((c) => (
                               <li key={c.campo}>
                                 <span className="text-stone-500">{c.campo}: </span>
-                                <span className="text-stone-400 line-through">{c.antes}</span>
-                                <span className="text-stone-400"> → </span>
+                                <span className="text-stone-600 line-through">{c.antes}</span>
+                                <span className="text-stone-600"> → </span>
                                 <span className="font-medium text-stone-800">{c.despues}</span>
                               </li>
                             ))}
                             {cambios.length > 4 && (
-                              <li className="text-stone-400">y {cambios.length - 4} campo(s) más</li>
+                              <li className="text-stone-600">y {cambios.length - 4} campo(s) más</li>
                             )}
                           </ul>
                         )}

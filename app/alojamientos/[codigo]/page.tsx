@@ -15,7 +15,8 @@ import {
   type PrecioTemporada,
   type TipoCatalogo,
 } from '@/lib/domain/catalogo'
-import { Marco, Titulo, Tarjeta, Etiqueta, botonPublico } from '../../_publico/ui'
+import { formatearUSD } from '@/lib/domain/moneda'
+import { Marco, Titulo, Tarjeta, Etiqueta, Precio, botonPublico } from '../../_publico/ui'
 import { PortadaAlojamiento } from '../_portada'
 
 interface FilaTipo {
@@ -189,15 +190,12 @@ export default async function AlojamientoDetallePage({
                   Todavía no publicamos las tarifas de este alojamiento.
                 </p>
               ) : (
-                <>
-                  <p className="text-xs tracking-wide text-stone-500 uppercase">Desde</p>
-                  <p className="tabular font-display text-3xl leading-none font-semibold text-stone-900">
-                    USD {desde.toLocaleString('es-AR')}
-                  </p>
-                  <p className="mt-1 text-sm text-stone-500">
-                    por noche, con IVA incluido
-                  </p>
-                </>
+                <Precio
+                  monto={formatearUSD(desde)}
+                  encabezado="Desde"
+                  detalle="por noche, con IVA incluido"
+                  tamano="grande"
+                />
               )}
             </div>
             <Link
@@ -261,7 +259,7 @@ export default async function AlojamientoDetallePage({
                       )}
                     </td>
                     <td className="tabular px-5 py-3 text-right font-semibold text-stone-900 sm:px-6">
-                      USD {p.precio.toLocaleString('es-AR')}
+                      {formatearUSD(p.precio)}
                     </td>
                   </tr>
                 ))}

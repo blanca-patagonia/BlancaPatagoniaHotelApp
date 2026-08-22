@@ -6,11 +6,14 @@ import {
   ETIQUETAS_ESTADO_HK,
   type EstadoHousekeeping,
 } from '@/lib/domain/unidades'
+import { ESTADOS_ACTIVOS } from '@/lib/domain/reservas'
+import { contadores, type UnidadHousekeeping } from '@/lib/domain/housekeeping'
+import { hoyISO } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
-import { PUNTO_HK } from '../_components/estilos'
 import {
   BarraHerramientas,
   Chip,
+  EstadoUnidad,
   Encabezado,
   EstadoVacio,
   Kpi,
@@ -38,10 +41,10 @@ interface Mucama {
 function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-4 py-3 first:border-0">
-      <span className={`size-2.5 shrink-0 rounded-full ${PUNTO_HK[u.estado]}`} aria-hidden="true" />
+      <EstadoUnidad estado={u.estado} />
       <div className="min-w-36 flex-1">
         <p className="font-medium text-stone-800">{u.nombre}</p>
-        <p className="text-xs text-stone-400">{u.tipo?.nombre}</p>
+        <p className="text-xs text-stone-600">{u.tipo?.nombre}</p>
       </div>
 
       <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Estado de ${u.nombre}`}>
@@ -107,22 +110,61 @@ export default async function HousekeepingPage({
     : undefined
   const porMucama = sp.vista === 'mucama'
 
-  const [{ data }, { data: mucamasData }] = await Promise.all([
-    supabase
-      .from('unidades')
-      .select('id, nombre, estado, tipo:tipos_unidad(nombre), asignada_a')
-      .eq('activo', true)
-      .order('nombre'),
-    supabase
-      .from('perfiles')
-      .select('id, nombre')
-      .eq('rol', 'housekeeping')
-      .eq('activo', true)
-      .order('nombre'),
-  ])
+  const hoy = hoyISO()
+
+  const [{ data }, { data: mucamasData }, { data: estadiasData }, { data: ordenesData }] =
+    await Promise.all([
+      supabase
+        .from('unidades')
+        .select('id, nombre, estado, tipo:tipos_unidad(nombre), asignada_a')
+        .eq('activo', true)
+        .order('nombre'),
+      supabase
+        .from('perfiles')
+        .select('id, nombre')
+        .eq('rol', 'housekeeping')
+        .eq('activo', true)
+        .order('nombre'),
+      // ── Contexto del día ────────────────────────────────────────────────────
+      // «Sucia» no significa lo mismo si esa habitación tiene una llegada hoy a las
+      // 15:00. Sin esto, el orden de limpieza lo decidía quien se acordara de mirar
+      // la planilla de llegadas.
+      supabase
+        .from('estadias')
+        .select('unidad_id, check_in, check_out')
+        .in('estado', [...ESTADOS_ACTIVOS])
+        .or(`check_in.eq.${hoy},check_out.eq.${hoy}`),
+      supabase.from('ordenes_mantenimiento').select('unidad_id').neq('estado', 'resuelta'),
+    ])
 
   const todas = (data ?? []) as unknown as UnidadRow[]
   const mucamas = (mucamasData ?? []) as Mucama[]
+
+  const llegaHoy = new Set<string>()
+  const saleHoy = new Set<string>()
+  for (const e of (estadiasData ?? []) as { unidad_id: string; check_in: string; check_out: string }[]) {
+    if (e.check_in === hoy) llegaHoy.add(e.unidad_id)
+    if (e.check_out === hoy) saleHoy.add(e.unidad_id)
+  }
+  const enReparacion = new Set(
+    ((ordenesData ?? []) as { unidad_id: string | null }[])
+      .map((o) => o.unidad_id)
+      .filter((x): x is string => Boolean(x)),
+  )
+
+  /** Las unidades en la forma del dominio, para poder priorizarlas y contarlas. */
+  const paraDominio: UnidadHousekeeping[] = todas.map((u) => ({
+    id: u.id,
+    nombre: u.nombre,
+    estado: u.estado,
+    asignadaA: u.asignada_a,
+    tipo: u.tipo?.nombre ?? '',
+    ocupada: false,
+    saleHoy: saleHoy.has(u.id),
+    llegaHoy: llegaHoy.has(u.id),
+    enReparacion: enReparacion.has(u.id),
+  }))
+  const resumen = contadores(paraDominio)
 
   // Los contadores miran el total; el filtro solo afecta a lo que se lista.
   const conteo = new Map<EstadoHousekeeping, number>()
@@ -171,6 +213,12 @@ export default async function HousekeepingPage({
             >
               Por responsable
             </Chip>
+            {/* La vista de la mucama: el mismo dato, ordenado por prioridad y con
+                botones para el pulgar. Se ofrece desde acá para que la gobernanta
+                vea lo mismo que ve el equipo. */}
+            <Link href="/panel/housekeeping/mi-trabajo" className={botonClases('primario')}>
+              Vista para el celular
+            </Link>
           </>
         }
       />
@@ -182,6 +230,45 @@ export default async function HousekeepingPage({
           </Mensaje>
         </div>
       )}
+
+      {/* ── Contexto operativo del día ────────────────────────────────────────
+          Lo que WinPAX mostraba y acá faltaba: no sólo cuántas están sucias, sino
+          cuántas tienen a alguien llegando hoy. Es la diferencia entre una lista de
+          estados y un orden de trabajo. */}
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Kpi
+          titulo="Faltan por hacer"
+          valor={String(resumen.faltantes)}
+          detalle={
+            resumen.urgentes > 0
+              ? `${resumen.urgentes} urgente(s): llega alguien hoy`
+              : 'sin urgencias'
+          }
+          icono={resumen.urgentes > 0 ? 'alerta' : 'housekeeping'}
+          tono={resumen.urgentes > 0 ? 'peligro' : 'alerta'}
+        />
+        <Kpi
+          titulo="Llegadas hoy"
+          valor={String(llegaHoy.size)}
+          detalle="habitaciones que tienen que estar listas"
+          icono="reservas"
+          tono="exito"
+        />
+        <Kpi
+          titulo="Salidas hoy"
+          valor={String(saleHoy.size)}
+          detalle="se desocupan y hay que prepararlas"
+          icono="salir"
+          tono="alerta"
+        />
+        <Kpi
+          titulo="En reparación"
+          valor={String(enReparacion.size)}
+          detalle="no se limpian hasta resolverlas"
+          icono="mantenimiento"
+          href="/panel/mantenimiento"
+        />
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {ESTADOS_HK.map((e) => (

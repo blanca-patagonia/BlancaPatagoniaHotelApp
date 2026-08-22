@@ -12,7 +12,10 @@ import {
   textoCapacidad,
   type TipoCatalogo,
 } from '@/lib/domain/catalogo'
-import { Marco, Titulo, ChipEnlace, Etiqueta, botonPublico } from '../_publico/ui'
+import { formatearUSD } from '@/lib/domain/moneda'
+import { hoyISO, sumarDias } from '@/lib/fechas'
+import { Marco, Titulo, ChipEnlace, Etiqueta, Precio, botonPublico } from '../_publico/ui'
+import { BuscadorEstadia } from '../_publico/buscador'
 import { PortadaAlojamiento } from './_portada'
 
 export const metadata = {
@@ -105,8 +108,20 @@ export default async function AlojamientosPage({
 
   const visibles = ordenarCatalogo(filtrarPorCategoria(tipos, filtro))
 
+  const hoy = hoyISO()
+
   return (
     <Marco>
+      {/* La misma barra que en los resultados: quien está mirando el catálogo y
+          se decide no tiene que ir a buscar dónde se consultan las fechas. */}
+      <BuscadorEstadia
+        checkIn=""
+        checkOut=""
+        huespedes={2}
+        hoy={hoy}
+        salidaPorDefecto={sumarDias(hoy, 2)}
+      />
+
       <Titulo
         titulo="Nuestros alojamientos"
         descripcion="Hostería boutique frente al Lago Argentino y cabañas a pasos del Parque Nacional Los Glaciares. Mirá las opciones y después elegí las fechas."
@@ -182,13 +197,11 @@ export default async function AlojamientosPage({
                              «USD 0» fue un bug real (Fase 18). */
                           <p className="text-sm text-stone-500">Precio a confirmar</p>
                         ) : (
-                          <>
-                            <p className="text-xs tracking-wide text-stone-400 uppercase">Desde</p>
-                            <p className="tabular font-display text-xl leading-none font-semibold text-stone-900">
-                              USD {desde.toLocaleString('es-AR')}
-                            </p>
-                            <p className="mt-0.5 text-xs text-stone-500">por noche, con IVA</p>
-                          </>
+                          <Precio
+                            monto={formatearUSD(desde)}
+                            encabezado="Desde"
+                            detalle="por noche, con IVA"
+                          />
                         )}
                       </div>
                       <span className="text-sm font-medium text-lago-700 transition group-hover:text-lago-800">

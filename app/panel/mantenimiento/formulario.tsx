@@ -20,7 +20,18 @@ const ESTADO_INICIAL: EstadoOrden = {}
  * La prioridad no es decorativa: una orden de prioridad alta sobre una unidad
  * ocupada es lo que dispara el aviso en el tablero.
  */
-export function FormularioOrden({ unidades }: { unidades: { id: string; nombre: string }[] }) {
+export function FormularioOrden({
+  unidades,
+  unidadInicial = '',
+}: {
+  unidades: { id: string; nombre: string }[]
+  /**
+   * Unidad preseleccionada. La manda la accion rapida de la grilla de ocupacion:
+   * sin esto, quien reporta un desperfecto desde la grilla tenia que volver a
+   * buscar la habitacion en el desplegable, y la accion no ahorraba nada.
+   */
+  unidadInicial?: string
+}) {
   const [estado, accion, pendiente] = useActionState(crearOrden, ESTADO_INICIAL)
 
   return (
@@ -35,7 +46,7 @@ export function FormularioOrden({ unidades }: { unidades: { id: string; nombre: 
       </Campo>
 
       <Campo etiqueta="Unidad afectada" ayuda="Dejalo en general si no es de una habitación puntual.">
-        <select name="unidad_id" defaultValue="" className={CAMPO}>
+        <select name="unidad_id" defaultValue={unidadInicial} className={CAMPO}>
           <option value="">Sin unidad / general</option>
           {unidades.map((u) => (
             <option key={u.id} value={u.id}>

@@ -151,27 +151,37 @@ export function textoRango(desde: string, hasta: string): string {
 /**
  * Foto de portada por código de tipo.
  *
- * Está vacío a propósito. Las fotos del hotel no se pudieron incorporar todavía,
- * así que el catálogo se diseñó para verse terminado **sin** ellas: cuando no hay
- * imagen, la tarjeta muestra una cabecera con los colores de marca y la silueta
- * del logo, que se lee como una decisión y no como una imagen que faltó cargar.
+ * ⚠️ **Las imágenes cargadas son de MUESTRA, no son del Hotel Blanca Patagonia.**
+ * Salen de Pexels (licencia libre, uso comercial permitido y sin atribución
+ * obligatoria) y se eligieron una por una para que el ambiente sea verosímil:
+ * hostería de montaña con vista al lago, cabañas de madera con hogar a leña e
+ * hidromasaje. Se descartaron las que mostraban ciudades, decoración tropical o
+ * la marca de otro hotel a la vista.
  *
- * Para sumarlas, sin tocar nada más:
- *   1. Copiar los archivos en `public/alojamientos/`.
- *   2. Descomentar la línea del código correspondiente.
- * Recomendado: JPG de 1200×800 aproximadamente, por debajo de 300 kB.
+ * Están para que el portal se pueda mostrar y defender con el aspecto que va a
+ * tener en uso —los patrones de tarjeta, galería y portada solo funcionan con
+ * imagen—, no para hacerlas pasar por fotos del hotel. **Antes de cualquier
+ * puesta en producción hay que reemplazarlas por las reales**, y alcanza con
+ * pisar los archivos de `public/alojamientos/` conservando los nombres: no hay
+ * que tocar este mapa.
+ *
+ * Si un código no tiene entrada, `PortadaAlojamiento` dibuja la cabecera de
+ * marca —degradé y silueta— que se diseñó para que la ausencia de foto se lea
+ * como una decisión y no como una imagen rota.
+ *
+ * Recomendado para las reales: JPG de ~1400 px de ancho, por debajo de 300 kB.
  */
 export const FOTOS: Readonly<Partial<Record<string, string>>> = {
-  // 'HOST-SINGLE':  '/alojamientos/single.jpg',
-  // 'HOST-DBL-STD': '/alojamientos/doble-standard.jpg',
-  // 'HOST-DBL-SUP': '/alojamientos/doble-superior.jpg',
-  // 'HOST-TRIPLE':  '/alojamientos/triple.jpg',
-  // 'HOST-SUITE':   '/alojamientos/suite-principal.jpg',
-  // 'CAB-1D-3P':    '/alojamientos/cabana-1-dormitorio.jpg',
-  // 'CAB-2D-4P':    '/alojamientos/cabana-2-dormitorios-4.jpg',
-  // 'CAB-2D-5P':    '/alojamientos/cabana-2-dormitorios-5.jpg',
-  // 'CAB-3D-6P':    '/alojamientos/cabana-3-dormitorios-6.jpg',
-  // 'CAB-3D-7P':    '/alojamientos/cabana-3-dormitorios-7.jpg',
+  'HOST-SINGLE': '/alojamientos/single.jpg',
+  'HOST-DBL-STD': '/alojamientos/doble-standard.jpg',
+  'HOST-DBL-SUP': '/alojamientos/doble-superior.jpg',
+  'HOST-TRIPLE': '/alojamientos/triple.jpg',
+  'HOST-SUITE': '/alojamientos/suite-principal.jpg',
+  'CAB-1D-3P': '/alojamientos/cabana-1-dormitorio.jpg',
+  'CAB-2D-4P': '/alojamientos/cabana-2-dormitorios-4.jpg',
+  'CAB-2D-5P': '/alojamientos/cabana-2-dormitorios-5.jpg',
+  'CAB-3D-6P': '/alojamientos/cabana-3-dormitorios-6.jpg',
+  'CAB-3D-7P': '/alojamientos/cabana-3-dormitorios-7.jpg',
 }
 
 export function fotoDe(codigo: string): string | null {

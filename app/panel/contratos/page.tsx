@@ -278,7 +278,7 @@ export default async function ContratosPage({
                         {c.vigencia_hasta ? formatoFechaCorta(c.vigencia_hasta) : 'sin fin'}
                       </>
                     ) : (
-                      <span className="text-stone-400">sin definir</span>
+                      <span className="text-stone-600">sin definir</span>
                     )}
                   </td>
                   <td className={TD}>

@@ -150,3 +150,115 @@ export function estadoSegunOperacion(
 ): 'confirmada' | 'cancelada' {
   return operacion === 'cancelada' ? 'cancelada' : 'confirmada'
 }
+
+/* ─────────────────────────────────────────── conflicto de cupo ──────────── */
+
+/** Una noche ya ocupada de un tipo de unidad. */
+export interface OcupacionNoche {
+  tipoUnidadCodigo: string
+  /** Fecha de la noche, en ISO. */
+  fecha: string
+  /** Cuántas unidades de ese tipo ya están vendidas esa noche. */
+  ocupadas: number
+}
+
+export interface EntranteParaCupo {
+  externalId: string
+  tipoUnidadCodigo: string
+  checkIn: string
+  checkOut: string
+  operacion: 'nueva' | 'modificada' | 'cancelada'
+  /** `true` si ya se convirtió en reserva propia: su cupo ya está contado. */
+  yaImportada?: boolean
+}
+
+/**
+ * ¿El canal vendió más unidades de las que hay libres?
+ *
+ * ── Qué resuelve y qué no ───────────────────────────────────────────────────
+ *
+ * **No evita el overbooking.** No se puede: para eso habría que publicarle
+ * disponibilidad a Booking, y eso exige un channel manager (ADR 0021). Lo que hace es
+ * detectarlo **el día en que el informe entra**, en vez de cuando alguien aprieta
+ * «Importar» —que pueden ser días— o, en el peor caso, en el check-in con el huésped
+ * en la puerta.
+ *
+ * La diferencia es entre reacomodar con tiempo y no tener nada que ofrecer.
+ *
+ * ── Por qué es pura y recibe la ocupación ya calculada ──────────────────────
+ *
+ * El llamador trae en **una** consulta las noches ocupadas del rango completo del
+ * informe, y esta función resuelve todo en memoria. La alternativa —una consulta de
+ * disponibilidad por cada entrante— serían 40 viajes a la base por importación, y
+ * además no se podría testear sin Postgres.
+ *
+ * ── La parte que no es obvia ────────────────────────────────────────────────
+ *
+ * Dos entrantes del mismo tipo y las mismas fechas pueden **caber por separado y no
+ * juntas**. Si queda una unidad libre y llegan dos reservas, cada una mirada sola
+ * «cabe», y una comprobación fila por fila no detectaría nada.
+ *
+ * Por eso las entrantes se acumulan sobre la ocupación a medida que se recorren: la
+ * segunda ve el cupo que consumió la primera. Y **las dos** quedan marcadas, no solo
+ * la segunda: cuál de las dos se acomoda es una decisión de quien atiende, no del
+ * orden en que el archivo las traía.
+ */
+export function detectarConflictoDeCupo(
+  entrantes: readonly EntranteParaCupo[],
+  ocupacion: readonly OcupacionNoche[],
+  /** Cuántas unidades activas hay de cada tipo. */
+  cupoPorTipo: Readonly<Record<string, number>>,
+): Set<string> {
+  const conflicto = new Set<string>()
+
+  // `tipo|fecha` → unidades ya comprometidas esa noche.
+  const usado = new Map<string, number>()
+  for (const o of ocupacion) {
+    usado.set(`${o.tipoUnidadCodigo}|${o.fecha}`, o.ocupadas)
+  }
+
+  /** Noches de una estadía: `[checkIn, checkOut)`, el fin excluido. */
+  const nochesDe = (desde: string, hasta: string): string[] => {
+    const noches: string[] = []
+    // Se itera con Date en UTC para no depender de la zona de quien corre esto.
+    for (let d = new Date(`${desde}T00:00:00Z`); ; d = new Date(d.getTime() + 86400000)) {
+      const iso = d.toISOString().slice(0, 10)
+      if (iso >= hasta) break
+      noches.push(iso)
+      // Guarda contra una fecha invertida o un rango absurdo: sin esto, un
+      // `checkOut` anterior al `checkIn` colgaría el bucle. La validación ya lo
+      // rechaza antes, pero esta función es pública y no puede confiar en eso.
+      if (noches.length > 370) break
+    }
+    return noches
+  }
+
+  for (const e of entrantes) {
+    // Una cancelada no ocupa nada. Una ya importada tampoco suma: su cupo ya está
+    // contado en `ocupacion`, y contarlo dos veces marcaría un conflicto inexistente.
+    if (e.operacion === 'cancelada' || e.yaImportada) continue
+
+    const cupo = cupoPorTipo[e.tipoUnidadCodigo]
+
+    // Tipo desconocido: no se marca conflicto. La importación ya va a fallar con un
+    // motivo mejor («ese código de tipo no existe»), y marcar además un conflicto de
+    // cupo sería un segundo mensaje que no ayuda a nadie.
+    if (cupo === undefined) continue
+
+    let choca = false
+    const noches = nochesDe(e.checkIn, e.checkOut)
+
+    for (const noche of noches) {
+      const clave = `${e.tipoUnidadCodigo}|${noche}`
+      const ya = usado.get(clave) ?? 0
+      if (ya + 1 > cupo) choca = true
+      // Se acumula SIEMPRE, incluso si ya chocó: la entrante siguiente tiene que ver
+      // este cupo consumido.
+      usado.set(clave, ya + 1)
+    }
+
+    if (choca) conflicto.add(e.externalId)
+  }
+
+  return conflicto
+}

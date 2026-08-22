@@ -184,6 +184,86 @@ export function ChipEnlace({
   )
 }
 
+/**
+ * Insignia: un dato corto que **cambia la decisión**, resaltado.
+ *
+ * Se distingue de `Etiqueta` en el peso visual y en el propósito. `Etiqueta` es
+ * un dato de ficha —la categoría, la capacidad— y no compite por la atención.
+ * `Insignia` es lo que en Booking va sobre la tarjeta: quedan pocas, es la más
+ * elegida, incluye desayuno. Por eso lleva color, y por eso hay pocas: si todo
+ * está resaltado, nada lo está.
+ */
+export function Insignia({
+  tono = 'lago',
+  children,
+}: {
+  tono?: 'lago' | 'urgente' | 'atencion' | 'neutro'
+  children: ReactNode
+}) {
+  const estilo = {
+    // `lenga` es el naranja de marca para pendientes y alertas (ADR 0009). No
+    // se usa rojo: quedan pocas habitaciones no es un error ni un peligro.
+    urgente: 'bg-lenga-100 text-lenga-900 ring-lenga-200',
+    atencion: 'bg-lenga-50 text-lenga-800 ring-lenga-200',
+    lago: 'bg-lago-50 text-lago-800 ring-lago-200',
+    neutro: 'bg-stone-100 text-stone-700 ring-stone-200',
+  }[tono]
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${estilo}`}
+    >
+      {children}
+    </span>
+  )
+}
+
+/* ------------------------------------------------------------- precios -- */
+
+/**
+ * Precio, con la jerarquía que el huésped necesita para comparar.
+ *
+ * Patrón de Booking: el número grande es el que se paga y arriba va, chiquito,
+ * a qué corresponde. La aclaración de IVA no es decorativa —en este sistema el
+ * precio se guarda sin IVA y se suma al cotizar (ADR 0004), así que decir que
+ * el número mostrado ya lo incluye es parte de que no haya sorpresa al pagar—.
+ *
+ * `tamano` existe porque el mismo componente se usa en la tarjeta de un listado
+ * y en la ficha de detalle, donde el precio es el protagonista.
+ */
+export function Precio({
+  monto,
+  encabezado,
+  detalle,
+  tamano = 'normal',
+  alineado = 'izquierda',
+}: {
+  /** Importe ya formateado, p. ej. `USD 145,20`. */
+  monto: string
+  /** Qué es ese número: «Desde», «Total», «Por noche». */
+  encabezado?: string
+  /** Aclaración al pie: «con IVA», «3 noches». */
+  detalle?: string
+  tamano?: 'normal' | 'grande'
+  alineado?: 'izquierda' | 'derecha'
+}) {
+  const clases = tamano === 'grande' ? 'text-3xl' : 'text-2xl'
+  return (
+    // `min-w-0`: dentro de un flex, el detalle («USD 435,60 por 3 noches, con
+    // IVA») es una línea larga, y un hijo de flex no se encoge por debajo de su
+    // contenido mínimo salvo que se le diga.
+    <div className={`min-w-0 ${alineado === 'derecha' ? 'text-right' : ''}`}>
+      {encabezado && (
+        <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">{encabezado}</p>
+      )}
+      <p className={`tabular font-display leading-none font-semibold text-stone-900 ${clases}`}>
+        {monto}
+      </p>
+      {detalle && <p className="mt-1 text-sm text-stone-500">{detalle}</p>}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------- botones -- */
 
 export type VarianteBoton = 'primario' | 'secundario'

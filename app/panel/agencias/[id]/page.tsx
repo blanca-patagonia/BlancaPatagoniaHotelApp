@@ -16,6 +16,7 @@ import { type CondicionIva } from '@/lib/domain/facturacion'
 import { Encabezado, Mensaje, Pagina, botonClases } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
 import { BotonEnvio } from '../../_components/boton-envio'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 interface Agencia {
   id: string
@@ -126,11 +127,11 @@ export default async function AgenciaDetallePage({
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5">
         <div>
-          <p className="text-xs uppercase tracking-wide text-stone-400">Saldo</p>
+          <p className="text-xs uppercase tracking-wide text-stone-600">Saldo</p>
           <p className={`text-2xl font-semibold ${saldo > 0 ? 'text-red-600' : 'text-stone-900'}`}>
-            USD {saldo.toLocaleString('es-AR')}
+            {formatearUSD(saldo)}
           </p>
-          <p className="text-xs text-stone-400">{saldo > 0 ? 'adeuda al hotel' : 'sin deuda'}</p>
+          <p className="text-xs text-stone-600">{saldo > 0 ? 'adeuda al hotel' : 'sin deuda'}</p>
         </div>
         <form action={registrarMovimiento} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="agencia_id" value={agencia.id} />
@@ -196,7 +197,7 @@ export default async function AgenciaDetallePage({
           <tbody>
             {movs.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-stone-400">
+                <td colSpan={4} className="px-4 py-8 text-center text-stone-600">
                   Sin movimientos.
                 </td>
               </tr>
@@ -206,13 +207,13 @@ export default async function AgenciaDetallePage({
                 <td className="px-4 py-2 text-stone-500">{m.fecha}</td>
                 <td className="px-4 py-2 text-stone-700">
                   {m.concepto || ETIQUETAS_MOVIMIENTO[m.tipo]}
-                  {m.reserva && <span className="ml-2 text-xs text-stone-400">{m.reserva.codigo}</span>}
+                  {m.reserva && <span className="ml-2 text-xs text-stone-600">{m.reserva.codigo}</span>}
                 </td>
                 <td className="px-4 py-2 text-right text-stone-800">
-                  {m.tipo === 'cargo' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                  {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
                 </td>
                 <td className="px-4 py-2 text-right text-emerald-700">
-                  {m.tipo === 'pago' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                  {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
                 </td>
               </tr>
             ))}

@@ -3,6 +3,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { seniaSugerida } from '@/lib/domain/pagos'
 import { diasEntre, formatoFechaCorta } from '@/lib/fechas'
+import { formatearUSD } from '@/lib/domain/moneda'
 import { FormularioCheckout } from './formulario'
 import { Marco, Tarjeta, Titulo } from '../../_publico/ui'
 
@@ -68,14 +69,14 @@ export default async function CheckoutPage({
           <div>
             <dt className="text-sm text-stone-500">Total</dt>
             <dd className="tabular mt-0.5 font-display text-2xl leading-none font-semibold text-stone-900">
-              USD {cot.resumen.total.toLocaleString('es-AR')}
+              {formatearUSD(cot.resumen.total)}
             </dd>
             <dd className="text-sm text-stone-500">IVA incluido</dd>
           </div>
           <div className="col-span-2 border-t border-stone-100 pt-4">
             <dt className="text-sm text-stone-500">Seña para tomar la reserva</dt>
             <dd className="tabular mt-0.5 font-medium text-stone-900">
-              USD {senia.toLocaleString('es-AR')}
+              {formatearUSD(senia)}
               <span className="ml-2 font-normal text-stone-500">
                 (equivale a la primera noche)
               </span>

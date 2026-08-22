@@ -34,6 +34,7 @@ import {
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
 import { vencerComprobantes } from './actions'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 interface Proveedor {
   id: string
@@ -142,7 +143,7 @@ export default async function ProveedoresPage({
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi
           titulo="Total a pagar"
-          valor={`USD ${totalAPagar.toLocaleString('es-AR')}`}
+          valor={`${formatearUSD(totalAPagar)}`}
           detalle="suma de saldos pendientes"
           icono="proveedores"
           tono={totalAPagar > 0 ? 'alerta' : 'exito'}
@@ -206,7 +207,7 @@ export default async function ProveedoresPage({
                 >
                   <div className="min-w-40 flex-1">
                     <p className="font-medium text-stone-800">{nombre}</p>
-                    <p className="text-xs text-stone-400">
+                    <p className="text-xs text-stone-600">
                       {m.concepto || 'Factura'}
                       {m.comprobante && ` · ${m.comprobante}`}
                     </p>
@@ -218,7 +219,7 @@ export default async function ProveedoresPage({
                     {formatoFechaCorta(m.vencimiento!)}
                   </span>
                   <span className="tabular w-24 text-right font-medium text-stone-800">
-                    USD {Number(m.monto).toLocaleString('es-AR')}
+                    {formatearUSD(Number(m.monto))}
                   </span>
                 </li>
               )
@@ -244,7 +245,7 @@ export default async function ProveedoresPage({
                 <span>
                   <span className="text-stone-500">Total adeudado: </span>
                   <span className="tabular font-semibold text-stone-900">
-                    USD {adeudado.toLocaleString('es-AR')}
+                    {formatearUSD(adeudado)}
                   </span>
                 </span>
                 <span>
@@ -252,7 +253,7 @@ export default async function ProveedoresPage({
                   <span
                     className={`tabular font-semibold ${vencido > 0 ? 'text-red-600' : 'text-emerald-700'}`}
                   >
-                    USD {vencido.toLocaleString('es-AR')}
+                    {formatearUSD(vencido)}
                   </span>
                 </span>
               </div>
@@ -349,7 +350,7 @@ export default async function ProveedoresPage({
                       p.saldo > 0 ? 'text-red-600' : 'text-stone-800'
                     }`}
                   >
-                    {p.saldo.toLocaleString('es-AR')}
+                    {importe(p.saldo)}
                   </td>
                 </tr>
               ))}

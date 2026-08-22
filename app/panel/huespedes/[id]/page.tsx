@@ -21,6 +21,7 @@ import { Icono } from '../../_components/iconos'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 import { ETIQUETAS_CONDICION_IVA, type CondicionIva } from '@/lib/domain/facturacion'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 interface Huesped {
   id: string
@@ -112,7 +113,7 @@ export default async function DetalleHuespedPage({
                   {huesped.email}
                 </a>
               ) : (
-                <span className="text-stone-400">Sin cargar</span>
+                <span className="text-stone-600">Sin cargar</span>
               )}
             </Dato>
             <Dato etiqueta="Teléfono">
@@ -125,11 +126,11 @@ export default async function DetalleHuespedPage({
                   {huesped.telefono}
                 </a>
               ) : (
-                <span className="text-stone-400">Sin cargar</span>
+                <span className="text-stone-600">Sin cargar</span>
               )}
             </Dato>
             <Dato etiqueta="Nacionalidad">
-              {huesped.nacionalidad || <span className="text-stone-400">Sin cargar</span>}
+              {huesped.nacionalidad || <span className="text-stone-600">Sin cargar</span>}
             </Dato>
             <Dato etiqueta="Condición frente al IVA">
               {ETIQUETAS_CONDICION_IVA[huesped.condicion_iva]}
@@ -195,7 +196,7 @@ export default async function DetalleHuespedPage({
                         </Link>
                         <span className="tabular block text-xs text-stone-500 sm:hidden">
                           {p ? `${formatoFechaCorta(p.desde)} → ${formatoFechaCorta(p.hasta)}` : '—'}
-                          {` · USD ${Number(r.total).toLocaleString('es-AR')}`}
+                          {` · ${formatearUSD(Number(r.total))}`}
                         </span>
                       </td>
                       <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
@@ -204,7 +205,7 @@ export default async function DetalleHuespedPage({
                       <td
                         className={`${TD} ${COL_SECUNDARIA} tabular text-right font-medium text-stone-800`}
                       >
-                        USD {Number(r.total).toLocaleString('es-AR')}
+                        {formatearUSD(Number(r.total))}
                       </td>
                       <td className={TD}>
                         <Etiqueta tono={TONO_ESTADO[r.estado]}>

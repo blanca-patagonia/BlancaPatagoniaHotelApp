@@ -5,15 +5,30 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import {
   transicionesPosibles,
   ETIQUETAS_ESTADO_RESERVA,
+  ETIQUETAS_GARANTIA,
+  ETIQUETAS_PLAN,
+  ETIQUETAS_SEGMENTO,
+  noShowEsCobrable,
   type EstadoReserva,
+  type Garantia,
+  type Plan,
+  type Segmento,
 } from '@/lib/domain/reservas'
+import {
+  desgloseCoincide,
+  paxQueOcupa,
+  textoOcupantes,
+  type Ocupantes,
+} from '@/lib/domain/ocupantes'
 import {
   cargoPorCancelacion,
   montoCancelacion,
   nochePromedioConIva,
+  primeraNocheRealConIva,
   type ReglaCancelacion,
 } from '@/lib/domain/cancelacion'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
+import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import {
   cambiarEstadoReserva,
   registrarPago,
@@ -27,6 +42,7 @@ import { motivoNoFacturable, MENSAJES_NO_FACTURABLE } from '@/lib/domain/factura
 import { puedeCambiarUnidad, MENSAJES_RECHAZO_MUDANZA } from '@/lib/domain/mudanzas'
 import { unidadesDisponibles } from '@/lib/availability/disponibilidad'
 import { BotonEnvio } from '../../_components/boton-envio'
+import { Icono } from '../../_components/iconos'
 import { TONO_ESTADO } from '../../_components/estilos'
 import { Encabezado, Etiqueta, Mensaje, Pagina } from '../../_components/ui'
 import {
@@ -46,6 +62,7 @@ import {
   type EstadoPago,
   type Pago,
 } from '@/lib/domain/pagos'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 const MEDIOS_MANUALES: MedioPago[] = ['efectivo', 'transferencia', 'tarjeta']
 
@@ -128,22 +145,47 @@ interface Reserva {
   codigo: string
   estado: EstadoReserva
   total: number | string
+  /* Desglose fiscal (paso 6). `total` sigue siendo el importe CON IVA. */
+  subtotal: number | string
+  total_neto: number | string
+  iva: number | string
+  descuento_pct: number | string
   canal: string
   tarifa_tipo: string
   notas: string
-  huesped: { apellido: string; nombre: string; email: string | null; doc_numero: string } | null
+  plan: Plan
+  garantia: Garantia
+  segmento: Segmento
+  voucher: string
+  huesped: {
+    apellido: string
+    nombre: string
+    email: string | null
+    doc_numero: string
+    vip: boolean
+  } | null
   estadias: {
     periodo: string
     precio_noche: number | string
     huespedes: number
-    unidad: { nombre: string; tipo: { nombre: string } | null } | null
+    adultos: number
+    menores: number
+    bebes: number
+    camas_extra: number
+    cunas: number
+    no_mover: boolean
+    unidad: {
+      nombre: string
+      tipo_unidad_id: string
+      tipo: { nombre: string; capacidad_max: number } | null
+    } | null
   }[]
 }
 
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-stone-400">{etiqueta}</dt>
+      <dt className="text-xs uppercase tracking-wide text-stone-600">{etiqueta}</dt>
       <dd className="mt-0.5 text-stone-800">{valor}</dd>
     </div>
   )
@@ -164,7 +206,7 @@ export default async function DetalleReservaPage({
   const { data } = await supabase
     .from('reservas')
     .select(
-      'id, codigo, estado, total, canal, tarifa_tipo, notas, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero), estadias(periodo, precio_noche, huespedes, unidad:unidades(nombre, tipo:tipos_unidad(nombre)))',
+      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
     )
     .eq('id', id)
     .single()
@@ -172,6 +214,16 @@ export default async function DetalleReservaPage({
   if (!data) notFound()
   const reserva = data as unknown as Reserva
   const estadia = reserva.estadias?.[0]
+
+  // Desglose de ocupantes en la forma del dominio. Se arma una vez y se reusa,
+  // en vez de leer seis campos sueltos en cada lugar de la pantalla.
+  const ocupantes: Ocupantes = {
+    adultos: estadia?.adultos ?? 0,
+    menores: estadia?.menores ?? 0,
+    bebes: estadia?.bebes ?? 0,
+    camasExtra: estadia?.camas_extra ?? 0,
+    cunas: estadia?.cunas ?? 0,
+  }
   const periodo = estadia ? parsearPeriodo(estadia.periodo) : null
   const noches = periodo ? diasEntre(periodo.desde, periodo.hasta) : 0
   const transiciones = transicionesPosibles(reserva.estado)
@@ -187,13 +239,37 @@ export default async function DetalleReservaPage({
     const reglas = (pol?.reglas ?? []) as ReglaCancelacion[]
     const dias = diasEntre(hoyISO(), periodo.desde)
     const tipoCargo = cargoPorCancelacion(reglas, dias)
-    // `estadia.precio_noche` está SIN IVA (es `totalNeto / noches`), mientras que
-    // `reserva.total` sí lo lleva. Pasarlos juntos mezclaba unidades y el cargo
-    // anunciado al huésped salía mal.
+    /*
+      La primera noche REAL, no el promedio.
+
+      `estadia.precio_noche` guarda `totalNeto / noches`: ya viene promediado, así que
+      no sirve para esto. Se piden las tarifas por noche del tramo y se reparte el
+      total **guardado** según esa proporción — el precio se fijó al reservar (ADR
+      0004), así que recotizar cobraría un número que el huésped nunca aceptó.
+
+      Si la estadía cruza un cambio de temporada, el promedio cobraba de más o de
+      menos según cuál de las dos fuera la primera noche. En los dos sentidos es plata
+      mal cobrada, y el huésped tiene el tarifario publicado para discutirlo.
+
+      Si no se pudieron leer las tarifas —temporada sin cargar, por ejemplo— se cae al
+      promedio, que es lo que había antes: peor que lo exacto, mejor que nada.
+    */
+    const cotizacion = await cotizarEstadia({
+      tipoUnidadId: estadia?.unidad?.tipo_unidad_id ?? '',
+      checkIn: periodo.desde,
+      checkOut: periodo.hasta,
+      tarifaTipo: reserva.tarifa_tipo as 'neto' | 'rack',
+    }).catch(() => null)
+
+    const preciosPorNoche = (cotizacion?.noches ?? []).map((n: { precio: number }) => n.precio)
+
     const monto = montoCancelacion({
       cargo: tipoCargo,
       totalEstadia: Number(reserva.total),
-      primeraNocheConIva: nochePromedioConIva(Number(reserva.total), noches),
+      primeraNocheConIva:
+        preciosPorNoche.length > 0
+          ? primeraNocheRealConIva(Number(reserva.total), preciosPorNoche)
+          : nochePromedioConIva(Number(reserva.total), noches),
     })
     cargo = { dias, monto }
   }
@@ -304,6 +380,16 @@ export default async function DetalleReservaPage({
             />
             <Dato etiqueta="Email" valor={reserva.huesped?.email || '—'} />
             <Dato etiqueta="Documento" valor={reserva.huesped?.doc_numero || '—'} />
+            {/* VIP con etiqueta de texto, no sólo una estrellita de color: si el
+                dato importa tiene que leerse sin depender del color. */}
+            {reserva.huesped?.vip && (
+              <div>
+                <dt className="text-xs tracking-wide text-stone-600 uppercase">Categoría</dt>
+                <dd className="mt-0.5">
+                  <Etiqueta tono="calafate">★ Huésped VIP</Etiqueta>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
 
@@ -326,12 +412,94 @@ export default async function DetalleReservaPage({
                   : '—'
               }
             />
-            <Dato etiqueta="Huéspedes" valor={String(estadia?.huespedes ?? '—')} />
+            {/* Desglose de ocupantes: es lo que recepción necesita para preparar
+                la habitación. «2 huéspedes» no dice si van dos camas o una cama
+                y una cuna. */}
+            <Dato etiqueta="Ocupantes" valor={estadia ? textoOcupantes(ocupantes) : '—'} />
+
+            {/* Si el desglose y el pax guardado no cierran, se dice. Puede pasar
+                con filas viejas o escritas por fuera de `crear_reserva`; mostrar
+                dos números contradictorios sin avisar es peor que avisar. */}
+            {estadia && !desgloseCoincide(ocupantes, estadia.huespedes) && (
+              <div>
+                <dt className="text-xs tracking-wide text-stone-600 uppercase">Atención</dt>
+                <dd className="mt-0.5 text-sm text-lenga-800">
+                  El desglose suma {paxQueOcupa(ocupantes)} pero la estadía tiene{' '}
+                  {estadia.huespedes} huésped(es) registrado(s). Revisá el detalle.
+                </dd>
+              </div>
+            )}
+
+            {estadia?.no_mover && (
+              <div>
+                <dt className="text-xs tracking-wide text-stone-600 uppercase">Asignación</dt>
+                <dd className="mt-0.5">
+                  <Etiqueta tono="alerta">No mover de habitación</Etiqueta>
+                </dd>
+              </div>
+            )}
+
+            <Dato etiqueta="Plan" valor={ETIQUETAS_PLAN[reserva.plan] ?? reserva.plan} />
             <Dato
-              etiqueta="Canal / tarifa"
-              valor={`${reserva.canal} · ${reserva.tarifa_tipo}`}
+              etiqueta="Canal / tarifa / segmento"
+              valor={`${reserva.canal} · ${reserva.tarifa_tipo} · ${ETIQUETAS_SEGMENTO[reserva.segmento] ?? reserva.segmento}`}
             />
-            <Dato etiqueta="Total" valor={`USD ${Number(reserva.total).toLocaleString('es-AR')}`} />
+            <Dato
+              etiqueta="Garantía"
+              valor={
+                (ETIQUETAS_GARANTIA[reserva.garantia] ?? reserva.garantia) +
+                (noShowEsCobrable(reserva.garantia) ? '' : ' — un no-show no sería cobrable')
+              }
+            />
+            {reserva.voucher && <Dato etiqueta="Voucher" valor={reserva.voucher} />}
+
+            {/* ── Desglose fiscal ──────────────────────────────────────────
+                El listado de WinPAX mostraba la tarifa con y sin impuestos. Antes
+                del paso 6 esto no se podía: `total` guarda el importe con IVA y
+                `tarifas.iva_pct` puede variar por tarifa, así que dividir por 1,21
+                daba un número aproximado y silenciosamente equivocado. */}
+            <div className="border-t border-stone-100 pt-3">
+              <dt className="text-xs tracking-wide text-stone-600 uppercase">Importes</dt>
+              <dd className="mt-1 space-y-0.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Subtotal sin IVA</span>
+                  <span className="tabular text-stone-700">
+                    {formatearUSD(Number(reserva.subtotal))}
+                  </span>
+                </div>
+                {Number(reserva.descuento_pct) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-stone-500">
+                      Descuento {Number(reserva.descuento_pct)}%
+                    </span>
+                    <span className="tabular text-stone-700">
+                      −USD{' '}
+                      {(Number(reserva.subtotal) - Number(reserva.total_neto)).toLocaleString(
+                        'es-AR',
+                      )}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Neto gravado</span>
+                  <span className="tabular text-stone-700">
+                    {formatearUSD(Number(reserva.total_neto))}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">IVA</span>
+                  <span className="tabular text-stone-700">
+                    {formatearUSD(Number(reserva.iva))}
+                  </span>
+                </div>
+                <div className="flex justify-between border-t border-stone-100 pt-1 font-semibold text-stone-900">
+                  <span>Total con IVA</span>
+                  <span className="tabular">
+                    {formatearUSD(Number(reserva.total))}
+                  </span>
+                </div>
+              </dd>
+            </div>
           </dl>
         </div>
       </div>
@@ -339,7 +507,7 @@ export default async function DetalleReservaPage({
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium text-stone-700">Acciones</h2>
         {transiciones.length === 0 ? (
-          <p className="text-sm text-stone-400">La reserva está en un estado final.</p>
+          <p className="text-sm text-stone-600">La reserva está en un estado final.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {transiciones.map((t) => (
@@ -356,7 +524,7 @@ export default async function DetalleReservaPage({
                   cargando="Aplicando…"
                   confirmar={
                     t === 'cancelada'
-                      ? `¿Cancelar la reserva ${reserva.codigo}?${cargo && cargo.monto > 0 ? ` Corresponde un cargo de USD ${cargo.monto.toLocaleString('es-AR')}.` : ''} No se puede deshacer.`
+                      ? `¿Cancelar la reserva ${reserva.codigo}?${cargo && cargo.monto > 0 ? ` Corresponde un cargo de ${formatearUSD(cargo.monto)}.` : ''} No se puede deshacer.`
                       : t === 'no_show'
                         ? `¿Marcar ${reserva.codigo} como no-show? Se cobra la estadía completa y no se puede deshacer.`
                         : undefined
@@ -376,7 +544,7 @@ export default async function DetalleReservaPage({
               : 'check-in ya transcurrido'}
             ): cargo estimado{' '}
             <span className="font-medium text-stone-700">
-              USD {cargo.monto.toLocaleString('es-AR')}
+              {formatearUSD(cargo.monto)}
             </span>{' '}
             según la política estándar.
           </p>
@@ -400,7 +568,7 @@ export default async function DetalleReservaPage({
               Reprogramar
             </BotonEnvio>
           </form>
-          <p className="mt-2 text-xs text-stone-400">
+          <p className="mt-2 text-xs text-stone-600">
             Recotiza el total; se rechaza si la unidad ya está ocupada en esas fechas.
           </p>
         </div>
@@ -409,13 +577,28 @@ export default async function DetalleReservaPage({
       {puedeMudarse && (
         <div className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-1 text-sm font-medium text-stone-700">Cambiar de unidad</h2>
-          <p className="mb-3 text-xs text-stone-400">
+          <p className="mb-3 text-xs text-stone-600">
             Para averías, pedidos del huésped o para liberar la habitación. Solo se listan las
             unidades libres en {formatoFechaCorta(periodo!.desde)} – {formatoFechaCorta(periodo!.hasta)}.
           </p>
 
+          {/* Acá es donde «no mover» sirve. Sin este aviso, el motivo por el que
+              se le asignó esa habitación —vista al lago, planta baja, la de
+              siempre— se pierde en el momento exacto en que importa. */}
+          {estadia?.no_mover && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg bg-lenga-50 px-3 py-2 text-xs ring-1 ring-lenga-200">
+              <span className="shrink-0 text-lenga-700">
+                <Icono nombre="alerta" tam={14} />
+              </span>
+              <span className="text-lenga-900">
+                <strong className="font-semibold">Marcada «no mover»:</strong> el huésped pidió esta
+                unidad en particular. Confirmá con él antes de cambiarla.
+              </span>
+            </div>
+          )}
+
           {libres.length === 0 ? (
-            <p className="text-sm text-stone-400">
+            <p className="text-sm text-stone-600">
               No hay otra unidad libre en esas fechas. Se puede liberar una reprogramando o
               cancelando otra reserva.
             </p>
@@ -461,7 +644,7 @@ export default async function DetalleReservaPage({
               </BotonEnvio>
             </form>
           )}
-          <p className="mt-2 text-xs text-stone-400">
+          <p className="mt-2 text-xs text-stone-600">
             Dentro del mismo tipo el precio no cambia. La unidad que se libera queda sucia solo si
             el huésped ya había hecho el check-in.
           </p>
@@ -477,21 +660,21 @@ export default async function DetalleReservaPage({
             110px se cortaban. En móvil van de a uno. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-lg bg-stone-50 px-4 py-3">
-            <p className="text-xs text-stone-400">Total</p>
+            <p className="text-xs text-stone-600">Total</p>
             <p className="text-lg font-semibold text-stone-900">
-              USD {Number(reserva.total).toLocaleString('es-AR')}
+              {formatearUSD(Number(reserva.total))}
             </p>
           </div>
           <div className="rounded-lg bg-emerald-50 px-4 py-3">
             <p className="text-xs text-emerald-600">Pagado</p>
             <p className="text-lg font-semibold text-emerald-700">
-              USD {resumen.pagado.toLocaleString('es-AR')}
+              {formatearUSD(resumen.pagado)}
             </p>
           </div>
           <div className="rounded-lg bg-lenga-50 px-4 py-3">
             <p className="text-xs text-lenga-600">Saldo</p>
             <p className="text-lg font-semibold text-lenga-700">
-              USD {resumen.saldo.toLocaleString('es-AR')}
+              {formatearUSD(resumen.saldo)}
             </p>
           </div>
         </div>
@@ -506,7 +689,7 @@ export default async function DetalleReservaPage({
                 <span
                   className={`font-medium ${p.tipo === 'reembolso' ? 'text-red-600' : 'text-stone-800'}`}
                 >
-                  {p.tipo === 'reembolso' ? '−' : ''}USD {Number(p.monto).toLocaleString('es-AR')}
+                  {p.tipo === 'reembolso' ? '−' : ''}{formatearUSD(Number(p.monto))}
                 </span>
               </li>
             ))}
@@ -563,15 +746,25 @@ export default async function DetalleReservaPage({
             </BotonEnvio>
           </form>
         )}
-        <p className="mt-3 text-xs text-stone-400">
-          Seña sugerida (primera noche): USD {senia.toLocaleString('es-AR')}. Las pasarelas
+        <p className="mt-3 text-xs text-stone-600">
+          Seña sugerida (primera noche): {formatearUSD(senia)}. Las pasarelas
           (MercadoPago / Stripe) ingresan por webhook.
         </p>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-stone-700">Consumos y cuenta</h2>
+          <div className="flex flex-wrap items-center gap-3">
+          {/* La cuenta detallada vive aparte: acá está la consolidada, que alcanza
+              para el día a día. El detalle por departamento y el split entre folios
+              son de administración y ocuparían la pantalla entera. */}
+          <Link
+            href={`/panel/reservas/${reserva.id}/cuenta`}
+            className="text-sm font-medium text-lago-700 hover:underline"
+          >
+            Ver cuenta detallada
+          </Link>
           {factura ? (
             <Link
               href={`/panel/reservas/${reserva.id}/factura`}
@@ -582,7 +775,7 @@ export default async function DetalleReservaPage({
           ) : motivoFactura ? (
             /* El botón no se ofrece si no corresponde: es más claro explicar por
                qué que dejar apretar y devolver un error. */
-            <span className="max-w-sm text-right text-xs text-stone-400">
+            <span className="max-w-sm text-right text-xs text-stone-600">
               {MENSAJES_NO_FACTURABLE[motivoFactura]}
             </span>
           ) : (
@@ -596,6 +789,7 @@ export default async function DetalleReservaPage({
               </BotonEnvio>
             </form>
           )}
+          </div>
         </div>
 
         {consumos.length > 0 && (
@@ -604,18 +798,18 @@ export default async function DetalleReservaPage({
               <li key={c.id} className="flex items-center justify-between py-2">
                 <span className="text-stone-600">
                   {c.cantidad}× {c.producto?.nombre}
-                  <span className="ml-2 text-xs text-stone-400">
+                  <span className="ml-2 text-xs text-stone-600">
                     {c.producto ? ETIQUETAS_CATEGORIA_PRODUCTO[c.producto.categoria] : ''}
                   </span>
                 </span>
                 <span className="flex items-center gap-3">
                   <span className="font-medium text-stone-800">
-                    USD {(c.cantidad * Number(c.precio_unitario)).toLocaleString('es-AR')}
+                    {formatearUSD((c.cantidad * Number(c.precio_unitario)))}
                   </span>
                   <form action={quitarConsumo}>
                     <input type="hidden" name="reserva_id" value={reserva.id} />
                     <input type="hidden" name="consumo_id" value={c.id} />
-                    <button className="text-xs text-stone-400 transition hover:text-red-600" title="Quitar">
+                    <button className="text-xs text-stone-600 transition hover:text-red-600" title="Quitar">
                       ✕
                     </button>
                   </form>
@@ -636,7 +830,7 @@ export default async function DetalleReservaPage({
             >
               {productos.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nombre} — USD {Number(p.precio).toLocaleString('es-AR')}
+                  {p.nombre} — {formatearUSD(Number(p.precio))}
                 </option>
               ))}
             </select>
@@ -659,15 +853,15 @@ export default async function DetalleReservaPage({
         <dl className="mt-4 border-t border-stone-100 pt-3 text-sm">
           <div className="flex justify-between">
             <dt className="text-stone-500">Alojamiento</dt>
-            <dd className="text-stone-700">USD {cuenta.alojamiento.toLocaleString('es-AR')}</dd>
+            <dd className="text-stone-700">{formatearUSD(cuenta.alojamiento)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-stone-500">Consumos</dt>
-            <dd className="text-stone-700">USD {cuenta.consumos.toLocaleString('es-AR')}</dd>
+            <dd className="text-stone-700">{formatearUSD(cuenta.consumos)}</dd>
           </div>
           <div className="mt-1 flex justify-between border-t border-stone-100 pt-1 font-semibold text-stone-900">
             <dt>Total cuenta</dt>
-            <dd>USD {cuenta.total.toLocaleString('es-AR')}</dd>
+            <dd>{formatearUSD(cuenta.total)}</dd>
           </div>
         </dl>
       </div>

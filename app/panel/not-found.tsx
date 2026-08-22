@@ -20,7 +20,7 @@ export default function NoEncontrado() {
 
       <Tarjeta>
         <div className="flex flex-col items-center gap-4 px-6 py-12 text-center">
-          <span className="flex size-12 items-center justify-center rounded-2xl bg-stone-100 text-stone-400">
+          <span className="flex size-12 items-center justify-center rounded-2xl bg-stone-100 text-stone-600">
             <Icono nombre="montana" tam={26} />
           </span>
           <p className="max-w-sm text-sm leading-relaxed text-stone-600">

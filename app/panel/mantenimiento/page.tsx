@@ -269,7 +269,7 @@ export default async function MantenimientoPage({
                 >
                   <div className="min-w-40 flex-1">
                     <p className="font-medium text-stone-800">{p.titulo}</p>
-                    <p className="text-xs text-stone-400">
+                    <p className="text-xs text-stone-600">
                       {p.unidad?.nombre ?? 'General'} · cada {p.cada_meses}{' '}
                       {p.cada_meses === 1 ? 'mes' : 'meses'}
                     </p>
@@ -367,7 +367,7 @@ export default async function MantenimientoPage({
                 </Etiqueta>
                 <div className="min-w-40 flex-1">
                   <p className="font-medium text-stone-800">{o.titulo}</p>
-                  <p className="text-xs text-stone-400">
+                  <p className="text-xs text-stone-600">
                     {o.unidad?.nombre ?? 'General'}
                     {o.descripcion ? ` · ${o.descripcion}` : ''}
                   </p>
@@ -375,7 +375,7 @@ export default async function MantenimientoPage({
                 {o.estado !== 'resuelta' && (
                   <span
                     className={`inline-flex items-center gap-1 text-xs ${
-                      demorada ? 'font-medium text-lenga-700' : 'text-stone-400'
+                      demorada ? 'font-medium text-lenga-700' : 'text-stone-600'
                     }`}
                   >
                     {demorada && <Icono nombre="alerta" tam={13} />}

@@ -39,7 +39,13 @@ const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
 interface FilaEstadia {
   periodo: string
   huespedes: number | null
-  unidad: { codigo: string } | null
+  /**
+   * ⚠️ `nombre`, no `codigo`: la tabla `unidades` no tiene columna `codigo`.
+   * Pedirla hacía fallar la consulta entera con «column unidades_1.codigo does
+   * not exist», así que la lista de desayuno salía **siempre vacía**. Los otros
+   * seis módulos que embeben `unidades` ya usaban `nombre`.
+   */
+  unidad: { nombre: string } | null
   reserva: {
     codigo: string
     estado: string
@@ -79,7 +85,7 @@ export default async function ServicioPage({
       supabase
         .from('estadias')
         .select(
-          'periodo, huespedes, unidad:unidades(codigo), reserva:reservas(codigo, estado, notas, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre))',
+          'periodo, huespedes, unidad:unidades(nombre), reserva:reservas(codigo, estado, notas, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre))',
         )
         .in('estado', ESTADOS_EN_CASA)
         .overlaps('periodo', `[${sumarDias(fecha, -1)},${sumarDias(fecha, 1)})`)
@@ -97,7 +103,23 @@ export default async function ServicioPage({
     ),
   ])
 
-  const incompleto = estadiasRes.truncado || consumosRes.truncado
+  /*
+    Se separan las dos cosas que antes se leían como una sola.
+
+    `traerTodo` devuelve `truncado: true` tanto cuando llegó al techo de filas
+    como cuando **la consulta falló**, y esta pantalla solo miraba `truncado`.
+    Con la consulta de estadías rota, el resultado era un cartel que decía «hay
+    más datos de los que se pudieron leer, achicá el rango» sobre una lista
+    vacía: el mensaje mandaba a corregir el filtro cuando el problema era otro,
+    y el error real no aparecía en ningún lado.
+  */
+  const fallo = estadiasRes.error ?? consumosRes.error
+  const truncado = !fallo && (estadiasRes.truncado || consumosRes.truncado)
+
+  // El detalle técnico va al log del servidor, nunca a la pantalla: a quien
+  // arma el desayuno no le sirve un mensaje de PostgREST, y a quien tiene que
+  // arreglarlo no le sirve «no se pudieron leer los datos».
+  if (fallo) console.error('Servicio de cocina: falló la lectura —', fallo)
 
   const estadias: EstadiaServicio[] = estadiasRes.filas
     .filter((e) => e.unidad && e.reserva)
@@ -106,7 +128,7 @@ export default async function ServicioPage({
       const h = e.reserva!.huesped
       return {
         reservaCodigo: e.reserva!.codigo,
-        unidad: e.unidad!.codigo,
+        unidad: e.unidad!.nombre,
         huesped: h ? `${h.apellido}, ${h.nombre}` : 'Sin huésped',
         checkIn: ci,
         checkOut: co,
@@ -141,7 +163,15 @@ export default async function ServicioPage({
         />
       </div>
 
-      {incompleto && (
+      {fallo && (
+        <Mensaje tono="error">
+          No se pudieron leer los datos del servicio, así que estos listados pueden estar vacíos o
+          incompletos. No es un problema del filtro: volvé a intentar y, si sigue igual, avisá a
+          sistemas.
+        </Mensaje>
+      )}
+
+      {truncado && (
         <Mensaje tono="error">
           Hay más datos de los que se pudieron leer de una vez: estos listados están incompletos.
           Achicá el rango de fechas.

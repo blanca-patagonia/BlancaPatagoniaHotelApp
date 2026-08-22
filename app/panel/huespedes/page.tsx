@@ -113,12 +113,23 @@ export default async function HuespedesPage({
         {huespedes.length === 0 ? (
           <EstadoVacio
             titulo={q ? 'Ningún huésped coincide con la búsqueda' : 'Todavía no hay huéspedes'}
+            /* El texto anterior decía que los huéspedes «se cargan al crear una
+               reserva», y arriba, en el encabezado, hay un botón «Registrar
+               huésped» que funciona. Contradecir al botón que está a la vista
+               hace dudar de cuál es el camino bueno: son los dos. */
             descripcion={
               q
                 ? 'Se busca por apellido, nombre, documento o email.'
-                : 'Los huéspedes se cargan al crear una reserva.'
+                : 'Se cargan solos al crear una reserva, o los podés registrar vos ahora.'
             }
             icono="huespedes"
+            accion={
+              q ? undefined : (
+                <Link href="/panel/huespedes/nuevo" className={botonClases('primario')}>
+                  Registrar huésped
+                </Link>
+              )
+            }
           />
         ) : (
           <>
@@ -164,7 +175,7 @@ export default async function HuespedesPage({
                             )}
                             {h.email && <p className="hidden sm:block">{h.email}</p>}
                             {h.telefono && (
-                              <p className="hidden text-xs text-stone-400 sm:block">{h.telefono}</p>
+                              <p className="hidden text-xs text-stone-600 sm:block">{h.telefono}</p>
                             )}
                             {!h.telefono && h.email && (
                               <p className="truncate sm:hidden">{h.email}</p>
@@ -183,7 +194,7 @@ export default async function HuespedesPage({
                             {ETIQUETAS_NIVEL[nivel]} · {puntos} pts
                           </Etiqueta>
                         ) : (
-                          <span className="text-stone-400">—</span>
+                          <span className="text-stone-600">—</span>
                         )}
                       </td>
                     </tr>

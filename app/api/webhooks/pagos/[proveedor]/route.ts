@@ -1,13 +1,7 @@
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { obtenerProveedor } from '@/lib/payments'
-import {
-  puedeAvanzarEstadoPago,
-  resumenPagos,
-  type EstadoPago,
-  type Pago,
-} from '@/lib/domain/pagos'
-import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
-import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
+import { puedeAvanzarEstadoPago, type EstadoPago } from '@/lib/domain/pagos'
+import { saldarSiCorresponde } from '@/lib/reservas/saldar'
 
 type ClienteAdmin = ReturnType<typeof crearClienteAdmin>
 
@@ -74,7 +68,7 @@ export async function POST(
   // sería permanente —no habría manera de repararla—. Al reconciliar igual,
   // reenviar el evento se convierte en el modo de arreglarlo.
   if (evento.estado === 'aprobado') {
-    const falla = await saldarSiCorresponde(admin, evento.reservaId)
+    const falla = await saldarReserva(admin, evento.reservaId)
     if (falla) return Response.json({ error: falla }, { status: 500 })
   }
 
@@ -119,67 +113,25 @@ async function avanzarEstadoDelPago(
 /**
  * Marca la reserva como `pagada` si los pagos registrados la saldan.
  *
+ * La regla vive en `lib/reservas/saldar.ts`: el mostrador (`registrarPago`) hace lo
+ * mismo, las dos copias divergieron una vez —allá se corrigió para consolidar
+ * alojamiento + consumos y acá no— y una regla de plata duplicada se vuelve a
+ * separar. Esta función queda solo para traducir el resultado a lo que el webhook
+ * necesita responder.
+ *
  * Devuelve `null` cuando no hay nada que hacer o salió bien, y el motivo cuando
- * falló algo de base. Los errores de lectura importan tanto como los de
- * escritura: si no se pudo leer el total o los pagos, el resumen daría «no
- * saldada» y se saltearía la transición **por un problema de infraestructura**,
- * respondiendo `ok`. Eso es exactamente el fallo silencioso que hay que evitar.
+ * falló algo de base. Los errores de lectura importan tanto como los de escritura:
+ * si no se pudo leer el total o los pagos, el resumen daría «no saldada» y se
+ * saltearía la transición **por un problema de infraestructura**, respondiendo `ok`.
+ * Eso es exactamente el fallo silencioso que hay que evitar.
  */
-async function saldarSiCorresponde(
-  admin: ClienteAdmin,
-  reservaId: string,
-): Promise<string | null> {
-  // `maybeSingle` y no `single`: si la reserva no existe, no es un error de
-  // infraestructura y no tiene sentido pedirle a la pasarela que reintente.
-  const { data: reserva, error: eReserva } = await admin
-    .from('reservas')
-    .select('estado, total')
-    .eq('id', reservaId)
-    .maybeSingle()
-  if (eReserva) return `no se pudo leer la reserva: ${eReserva.message}`
-  if (!reserva || reserva.estado === 'pagada') return null
+async function saldarReserva(admin: ClienteAdmin, reservaId: string): Promise<string | null> {
+  const { error, noExiste } = await saldarSiCorresponde(admin, reservaId)
 
-  const { data: pagos, error: ePagos } = await admin
-    .from('pagos')
-    .select('tipo, monto, estado')
-    .eq('reserva_id', reservaId)
-  if (ePagos) return `no se pudieron leer los pagos: ${ePagos.message}`
+  // Una reserva inexistente NO es motivo de 500: reintentar no la va a hacer
+  // aparecer, y un reintento eterno es peor que aceptar el evento. Por eso el módulo
+  // compartido lo devuelve aparte del error.
+  if (noExiste) return null
 
-  /*
-    La cuenta del huésped es alojamiento MÁS consumos, no solo el alojamiento.
-
-    Antes se comparaba lo pagado contra `reserva.total`, que cubre únicamente la
-    estadía. Quien había consumido del frigobar quedaba marcado como «pagada»
-    debiendo esa parte, y en el mostrador nadie se lo cobraba porque el sistema
-    decía que estaba al día. Se descubría al cerrar caja, o no se descubría.
-  */
-  const { data: consumos, error: eConsumos } = await admin
-    .from('consumos')
-    .select('cantidad, precio_unitario')
-    .eq('reserva_id', reservaId)
-  if (eConsumos) return `no se pudieron leer los consumos: ${eConsumos.message}`
-
-  const cuenta = cuentaConsolidada(
-    Number(reserva.total),
-    (consumos ?? []).map((c) => ({
-      cantidad: c.cantidad,
-      precioUnitario: Number(c.precio_unitario),
-    })) as Consumo[],
-  )
-
-  const resumen = resumenPagos(cuenta.total, (pagos ?? []) as Pago[])
-  if (!resumen.saldada) return null
-
-  // Una reserva anulada que quedó saldada no se transiciona: la máquina de
-  // estados no lo permite. Queda fuera del alcance de este webhook resolver qué
-  // hacer con esa plata; es una decisión del hotel, no del código.
-  if (!puedeTransicionar(reserva.estado as EstadoReserva, 'pagada')) return null
-
-  const { error: eEstado } = await admin
-    .from('reservas')
-    .update({ estado: 'pagada' })
-    .eq('id', reservaId)
-  if (eEstado) return `no se pudo marcar la reserva como pagada: ${eEstado.message}`
-
-  return null
+  return error
 }

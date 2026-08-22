@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
@@ -6,11 +7,13 @@ import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/
 import { hoyISO, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
-import { areasDe, ETIQUETAS_AREA, type Area } from '@/lib/domain/permisos'
-import { PUNTO_HK, TONO_ESTADO } from './_components/estilos'
+import { areasDe, estaOculta, type Area } from '@/lib/domain/permisos'
+import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
+import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
 import {
   Encabezado,
+  EstadoUnidad,
   EstadoVacio,
   Etiqueta,
   Kpi,
@@ -18,28 +21,6 @@ import {
   botonClases,
   Pagina,
 } from './_components/ui'
-
-/** Ruta e icono de cada módulo, para la grilla de accesos rápidos. */
-const MODULOS: Record<Area, { href: string; icono: NombreIcono }> = {
-  dashboard: { href: '/panel', icono: 'inicio' },
-  ocupacion: { href: '/panel/ocupacion', icono: 'ocupacion' },
-  servicio: { href: '/panel/servicio', icono: 'reportes' },
-  reservas: { href: '/panel/reservas', icono: 'reservas' },
-  huespedes: { href: '/panel/huespedes', icono: 'huespedes' },
-  housekeeping: { href: '/panel/housekeeping', icono: 'housekeeping' },
-  mantenimiento: { href: '/panel/mantenimiento', icono: 'mantenimiento' },
-  objetos_perdidos: { href: '/panel/objetos-perdidos', icono: 'objetos' },
-  avisos: { href: '/panel/avisos', icono: 'avisos' },
-  conversaciones: { href: '/panel/conversaciones', icono: 'chat' },
-  agencias: { href: '/panel/agencias', icono: 'agencias' },
-  proveedores: { href: '/panel/proveedores', icono: 'proveedores' },
-  contratos: { href: '/panel/contratos', icono: 'contratos' },
-  auditoria: { href: '/panel/auditoria', icono: 'auditoria' },
-  reportes: { href: '/panel/reportes', icono: 'reportes' },
-  config: { href: '/panel/config', icono: 'config' },
-  usuarios: { href: '/panel/usuarios', icono: 'usuarios' },
-  ayuda: { href: '/panel/ayuda', icono: 'ayuda' },
-}
 
 interface EstadiaDia {
   periodo: string
@@ -61,7 +42,7 @@ function FilaMovimiento({ e }: { e: EstadiaDia }) {
         <span className="font-medium text-stone-800">
           {r?.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : 'Sin huésped'}
         </span>
-        <span className="ml-2 text-xs text-stone-400">{e.unidad?.nombre}</span>
+        <span className="ml-2 text-xs text-stone-600">{e.unidad?.nombre}</span>
       </span>
       {r && <Etiqueta tono={TONO_ESTADO[r.estado]}>{ETIQUETAS_ESTADO_RESERVA[r.estado]}</Etiqueta>}
       {r && (
@@ -87,6 +68,7 @@ export default async function DashboardPage() {
     { count: reservasActivas },
     { count: mantPendiente },
     { count: objetosGuardados },
+    { count: conflictosCanal },
     { data: stockBajo },
     { data: comprobantes },
   ] = await Promise.all([
@@ -102,7 +84,21 @@ export default async function DashboardPage() {
       .from('ordenes_mantenimiento')
       .select('*', { count: 'exact', head: true })
       .in('estado', ['pendiente', 'en_proceso']),
-    supabase.from('objetos_perdidos').select('*', { count: 'exact', head: true }).eq('estado', 'guardado'),
+    // Entrantes del canal que chocan con lo ya vendido (migración 0052). Va acá porque
+    // el hub es lo que se mira una vez por día.
+    supabase
+      .from('canal_reservas')
+      .select('*', { count: 'exact', head: true })
+      .eq('conflicto', true)
+      .neq('estado', 'ignorada'),
+    // Si el módulo está apagado (`AREAS_OCULTAS`), nadie va a ver este número y la
+    // consulta sería un viaje a la base de más en la pantalla que más se abre.
+    estaOculta('objetos_perdidos')
+      ? Promise.resolve({ count: 0 })
+      : supabase
+          .from('objetos_perdidos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado', 'guardado'),
     supabase.from('productos_servicios').select('nombre, stock, stock_minimo').eq('activo', true),
     supabase
       .from('movimientos_proveedor')
@@ -144,6 +140,54 @@ export default async function DashboardPage() {
 
   const areas = areasDe(sesion.rol)
   const puede = (a: Area) => areas.includes(a)
+
+  /*
+    Lo que pide acción hoy. Cada línea se arma solo si el rol tiene el área
+    **y** el número es mayor que cero: un tablero que dice «0 pendientes» en
+    cinco filas entrena a no mirarlo.
+
+    El orden es por urgencia real, no por módulo: lo vencido antes que lo que
+    vence, y el dinero antes que un paraguas olvidado.
+  */
+  const pendientes: { href: string; icono: NombreIcono; cantidad: number; texto: string }[] = [
+    {
+      area: 'proveedores' as Area,
+      href: '/panel/proveedores',
+      icono: 'proveedores' as NombreIcono,
+      cantidad: yaVencidos,
+      texto: yaVencidos === 1 ? 'factura de proveedor vencida' : 'facturas de proveedor vencidas',
+    },
+    {
+      area: 'proveedores' as Area,
+      href: '/panel/proveedores',
+      icono: 'proveedores' as NombreIcono,
+      cantidad: vencenPronto,
+      texto: 'por vencer esta semana',
+    },
+    {
+      area: 'mantenimiento' as Area,
+      href: '/panel/mantenimiento',
+      icono: 'mantenimiento' as NombreIcono,
+      cantidad: mantPendiente ?? 0,
+      texto: mantPendiente === 1 ? 'orden de mantenimiento abierta' : 'órdenes de mantenimiento abiertas',
+    },
+    {
+      area: 'config' as Area,
+      href: '/panel/config',
+      icono: 'config' as NombreIcono,
+      cantidad: faltantes.length,
+      texto: faltantes.length === 1 ? 'artículo con stock bajo' : 'artículos con stock bajo',
+    },
+    {
+      area: 'objetos_perdidos' as Area,
+      href: '/panel/objetos-perdidos',
+      icono: 'objetos' as NombreIcono,
+      cantidad: objetosGuardados ?? 0,
+      texto: objetosGuardados === 1 ? 'objeto perdido guardado' : 'objetos perdidos guardados',
+    },
+  ]
+    .filter((p) => p.cantidad > 0 && puede(p.area))
+    .map(({ href, icono, cantidad, texto }) => ({ href, icono, cantidad, texto }))
 
   return (
     <Pagina>
@@ -223,6 +267,20 @@ export default async function DashboardPage() {
               {mantPendiente} orden(es) de mantenimiento sin resolver
             </Link>
           )}
+          {/*
+            El posible overbooking va en el hub y no solo en la pantalla de canales
+            porque es lo más caro que le puede pasar al hotel y hay que verlo sin ir a
+            buscarlo. En tono de peligro, no del gris de los demás avisos.
+          */}
+          {(conflictosCanal ?? 0) > 0 && puede('canales') && (
+            <Link
+              href="/panel/canales"
+              className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-800 ring-1 ring-red-200 transition hover:bg-red-100"
+            >
+              <Icono nombre="alerta" tam={16} />
+              {conflictosCanal} reserva(s) de canal con posible overbooking
+            </Link>
+          )}
           {(objetosGuardados ?? 0) > 0 && puede('objetos_perdidos') && (
             <Link
               href="/panel/objetos-perdidos"
@@ -274,50 +332,72 @@ export default async function DashboardPage() {
       )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <Tarjeta titulo="Estado de las unidades" className="lg:col-span-1">
-          <ul className="px-5 py-3">
-            {ESTADOS_HK.map((estado) => (
-              <li key={estado} className="flex items-center gap-2.5 py-1.5">
-                <span className={`size-2.5 rounded-full ${PUNTO_HK[estado]}`} aria-hidden="true" />
-                <span className="tabular w-8 text-lg font-semibold text-stone-900">
-                  {porEstado.get(estado) ?? 0}
-                </span>
-                <span className="text-sm text-stone-500">{ETIQUETAS_ESTADO_HK[estado]}</span>
-              </li>
-            ))}
-          </ul>
-        </Tarjeta>
+        {/* Cotización y estado de unidades comparten columna: los dos son datos
+            de referencia que recepción consulta de un vistazo, no listados.
+            El widget va en Suspense porque puede tardar hasta 3 s si la fuente
+            externa está lenta, y el resto del dashboard no tiene por qué esperarlo. */}
+        <div className="space-y-4 lg:col-span-1">
+          <Suspense fallback={<WidgetCotizacionCargando />}>
+            <WidgetCotizacion />
+          </Suspense>
 
-        <Tarjeta titulo="Módulos" descripcion="Accesos según tu rol" className="lg:col-span-2">
-          <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-3">
-            {areas
-              .filter((a) => a !== 'dashboard')
-              .map((a) => {
-                const badge =
-                  a === 'mantenimiento'
-                    ? (mantPendiente ?? 0)
-                    : a === 'objetos_perdidos'
-                      ? (objetosGuardados ?? 0)
-                      : null
-                return (
+          <Tarjeta titulo="Estado de las unidades">
+            <ul className="px-5 py-3">
+              {ESTADOS_HK.map((estado) => (
+                <li key={estado} className="flex items-center gap-2.5 py-1.5">
+                  <EstadoUnidad estado={estado} />
+                  <span className="tabular w-8 text-lg font-semibold text-stone-900">
+                    {porEstado.get(estado) ?? 0}
+                  </span>
+                  <span className="text-sm text-stone-500">{ETIQUETAS_ESTADO_HK[estado]}</span>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        </div>
+
+        {/*
+          Antes acá había una grilla «Módulos» que repetía, uno por uno, los
+          mismos enlaces del menú lateral. Ocupaba dos tercios del ancho para no
+          decir nada nuevo, y empujaba abajo del pliegue el estado de las
+          unidades, que sí es información.
+
+          Lo único que aportaba eran dos contadores —mantenimiento pendiente y
+          objetos guardados— colgados como insignias. Eso es lo que queda, pero
+          al revés: en vez de un menú con números, una lista de lo que **pide
+          acción**, donde cada línea existe solo si hay algo que hacer. Si no
+          hay nada, lo dice y no ocupa lugar.
+        */}
+        <Tarjeta
+          titulo="Requiere atención"
+          descripcion="Solo lo que tiene algo pendiente"
+          className="lg:col-span-2"
+        >
+          {pendientes.length === 0 ? (
+            <EstadoVacio titulo="No hay nada pendiente" icono="ayuda" />
+          ) : (
+            <ul className="p-4">
+              {pendientes.map((p) => (
+                <li key={p.href}>
                   <Link
-                    key={a}
-                    href={MODULOS[a].href}
-                    className="flex items-center gap-2.5 rounded-xl border border-stone-200 px-3 py-2.5 text-sm font-medium text-stone-700 transition hover:border-lago-300 hover:bg-lago-50 hover:text-lago-900"
+                    href={p.href}
+                    className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm transition hover:bg-lago-50"
                   >
                     <span className="text-lago-600">
-                      <Icono nombre={MODULOS[a].icono} tam={17} />
+                      <Icono nombre={p.icono} tam={17} />
                     </span>
-                    <span className="min-w-0 flex-1 truncate">{ETIQUETAS_AREA[a]}</span>
-                    {badge != null && badge > 0 && (
-                      <span className="tabular rounded-full bg-lenga-100 px-1.5 py-0.5 text-xs font-semibold text-lenga-800">
-                        {badge}
-                      </span>
-                    )}
+                    <span className="tabular w-8 shrink-0 text-lg font-semibold text-stone-900">
+                      {p.cantidad}
+                    </span>
+                    <span className="min-w-0 flex-1 text-stone-700">{p.texto}</span>
+                    <span aria-hidden="true" className="text-stone-600">
+                      →
+                    </span>
                   </Link>
-                )
-              })}
-          </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Tarjeta>
       </div>
     </Pagina>

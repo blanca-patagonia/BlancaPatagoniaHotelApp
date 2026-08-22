@@ -159,7 +159,7 @@ export default async function UsuariosPage({
                   <tr key={p.id} className={FILA}>
                     <td className={`${TD} font-medium text-stone-800`}>
                       {p.nombre}
-                      {esYo && <span className="ml-2 text-xs text-stone-400">(vos)</span>}
+                      {esYo && <span className="ml-2 text-xs text-stone-600">(vos)</span>}
                       {/* El email identifica al usuario tanto como el nombre:
                           si se oculta la columna, se pliega debajo. */}
                       <span className="block truncate text-xs font-normal text-stone-500 sm:hidden">

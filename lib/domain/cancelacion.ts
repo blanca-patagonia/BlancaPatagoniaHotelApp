@@ -54,6 +54,47 @@ export function nochePromedioConIva(totalConIva: number, noches: number): number
 }
 
 /**
+ * Precio **real** de la primera noche, con IVA, cuando las noches valen distinto.
+ *
+ * ── El problema que cierra ──────────────────────────────────────────────────
+ *
+ * `nochePromedioConIva` reparte el total en partes iguales. Si la estadía cruza un
+ * cambio de temporada, eso no es la primera noche: es el promedio. Con una entrada en
+ * temporada baja y una salida en alta, el cargo por cancelar entre 14 y 7 días sale
+ * **más alto** que la noche que efectivamente se pierde; al revés, sale más bajo.
+ *
+ * En los dos sentidos es plata mal cobrada, y el huésped tiene el tarifario publicado
+ * para discutirlo.
+ *
+ * ── Por qué se reparte el total guardado en vez de recotizar ────────────────
+ *
+ * La tentación es cotizar de nuevo una noche y usar ese número. Está mal: el precio de
+ * la reserva **se fijó al reservar** (ADR 0004), y las tarifas pudieron cambiar desde
+ * entonces. Recotizar cobraría un precio que el huésped nunca aceptó.
+ *
+ * Lo que se hace es repartir el total que **ya está guardado** según la proporción de
+ * las tarifas por noche: la primera noche se lleva la parte que le corresponde de lo
+ * que efectivamente se pactó. Así el descuento, la promoción y el IVA quedan
+ * distribuidos igual que en el total original, sin recalcular ninguno.
+ *
+ * Cuando todas las noches valen lo mismo, esto da exactamente `total / noches`, así
+ * que reemplaza al promedio sin cambiar ningún caso que hoy esté bien.
+ */
+export function primeraNocheRealConIva(totalConIva: number, preciosPorNoche: readonly number[]): number {
+  if (preciosPorNoche.length === 0) return 0
+
+  const suma = preciosPorNoche.reduce((a, p) => a + p, 0)
+
+  // Sin base para repartir —todas las noches en cero, o precios corruptos— se cae al
+  // promedio en vez de devolver cero. Devolver cero significaría «no se cobra nada»,
+  // que es una afirmación sobre el dinero que este dato no respalda.
+  if (!(suma > 0)) return nochePromedioConIva(totalConIva, preciosPorNoche.length)
+
+  const proporcion = preciosPorNoche[0] / suma
+  return Math.round((totalConIva * proporcion + Number.EPSILON) * 100) / 100
+}
+
+/**
  * Traduce el tipo de cargo a un monto concreto.
  *
  * **Los dos importes tienen que venir en la misma unidad** —ambos con IVA—, o el

@@ -36,6 +36,8 @@ export type NombreIcono =
   | 'alerta'
   | 'ok'
   | 'ayuda'
+  | 'divisas'
+  | 'canales'
 
 /** Trazos de cada icono (todo dentro de un viewBox 0 0 24 24). */
 const TRAZOS: Record<NombreIcono, string[]> = {
@@ -89,6 +91,25 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     'M20.5 12.5c0 3.6-3.8 6.5-8.5 6.5-1 0-2-.1-2.9-.4l-5.1 1.4 1.5-4.2c-1.2-1-1.9-2.4-1.9-3.9C3.6 8.9 7.4 6 12 6s8.5 2.9 8.5 6.5z',
   ],
   reportes: ['M3.5 20.5h17', 'M7 20.5v-7', 'M12 20.5V5.5', 'M17 20.5v-10'],
+  // Nodo central con tres ramas: el hotel y los canales que le mandan reservas.
+  // No se usa un globo terráqueo, que en el panel ya sugeriría «portal público».
+  canales: [
+    'M12 6.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5z',
+    'M5 22a2.25 2.25 0 1 0 0-4.5A2.25 2.25 0 0 0 5 22z',
+    'M19 22a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5z',
+    'M12 6.5v5',
+    'M12 11.5H5.5a.5.5 0 0 0-.5.5v5.5',
+    'M12 11.5h6.5a.5.5 0 0 1 .5.5v5.5',
+  ],
+  // Billete con una moneda: la conversión entre divisas, no un signo «$» suelto
+  // (que en este sistema significaría un importe, no un tipo de cambio).
+  divisas: [
+    'M2.5 7.5h13v7h-13z',
+    'M9 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+    'M18 9.5a4.5 4.5 0 1 1-4.4 5.4',
+    'M18 8v1.2',
+    'M18 14.3v1.2',
+  ],
   config: [
     'M4 7h8',
     'M16.5 7H20',
