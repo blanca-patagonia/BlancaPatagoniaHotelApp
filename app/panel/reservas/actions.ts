@@ -12,8 +12,8 @@ import {
   debeRecotizar,
   type PoliticaTarifa,
 } from '@/lib/domain/mudanzas'
-import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
+import { saldarSiCorresponde } from '@/lib/reservas/saldar'
 import { puntosPorEstadia, nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 import { requerirAcceso } from '@/lib/auth/session'
 import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
@@ -311,23 +311,33 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
   if (nuevo === 'checkout' && reserva.huesped_id) {
     const puntos = puntosPorEstadia(Number(reserva.total))
     if (puntos > 0) {
-      const { data: h } = await supabase
-        .from('huespedes')
-        .select('puntos')
-        .eq('id', reserva.huesped_id)
-        .single()
+      /*
+        La suma la hace la base (`sumar_puntos_huesped`, migración 0053), no la app.
 
-      const previos = h?.puntos ?? 0
-      const totales = previos + puntos
-      const { error: ePuntos } = await supabase
-        .from('huespedes')
-        .update({ puntos: totales })
-        .eq('id', reserva.huesped_id)
+        Antes esto era read-then-write y **descartaba el error de la lectura**: con la
+        lectura fallada, `previos` quedaba en 0 y el `update` escribía solo los puntos
+        de esta estadía, **borrando todo lo acumulado** del huésped. El check-out se
+        completaba igual y nadie se enteraba.
+
+        Arreglar solo el error de lectura habría dejado abierta una segunda carrera:
+        dos check-outs simultáneos del mismo huésped —dos reservas, dos personas en el
+        mostrador— leen el mismo valor previo y el segundo update pisa al primero.
+        `update ... set puntos = puntos + n` no tiene lectura que falle ni valor previo
+        que quede viejo.
+      */
+      const { data: totalesData, error: ePuntos } = await supabase.rpc('sumar_puntos_huesped', {
+        p_huesped: reserva.huesped_id,
+        p_puntos: puntos,
+      })
+
       // El check-out ya quedó hecho arriba. Se corta igual: perder los puntos de
       // un huésped en silencio es un problema real, y avisando se pueden cargar
       // a mano. El aviso de nivel no se manda, que es lo correcto si no se pudo
       // guardar el nivel nuevo.
       cortarSiFalla(ePuntos, `/panel/reservas/${id}`, 'puntos')
+
+      const totales = Number(totalesData ?? 0)
+      const previos = totales - puntos
 
       // Solo se avisa si la estadía lo hizo CAMBIAR de nivel; sumar puntos sin
       // cruzar el umbral no amerita un correo.
@@ -387,28 +397,16 @@ export async function registrarPago(formData: FormData): Promise<void> {
   if (error) redirect(`/panel/reservas/${reservaId}?error=pago`)
 
   // ¿Quedó saldada? → intentar pasar a 'pagada'.
-  const { data: reserva } = await supabase
-    .from('reservas')
-    .select('estado, total')
-    .eq('id', reservaId)
-    .single()
-  if (reserva && reserva.estado !== 'pagada') {
-    const { data: pagos } = await supabase
-      .from('pagos')
-      .select('tipo, monto, estado')
-      .eq('reserva_id', reservaId)
-    const resumen = resumenPagos(Number(reserva.total), (pagos ?? []) as Pago[])
-    if (resumen.saldada && puedeTransicionar(reserva.estado as EstadoReserva, 'pagada')) {
-      const { error: eSaldada } = await supabase
-        .from('reservas')
-        .update({ estado: 'pagada' })
-        .eq('id', reservaId)
-      // Mismo fallo que tenía el webhook: el pago ya está registrado, y si esto
-      // se pierde queda cobrado sin marcar. Acá al menos hay alguien mirando la
-      // pantalla, pero solo si se le dice.
-      cortarSiFalla(eSaldada, `/panel/reservas/${reservaId}`, 'saldada')
-    }
-  }
+  //
+  // La regla vive en `lib/reservas/saldar.ts` y no acá porque el webhook de pagos
+  // hace exactamente lo mismo. Estaban duplicadas y divergieron: allá se corrigió
+  // para consolidar alojamiento + consumos, y acá quedó comparando contra
+  // `reservas.total`, que cubre solo la estadía. Quien había consumido del frigobar
+  // y pagaba el alojamiento en efectivo quedaba marcado «pagada» debiendo esa parte.
+  const { error: eSaldada } = await saldarSiCorresponde(supabase, reservaId)
+  // El pago ya está registrado. Si esto se pierde queda cobrado sin marcar, y acá
+  // hay alguien mirando la pantalla — pero solo se entera si se le dice.
+  cortarSiFalla(eSaldada ? { message: eSaldada } : null, `/panel/reservas/${reservaId}`, 'saldada')
 
   redirect(`/panel/reservas/${reservaId}`)
 }
@@ -602,6 +600,45 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     cae_solicitado_en: new Date().toISOString(),
     emitida_por: sesion?.userId ?? null,
   })
+  // ── Si el insert chocó con la restricción única, la reserva YA está facturada ──
+  //
+  // Esta acción es check-then-act: entre el `select` del principio y este `insert`
+  // no hay nada. Dos emisiones simultáneas —dos clics, o dos personas cerrando la
+  // misma reserva desde dos puestos— pasan las dos por el `select`, las dos ven que
+  // no hay factura, y las dos llegan hasta acá. La que pierde recibe 23505 de
+  // `facturas_una_por_reserva` (migración 0045), que es la garantía funcionando: en
+  // la base quedó un solo comprobante.
+  //
+  // Mandarla al error genérico sería mentirle a quien la usa: la reserva **está**
+  // facturada, solo que la emitió el otro pedido. Lo correcto es mostrarle el
+  // comprobante, igual que si hubiera llegado segunda en secuencia.
+  // ⚠️ Lo que este arreglo NO resuelve, y hay que decirlo:
+  //
+  // El pedido que pierde la carrera llegó hasta acá, o sea que **ya consumió un
+  // número correlativo** (`siguiente_numero_comprobante`, más arriba) y **ya le
+  // pidió un CAE al proveedor**. Con el proveedor simulado no pasa nada. Con AFIP de
+  // verdad quedaría un CAE emitido para un número que no tiene fila en `facturas`:
+  // un salto en la numeración, que es una obligación formal (ADR 0015).
+  //
+  // No se arregla acá. Pedir el CAE después de insertar no alcanza —el CAE va en la
+  // fila— y reservar la fila primero y completarla después choca con la
+  // inmutabilidad de `facturas` (migración 0034). La salida es una función SQL
+  // transaccional que numere, inserte y devuelva, con el CAE pedido dentro de la
+  // misma transacción. Queda anotado como pendiente.
+  //
+  // La ventana es chica (dos pedidos en vuelo sobre la misma reserva) y el daño de
+  // no tener la restricción era mucho peor: dos comprobantes fiscales de la misma
+  // estadía y una nota de crédito para arreglarlo.
+  if (eFactura?.code === '23505') {
+    // Al log igual: hubo una carrera y probablemente un número gastado.
+    console.error(
+      `Emisión simultánea sobre la reserva ${reservaId}: la restricción única rechazó el segundo comprobante. ` +
+        `Revisar si quedó un salto en la numeración del punto de venta ${PUNTO_VENTA}.`,
+      eFactura.message,
+    )
+    redirect(`/panel/reservas/${reservaId}/factura`)
+  }
+
   // El punto más caro del archivo: acá ya se pidió el CAE al proveedor y ya se
   // consumió el número correlativo del punto de venta. Si el insert se pierde en
   // silencio queda un CAE emitido y un número gastado SIN factura, y el usuario
@@ -614,6 +651,31 @@ export async function emitirFactura(formData: FormData): Promise<void> {
 
 export interface EstadoReservaGrupal {
   error?: string
+  /**
+   * Éxito **parcial**: el grupo se creó, pero con menos unidades de las pedidas.
+   *
+   * ── Por qué no se aborta el lote entero ─────────────────────────────────────
+   *
+   * El pendiente original decía «`crearReservaGrupal` no es atómica». La
+   * no-atomicidad no es el problema: para un hotel, un grupo de 5 que sólo consigue
+   * 4 unidades **suele valer la pena igual** —se toman las 4 y se llama al cliente—,
+   * y abortar el lote perdería cuatro ventas reales por una que no entró.
+   *
+   * El problema es el **silencio**: `primerError` se calculaba y se descartaba
+   * cuando `creadas > 0`, así que quien pedía 5 y recibía 2 veía la misma pantalla
+   * de éxito que quien recibía las 5. Lo descubría el día de la llegada.
+   *
+   * Por eso el resultado parcial se devuelve como estado y **no** se redirige: el
+   * listado de reservas no renderiza mensajes de query, así que un
+   * `?parcial=…` se habría perdido en el camino.
+   */
+  parcial?: {
+    creadas: number
+    pedidas: number
+    /** Por qué no entraron las demás, en las palabras del motor de disponibilidad. */
+    motivo: string
+    grupoId: string
+  }
 }
 
 /**
@@ -697,6 +759,21 @@ export async function crearReservaGrupal(
   }
 
   if (creadas === 0) return { error: primerError ?? 'No se pudo crear el grupo.' }
+
+  // Cuántas unidades se habían pedido, para poder comparar contra lo que entró.
+  const pedidas = selecciones.reduce((a, s) => a + s.cantidad, 0)
+
+  if (creadas < pedidas) {
+    return {
+      parcial: {
+        creadas,
+        pedidas,
+        motivo: primerError ?? 'No había más unidades libres para esas fechas.',
+        grupoId,
+      },
+    }
+  }
+
   redirect(`/panel/reservas?grupo=${grupoId}`)
 }
 

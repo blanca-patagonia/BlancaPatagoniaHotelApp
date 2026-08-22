@@ -126,6 +126,13 @@ describe.skipIf(!hayDB)('capa de canales contra la base', () => {
       if (e.reserva_id) await db.from('reservas').delete().eq('id', e.reserva_id)
     }
 
+    // Los cargos de comisión que devenga `guardarEntrantes` desde la migración 0049.
+    // Van ANTES de borrar las entrantes: `canal_cargos.canal_reserva_id` es
+    // `on delete set null`, así que si se borra primero la entrante estos cargos
+    // quedan huérfanos y sin forma de identificarlos. La clave de idempotencia lleva
+    // el `external_id`, que sí tiene el sufijo del test.
+    await db.from('canal_cargos').delete().like('clave_idempotencia', `%BK-${sufijo}%`)
+
     await db.from('canal_reservas').delete().like('external_id', `BK-${sufijo}%`)
     await db.from('canal_sincronizaciones').delete().like('origen', `test-${sufijo}%`)
     await db.from('huespedes').delete().like('apellido', `Canal${sufijo}%`)
@@ -437,5 +444,138 @@ describe.skipIf(!hayDB)('capa de canales contra la base', () => {
       .eq('email', `canal-${sufijo}@example.com`)
 
     expect(count).toBe(1)
+  })
+
+  describe('modalidad de cobro', () => {
+    /**
+     * La guarda que evita una pérdida de datos silenciosa.
+     *
+     * Los dos caminos traen datos distintos: el informe CSV sabe quién cobra, el feed
+     * iCal **no** y manda `desconocida`. Como el iCal se sondea cada hora y el CSV se
+     * sube una vez por semana, un `update` que pise todos los campos haría que el
+     * primer sondeo posterior **borre** la modalidad que el informe estableció — y esa
+     * reserva desaparecería de la lista de cobros sin que nadie lo note.
+     *
+     * Un dato que llega vacío no es un dato que cambió a vacío.
+     */
+    const REF = `BK-${sufijo}-modalidad`
+
+    it('el informe guarda quién cobra', async () => {
+      await guardarEntrantes(
+        db,
+        [entrante({ externalId: REF, modalidadCobro: 'canal' })],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('modalidad_cobro')
+        .eq('external_id', REF)
+        .single()
+      expect((data as { modalidad_cobro: string }).modalidad_cobro).toBe('canal')
+    })
+
+    it('un evento POSTERIOR sin modalidad NO la borra', async () => {
+      // Es exactamente lo que hace el feed iCal cada hora.
+      await guardarEntrantes(
+        db,
+        [
+          entrante({
+            externalId: REF,
+            modalidadCobro: undefined,
+            emitidaEn: '2027-02-20T10:00:00.000Z',
+          }),
+        ],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('modalidad_cobro')
+        .eq('external_id', REF)
+        .single()
+      expect(
+        (data as { modalidad_cobro: string }).modalidad_cobro,
+        'el sondeo del iCal borró la modalidad que había traído el informe',
+      ).toBe('canal')
+    })
+
+    it('un evento posterior CON otra modalidad sí la corrige', async () => {
+      // Lo que sí tiene que pasar: si el informe se corrige, el dato se actualiza.
+      await guardarEntrantes(
+        db,
+        [
+          entrante({
+            externalId: REF,
+            modalidadCobro: 'hotel',
+            emitidaEn: '2027-02-25T10:00:00.000Z',
+          }),
+        ],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('modalidad_cobro')
+        .eq('external_id', REF)
+        .single()
+      expect((data as { modalidad_cobro: string }).modalidad_cobro).toBe('hotel')
+    })
+  })
+
+  describe('conflicto de cupo', () => {
+    /**
+     * El conflicto es una ADVERTENCIA, no un rechazo.
+     *
+     * El tipo de prueba tiene UNA sola unidad, así que dos entrantes en las mismas
+     * fechas no caben. Lo que hay que verificar no es solo que se detecte: es que la
+     * entrante marcada SIGA siendo importable, porque el conflicto se resuelve
+     * moviendo otra reserva o habilitando una unidad, y quien decide eso es quien
+     * atiende. Si el marcador cambiara el estado a 'error', el flujo de la pantalla se
+     * rompería.
+     */
+    const A = `BK-${sufijo}-cupoA`
+    const B = `BK-${sufijo}-cupoB`
+
+    it('dos entrantes sobre una sola unidad marcan la segunda', async () => {
+      await guardarEntrantes(
+        db,
+        [
+          entrante({ externalId: A, checkIn: '2027-03-20', checkOut: '2027-03-22' }),
+          entrante({ externalId: B, checkIn: '2027-03-20', checkOut: '2027-03-22' }),
+        ],
+        contexto,
+      )
+
+      const { data } = await db
+        .from('canal_reservas')
+        .select('external_id, conflicto, estado')
+        .in('external_id', [A, B])
+        .order('external_id')
+
+      const filas = (data ?? []) as { external_id: string; conflicto: boolean; estado: string }[]
+      expect(filas).toHaveLength(2)
+
+      // Una de las dos choca. Cuál, depende del orden del archivo.
+      expect(filas.filter((f) => f.conflicto)).toHaveLength(1)
+
+      // Y NINGUNA queda en error: las dos siguen siendo importables.
+      for (const f of filas) {
+        expect(f.estado, `${f.external_id} quedó en «${f.estado}» en vez de pendiente`).toBe(
+          'pendiente',
+        )
+      }
+    })
+
+    it('la entrante marcada se puede importar igual', async () => {
+      const { data } = await db
+        .from('canal_reservas')
+        .select('id')
+        .eq('external_id', A)
+        .single()
+
+      const r = await importarEntrante(db, (data as { id: string }).id, perfilId)
+      expect(r.ok, 'una entrante con conflicto no se pudo importar: ' + (r.ok ? '' : r.error)).toBe(true)
+    })
   })
 })

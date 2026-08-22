@@ -2,15 +2,11 @@
 
 import { useActionState, useMemo, useState } from 'react'
 import { cerrarComanda, type EstadoComanda } from './actions'
-import {
-  ETIQUETAS_PUNTO,
-  PUNTOS_VENTA,
-  filtrarCatalogo,
-  subtotalLinea,
-  type PuntoVenta,
-} from '@/lib/domain/punto-venta'
+import { filtrarCatalogo, subtotalLinea } from '@/lib/domain/punto-venta'
+import { ETIQUETAS_FOLIO, FOLIOS, type Folio } from '@/lib/domain/folios'
 import { ETIQUETAS_CATEGORIA_PRODUCTO, type CategoriaProducto } from '@/lib/domain/consumos'
 import { CAMPO, Campo, Mensaje, botonClases } from '../_components/ui'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 export interface ProductoPos {
   id: string
@@ -59,7 +55,7 @@ export function GrillaPos({
 }) {
   const [estado, accion, pendiente] = useActionState(cerrarComanda, ESTADO_INICIAL)
 
-  const [punto, setPunto] = useState<PuntoVenta>('frigobar')
+  const [folio, setFolio] = useState<Folio>('A')
   const [busqueda, setBusqueda] = useState('')
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
 
@@ -119,16 +115,21 @@ export function GrillaPos({
           </select>
         </Campo>
 
-        <Campo etiqueta="Punto de venta">
+        {/* Folio, no «punto de venta». El departamento de cada línea sale del
+            producto y se copia solo; lo que hay que preguntar es a quién se le
+            cobra. Antes todo iba al folio A y había que moverlo después desde la
+            cuenta, que para el caso inverso al típico —la empresa paga los
+            consumos— eran dos pasos por comanda. */}
+        <Campo etiqueta="Cobrar al folio" ayuda="El departamento lo pone cada producto.">
           <select
-            name="punto"
-            value={punto}
-            onChange={(e) => setPunto(e.target.value as PuntoVenta)}
+            name="folio"
+            value={folio}
+            onChange={(e) => setFolio(e.target.value as Folio)}
             className={CAMPO}
           >
-            {PUNTOS_VENTA.map((p) => (
-              <option key={p} value={p}>
-                {ETIQUETAS_PUNTO[p]}
+            {FOLIOS.map((f) => (
+              <option key={f} value={f}>
+                {ETIQUETAS_FOLIO[f]}
               </option>
             ))}
           </select>
@@ -197,7 +198,7 @@ export function GrillaPos({
                           </span>
                         </td>
                         <td className="tabular px-2 py-2 text-right whitespace-nowrap text-stone-600">
-                          USD {p.precio.toLocaleString('es-AR')}
+                          {formatearUSD(p.precio)}
                         </td>
                         <td className="px-2 py-2">
                           <input
@@ -255,7 +256,7 @@ export function GrillaPos({
               : `${lineas.length} línea(s) · ${lineas.reduce((a, l) => a + l.cantidad, 0)} artículo(s)`}
           </p>
           <p className="tabular text-xl leading-tight font-semibold text-stone-900">
-            USD {total.toLocaleString('es-AR')}
+            {formatearUSD(total)}
           </p>
         </div>
 

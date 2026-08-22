@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { type SupabaseClient } from '@supabase/supabase-js'
 import { hayDB, clienteDePrueba, sufijoUnico, periodo } from './db'
-import { SELECT_RESERVAS } from '@/app/panel/reservas/consulta'
+import { SELECT_RESERVAS, filtroTermino } from '@/app/panel/reservas/consulta'
 import { definicionDe, type VistaReservas } from '@/lib/domain/vistas-reservas'
 
 /**
@@ -237,6 +237,88 @@ describe.skipIf(!hayDB)('vistas operativas del listado de reservas', () => {
   it('«Canceladas» trae la cancelada', async () => {
     const ids = await aplicar('canceladas')
     expect(ids).toEqual([reservas.canceladaHoy])
+  })
+
+  it('BUSCAR POR HABITACIÓN encuentra la reserva', async () => {
+    // Era el hueco más molesto del buscador: recepcion identifica una reserva por
+    // la habitación mucho antes que por su código, y buscar «103» no devolvía nada.
+    //
+    // Requiere dos saltos: el nombre vive en `unidades`, a dos tablas de `reservas`,
+    // y el `or` de PostgREST no puede mezclar la tabla madre con una embebida.
+    const orTermino = await filtroTermino(db, `Test vista llega ${sufijo}`)
+    expect(orTermino).not.toBeNull()
+
+    const { data, error } = await db
+      .from('reservas')
+      .select(SELECT_RESERVAS)
+      .eq('notas', `test-vistas-${sufijo}`)
+      .or(orTermino!)
+
+    expect(error).toBeNull()
+    const ids = (data ?? []).map((r) => (r as { id: string }).id)
+    expect(ids).toContain(reservas.llegaHoy)
+  })
+
+  it('buscar por habitación NO trae las de otras unidades', async () => {
+    const orTermino = await filtroTermino(db, `Test vista sale ${sufijo}`)
+    const { data } = await db
+      .from('reservas')
+      .select(SELECT_RESERVAS)
+      .eq('notas', `test-vistas-${sufijo}`)
+      .or(orTermino!)
+
+    const ids = (data ?? []).map((r) => (r as { id: string }).id)
+    expect(ids).toContain(reservas.saleHoy)
+    expect(ids).not.toContain(reservas.llegaHoy)
+  })
+
+  it('buscar por tipo de habitación encuentra todas las de ese tipo', async () => {
+    const orTermino = await filtroTermino(db, 'Test vistas')
+    const { data } = await db
+      .from('reservas')
+      .select(SELECT_RESERVAS)
+      .eq('notas', `test-vistas-${sufijo}`)
+      .or(orTermino!)
+
+    // Todas las del fixture comparten el mismo tipo de unidad.
+    expect((data ?? []).length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('el buscador sigue encontrando por apellido y por código', async () => {
+    // La ampliación no puede haber roto lo que ya funcionaba.
+    const porApellido = await filtroTermino(db, `Vistas ${sufijo}`)
+    const { data: porAp } = await db
+      .from('reservas')
+      .select(SELECT_RESERVAS)
+      .eq('notas', `test-vistas-${sufijo}`)
+      .or(porApellido!)
+    expect((porAp ?? []).length).toBeGreaterThan(0)
+
+    const { data: reserva } = await db
+      .from('reservas')
+      .select('codigo')
+      .eq('id', reservas.llegaHoy)
+      .single()
+
+    const porCodigo = await filtroTermino(db, (reserva as { codigo: string }).codigo)
+    const { data: porCod } = await db
+      .from('reservas')
+      .select(SELECT_RESERVAS)
+      .or(porCodigo!)
+    expect((porCod ?? []).map((r) => (r as { id: string }).id)).toContain(reservas.llegaHoy)
+  })
+
+  it('un término sin coincidencias no devuelve todo', async () => {
+    // Si `filtroTermino` devolviera null o una condición vacía, el listado
+    // mostraria TODAS las reservas y pareceria que la busqueda no filtro.
+    const orTermino = await filtroTermino(db, 'zzz-no-existe-nada-zzz')
+    const { data } = await db
+      .from('reservas')
+      .select(SELECT_RESERVAS)
+      .eq('notas', `test-vistas-${sufijo}`)
+      .or(orTermino!)
+
+    expect(data ?? []).toEqual([])
   })
 
   it('el select trae los pagos para poder calcular el saldo', async () => {

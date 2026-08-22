@@ -12,58 +12,30 @@
  * con su total, sus validaciones y su número.
  */
 
-import type { CategoriaProducto } from './consumos'
-
-/* ─────────────────────────────────────────────────── puntos de venta ──── */
+/* ──────────────────────────────────────────────────── departamentos ──── */
 
 /**
- * Dónde se vendió.
+ * NOTA HISTÓRICA — por qué acá ya no hay una lista de puntos de venta.
  *
- * Es el «departamento» de WinPAX en su forma mínima. El paso 8 va a formalizar la
- * jerarquía departamento/subdepartamento; esto alcanza para que la grilla del POS
- * agrupe los productos y para que los reportes sepan qué vendió cada sector.
- */
-export const PUNTOS_VENTA = [
-  'recepcion',
-  'frigobar',
-  'room_service',
-  'restaurante',
-  'excursiones',
-] as const
-
-export type PuntoVenta = (typeof PUNTOS_VENTA)[number]
-
-export const ETIQUETAS_PUNTO: Record<PuntoVenta, string> = {
-  recepcion: 'Recepción',
-  frigobar: 'Frigobar',
-  room_service: 'Room service',
-  restaurante: 'Restaurante',
-  excursiones: 'Excursiones',
-}
-
-export function esPuntoVenta(v: string): v is PuntoVenta {
-  return (PUNTOS_VENTA as readonly string[]).includes(v)
-}
-
-/**
- * Punto de venta que corresponde por omisión a cada categoría de producto.
+ * El paso 7 declaró acá una constante `PUNTOS_VENTA` con cinco valores fijos
+ * (recepción, frigobar, room service, restaurante, excursiones) y una columna
+ * `consumos.punto` para guardarla. El paso 8 creó la tabla `departamentos`, con
+ * jerarquía de dos niveles y editable por el hotel, y agregó
+ * `consumos.departamento_id`.
  *
- * Sirve para que la grilla venga preseleccionada con algo sensato: si alguien abre
- * el POS del frigobar, los productos de frigobar ya están ahí. No es una regla
- * rígida —una cerveza se puede vender en el restaurante— así que quien carga puede
- * cambiarlo.
+ * Quedaron **dos clasificaciones para el mismo dato**, y nada impedía que se
+ * contradijeran: una línea con `punto = 'frigobar'` y el departamento apuntando a
+ * «Restaurante» era posible, y los reportes por sector habrían dado dos números
+ * distintos según cuál columna mirara quien los escribiera.
+ *
+ * La migración 0044 eliminó `punto`. Gana `departamentos` porque tiene jerarquía,
+ * la puede editar el hotel sin una migración por sector nuevo, y es lo que ya usa
+ * la cuenta del huésped para agrupar — o sea, el consumidor real del dato.
+ *
+ * El departamento de cada línea sale del **producto**
+ * (`productos_servicios.departamento_id`) y se copia al consumo, así que la grilla
+ * no necesita preguntarlo.
  */
-const PUNTO_POR_CATEGORIA: Record<CategoriaProducto, PuntoVenta> = {
-  frigobar: 'frigobar',
-  desayuno: 'restaurante',
-  excursion: 'excursiones',
-  traslado: 'recepcion',
-  otro: 'recepcion',
-}
-
-export function puntoSugerido(categoria: CategoriaProducto): PuntoVenta {
-  return PUNTO_POR_CATEGORIA[categoria] ?? 'recepcion'
-}
 
 /* ────────────────────────────────────────────────────────── comanda ──── */
 

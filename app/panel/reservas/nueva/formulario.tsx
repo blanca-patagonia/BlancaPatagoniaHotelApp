@@ -19,6 +19,7 @@ import {
   Tarjeta,
   botonClases,
 } from '../../_components/ui'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 export interface OpcionAgencia {
   id: string
@@ -125,7 +126,7 @@ export function FormularioReserva({
                   ) : (
                     <>
                       <span className="tabular font-semibold text-stone-900">
-                        USD {o.total.toLocaleString('es-AR')}
+                        {formatearUSD(o.total)}
                       </span>
                       <span className="block text-xs text-stone-500">total de referencia</span>
                     </>

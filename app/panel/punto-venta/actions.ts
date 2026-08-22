@@ -7,12 +7,12 @@ import { obtenerSesion } from '@/lib/auth/session'
 import { registrarFalla } from '@/lib/acciones'
 import { puedeAcceder } from '@/lib/domain/permisos'
 import {
-  esPuntoVenta,
   lineasCargadas,
   totalComanda,
   validarComanda,
   type LineaComanda,
 } from '@/lib/domain/punto-venta'
+import { esFolio } from '@/lib/domain/folios'
 
 /**
  * Cierre de una comanda del punto de venta.
@@ -48,11 +48,15 @@ export async function cerrarComanda(
   if (!sesion || !puedeAcceder(sesion.rol, 'punto_venta')) redirect('/panel')
 
   const reservaId = String(formData.get('reserva_id') ?? '')
-  const puntoCrudo = String(formData.get('punto') ?? 'recepcion')
   const notaGeneral = String(formData.get('nota') ?? '').trim()
 
+  // Folio al que se carga. Antes iba siempre al A y había que moverlo después desde
+  // la cuenta; para el caso inverso al típico —la empresa paga los consumos y el
+  // huésped la habitación— eso eran dos pasos por cada comanda.
+  const folioCrudo = String(formData.get('folio') ?? 'A')
+
   if (!reservaId) return { error: 'Elegí a qué habitación se carga la comanda.' }
-  if (!esPuntoVenta(puntoCrudo)) return { error: 'El punto de venta no es válido.' }
+  if (!esFolio(folioCrudo)) return { error: 'El folio no es válido.' }
 
   const supabase = await crearClienteServidor()
 
@@ -127,11 +131,13 @@ export async function cerrarComanda(
       // vino, esta comanda sigue diciendo lo que se cobró.
       precio_unitario: l.precioUnitario,
       // Se copia el departamento del producto, no se deriva al consultar: si mañana
-      // el producto cambia de sector, la linea ya cobrada tiene que seguir
-      // diciendo donde se vendio.
+      // el producto cambia de sector, la línea ya cobrada tiene que seguir diciendo
+      // dónde se vendió. Es la ÚNICA clasificación del consumo — la migración 0044
+      // eliminó `punto`, que era una segunda columna para lo mismo y podía
+      // contradecirla.
       departamento_id: porId.get(l.productoId)?.departamento_id ?? null,
       comanda,
-      punto: puntoCrudo,
+      folio: folioCrudo,
       nota: notaGeneral,
       cargado_por: sesion.userId,
     })),
@@ -164,7 +170,7 @@ export async function cerrarComanda(
 
   return {
     ok:
-      `Comanda ${comanda} cargada: ${aCargar.length} línea(s) por USD ` +
+      `Comanda ${comanda} cargada al folio ${folioCrudo}: ${aCargar.length} línea(s) por USD ` +
       `${totalComanda(aCargar).toLocaleString('es-AR')}.`,
     comanda,
   }

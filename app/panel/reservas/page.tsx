@@ -46,6 +46,7 @@ import {
 } from '../_components/ui'
 import { consultaReservas, filtroTermino } from './consulta'
 import { enviarRecordatoriosLlegada } from './actions'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 interface Row {
   id: string
@@ -86,6 +87,9 @@ interface Params {
   plan?: string
   garantia?: string
   segmento?: string
+  contrato?: string
+  unidad?: string
+  tipo?: string
   /** `sin` muestra los importes sin IVA. Por omisión, con IVA (lo que se cobra). */
   impuestos?: string
   pagina?: string
@@ -124,6 +128,13 @@ export default async function ReservasPage({
   /** Los importes se muestran sin IVA sólo si se pide. Por omisión, lo que se cobra. */
   const sinImpuestos = sp.impuestos === 'sin'
 
+  // Contrato, habitación y tipo. Son UUID, así que no hay lista contra la que
+  // validar: se pasan tal cual y si no existen la consulta devuelve vacío, que es
+  // el comportamiento correcto para un id inventado en la URL.
+  const contrato = sp.contrato?.trim() || undefined
+  const unidad = sp.unidad?.trim() || undefined
+  const tipoUnidad = sp.tipo?.trim() || undefined
+
   const filtros = {
     q: sp.q,
     estado,
@@ -135,13 +146,39 @@ export default async function ReservasPage({
     plan,
     garantia,
     segmento,
+    contrato,
+    unidad,
+    tipoUnidad,
     hoy,
   }
 
   const pagina = paginaActual(sp.pagina)
   const { desde, hasta } = rangoDePagina(pagina)
   const orTermino = await filtroTermino(supabase, sp.q)
-  const { data, count } = await consultaReservas(supabase, filtros, orTermino).range(desde, hasta)
+
+  // Opciones de los selectores nuevos. Van en paralelo con el listado: son
+  // catálogos chicos y ninguno depende del resultado.
+  const [
+    { data, count },
+    { data: contratosData },
+    { data: unidadesData },
+    { data: tiposData },
+  ] = await Promise.all([
+    consultaReservas(supabase, filtros, orTermino).range(desde, hasta),
+    supabase.from('contratos').select('id, titulo').order('titulo').limit(200),
+    supabase
+      .from('unidades')
+      .select('id, nombre')
+      .eq('activo', true)
+      .order('bloque')
+      .order('piso')
+      .order('orden'),
+    supabase.from('tipos_unidad').select('id, nombre').eq('activo', true).order('nombre'),
+  ])
+
+  const contratos = (contratosData ?? []) as { id: string; titulo: string }[]
+  const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
+  const tipos = (tiposData ?? []) as { id: string; nombre: string }[]
 
   const reservas = (data ?? []) as unknown as Row[]
   const total = count ?? 0
@@ -158,6 +195,9 @@ export default async function ReservasPage({
     plan,
     garantia,
     segmento,
+    contrato,
+    unidad,
+    tipo: tipoUnidad,
     impuestos: sp.impuestos,
   }
   const hayFiltros = Object.values(vigentes).some(Boolean)
@@ -214,7 +254,7 @@ export default async function ReservasPage({
             Reserva grupal · {reservas.length} unidad(es)
           </span>
           <span className="tabular font-semibold text-calafate-900">
-            Total consolidado USD {totalGrupo.toLocaleString('es-AR')}
+            Total consolidado {formatearUSD(totalGrupo)}
           </span>
         </div>
       )}
@@ -224,7 +264,7 @@ export default async function ReservasPage({
           accion="/panel/reservas"
           valor={sp.q}
           etiqueta="Buscar reservas"
-          placeholder="Código, huésped o email…"
+          placeholder="Código, huésped, email o habitación…"
           ocultos={{ estado, canal, desde: sp.desde, hasta: sp.hasta, grupo: sp.grupo }}
         />
 
@@ -305,6 +345,51 @@ export default async function ReservasPage({
               </option>
             ))}
           </select>
+          {/* ── Habitación, tipo y contrato ─────────────────────────────────
+              Los tres cierran lo que faltaba del listado de WinPAX. El contrato
+              solo aparece si hay alguno cargado: un desplegable vacío ocupa lugar
+              y no ofrece nada. */}
+          <select
+            name="unidad"
+            defaultValue={unidad ?? ''}
+            aria-label="Habitación"
+            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+          >
+            <option value="">Toda habitación</option>
+            {unidades.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+          <select
+            name="tipo"
+            defaultValue={tipoUnidad ?? ''}
+            aria-label="Tipo de habitación"
+            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+          >
+            <option value="">Todo tipo</option>
+            {tipos.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre}
+              </option>
+            ))}
+          </select>
+          {contratos.length > 0 && (
+            <select
+              name="contrato"
+              defaultValue={contrato ?? ''}
+              aria-label="Contrato"
+              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            >
+              <option value="">Todo contrato</option>
+              {contratos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.titulo}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="submit" className={botonClases('secundario')}>
             Aplicar
           </button>
@@ -447,8 +532,8 @@ export default async function ReservasPage({
                         {periodo && (
                           <span className="tabular block text-xs text-stone-500 sm:hidden">
                             {formatoFechaCorta(periodo.desde)} → {formatoFechaCorta(periodo.hasta)}
-                            {' · USD '}
-                            {importeDe(r).toLocaleString('es-AR')}
+                            {' · '}
+                            {formatearUSD(importeDe(r))}
                           </span>
                         )}
                       </td>
@@ -470,7 +555,7 @@ export default async function ReservasPage({
                       <td
                         className={`${TD} ${COL_SECUNDARIA} tabular text-right font-medium text-stone-800`}
                       >
-                        USD {importeDe(r).toLocaleString('es-AR')}
+                        {formatearUSD(importeDe(r))}
                       </td>
                       {/* Saldo: la columna que decide si hay que llamar al
                           huésped. «Saldada» va con texto y no sólo en verde, para
@@ -480,7 +565,7 @@ export default async function ReservasPage({
                           <span className="text-xs font-medium text-emerald-700">Saldada</span>
                         ) : (
                           <span className="font-semibold text-stone-900">
-                            USD {pago.saldo.toLocaleString('es-AR')}
+                            {formatearUSD(pago.saldo)}
                           </span>
                         )}
                       </td>
@@ -509,10 +594,10 @@ export default async function ReservasPage({
                   <td className={COL_SECUNDARIA} />
                   <td className={COL_SECUNDARIA} />
                   <td className={`${COL_SECUNDARIA} tabular px-4 py-2.5 text-right font-semibold text-stone-900`}>
-                    USD {totalPagina.toLocaleString('es-AR')}
+                    {formatearUSD(totalPagina)}
                   </td>
                   <td className="tabular px-4 py-2.5 text-right font-semibold text-stone-900">
-                    USD {saldoPagina.toLocaleString('es-AR')}
+                    {formatearUSD(saldoPagina)}
                   </td>
                   <td />
                 </tr>

@@ -7,7 +7,7 @@ import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/
 import { hoyISO, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
-import { areasDe, type Area } from '@/lib/domain/permisos'
+import { areasDe, estaOculta, type Area } from '@/lib/domain/permisos'
 import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
 import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
@@ -68,6 +68,7 @@ export default async function DashboardPage() {
     { count: reservasActivas },
     { count: mantPendiente },
     { count: objetosGuardados },
+    { count: conflictosCanal },
     { data: stockBajo },
     { data: comprobantes },
   ] = await Promise.all([
@@ -83,7 +84,21 @@ export default async function DashboardPage() {
       .from('ordenes_mantenimiento')
       .select('*', { count: 'exact', head: true })
       .in('estado', ['pendiente', 'en_proceso']),
-    supabase.from('objetos_perdidos').select('*', { count: 'exact', head: true }).eq('estado', 'guardado'),
+    // Entrantes del canal que chocan con lo ya vendido (migración 0052). Va acá porque
+    // el hub es lo que se mira una vez por día.
+    supabase
+      .from('canal_reservas')
+      .select('*', { count: 'exact', head: true })
+      .eq('conflicto', true)
+      .neq('estado', 'ignorada'),
+    // Si el módulo está apagado (`AREAS_OCULTAS`), nadie va a ver este número y la
+    // consulta sería un viaje a la base de más en la pantalla que más se abre.
+    estaOculta('objetos_perdidos')
+      ? Promise.resolve({ count: 0 })
+      : supabase
+          .from('objetos_perdidos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado', 'guardado'),
     supabase.from('productos_servicios').select('nombre, stock, stock_minimo').eq('activo', true),
     supabase
       .from('movimientos_proveedor')
@@ -250,6 +265,20 @@ export default async function DashboardPage() {
             >
               <Icono nombre="mantenimiento" tam={16} />
               {mantPendiente} orden(es) de mantenimiento sin resolver
+            </Link>
+          )}
+          {/*
+            El posible overbooking va en el hub y no solo en la pantalla de canales
+            porque es lo más caro que le puede pasar al hotel y hay que verlo sin ir a
+            buscarlo. En tono de peligro, no del gris de los demás avisos.
+          */}
+          {(conflictosCanal ?? 0) > 0 && puede('canales') && (
+            <Link
+              href="/panel/canales"
+              className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-800 ring-1 ring-red-200 transition hover:bg-red-100"
+            >
+              <Icono nombre="alerta" tam={16} />
+              {conflictosCanal} reserva(s) de canal con posible overbooking
             </Link>
           )}
           {(objetosGuardados ?? 0) > 0 && puede('objetos_perdidos') && (

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   detectarDelimitador,
+  esColumnaProhibida,
   interpretarCsvBooking,
   interpretarFecha,
   interpretarImporte,
@@ -402,5 +403,66 @@ describe('interpretarCsvBooking', () => {
     const r = interpretarCsvBooking(INFORME_ES)
     const serializado = JSON.stringify(r.reservas)
     expect(serializado).not.toMatch(/tarjeta|card|pan|pin|cvv/i)
+  })
+
+  describe('columnas prohibidas', () => {
+    /*
+      El test de arriba prueba que un informe SIN columnas de tarjeta no las trae, lo
+      cual es fácil. Lo que hay que fijar es el caso contrario: un archivo que SÍ las
+      trae —porque alguien lo armó a mano, o porque el extranet agregó la columna— no
+      puede meterlas en la base.
+
+      Importa ahora y no dentro de tres pasos: el mapeo manual de columnas va a
+      dejarle al usuario elegir qué columna es cuál, y sin esta guarda podría asignar
+      «Tarjeta virtual» al campo de observaciones sin darse cuenta.
+    */
+    const CON_TARJETA = [
+      'Número de reserva;Nombre del cliente;Fecha de entrada;Fecha de salida;Tarjeta virtual;CVC;Caducidad;Observaciones',
+      '4123456789;"Pérez, Ana";25/09/2026;28/09/2026;4111111111111111;737;12/28;Llegada tardía',
+    ].join('\n')
+
+    it('reconoce los encabezados que no se pueden leer', () => {
+      for (const h of [
+        'Tarjeta virtual',
+        'Número de tarjeta',
+        'Credit card',
+        'CVC',
+        'CVV',
+        'Caducidad',
+        'Expiry date',
+        'IBAN',
+        'Titular de la tarjeta',
+        'Cardholder name',
+      ]) {
+        expect(esColumnaProhibida(h), `«${h}» debería estar prohibida`).toBe(true)
+      }
+    })
+
+    it('NO prohíbe columnas legítimas que se parecen', () => {
+      // `pan` está con límites de palabra a propósito: «Panamá» y «acompañante» no
+      // son datos de tarjeta, y prohibirlas dejaría al importador sin el país.
+      for (const h of ['País', 'Panamá', 'Acompañantes', 'Cantidad', 'Comisión', 'Precio']) {
+        expect(esColumnaProhibida(h), `«${h}» NO debería estar prohibida`).toBe(false)
+      }
+    })
+
+    it('un informe CON columnas de tarjeta se lee, pero sin ellas', () => {
+      // No se rechaza el archivo entero: la reserva es válida y perderla sería peor.
+      // Lo que se pierde es la columna prohibida, y nada más.
+      const r = interpretarCsvBooking(CON_TARJETA)
+      expect(r.reservas).toHaveLength(1)
+      expect(r.reservas[0].externalId).toBe('4123456789')
+      // Las columnas legítimas que venían DESPUÉS de las prohibidas siguen alineadas:
+      // por eso el encabezado se pone en blanco en vez de sacarse de la lista.
+      expect(r.reservas[0].notas).toBe('Llegada tardía')
+    })
+
+    it('ni el PAN ni el CVC ni el vencimiento quedan en la reserva interpretada', () => {
+      const r = interpretarCsvBooking(CON_TARJETA)
+      const serializado = JSON.stringify(r.reservas)
+      expect(serializado).not.toContain('4111111111111111')
+      expect(serializado).not.toContain('737')
+      expect(serializado).not.toContain('12/28')
+    })
   })
 })

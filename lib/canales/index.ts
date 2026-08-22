@@ -171,6 +171,14 @@ export interface ReservaDeCanal {
   monedaCanal: string
   /** Comisión declarada por el canal, si la informa. */
   comision?: number | null
+  /**
+   * Quién cobra: el hotel en el mostrador, o el canal y después transfiere.
+   *
+   * `'desconocida'` cuando el informe no lo dice —que es el caso del feed iCal
+   * siempre, y del informe CSV cuando la cuenta no exporta esa columna—. No se
+   * asume: de esa distinción depende si hay algo que cobrar al hacer el check-out.
+   */
+  modalidadCobro?: 'hotel' | 'canal' | 'desconocida'
   notas?: string | null
   /** `nueva`, `modificada` o `cancelada`: el canal manda las tres por el mismo camino. */
   operacion: 'nueva' | 'modificada' | 'cancelada'

@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { useActionState } from 'react'
 import { importarCsvCanal, type EstadoImportacionCsv } from './actions'
 import { CAMPO, Campo, Mensaje, botonClases } from '../_components/ui'
@@ -50,6 +52,30 @@ export function ImportarCsv() {
       </Campo>
 
       {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
+
+      {/*
+        La salida cuando el sistema no reconoce las columnas.
+
+        Antes esto terminaba en «bajá el informe sin modificarlo», que no ayuda si el
+        export de esta cuenta simplemente tiene otros nombres de columna. El archivo no
+        se guarda —tiene datos de huéspedes y no hay Storage— pero sí sus encabezados y
+        unos valores de ejemplo, que es todo lo que hace falta para preguntar.
+      */}
+      {estado.mapear && (
+        <div className="mb-4 rounded-xl bg-lenga-50 px-4 py-3 text-sm text-lenga-900 ring-1 ring-lenga-200">
+          <p className="font-semibold">Se puede resolver una sola vez y no volver a preguntar.</p>
+          <p className="mt-1 text-stone-700">
+            Guardamos los encabezados de este archivo. Decí qué columna es cuál y, a partir de ahí,
+            todos los informes con el mismo formato entran solos.
+          </p>
+          <Link
+            href="/panel/canales/mapeo"
+            className="mt-2 inline-block font-semibold underline"
+          >
+            Configurar las columnas de «{estado.mapear}»
+          </Link>
+        </div>
+      )}
       {estado.ok && <Mensaje tono="ok">{estado.ok}</Mensaje>}
 
       {estado.advertencia && (
