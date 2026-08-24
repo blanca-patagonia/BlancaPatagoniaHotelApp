@@ -12,30 +12,23 @@ quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior.
 ## 1. Lo que falta del bloque Booking
 
 El plan completo está en `~/.claude/plans/peaceful-bubbling-yeti.md` y las decisiones en
-los ADRs 0021 y 0023. De los diez pasos hay **cinco hechos** (B1, B2, B4, B5, B6).
+los ADRs 0021 y 0023. De los diez pasos hay **ocho hechos** (B1, B2, B4, B5, B6, B8, B9, B10). Quedan **B3** y **B7**.
 
-### B9 · Reportes: neto de comisión y costo por canal
-Los datos ya están en `canal_cargos`; falta la pantalla que responda *cuánto me dejó
-Booking neto*. Vista `resumen_canal_mes` con `security_invoker` —es lo que pide el
-comentario de `app/panel/reportes/page.tsx:194`— más `lib/domain/metricas-canal.ts` puro.
+### ~~B9 · Reportes: neto de comisión y costo por canal~~ ✅ YA ESTABA HECHO
 
-> ⚠️ **El error fácil, que hay que dejar escrito en la pantalla:**
-> `tarifa_tipo = 'neto'` es un **tipo de tarifa** (agencia vs mostrador), **no**
-> «importe ya sin comisión». Neto de comisión = total − comisión. Restársela a un total
-> que alguien creyó ya neto da un número más bajo y **no falla**: se publica como si
-> estuviera bien.
+Verificado en el código, no asumido: `app/panel/reportes/page.tsx:193` lee la vista
+`resumen_canal_mes`, calcula neto, comisión efectiva y ADR bruto/neto con los
+ayudantes puros de `lib/domain/metricas-canal.ts`, y ordena **por neto y no por
+bruto** —la pregunta del hotel es cuál le deja más plata—.
 
-Y dos honestidades obligatorias: si no había cotización al importar, `monto_usd` queda
-nulo y el reporte tiene que **contar cuántas filas no pudo convertir** en vez de sumar
-cero; y para `directo`/`web` el costo de adquisición se muestra `—`, **nunca `USD 0`**
-—hay Google Ads y tiempo de mostrador, pero el sistema no los conoce—.
+Las dos honestidades que este pendiente exigía también están:
 
-### ~~B8 · Programación de la sincronización~~ ✅ HECHO (PR #14)
-`app/api/cron/canales/route.ts` + `vercel.json` (`0 6 * * *`) + `CRON_SECRET`.
-El cron **aterriza, no importa**. Si `CRON_SECRET` falta, el handler rechaza; la
-cabecera `x-vercel-cron` no se usa como autenticación. Documentado en
-`docs/sincronizacion-automatica.md`, con la trampa del plan Hobby (una corrida
-por día, no cada tres horas) y GitHub Actions como plan B.
+- `costoAdquisicion` devuelve `null` para `directo`/`web` y la pantalla muestra
+  `—`, nunca `USD 0`.
+- `sin_comision_informada` se cuenta y se avisa en pantalla («al menos», «N sin
+  informar»): mientras sea > 0, el neto es un piso y así se declara.
+
+Era el único pedido del relevamiento que seguía abierto («cuál nos conviene»).
 
 ### B7 · Feed iCal propio de salida + ADR 0022
 El `ical_token` ya está en `canal_config` (migración 0049). Falta

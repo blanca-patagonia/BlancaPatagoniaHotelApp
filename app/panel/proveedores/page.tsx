@@ -56,6 +56,20 @@ export default async function ProveedoresPage({
   const { q, saldo: filtroSaldo } = sp
   const supabase = await crearClienteServidor()
 
+  /*
+    Este listado NO pagina, y es una decisión.
+
+    La pantalla filtra en memoria por saldo (`visibles`, más abajo), y el saldo sale
+    de la vista `saldos_proveedores`, no de esta consulta. Paginar en la base
+    aplicaría el filtro «solo con deuda» sobre las 25 filas de la página en vez de
+    sobre todos los proveedores: el resultado sería distinto en cada página y
+    **equivocado**, sin fallar.
+
+    Se deja sin paginar a propósito porque la tabla es chica —un hotel tiene decenas
+    de proveedores, no miles— y el riesgo de un filtro que miente es peor que el de
+    una lista larga. Si algún día crece, primero hay que mover el filtro de saldo a
+    la base; recién ahí tiene sentido paginar.
+  */
   let consulta = supabase.from('proveedores').select('id, nombre, rubro, activo').order('nombre')
   const termino = terminoBusqueda(q)
   if (termino) consulta = consulta.or(`nombre.ilike.${patronOr(termino)},rubro.ilike.${patronOr(termino)}`)

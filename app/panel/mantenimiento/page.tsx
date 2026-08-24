@@ -2,9 +2,16 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { hoyISO, diasEntre, formatoFechaCorta } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda, patronOr } from '@/lib/listados'
+import {
+  construirQuery,
+  terminoBusqueda,
+  patronOr,
+  paginaActual,
+  rangoDePagina,
+} from '@/lib/listados'
 import {
   BarraHerramientas,
+  Paginacion,
   BotonExportar,
   Buscador,
   Chip,
@@ -103,6 +110,7 @@ export default async function MantenimientoPage({
     ok?: string
     error?: string
     generadas?: string
+    pagina?: string
   }>
 }) {
   await requerirAcceso('mantenimiento')
@@ -114,9 +122,19 @@ export default async function MantenimientoPage({
     ? (sp.prioridad as Prioridad)
     : undefined
 
+  /*
+    Pagina. Sin esto la consulta traía la tabla entera y PostgREST la cortaba en
+    1000 filas **sin avisar**: el listado se quedaba mudo a partir de ahí y nadie
+    podía saber que faltaban órdenes.
+  */
+  const pagina = paginaActual(sp.pagina)
+  const { desde, hasta } = rangoDePagina(pagina)
+
   let consulta = supabase
     .from('ordenes_mantenimiento')
-    .select('id, titulo, descripcion, prioridad, estado, creada_en, unidad:unidades(nombre)')
+    .select('id, titulo, descripcion, prioridad, estado, creada_en, unidad:unidades(nombre)', {
+      count: 'exact',
+    })
     .order('creada_en', { ascending: false })
 
   if (estado) consulta = consulta.eq('estado', estado)
@@ -137,14 +155,14 @@ export default async function MantenimientoPage({
     fila: es correcto a cualquier volumen y además más barato.
   */
   const [
-    { data: ordenesData },
+    { data: ordenesData, count: enFiltro },
     { data: unidadesData },
     { count: pendientesCount },
     { count: enProcesoCount },
     { count: urgentesCount },
     { data: planesData },
   ] = await Promise.all([
-    consulta,
+    consulta.range(desde, hasta),
     supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
     supabase
       .from('ordenes_mantenimiento')
@@ -167,6 +185,7 @@ export default async function MantenimientoPage({
   ])
 
   const ordenes = (ordenesData ?? []) as unknown as Orden[]
+  const totalFiltrado = enFiltro ?? 0
   const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
 
   const pendientes = pendientesCount ?? 0
@@ -424,6 +443,15 @@ export default async function MantenimientoPage({
             )
           })}
         </ul>
+      )}
+
+      {totalFiltrado > 0 && (
+        <Paginacion
+          base="/panel/mantenimiento"
+          params={{ q: sp.q, estado, prioridad }}
+          pagina={pagina}
+          total={totalFiltrado}
+        />
       )}
     </Pagina>
   )

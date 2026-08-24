@@ -1,5 +1,6 @@
 import 'server-only'
 import { redirect } from 'next/navigation'
+import { registrarErrorSync } from '@/lib/registro'
 
 /**
  * Utilidades para las Server Actions que terminan en `redirect()`.
@@ -46,7 +47,9 @@ export function cortarSiFalla(
   motivo = 'guardar',
 ): void {
   if (!error) return
-  console.error(`No se pudo completar «${motivo}» en ${destino}:`, error.message)
+  // Línea JSON en vez de texto suelto: en el log de una plataforma, con varias
+  // peticiones entrelazadas, un mensaje libre no se puede filtrar ni agrupar.
+  registrarErrorSync('escritura_fallida', { motivo, destino, detalle: error.message })
   // El destino puede traer su propia query (`?canal=…`, `?vista=…`), y entonces
   // el separador es `&`. Con `?` fijo la URL saldría rota y el parámetro que ya
   // venía se perdería junto con el contexto de la pantalla.
@@ -70,5 +73,5 @@ export function cortarSiFalla(
  */
 export function registrarFalla(error: ErrorDeBase | null | undefined, contexto: string): void {
   if (!error) return
-  console.error(`Falló una escritura accesoria (${contexto}):`, error.message)
+  registrarErrorSync('escritura_accesoria_fallida', { contexto, detalle: error.message })
 }

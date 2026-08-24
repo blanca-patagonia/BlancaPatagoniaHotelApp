@@ -2628,3 +2628,50 @@ reusaran el mismo número se pisarían y se perdería una reserva. El test falla
 simplifica la clave.
 
 **1393 tests verdes.**
+
+### Addendum del 2026-08-24 — paginación, B9 y registro estructurado
+
+**B9 ya estaba hecho.** Al ir a implementarlo apareció que `app/panel/reportes/page.tsx:193`
+ya lee `resumen_canal_mes`, calcula neto y ADR, y ordena **por neto y no por bruto**. Las dos
+honestidades que el pendiente exigía también estaban: `—` en vez de `USD 0` para
+`directo`/`web`, y el aviso de cuántas reservas no informaron comisión. Era el último pedido
+del relevamiento que figuraba abierto; el pendiente estaba desactualizado, no el código.
+
+**Paginación en tres listados** (mantenimiento, objetos perdidos, contratos). Sin ella
+PostgREST cortaba en 1000 filas **sin avisar** y el listado se quedaba mudo a partir de ahí.
+
+Dos cosas que aparecieron al hacerlo, y que importan más que la paginación en sí:
+
+1. **Paginar rompe los KPI si se calculaban en memoria.** En contratos, `vigentes`,
+   `pendientesFirma` y `porVencer` salían de `contratos.filter(...)`: con paginación habrían
+   contado solo las 25 filas visibles y **dirían un número distinto en cada página**. Se
+   pasaron a conteos en la base. Es el mismo error que la auditoría encontró antes, con otra
+   causa.
+
+2. **Proveedores NO se pagina, y es una decisión escrita en el código.** Esa pantalla filtra
+   en memoria por saldo, y el saldo viene de la vista `saldos_proveedores`, no de la consulta.
+   Paginar aplicaría el filtro «solo con deuda» sobre la página en vez de sobre todos: el
+   resultado sería distinto en cada página y **equivocado, sin fallar**. La tabla es chica
+   —decenas de proveedores, no miles—, así que el riesgo de un filtro que miente es peor que
+   el de una lista larga. Si crece, primero hay que mover el filtro a la base.
+
+**Registro estructurado** (`lib/registro.ts`). Había ~29 `console.error`/`warn` sueltos, cada
+uno con su formato. Eso alcanza mientras alguien mira una terminal y deja de alcanzar el día
+del deploy: en un log con varias peticiones entrelazadas no hay forma de saber qué líneas son
+del mismo pedido.
+
+Ahora es **una línea JSON por evento**, con el id de la petición (`x-vercel-id`). Sin
+dependencias nuevas: lo que un logger aporta acá se reduce a emitir JSON a stdout, que es lo
+que cualquier plataforma indexa.
+
+Dos decisiones del módulo:
+
+- **Oculta datos sensibles en dos capas**: por nombre de campo (`token`, `password`, `cvv`…)
+  y por contenido (12+ dígitos seguidos → `[oculto]`). La segunda es la que salva cuando el
+  dato viaja anidado en un mensaje de error de la base, que es como se cuela de verdad.
+- **`registrarErrorSync` existe a propósito.** `cortarSiFalla` tiene que ser síncrona porque
+  lanza para **detener** la Server Action; si fuera `async` y alguien olvidara el `await`, el
+  redirect no ocurriría y la acción seguiría — un bug peor que el que se registraba. Como
+  `headers()` es async en Next 16, esa variante va sin id de petición y se acepta.
+
+**1400 tests verdes en 86 archivos.**

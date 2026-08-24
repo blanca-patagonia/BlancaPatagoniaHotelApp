@@ -2,9 +2,16 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { formatoFechaCorta } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda, patronOr } from '@/lib/listados'
+import {
+  construirQuery,
+  terminoBusqueda,
+  patronOr,
+  paginaActual,
+  rangoDePagina,
+} from '@/lib/listados'
 import {
   BarraHerramientas,
+  Paginacion,
   BotonExportar,
   Buscador,
   Chip,
@@ -44,7 +51,7 @@ const MENSAJES_ERROR: Record<string, string> = {
 export default async function ObjetosPerdidosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; estado?: string; error?: string }>
+  searchParams: Promise<{ q?: string; estado?: string; pagina?: string; error?: string }>
 }) {
   await requerirAcceso('objetos_perdidos')
   const sp = await searchParams
@@ -52,9 +59,17 @@ export default async function ObjetosPerdidosPage({
 
   const estado = sp.estado === 'guardado' || sp.estado === 'devuelto' ? sp.estado : undefined
 
+  /*
+    Pagina, como huéspedes y reservas. Sin esto la consulta traía la tabla entera
+    y PostgREST la cortaba en 1000 filas **sin avisar**: el listado se quedaba
+    mudo a partir de ahí y nadie podía saber que faltaban registros.
+  */
+  const pagina = paginaActual(sp.pagina)
+  const { desde, hasta } = rangoDePagina(pagina)
+
   let consulta = supabase
     .from('objetos_perdidos')
-    .select('id, descripcion, ubicacion, fecha_hallazgo, estado')
+    .select('id, descripcion, ubicacion, fecha_hallazgo, estado', { count: 'exact' })
     .order('fecha_hallazgo', { ascending: false })
 
   if (estado) consulta = consulta.eq('estado', estado)
@@ -69,9 +84,9 @@ export default async function ObjetosPerdidosPage({
     supabase/config.toml:10). Comprobado con 1100 filas sembradas: llegaban 1000 y
     el KPI decía 1000. Un número equivocado que no falla es peor que un error.
   */
-  const [{ data }, { count: guardadosCount }, { count: devueltosCount }, { count: totalCount }] =
+  const [{ data, count: enFiltro }, { count: guardadosCount }, { count: devueltosCount }, { count: totalCount }] =
     await Promise.all([
-    consulta,
+    consulta.range(desde, hasta),
     supabase
       .from('objetos_perdidos')
       .select('*', { count: 'exact', head: true })
@@ -87,6 +102,7 @@ export default async function ObjetosPerdidosPage({
   const guardados = guardadosCount ?? 0
   const devueltos = devueltosCount ?? 0
   const total = totalCount ?? 0
+  const totalFiltrado = enFiltro ?? 0
 
   const vigentes = { q: sp.q, estado }
   const hayFiltros = Boolean(sp.q || estado)
@@ -234,6 +250,14 @@ export default async function ObjetosPerdidosPage({
               ))}
             </tbody>
           </Tabla>
+        )}
+        {totalFiltrado > 0 && (
+          <Paginacion
+            base="/panel/objetos-perdidos"
+            params={{ q: sp.q, estado }}
+            pagina={pagina}
+            total={totalFiltrado}
+          />
         )}
       </Tarjeta>
     </Pagina>
