@@ -2675,3 +2675,41 @@ Dos decisiones del módulo:
   `headers()` es async en Next 16, esa variante va sin id de petición y se acepta.
 
 **1400 tests verdes en 86 archivos.**
+
+### Addendum del 2026-08-24 — los 23 literales de permisos
+
+`['admin','gerencia'].includes(sesion.rol)` estaba repetido **23 veces en 12 archivos**.
+`AGENTS.md` pedía migrarlos a la matriz de `lib/domain/permisos.ts` al tocarlos.
+
+Al hacerlo apareció que **no todos se podían migrar**, y ésa es la parte interesante. Se
+comparó cada área contra la matriz antes de tocar nada:
+
+```
+agencias      → admin, gerencia, recepcion       ⚠️ migrar CAMBIARÍA permisos
+proveedores   → admin, gerencia                  ✅ el literal coincide
+contratos     → admin, gerencia                  ✅ el literal coincide
+config        → admin, gerencia                  ✅ el literal coincide
+mantenimiento → admin, gerencia, housekeeping    ⚠️ migrar CAMBIARÍA permisos
+```
+
+Usar `requerirAcceso('agencias')` le habría dado a **recepción** permiso de escritura sobre
+cuentas corrientes, y `requerirAcceso('mantenimiento')` se lo habría dado a **housekeeping**
+sobre los planes de preventivo. Un refactor «de limpieza» que amplía permisos en silencio es
+exactamente lo que no puede pasar en este archivo.
+
+Entonces se partió en dos:
+
+- **12 → `requerirAcceso(area)`**, donde el literal coincidía con la matriz. Tres de esos
+  eran además **dobles chequeos redundantes**: `requerirAcceso('proveedores')` seguido del
+  literal, que repetía la misma regla y podía divergir de la matriz sin que nada avisara.
+- **11 → `requerirRol('admin', 'gerencia')`**, una guarda nueva en `lib/auth/session.ts`. No
+  cambia el comportamiento, pero deja **una** implementación en vez de once copias, y sobre
+  todo **declara que la restricción es más estrecha que el área a propósito**.
+
+Verificado con la sonda de roles: la matriz de acceso quedó idéntica antes y después.
+
+**La guarda estructural (`tests/autorizacion-acciones.test.ts`) falló al hacer el cambio**, y
+con razón: no conocía `requerirRol` y marcó seis acciones como «sin verificar rol». Se le
+enseñó la forma nueva, con el porqué escrito en el propio test.
+
+Quedan **0 literales en código** (uno en un comentario que explica la migración).

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import {
@@ -30,9 +30,8 @@ export default async function EditarProveedorPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const sesion = await requerirAcceso('proveedores')
+  await requerirAcceso('proveedores')
   const { id } = await params
-  if (!['admin', 'gerencia'].includes(sesion.rol)) redirect(`/panel/proveedores/${id}`)
 
   const supabase = await crearClienteServidor()
   const { data } = await supabase

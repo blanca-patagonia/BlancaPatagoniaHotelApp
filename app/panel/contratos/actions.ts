@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { hoyISO } from '@/lib/fechas'
 import {
   puedeEnviar,
@@ -25,8 +25,7 @@ export interface EstadoContratoForm {
 
 /** Los contratos los gestionan solo admin y gerencia (RLS lo repite en la base). */
 async function exigirGestion() {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  const sesion = await requerirAcceso('contratos')
   return sesion
 }
 

@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
-import { redirect } from 'next/navigation'
 import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
 import { FormularioAgencia } from '../formulario'
 
@@ -11,8 +10,7 @@ import { FormularioAgencia } from '../formulario'
  * mostrarle a recepción un formulario que el servidor va a rechazar.
  */
 export default async function NuevaAgenciaPage() {
-  const sesion = await requerirAcceso('agencias')
-  if (!['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel/agencias')
+  await requerirAcceso('agencias')
 
   return (
     <Pagina ancho="angosto">

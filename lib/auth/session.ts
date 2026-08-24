@@ -73,3 +73,36 @@ export async function requerirAcceso(area: Area): Promise<Sesion> {
   if (!puedeAcceder(sesion.rol, area)) redirect('/panel')
   return sesion
 }
+
+/**
+ * Exige que el rol de la sesión esté entre los indicados.
+ *
+ * ── Cuándo usar esto y cuándo `requerirAcceso` ──────────────────────────────
+ *
+ * **`requerirAcceso(area)` es la opción por defecto**: consulta la matriz de
+ * `lib/domain/permisos.ts`, que es la única fuente de verdad de quién ve qué.
+ *
+ * Esto es para el caso en que una acción concreta es **más restrictiva que el
+ * área que la contiene**. Hay dos hoy, y las dos son decisiones de negocio:
+ *
+ * · **Agencias.** El área la ve recepción —necesita la lista para vincular una
+ *   reserva a un convenio—, pero mover plata en la cuenta corriente de un socio
+ *   es de administración.
+ * · **Mantenimiento.** El área la ve housekeeping —tiene que poder abrir una
+ *   orden y cerrarla—, pero los planes de preventivo los define gerencia.
+ *
+ * ── Por qué existe, en vez de dejar el literal ──────────────────────────────
+ *
+ * Antes esto eran **23 copias** de `['admin','gerencia'].includes(sesion.rol)`
+ * repartidas en 12 archivos. Con una sola implementación: se puede buscar, se
+ * puede cambiar en un lugar, y sobre todo **queda dicho que la restricción es
+ * deliberada** y no que alguien se olvidó de usar la matriz.
+ *
+ * ⚠️ Si una acción restringida así deja de serlo, lo correcto es borrar la
+ * llamada y usar `requerirAcceso(area)`, no ampliar la lista de roles acá.
+ */
+export async function requerirRol(...roles: readonly Rol[]): Promise<Sesion> {
+  const sesion = await requerirSesion()
+  if (!roles.includes(sesion.rol)) redirect('/panel')
+  return sesion
+}

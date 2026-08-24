@@ -22,8 +22,22 @@ import { fileURLToPath } from 'node:url'
 const RAIZ = fileURLToPath(new URL('..', import.meta.url))
 
 /** Verificación de ROL. `obtenerSesion` sola no alcanza: eso es autenticación. */
+/*
+  `requerirRol(...)` se sumó a la lista cuando se eliminaron los 23 literales
+  `['admin','gerencia'].includes(sesion.rol)`.
+
+  Doce se migraron a `requerirAcceso(area)`, que es lo correcto cuando el literal
+  coincide con la matriz de `lib/domain/permisos.ts`. Los otros once NO se podían
+  migrar sin **cambiar** permisos: el área `agencias` incluye a recepción y el área
+  `mantenimiento` incluye a housekeeping, así que usar la matriz les habría dado
+  acceso de escritura que no tenían. Para ésos existe `requerirRol`, que declara
+  que la restricción es más estrecha que el área **a propósito**.
+
+  Esta guarda tiene que reconocer las dos formas, o marcaría como «sin verificar»
+  a acciones que verifican mejor que antes.
+*/
 const VERIFICA_ROL =
-  /requerirAcceso\(|puedeAcceder\(|sesion\.rol\s*!==|includes\(sesion\.rol\)|sesion\.rol\s*===/
+  /requerirAcceso\(|requerirRol\(|puedeAcceder\(|sesion\.rol\s*!==|includes\(sesion\.rol\)|sesion\.rol\s*===/
 
 /** Helpers locales que envuelven la verificación (exigirAcceso, exigirGestion…). */
 function helpersConRol(fuente: string): string[] {
