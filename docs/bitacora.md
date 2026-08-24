@@ -2574,3 +2574,37 @@ reales y comprobando si sobrevivían. **El método importa tanto como el hallazg
 `npm run check` exit 0 · **1389 tests (84 archivos), cero salteados** · **63 migraciones**
 aplicadas · `npm audit`: 1 baja. Cada sonda se corrió **antes y después** del arreglo, y las
 que crearon datos los borraron.
+
+### Addendum del 2026-08-24 — el stock que no se descontaba
+
+Al verificar un pendiente que estaba anotado como **sospecha** («trigger de stock y
+`cambiar_unidad_reserva` como `SECURITY INVOKER`, mismo defecto que la 0033») apareció que
+uno de los dos era un bug real y **peor de lo que decía la sospecha**.
+
+Con una sesión de recepción —el rol que carga consumos todos los días—:
+
+```
+stock inicial: 50
+cargar consumo como recepción: OK        ← sin error
+stock después: 50                        ← NO descontó
+```
+
+No fallaba: descontaba **cero**. `descontar_stock_consumo()` corre con los privilegios de
+quien inserta el consumo, su `update` sobre `productos_servicios` choca con la política
+`admin/gerencia gestionan`, RLS filtra la fila y el update afecta cero filas — que para
+Postgres es un éxito. El consumo se cobraba y el inventario quedaba mintiendo.
+
+La diferencia con el caso de la 0033 es que aquél **fallaba ruidosamente** (no se podía
+emitir ninguna factura, así que se notó) y éste no falla. Por eso duró.
+
+Migración `0064`: `security definer` con `search_path` fijo. Después: 50 → 47.
+
+**`cambiar_unidad_reserva` se probó y no tenía el problema**: devuelve `{"ok":true,...}` con
+sesión de recepción. Queda anotado en la migración para que nadie lo «arregle».
+
+El test (`tests/stock-descuento.test.ts`) corre como **recepción y no con `service_role`**:
+con el cliente privilegiado el bug no se reproduce porque saltea RLS, y un test que no puede
+ver el bug no protege de él. Se comprobó volviendo la función a invoker: la suite se pone en
+rojo con «expected 50 to be 47».
+
+**1392 tests verdes en 85 archivos.**

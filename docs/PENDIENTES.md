@@ -2,7 +2,7 @@
 
 > Estado al cerrar la rama `feat/relevamiento-cliente-agosto`.
 > **Tests verdes, cero salteados.** Lint, typecheck y build en verde.
-> Migraciones hasta la **0063**.
+> Migraciones hasta la **0064**.
 
 Este archivo reemplaza a `docs/audit/00-pendientes.md` y `docs/audit/HANDOFF.md`, que
 quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior.
@@ -78,7 +78,7 @@ columnas, conciliar la factura e importar reseñas.
 | Qué | Dónde | Por qué importa |
 |---|---|---|
 | ~~Los tokens de portal no caducan ni se revocan~~ ✅ migración 0063 | — | El portal exige `activo` y `token_revocado_en is null`; hay botones para regenerar y dar de baja el enlace. **Queda `firmas.token`**: un contrato enviado y nunca firmado sigue abierto. Su ciclo de vida es del contrato, no del token: lo correcto es que el estado del contrato lo cierre. |
-| Trigger de stock y `cambiar_unidad_reserva` como `SECURITY INVOKER` | migraciones 0028 y la de stock | Mismo defecto que la 0033 ya corrigió en la numeración de comprobantes. |
+| ~~Trigger de stock como `SECURITY INVOKER`~~ ✅ migración 0064 | — | **Era peor de lo que decía la sospecha:** no fallaba, descontaba **cero** en silencio. Con sesión de recepción el consumo se cobraba y el stock quedaba igual, porque RLS filtraba la fila y el `update` afectaba 0 filas sin error. Verificado (50 → 50 antes, 50 → 47 después) y con test de regresión que falla sin el arreglo. **`cambiar_unidad_reserva` se probó y NO tenía el problema**: funciona bien para recepción. |
 | Seis listados del panel no paginan | varios `page.tsx` | PostgREST corta en 1000 filas **sin avisar** (`traerTodo` de `lib/paginado.ts`). |
 | ~~El portal del socio lee `firmas` entera~~ ✅ | — | Ahora se acota con `.in('contrato_id', …)` sobre los contratos del socio. Traía todos los tokens del sistema para usar tres, y pasadas las 1000 firmas el botón de firmar desaparecía en silencio. |
 | ~~No hay «olvidé mi contraseña»~~ ✅ | `/login/recuperar` | Con límite propio de 3/hora y respuesta uniforme exista o no el email. Verificado: el correo llega. |
