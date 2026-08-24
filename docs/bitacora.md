@@ -2443,3 +2443,134 @@ aplicaron limpias y la suite completa volvió a pasar. Es el mismo camino que ha
 Además se comprobó a mano, contra Postgres, lo que un test no cubre: que las cuatro
 restricciones de la `0059` rechacen un PAN, una verificación sin fecha y un exento mayor que el
 neto; y que las de la `0058` rechacen una exención sin fundamento legal.
+
+## 2026-08-24 — Auditoría técnica: los hallazgos aplicados
+
+**Resumen:** se corrieron doce fases de auditoría (arquitectura, seguridad, rendimiento,
+escalabilidad, datos, calidad, CI/CD, integraciones, pagos y UX) y acá se aplican los
+hallazgos. Cuatro migraciones (`0060`–`0063`), **1389 tests verdes en 84 archivos**, cero
+salteados. Las vulnerabilidades de dependencias pasaron de **8 (6 altas) a 1 baja**.
+
+Lo que distingue esta entrada de una lista de mejoras: **cada hallazgo se verificó
+ejecutándolo antes de arreglarlo, y se volvió a ejecutar después**. Las sondas están
+descritas abajo con su salida real.
+
+### Los dos hallazgos ALTA
+
+**1 · Una mucama podía firmar un contrato en nombre de una agencia** (migración `0060`)
+
+Dos políticas escritas como `rol_actual() is not null` —«cualquiera con sesión»— dejaban
+`agencias` y `proveedores` legibles por los cuatro roles, **token incluido**. Verificado
+con una sesión de housekeeping, que ni siquiera tiene esas áreas en `permisos.ts`:
+
+```
+── housekeeping ──
+   agencias    : LEYÓ 1 fila(s) → tokens visibles: 1
+   ejemplo: Agencia Sonda = 5f276040-f54b-4505-96a8-1b2569e4f2a4
+```
+
+Y el token no es un dato: abre `/portal/<token>`, que muestra la cuenta corriente completa
+del socio y enlaza a `/firmar/<token>`, donde `firmarContrato` **no exige sesión**.
+
+Es el escenario que la migración 0034 describe como su razón de ser («un token no es un
+dato: es una credencial»), alcanzado por una puerta que quedó abierta.
+
+Al arreglarlo apareció un segundo hallazgo: **el `revoke select (token)` de la 0034 nunca
+tuvo efecto.** En Postgres un revoke de columna no recorta un grant de tabla previo —el de
+`0006_grants_api.sql`—, y Postgres lo acepta sin error, así que el arreglo *parecía*
+aplicado. Comprobado con `has_column_privilege`, que devolvía `true`. La 0060 lo hace de la
+forma que sí funciona: quita el grant de tabla y lo repone columna por columna.
+
+Después: los cuatro roles reciben `42501` al pedir el token, la matriz de lectura coincide
+exactamente con `lib/domain/permisos.ts`, y el portal sigue funcionando con `service_role`.
+
+**2 · Recepción borraba una reserva y se llevaba la plata** (migración `0061`)
+
+```
+ANTES:   {"pagos":1,"consumos":1,"estadias":1}
+DELETE como recepción: ACEPTADO
+DESPUÉS: {"pagos":0,"consumos":0,"estadias":0}
+```
+
+Se fueron USD 150 de seña aprobada, un consumo y la estadía, arrastrados por las cascadas
+de las 0009 y 0010. Del borrado de la reserva no quedaba rastro: su trigger de auditoría es
+`after update`.
+
+Se revocó `delete` a `authenticated` en las siete tablas donde ninguna pantalla lo usa, y se
+sumaron triggers de auditoría de DELETE en `reservas`, `estadias`, `consumos` y los dos
+`movimientos_*`. Después: `42501: permission denied for table reservas`, y los tres
+registros siguen ahí.
+
+**Las cascadas se dejaron a propósito**, y está argumentado en la migración: el agujero ya
+lo cierra el revoke, y para `service_role` una limpieza legítima *tiene* que llevarse los
+hijos. Cambiar cuatro claves foráneas era un cambio más grande que el problema.
+
+### Corrección de un error propio en la sonda
+
+La primera versión de la sonda de borrado apuntaba a un **id inexistente**. Eso mide el
+GRANT de tabla, **no la política RLS**: una policy que filtra filas devuelve «0 filas, sin
+error», idéntico a una que permite. Reportaba «PERMITIDO» en 13 tablas para los cuatro
+roles, housekeeping incluido, y habría sido un falso positivo grave. Se rehízo creando filas
+reales y comprobando si sobrevivían. **El método importa tanto como el hallazgo.**
+
+### Lo demás, en una línea cada uno
+
+- **Una sola implementación de la IP del cliente.** `ipDePeticion` en `lib/firma` había
+  quedado con el bug del primer `x-forwarded-for` que `lib/limites` ya había arreglado.
+  Alimentaba el límite del asistente público —evadible rotando la cabecera— y la IP que se
+  guarda en `firmas.ip` como constancia de quién firmó: un dato probatorio que elegía el
+  propio firmante. Se borró la copia.
+- **El proveedor de email ya no loguea el cuerpo.** Es el proveedor por omisión y los
+  cuerpos llevan tokens vivos: cada reserva pública dejaba en el log el email del huésped y
+  un enlace a su ficha. Ahora van metadatos; el cuerpo solo con `EMAIL_LOG_CUERPO=1`.
+- **El webhook de pagos ya no da por aprobado un evento sin estado.** Era
+  `?? 'aprobado'`: fail-open sobre dinero. Y el `as EstadoPago` no verificaba nada, así que
+  un valor fuera del enum explotaba recién en el insert y la pasarela reintentaba en bucle.
+- **Recuperación de contraseña** (`/login/recuperar`). No existía: quien perdía la clave
+  dependía de un admin disponible, y hoy hay **un solo usuario**. La respuesta es siempre la
+  misma exista o no el email —si no, el formulario es un verificador de cuentas del staff— y
+  tiene límite propio de 3/hora. Verificado de punta a punta: el correo llega a Mailpit.
+- **Los enlaces del portal se pueden cerrar** (migración `0063`). Dar de baja una agencia
+  **no le cerraba el portal**, y un enlace filtrado servía para siempre. Ahora la consulta
+  exige `activo` y `token_revocado_en is null`, y hay botones para regenerar y para dar de
+  baja el enlace.
+- **Tres KPIs dejaron de mentir.** `mantenimiento`, `objetos-perdidos` y el portal contaban
+  filas trayéndolas, y PostgREST corta en 1000 **con HTTP 200 y sin aviso**. Verificado
+  sembrando 1100 filas: llegaban 1000, `Content-Range: 0-999/*`, sin error. Ahora cuenta la
+  base. El portal además traía **todos los tokens de firma del sistema** para usar tres.
+- **Índices del listado de reservas** (migración `0062`). Ordena por `creada_en` y filtra
+  por `estado`, y ninguna tenía índice. Medido con EXPLAIN sobre 30.000 filas: **2,599 ms →
+  0,101 ms**, y de 755 a 27 páginas tocadas.
+- **`reservas.canal` dejó de ser texto libre.** Alimenta el reporte de rentabilidad y la
+  conciliación de comisiones; un typo creaba un canal fantasma **sin fallar**. El CHECK usa
+  exactamente la lista de `CANALES` del dominio, ni un valor de más.
+- **La sesión se resuelve una vez por request.** Eran 3 llamadas a Auth y 2 SELECT sobre
+  `perfiles`, en serie, antes de empezar. Un `cache()` de React.
+- **Quitar un cargo pide confirmación.** Era un `<button>` crudo con `✕`: borrado
+  irreversible de dinero, sin confirmar, sin estado de envío y sin nombre accesible.
+  `BotonEnvio` ahora acepta `aria-label`.
+- **El CI corre en todas las ramas** y tiene `npm audit --audit-level=high`. Había cinco
+  ramas divergidas, la mayor con 50 commits sin una sola corrida. Se sumó Dependabot.
+- **Next 16.2.9 → 16.3.2.** Cerraba SSRF en Server Actions y exposición no autenticada de
+  endpoints internos, entre otras. De 8 vulnerabilidades a 1 baja.
+
+### Tres cosas que conviene recordar
+
+1. **Un `revoke select (columna)` NO recorta un `grant` de tabla previo.** Postgres lo acepta
+   sin error y no hace nada. Hay que revocar el de tabla y reponer por columna — y eso rompe
+   a quien lea esa columna con el cliente del usuario, así que van juntos.
+
+2. **La matriz de lectura RLS ahora sondea con `id` en las tres tablas con columna revocada.**
+   Con `select('*')` daría 42501 para todos, incluido admin, y el test diría «admin no puede
+   leer agencias», que es falso. La protección por columna tiene su propio bloque de tests.
+
+3. **El guardián de la auditoría hizo su trabajo.** Al agregar tres casos negativos nuevos, el
+   test que verifica que ningún caso pasó «por tabla vacía» los reportó como no auditados —con
+   razón—. Hubo que sembrar `agencias` y `proveedores`. Un caso que pasa sobre una tabla vacía
+   no prueba nada.
+
+### Verificación
+
+`npm run check` exit 0 · **1389 tests (84 archivos), cero salteados** · **63 migraciones**
+aplicadas · `npm audit`: 1 baja. Cada sonda se corrió **antes y después** del arreglo, y las
+que crearon datos los borraron.

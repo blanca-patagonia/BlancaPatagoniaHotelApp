@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { hoyISO } from '@/lib/fechas'
 import { motivoNoFirmable, type EstadoContrato } from '@/lib/domain/contratos'
-import { obtenerProveedorFirma, ipDePeticion } from '@/lib/firma'
+import { obtenerProveedorFirma } from '@/lib/firma'
+import { ipDeCabeceras } from '@/lib/limites'
 import { cortarSiFalla } from '@/lib/acciones'
 
 /**
@@ -53,7 +54,7 @@ export async function firmarContrato(formData: FormData): Promise<void> {
   const cabeceras = await headers()
   const proveedor = obtenerProveedorFirma()
   const constancia = await proveedor.registrarFirma(registro.contrato.contenido ?? '', {
-    ip: ipDePeticion(cabeceras),
+    ip: ipDeCabeceras(cabeceras),
     userAgent: cabeceras.get('user-agent'),
   })
 

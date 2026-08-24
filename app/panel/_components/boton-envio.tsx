@@ -27,6 +27,7 @@ export function BotonEnvio({
   variante = 'primario',
   extra = '',
   confirmar,
+  'aria-label': etiquetaAccesible,
 }: {
   children: ReactNode
   /** Texto mientras se procesa. Por defecto, "Guardando…". */
@@ -35,6 +36,14 @@ export function BotonEnvio({
   extra?: string
   /** Si se indica, se pide confirmación antes de enviar. */
   confirmar?: string
+  /**
+   * Nombre accesible, para los botones cuyo contenido es solo un símbolo.
+   *
+   * Un `✕` sin esto se anuncia como «botón» a secas en un lector de pantalla, y
+   * quien lo escucha no tiene forma de saber qué borra. El `title` no alcanza:
+   * no todos los lectores lo leen.
+   */
+  'aria-label'?: string
 }) {
   const { pending } = useFormStatus()
 
@@ -43,6 +52,7 @@ export function BotonEnvio({
       type="submit"
       disabled={pending}
       aria-busy={pending}
+      aria-label={etiquetaAccesible}
       onClick={
         confirmar
           ? (e) => {

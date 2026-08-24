@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { esRolValido, type Rol } from '@/lib/domain/roles'
@@ -16,7 +17,27 @@ export interface Sesion {
   rol: Rol
 }
 
-export async function obtenerSesion(): Promise<Sesion | null> {
+/**
+ * Resuelve la sesión una sola vez por petición.
+ *
+ * ── Por qué el `cache()` ────────────────────────────────────────────────────
+ *
+ * Cada carga de una pantalla del panel pasa por tres capas que preguntan quién
+ * es el usuario: el `proxy.ts` refresca el token, `app/panel/layout.tsx` llama a
+ * `requerirSesion()` y la página llama a `requerirAcceso(area)`. Sin memoizar,
+ * eso son **tres llamadas a Auth y dos SELECT sobre `perfiles`**, en serie, antes
+ * de empezar el trabajo real. Es latencia fija en cada navegación, y crece sola
+ * si mañana se agrega otra capa de layout.
+ *
+ * `cache()` de React deduplica por petición: la primera llamada consulta y las
+ * siguientes reciben el mismo resultado. No es un caché entre peticiones —cada
+ * request vuelve a resolver—, así que una baja de usuario sigue teniendo efecto
+ * inmediato, que es lo que la migración 0033 vino a garantizar.
+ *
+ * `requerirSesion` y `requerirAcceso` se benefician sin cambios: las dos pasan
+ * por acá.
+ */
+export const obtenerSesion = cache(async (): Promise<Sesion | null> => {
   const supabase = await crearClienteServidor()
   const {
     data: { user },
@@ -37,7 +58,7 @@ export async function obtenerSesion(): Promise<Sesion | null> {
     nombre: perfil.nombre || (user.email ?? ''),
     rol: perfil.rol,
   }
-}
+})
 
 /** Exige sesión activa; si no la hay, redirige al login. */
 export async function requerirSesion(): Promise<Sesion> {

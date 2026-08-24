@@ -47,9 +47,31 @@ class ProveedorConsola implements EmailProvider {
       return { ok: false, detalle: 'El destinatario no tiene un email válido.' }
     }
 
+    /*
+      Se loguean METADATOS, nunca el cuerpo.
+
+      Antes salía el mensaje entero, y los cuerpos llevan credenciales: el correo
+      de confirmación incluye `/reservar/confirmacion/<token>` y el de la encuesta
+      `/encuesta/<token>`. Como éste es el proveedor **por omisión** y no hay uno
+      real integrado, cada reserva pública dejaba en el log el email del huésped,
+      su nombre, el total y un token que abre su ficha — y los tokens no caducan,
+      así que la ventana es permanente.
+
+      Cualquiera con acceso de lectura a los logs —una integración de
+      observabilidad, un dump mal guardado— tenía credenciales de larga vida.
+
+      El destinatario va enmascarado por el mismo motivo: es un dato personal.
+    */
+    const [usuario, dominio] = m.para.split('@')
     console.info(
-      `[email:${this.nombre}] → ${m.para}\n  Asunto: ${m.asunto}\n  ${m.cuerpo.replace(/\n/g, '\n  ')}`,
+      `[email:${this.nombre}] → ${usuario.slice(0, 2)}***@${dominio} · «${m.asunto}» · ${m.cuerpo.length} caracteres`,
     )
+
+    // El cuerpo completo, solo bajo una bandera explícita de desarrollo. Sirve
+    // para depurar una plantilla sin que sea el comportamiento por defecto.
+    if (process.env.EMAIL_LOG_CUERPO === '1') {
+      console.debug(`[email:${this.nombre}] cuerpo:\n  ${m.cuerpo.replace(/\n/g, '\n  ')}`)
+    }
     return {
       ok: true,
       detalle: `Simulado: el correo para ${m.para} quedó registrado en el servidor, no se envió.`,

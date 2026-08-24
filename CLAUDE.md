@@ -217,8 +217,14 @@ Tarifario 2025/2026 (Anexo A).
   **Queda solo P5** —bandeja, comentarios y analytics de Booking—, que **difirió
   el propio cliente**: antes de prometer nada hay que verificar qué exporta el
   extranet sin API de partner.
-- **1351 tests verdes** (81 archivos), cero salteados, verificados contra una base
-  levantada **desde cero** con las **59** migraciones.
+- **1389 tests verdes** (84 archivos), cero salteados, verificados contra una base
+  levantada **desde cero** con las **63** migraciones.
+- **Auditoría técnica aplicada (2026-08-24).** Doce fases de auditoría y sus hallazgos
+  corregidos: tokens de socio fuera del alcance del staff (0060), el borrado de dinero
+  con permiso revocado y auditado (0061), índices del listado y `canal` acotado (0062),
+  enlaces del portal revocables (0063), recuperación de contraseña, y las dependencias
+  de 8 vulnerabilidades a 1 baja. Cada hallazgo se verificó **ejecutándolo** antes y
+  después; el detalle está en la bitácora.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.

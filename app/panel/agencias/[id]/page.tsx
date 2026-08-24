@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import {
   saldoCuenta,
   ETIQUETAS_TIPO_CUENTA,
@@ -11,7 +12,7 @@ import {
   type TipoMovimiento,
   type Movimiento,
 } from '@/lib/domain/cuentas'
-import { registrarMovimiento } from '../actions'
+import { registrarMovimiento, regenerarEnlacePortal, revocarEnlacePortal } from '../actions'
 import { type CondicionIva } from '@/lib/domain/facturacion'
 import { Encabezado, Mensaje, Pagina, botonClases } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
@@ -25,7 +26,6 @@ interface Agencia {
   cuit: string | null
   email: string | null
   descuento_pct: number
-  token: string
   telefono: string | null
   activo: boolean
   condicion_iva: CondicionIva
@@ -50,10 +50,13 @@ const MENSAJES_ERROR: Record<string, string> = {
   movimiento: 'No se pudo registrar el movimiento. El saldo de la cuenta quedó sin cambios.',
   datos: 'No se pudieron guardar los datos de la agencia.',
   activo: 'No se pudo cambiar el estado de la cuenta.',
+  enlace: 'No se pudo actualizar el enlace del portal. El anterior sigue vigente.',
 }
 
 const MENSAJES_OK: Record<string, string> = {
   datos: 'Datos actualizados.',
+  enlace: 'Enlace nuevo generado. El anterior dejó de funcionar: reenviale el nuevo al socio.',
+  enlace_revocado: 'Enlace dado de baja. El socio ya no puede entrar al portal.',
 }
 
 export default async function AgenciaDetallePage({
@@ -68,17 +71,39 @@ export default async function AgenciaDetallePage({
   const { ok: okParam, error: errorParam } = await searchParams
   const supabase = await crearClienteServidor()
 
-  const [{ data: agenciaData }, { data: movsData }] = await Promise.all([
-    supabase.from('agencias').select('id, nombre, tipo, cuit, email, telefono, descuento_pct, token, activo, condicion_iva').eq('id', id).single(),
+  /*
+    El token va por `crearClienteAdmin` y el resto por el cliente del usuario.
+
+    Desde la migración 0060 `agencias.token` **no es legible** con una sesión de
+    staff: es la credencial de `/portal/<token>`, y con ella cualquiera de los
+    cuatro roles podía abrir la cuenta corriente del socio y firmar un contrato
+    en su nombre. Se lee aparte, con el cliente privilegiado, solo para armar el
+    enlace que esta pantalla muestra.
+
+    El resto de la fila sigue pasando por RLS, que es lo que corresponde: la
+    política de lectura ya limita quién ve la ficha.
+  */
+  const [{ data: agenciaData }, { data: movsData }, { data: tokenData }] = await Promise.all([
+    supabase.from('agencias').select('id, nombre, tipo, cuit, email, telefono, descuento_pct, activo, condicion_iva').eq('id', id).single(),
     supabase
       .from('movimientos_cuenta')
       .select('id, tipo, monto, concepto, fecha, reserva:reservas(codigo)')
       .eq('agencia_id', id)
       .order('fecha', { ascending: false })
       .order('creado_en', { ascending: false }),
+    crearClienteAdmin()
+      .from('agencias')
+      .select('token, token_revocado_en')
+      .eq('id', id)
+      .maybeSingle(),
   ])
   if (!agenciaData) notFound()
   const agencia = agenciaData as Agencia
+  // Puede ser null si la lectura privilegiada falla: la pantalla lo contempla
+  // en vez de romperse, porque el enlace del portal es accesorio a la ficha.
+  const datosToken = tokenData as { token: string; token_revocado_en: string | null } | null
+  const tokenPortal = datosToken?.token ?? null
+  const revocado = Boolean(datosToken?.token_revocado_en)
   const cabeceras = await headers()
   const origen = `${cabeceras.get('x-forwarded-proto') ?? 'http'}://${cabeceras.get('host') ?? 'localhost:3000'}`
   const movs = (movsData ?? []) as unknown as MovRow[]
@@ -171,16 +196,56 @@ export default async function AgenciaDetallePage({
           accede: mandalo solo al contacto de la empresa.
         </p>
         <code className="mt-3 block rounded-lg bg-stone-50 px-3 py-2 font-mono text-xs break-all text-stone-700 ring-1 ring-stone-200">
-          {origen}/portal/{agencia.token}
+          {origen}/portal/{tokenPortal}
         </code>
-        <a
-          href={`/portal/${agencia.token}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 inline-block rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
-        >
-          Abrir el portal
-        </a>
+        {revocado && (
+          <p className="mt-3 rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-700">
+            <strong>Este enlace está dado de baja.</strong> El socio no puede entrar. Generá uno
+            nuevo si necesita volver a acceder.
+          </p>
+        )}
+        {!agencia.activo && (
+          <p className="mt-3 rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-700">
+            La cuenta está dada de baja, así que el portal no abre aunque el enlace exista.
+          </p>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <a
+            href={`/portal/${tokenPortal}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+          >
+            Abrir el portal
+          </a>
+
+          {/* Regenerar y revocar son la respuesta a un enlace filtrado: hasta la
+              migración 0063 no había ninguna, y el token servía para siempre. */}
+          <form action={regenerarEnlacePortal}>
+            <input type="hidden" name="agencia_id" value={agencia.id} />
+            <BotonEnvio
+              variante="secundario"
+              cargando="Generando…"
+              confirmar="¿Generar un enlace nuevo? El actual deja de funcionar en el momento, así que hay que reenviarle el nuevo al socio."
+            >
+              Generar enlace nuevo
+            </BotonEnvio>
+          </form>
+
+          {!revocado && (
+            <form action={revocarEnlacePortal}>
+              <input type="hidden" name="agencia_id" value={agencia.id} />
+              <BotonEnvio
+                variante="fantasma"
+                cargando="Dando de baja…"
+                confirmar="¿Dar de baja el enlace? El socio pierde el acceso al portal hasta que se le genere uno nuevo."
+              >
+                Dar de baja el enlace
+              </BotonEnvio>
+            </form>
+          )}
+        </div>
       </section>
 
       <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Movimientos</h2>

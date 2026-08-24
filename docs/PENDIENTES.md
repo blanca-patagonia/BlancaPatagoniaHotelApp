@@ -2,7 +2,7 @@
 
 > Estado al cerrar la rama `feat/relevamiento-cliente-agosto`.
 > **Tests verdes, cero salteados.** Lint, typecheck y build en verde.
-> Migraciones hasta la **0059**.
+> Migraciones hasta la **0063**.
 
 Este archivo reemplaza a `docs/audit/00-pendientes.md` y `docs/audit/HANDOFF.md`, que
 quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior.
@@ -77,25 +77,32 @@ columnas, conciliar la factura e importar reseñas.
 
 | Qué | Dónde | Por qué importa |
 |---|---|---|
-| **Los tokens de firma y de portal no caducan ni se revocan** | `firmas.token`, `agencias.token`, `proveedores.token` | Dar de baja una agencia **no le cierra el portal**. Un token filtrado sirve para siempre. |
+| ~~Los tokens de portal no caducan ni se revocan~~ ✅ migración 0063 | — | El portal exige `activo` y `token_revocado_en is null`; hay botones para regenerar y dar de baja el enlace. **Queda `firmas.token`**: un contrato enviado y nunca firmado sigue abierto. Su ciclo de vida es del contrato, no del token: lo correcto es que el estado del contrato lo cierre. |
 | Trigger de stock y `cambiar_unidad_reserva` como `SECURITY INVOKER` | migraciones 0028 y la de stock | Mismo defecto que la 0033 ya corrigió en la numeración de comprobantes. |
 | Seis listados del panel no paginan | varios `page.tsx` | PostgREST corta en 1000 filas **sin avisar** (`traerTodo` de `lib/paginado.ts`). |
-| El portal del socio lee `firmas` **entera** con `service_role` en cada carga | `app/portal/[token]/page.tsx` | Lectura sin filtrar de una tabla que crece. |
-| No hay «olvidé mi contraseña» | `app/login` | Quien pierde la clave necesita a un admin. |
+| ~~El portal del socio lee `firmas` entera~~ ✅ | — | Ahora se acota con `.in('contrato_id', …)` sobre los contratos del socio. Traía todos los tokens del sistema para usar tres, y pasadas las 1000 firmas el botón de firmar desaparecía en silencio. |
+| ~~No hay «olvidé mi contraseña»~~ ✅ | `/login/recuperar` | Con límite propio de 3/hora y respuesta uniforme exista o no el email. Verificado: el correo llega. |
 | Emitir factura en **una sola transacción SQL** | `app/panel/reservas/actions.ts` | El perdedor de una carrera gasta un número correlativo y pide un CAE sin fila: con AFIP real es un **salto de numeración**, que es obligación formal (ADR 0015). El test de concurrencia ya monta la carrera; falta afirmar que no hay salto. |
 
 ---
 
 ## 3. Auditoría
 
+- **La matriz de ESCRITURA RLS sigue siendo dirigida**, aunque creció: se sumaron los
+  casos de borrado (migración 0061) y un bloque nuevo de **credenciales por columna**
+  (tokens de portal y de firma, migración 0060), que audita algo que la matriz de tablas
+  no puede ver.
 - **Los 29 tests de Server Actions corren con la autorización mockeada.**
   `tests/acciones/entorno.ts` reemplaza `requerirAcceso` por un admin fijo, así que
   verifican la lógica de negocio y **no** la guarda que más importa.
-- **La matriz de escritura RLS es dirigida, no exhaustiva.** `tests/rls-escritura-por-rol.test.ts`
-  cubre 19 casos elegidos por consecuencia (escalada de privilegio, dinero, inventario,
-  borde público). Lo que no está, no está auditado — y el archivo lo dice.
-  La de **lectura** sí es exhaustiva: 40 tablas × 4 roles, con la lista traída de la base
-  para que una tabla nueva sin declarar haga fallar el test.
+- **Qué cubre y qué no la matriz de escritura.**
+  `tests/rls-escritura-por-rol.test.ts` cubre casos elegidos por consecuencia
+  (escalada de privilegio, dinero, inventario, borde público, borrado). Lo que no
+  está, no está auditado — y el archivo lo dice.
+  La de **lectura** sí es exhaustiva: 43 tablas × 4 roles, con la lista traída de la
+  base para que una tabla nueva sin declarar haga fallar el test. Y hay un guardián
+  que reporta los casos negativos que pasaron «por tabla vacía» en vez de darlos por
+  verificados.
 
 ---
 
@@ -109,8 +116,11 @@ Ninguno cuesta plata hoy, todos son «lo que un sistema serio necesita»:
 4. Sin logging estructurado con correlation ID — hoy son `console.error` sueltos.
 5. Sin captura de errores en producción (Sentry o equivalente).
 6. Sin tests E2E ni de componentes.
-7. Sin `npm audit` en CI, sin Dependabot/Renovate.
-8. Sin Prettier ni pre-commit; sin migraciones reversibles; sin backup restaurado y probado.
+7. ~~Sin `npm audit` en CI, sin Dependabot~~ ✅ los dos configurados. El CI corre además
+   en **todas** las ramas, no solo en `main`.
+8. Sin Prettier ni pre-commit; sin migraciones reversibles; **sin backup restaurado y
+   probado** — éste es el punto ciego más grande que queda: un backup que nunca se
+   restauró no es un backup.
 
 **Diseño — fases D–F del portal público** (7 items, sin especificar en ningún doc):
 filtros laterales, galería con lightbox, barra sticky de reserva, señales de confianza y

@@ -1034,12 +1034,23 @@ export default async function DetalleReservaPage({
                   <span className="font-medium text-stone-800">
                     {formatearUSD((c.cantidad * Number(c.precio_unitario)))}
                   </span>
+                  {/* Quitar un cargo es un borrado irreversible de dinero de la
+                      cuenta del huésped. Antes era un `<button>` crudo con `✕`:
+                      sin confirmación, sin estado de envío y sin nombre
+                      accesible —un lector de pantalla anunciaba «botón»—.
+                      `anularComanda` ya hacía lo correcto para el lote; esto
+                      quedó afuera. */}
                   <form action={quitarConsumo}>
                     <input type="hidden" name="reserva_id" value={reserva.id} />
                     <input type="hidden" name="consumo_id" value={c.id} />
-                    <button className="text-xs text-stone-600 transition hover:text-red-600" title="Quitar">
+                    <BotonEnvio
+                      variante="fantasma"
+                      cargando="Quitando…"
+                      aria-label={`Quitar ${c.producto?.nombre ?? 'el consumo'} de la cuenta`}
+                      confirmar={`¿Quitar ${c.cantidad}× ${c.producto?.nombre ?? 'este consumo'} por ${formatearUSD(c.cantidad * Number(c.precio_unitario))} de la cuenta? No se puede deshacer.`}
+                    >
                       ✕
-                    </button>
+                    </BotonEnvio>
                   </form>
                 </span>
               </li>

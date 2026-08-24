@@ -61,15 +61,32 @@ export default async function ObjetosPerdidosPage({
   const termino = terminoBusqueda(sp.q)
   if (termino) consulta = consulta.or(`descripcion.ilike.${patronOr(termino)},ubicacion.ilike.${patronOr(termino)}`)
 
-  const [{ data }, { data: todosData }] = await Promise.all([
+  /*
+    Los contadores los resuelve la base.
+
+    Antes traía `objetos_perdidos` entera para contarla en JavaScript, y PostgREST
+    corta en 1000 filas con HTTP 200 y sin aviso (`max_rows`,
+    supabase/config.toml:10). Comprobado con 1100 filas sembradas: llegaban 1000 y
+    el KPI decía 1000. Un número equivocado que no falla es peor que un error.
+  */
+  const [{ data }, { count: guardadosCount }, { count: devueltosCount }, { count: totalCount }] =
+    await Promise.all([
     consulta,
-    supabase.from('objetos_perdidos').select('estado'),
+    supabase
+      .from('objetos_perdidos')
+      .select('*', { count: 'exact', head: true })
+      .eq('estado', 'guardado'),
+    supabase
+      .from('objetos_perdidos')
+      .select('*', { count: 'exact', head: true })
+      .eq('estado', 'devuelto'),
+    supabase.from('objetos_perdidos').select('*', { count: 'exact', head: true }),
   ])
 
   const objetos = (data ?? []) as Objeto[]
-  const todos = (todosData ?? []) as { estado: string }[]
-  const guardados = todos.filter((o) => o.estado === 'guardado').length
-  const devueltos = todos.filter((o) => o.estado === 'devuelto').length
+  const guardados = guardadosCount ?? 0
+  const devueltos = devueltosCount ?? 0
+  const total = totalCount ?? 0
 
   const vigentes = { q: sp.q, estado }
   const hayFiltros = Boolean(sp.q || estado)
@@ -103,7 +120,7 @@ export default async function ObjetosPerdidosPage({
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="En depósito" valor={String(guardados)} detalle="sin reclamar" icono="objetos" tono="alerta" />
         <Kpi titulo="Devueltos" valor={String(devueltos)} detalle="entregados" icono="ok" tono="exito" />
-        <Kpi titulo="Total" valor={String(todos.length)} detalle="registros" icono="reportes" />
+        <Kpi titulo="Total" valor={String(total)} detalle="registros" icono="reportes" />
       </div>
 
       <BarraHerramientas>

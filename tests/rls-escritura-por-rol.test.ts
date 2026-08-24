@@ -548,4 +548,133 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     const { data } = await admin.from('tarifas').select('id, precio_rack').limit(1).single()
     await noPuedeActualizar(comoAnon(), 'tarifas', data!.id, { precio_rack: 1 })
   })
+
+  /*
+    ── Borrado de dinero (migración 0061) ─────────────────────────────────────
+
+    El caso que motivó la migración, reproducido: con una sesión de recepción se
+    creó una reserva confirmada con USD 150 de seña y un consumo, y se la borró
+    por PostgREST. Se fueron el pago, el consumo y la estadía —arrastrados por
+    las cascadas de las 0009 y 0010— y del borrado de la reserva no quedaba
+    rastro, porque su trigger de auditoría era `after update`.
+
+    Ninguna pantalla ofrece ese borrado: es alcanzable solo con una llamada
+    directa a la API. Por eso el test va acá y no en los de Server Actions.
+  */
+  describe('borrar una reserva con plata encima', () => {
+    /** Monta una reserva confirmada con un pago aprobado. Devuelve sus ids. */
+    async function reservaConPago() {
+      const admin = clienteDePrueba()
+      const { data: u } = await admin
+        .from('unidades')
+        .select('id, tipo_unidad_id')
+        .limit(1)
+        .single()
+      const { data: h } = await admin
+        .from('huespedes')
+        .insert({ apellido: `Borrado-${sufijo}`, nombre: 'Prueba' })
+        .select('id')
+        .single()
+      const { data: r, error } = await admin.rpc('crear_reserva', {
+        p_huesped_id: (h as { id: string }).id,
+        p_unidad_id: (u as { id: string }).id,
+        p_tipo_unidad_id: (u as { tipo_unidad_id: string }).tipo_unidad_id,
+        p_check_in: '2029-05-01',
+        p_check_out: '2029-05-03',
+        p_huespedes: 1,
+        p_precio_noche: 100,
+        p_total: 200,
+        p_canal: 'directo',
+        p_tarifa_tipo: 'rack',
+        p_estado: 'confirmada',
+      })
+      if (error) throw new Error(`no se pudo montar la reserva: ${error.message}`)
+      const reservaId = (r as { id: string }).id
+      await admin.from('pagos').insert({
+        reserva_id: reservaId,
+        medio: 'efectivo',
+        tipo: 'senia',
+        monto: 150,
+        estado: 'aprobado',
+      })
+      return { reservaId, huespedId: (h as { id: string }).id }
+    }
+
+    async function limpiarReserva(ids: { reservaId: string; huespedId: string }) {
+      const admin = clienteDePrueba()
+      await admin.from('reservas').delete().eq('id', ids.reservaId)
+      await admin.from('huespedes').delete().eq('id', ids.huespedId)
+    }
+
+    for (const rol of ['admin', 'gerencia', 'recepcion', 'housekeeping'] as Rol[]) {
+      it(`${rol} NO puede borrar una reserva`, async () => {
+        const ids = await reservaConPago()
+        try {
+          const { error } = await usuarios[rol].cliente
+            .from('reservas')
+            .delete()
+            .eq('id', ids.reservaId)
+
+          expect(error?.code, `${rol} pudo borrar una reserva con un pago encima`).toBe('42501')
+
+          // Y lo que importa de verdad: la plata sigue ahí.
+          const admin = clienteDePrueba()
+          const { count } = await admin
+            .from('pagos')
+            .select('*', { count: 'exact', head: true })
+            .eq('reserva_id', ids.reservaId)
+          expect(count, 'el pago desapareció').toBe(1)
+        } finally {
+          await limpiarReserva(ids)
+        }
+      })
+    }
+
+    it('el borrado por service_role SÍ queda auditado', async () => {
+      /*
+        La cascada se dejó a propósito para el rol privilegiado (ver la 0061): una
+        limpieza legítima tiene que llevarse los hijos. Lo que no puede pasar es
+        que se lleve la plata sin dejar constancia.
+      */
+      const admin = clienteDePrueba()
+      const ids = await reservaConPago()
+
+      const { count: antes } = await admin
+        .from('auditoria')
+        .select('*', { count: 'exact', head: true })
+        .eq('tabla', 'reservas')
+        .eq('accion', 'DELETE')
+
+      await admin.from('reservas').delete().eq('id', ids.reservaId)
+
+      const { count: despues } = await admin
+        .from('auditoria')
+        .select('*', { count: 'exact', head: true })
+        .eq('tabla', 'reservas')
+        .eq('accion', 'DELETE')
+
+      expect(
+        (despues ?? 0) - (antes ?? 0),
+        'se borró una reserva y no quedó registro en auditoría',
+      ).toBe(1)
+
+      await admin.from('huespedes').delete().eq('id', ids.huespedId)
+    })
+
+    it('la baja de una agencia es lógica: no se puede borrar la fila', async () => {
+      const admin = clienteDePrueba()
+      const { data } = await admin
+        .from('agencias')
+        .insert({ nombre: `Baja-${sufijo}`, tipo: 'agencia' })
+        .select('id')
+        .single()
+      const id = (data as { id: string }).id
+      try {
+        const { error } = await usuarios.admin.cliente.from('agencias').delete().eq('id', id)
+        expect(error?.code, 'se pudo borrar una agencia con su cuenta corriente').toBe('42501')
+      } finally {
+        await admin.from('agencias').delete().eq('id', id)
+      }
+    })
+  })
 })

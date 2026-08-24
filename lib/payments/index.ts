@@ -1,5 +1,11 @@
 import 'server-only'
-import type { MedioPago, TipoPago, EstadoPago } from '@/lib/domain/pagos'
+import {
+  ESTADOS_PAGO,
+  TIPOS_PAGO,
+  type MedioPago,
+  type TipoPago,
+  type EstadoPago,
+} from '@/lib/domain/pagos'
 
 /**
  * Abstracción de pasarelas de pago (`PaymentProvider`).
@@ -208,9 +214,38 @@ class ProveedorStub implements PaymentProvider {
     const reservaId = String(cuerpo.reserva_id ?? '')
     const monto = Number(cuerpo.monto ?? 0)
     if (!externalId || !reservaId || !(monto > 0)) return null
-    const tipo = (cuerpo.tipo as TipoPago) ?? 'saldo'
-    const estado = (cuerpo.estado as EstadoPago) ?? 'aprobado'
-    return { externalId, reservaId, monto, medio: this.nombre, tipo, estado }
+
+    /*
+      El estado y el tipo se VALIDAN contra el dominio; no se castean.
+
+      Antes eran `(cuerpo.estado as EstadoPago) ?? 'aprobado'`, con dos problemas:
+
+      · **`?? 'aprobado'` es fail-open sobre dinero.** Un evento al que le falte
+        el campo se convertía en un cobro aprobado que nadie hizo. Ante un
+        mensaje incompleto corresponde rechazarlo, no darlo por bueno.
+      · **El `as` no verifica nada.** Un valor fuera del enum pasaba el tipado y
+        explotaba recién en el `insert` contra `estado_pago`, devolviendo 500 y
+        dejando a la pasarela reintentando en bucle un evento que nunca va a
+        entrar.
+
+      Hoy no hay proveedor real conectado. Se corrige igual, por la misma razón
+      que se corrigió `verificarFirma`: el contrato es lo que va a heredar quien
+      enchufe MercadoPago o Stripe, y un contrato mal hecho se copia sin leerlo.
+    */
+    const tipo = cuerpo.tipo ?? 'saldo'
+    if (!TIPOS_PAGO.includes(tipo as TipoPago)) return null
+
+    const estado = cuerpo.estado
+    if (!ESTADOS_PAGO.includes(estado as EstadoPago)) return null
+
+    return {
+      externalId,
+      reservaId,
+      monto,
+      medio: this.nombre,
+      tipo: tipo as TipoPago,
+      estado: estado as EstadoPago,
+    }
   }
 }
 

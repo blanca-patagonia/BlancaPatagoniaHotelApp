@@ -28,7 +28,7 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 | **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | verificado, exit 0 |
 | Lint | `npm run lint` | verificado, exit 0 |
 | Typecheck | `npm run typecheck` | verificado, exit 0 |
-| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **1351 pasan / 0 saltean** con base y las 3 variables |
+| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **1389 pasan / 0 saltean** con base y las 3 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
 | Base local | `npx supabase start` · `npx supabase db reset` | necesita Docker |
@@ -197,6 +197,19 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   catálogos distintos. La `0034` intentó eso sobre `firmas.token` y el privilegio sigue ahí
   (verificable con `has_column_privilege`). Para que surta efecto hay que revocar el de tabla y
   reponer por columna — y eso rompe a quien lea esa columna con el cliente del usuario.
+- **Un token de socio NO se lee con el cliente del usuario.** `agencias.token`,
+  `proveedores.token` y `firmas.token` tienen el `select` revocado por columna
+  (migración 0060). Para mostrarlos hay que usar `crearClienteAdmin()`. Antes cualquier
+  rol —housekeeping incluido— podía leerlos, y con ellos abrir `/portal/<token>` y firmar
+  un contrato en nombre del socio.
+- **No se borran reservas, estadías, pagos, agencias, proveedores, tarifas ni perfiles.**
+  `authenticated` no tiene `delete` sobre esas tablas (migración 0061): el camino es la
+  máquina de estados o la baja lógica (`activo`). Los borrados que la UI sí usa —consumos,
+  huéspedes, avisos, rangos de temporada, mapeos— siguen habilitados y auditados.
+- **Contar filas es `count: 'exact', head: true`, nunca traerlas.** PostgREST corta en
+  1000 (`max_rows`) con **HTTP 200 y sin aviso**: contar en JavaScript da un número
+  equivocado a partir de la fila 1001 y nada falla. Hay un test que lo demuestra
+  (`tests/truncado-mil-filas.test.ts`).
 - **La cuenta se cierra con la FACTURA, no con el check-out** (`motivoNoCargable`, ADR/P3). Es lo
   que permite cobrarle el desayuno al que llegó a las 9 y al que se va a las 10.
 
