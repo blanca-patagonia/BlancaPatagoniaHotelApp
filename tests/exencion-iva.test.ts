@@ -102,6 +102,30 @@ describe('exención de IVA · desglose del comprobante', () => {
     expect(d.alicuota).toBe(ALICUOTA) // quedó parte gravada
   })
 
+  it('363 con IVA son 300 sin IVA: el número que anuncia la ficha', () => {
+    /*
+      Este caso está por un bug encontrado abriendo la pantalla en el navegador.
+
+      La ficha anunciaba el importe exento leyendo `reservas.total_neto`, una
+      columna que puede venir en cero, y mostraba «sale sin IVA: USD 0,00 en vez
+      de USD 363,00» — un número absurdo dicho con total confianza. Peor: la
+      factura sí calculaba bien los USD 300, así que la pantalla prometía una cosa
+      y el comprobante hacía otra.
+
+      Ahora las dos usan esta función. El test fija la aritmética exacta del caso
+      para que el número no se mueva sin que nadie se entere.
+    */
+    const d = desglosarConExencion({
+      alojamientoConIva: 363,
+      consumosConIva: 0,
+      alicuota: 21,
+      exento: true,
+    })
+    expect(d.exento).toBe(300)
+    expect(d.total).toBe(300)
+    expect(d.iva).toBe(0)
+  })
+
   it('la garantía neto + iva = total se mantiene con y sin exención', () => {
     const casos = [
       { alojamientoConIva: 148.7, consumosConIva: 0 },

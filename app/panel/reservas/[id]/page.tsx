@@ -45,6 +45,7 @@ import { MENSAJES_NO_CARGABLE } from '@/lib/domain/servicio'
 import {
   exentoDeIva,
   motivoSinExencion,
+  desglosarConExencion,
   MENSAJES_SIN_EXENCION,
 } from '@/lib/domain/exencion-iva'
 import {
@@ -278,6 +279,32 @@ export default async function DetalleReservaPage({
   }
   const exento = !reserva.agencia_id && exentoDeIva(condicionExencion)
   const motivoExencion = motivoSinExencion(condicionExencion)
+
+  /*
+    El importe que la ficha anuncia sale de `desglosarConExencion`, la MISMA
+    función que usa `emitirFactura`. No de `reserva.total_neto`.
+
+    Se hacía así y estaba mal: `total_neto` es una columna que puebla el alta
+    (migración 0039) y **puede venir en cero** —una reserva creada por un camino
+    que no la completa, o anterior a esa migración—. Con `total_neto = 0` la
+    pantalla anunciaba «sale sin IVA: USD 0,00 en vez de USD 363,00», un número
+    absurdo dicho con total confianza. Y peor: la factura sí calculaba bien los
+    USD 300, así que **la ficha prometía una cosa y el comprobante hacía otra**.
+
+    Detectado abriendo la pantalla en el navegador; ningún test lo veía porque el
+    número venía de la base y no del dominio.
+
+    Acá se pasa `consumosConIva: 0` a propósito: es una **vista previa del
+    alojamiento**, que es lo que cambia con la exención. Los consumos se suman en
+    la cuenta y siguen gravados, y el texto lo aclara.
+  */
+  const ALICUOTA_PREVIA = 21
+  const previaExencion = desglosarConExencion({
+    alojamientoConIva: Number(reserva.total),
+    consumosConIva: 0,
+    alicuota: ALICUOTA_PREVIA,
+    exento: true,
+  })
 
   /*
     Garantía de tarjeta (ADR 0025).
@@ -686,7 +713,7 @@ export default async function DetalleReservaPage({
                       <strong>Corresponde la exención.</strong> Al facturar, el
                       alojamiento sale sin IVA:{' '}
                       <span className="tabular font-semibold">
-                        {formatearUSD(Number(reserva.total_neto))}
+                        {formatearUSD(previaExencion.exento)}
                       </span>{' '}
                       en vez de {formatearUSD(Number(reserva.total))}. Los
                       consumos (frigobar, excursiones) siguen gravados.

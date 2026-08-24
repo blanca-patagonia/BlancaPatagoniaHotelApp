@@ -2742,3 +2742,68 @@ Esto no reemplaza migrar los 29 a sesiones reales —sigue siendo deseable—, p
 único que separa a la suite de verificar la autorización.
 
 **1416 tests verdes en 87 archivos.**
+
+### Addendum del 2026-08-24 — lo que solo se ve abriendo el navegador
+
+`docs/PENDIENTES.md` tenía dos cosas anotadas como **pendientes de verificación en el
+navegador**, y llevaban meses así. Se verificaron. Aparecieron **dos bugs que ningún test de
+los 1417 podía ver**, porque los dos viven en el borde entre React y el DOM.
+
+#### 1. Los `<select>` perdían lo elegido, y eso guardaba datos fiscales equivocados
+
+El pendiente preguntaba si el patrón de preservación de formularios funcionaba. La respuesta
+es **a medias**, y la mitad que fallaba era la peor.
+
+Se cargó un huésped con los nueve campos y un CUIT inválido a propósito:
+
+- Los **7 campos de texto se conservaron** ✅ (incluida la casilla de residencia)
+- Los **2 `<select>` no** ❌ — «Tipo de documento» volvió de CUIT a **DNI**, y «Condición
+  frente al IVA» de Responsable Inscripto a **Consumidor Final**
+
+La causa: `defaultValue` en un `<select>` marca la opción **al montar**; volver a renderizar
+con otro valor no toca el DOM, y el reseteo de formulario de React 19 devuelve el control a
+la opción de origen. Los `<input>` no tienen el problema porque ahí React sí actualiza el
+atributo `value`.
+
+**Por qué es grave y no una molestia.** Quien corrige solo el número del CUIT y reenvía
+guarda el huésped como **Consumidor Final** creyendo que puso Responsable Inscripto. De eso
+depende la letra del comprobante (ADR 0012). Es un dato fiscal equivocado, guardado en
+silencio, por un error de interfaz.
+
+Arreglado con `key` atado al valor, que fuerza el remontaje. Re-verificado en el navegador:
+CUIT y Responsable Inscripto ahora sobreviven.
+
+**Consecuencia para el pendiente UX-02:** el patrón sirve para los campos de texto, pero
+replicarlo a los otros formularios exige el `key` en cada `<select>`. Sin eso se estaría
+copiando el bug doce veces.
+
+#### 2. La ficha prometía una exención distinta de la que la factura aplicaba
+
+Al abrir una reserva de un huésped residente en el exterior, el aviso decía:
+
+> «Al facturar, el alojamiento sale sin IVA: **USD 0,00** en vez de USD 363,00»
+
+El número correcto es USD 300. La ficha leía `reservas.total_neto` —una columna que puede
+venir en cero— mientras que `emitirFactura` lo calcula bien con `desglosarConExencion`. O sea
+que **la pantalla y el comprobante se contradecían**, que es exactamente lo que el comentario
+del código decía estar evitando: ahí se usaba la misma función solo para el booleano, no para
+el importe.
+
+Arreglado: la ficha usa `desglosarConExencion`, la misma que la factura. Re-verificado:
+ahora dice USD 300,00. El caso quedó fijado en `tests/exencion-iva.test.ts` con los números
+exactos.
+
+#### Lo que sí estaba bien
+
+- `/panel/canales` y sus cinco vistas renderizan, con un estado vacío que dice qué hacer.
+- El bloque de garantía de tarjeta muestra «Sin tarjeta · Sin verificar» y el motivo.
+- `/login/recuperar` redirige al panel si ya hay sesión, como se codeó.
+- El enlace «¿Olvidaste tu contraseña?» está en el login.
+
+#### La lección
+
+Los dos bugs eran **de borde entre React y el DOM**, y ninguna de las tres capas de tests los
+alcanzaba: el dominio es puro, los de integración van contra Postgres y la guarda estructural
+lee el código fuente. Un test de componente los habría visto, pero exige dependencias nuevas.
+Mientras tanto, **abrir la pantalla sigue siendo la única verificación que cubre esa capa**, y
+conviene hacerlo antes de replicar un patrón a doce archivos.

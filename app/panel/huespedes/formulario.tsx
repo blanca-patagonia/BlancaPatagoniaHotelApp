@@ -76,7 +76,31 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
       </Campo>
 
       <Campo etiqueta="Tipo de documento">
-        <select name="doc_tipo" defaultValue={v.doc_tipo ?? huesped?.doc_tipo ?? 'DNI'} className={CAMPO}>
+        {/*
+          El `key` NO es decorativo: sin él este `<select>` pierde lo elegido.
+
+          Verificado en el navegador. `defaultValue` en un `<select>` marca la
+          opción al MONTAR; volver a renderizar con otro valor no toca el DOM, y
+          el reseteo de formulario de React 19 devuelve el control a la opción de
+          origen. Los `<input>` no tienen el problema porque ahí React sí
+          actualiza el atributo `value`.
+
+          Consecuencia real, que es lo que lo vuelve grave: al fallar la
+          validación del CUIT, este campo volvía de «CUIT» a «DNI» y el de
+          condición frente al IVA de «Responsable Inscripto» a «Consumidor
+          Final». Quien corregía solo el número y reenviaba **guardaba el huésped
+          con la condición fiscal equivocada, sin ningún aviso** — y de eso
+          depende la letra del comprobante (ADR 0012).
+
+          Con el `key` atado al valor, React remonta el `<select>` y la opción
+          correcta queda marcada.
+        */}
+        <select
+          key={`doc-${v.doc_tipo ?? huesped?.doc_tipo ?? 'DNI'}`}
+          name="doc_tipo"
+          defaultValue={v.doc_tipo ?? huesped?.doc_tipo ?? 'DNI'}
+          className={CAMPO}
+        >
           {DOCS.map((d) => (
             <option key={d} value={d}>
               {d}
@@ -128,7 +152,11 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
         etiqueta="Condición frente al IVA"
         ayuda="Define la letra de la factura. Si es responsable inscripto o monotributista, cargá el CUIT arriba."
       >
+        {/* Mismo motivo que el `<select>` de arriba: sin `key` se pierde lo
+            elegido al fallar la validación, y acá el dato define la letra de la
+            factura. */}
         <select
+          key={`iva-${v.condicion_iva ?? huesped?.condicion_iva ?? 'consumidor_final'}`}
           name="condicion_iva"
           defaultValue={v.condicion_iva ?? huesped?.condicion_iva ?? 'consumidor_final'}
           className={CAMPO}
