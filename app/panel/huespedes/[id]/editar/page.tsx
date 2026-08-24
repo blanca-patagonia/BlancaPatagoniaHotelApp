@@ -23,7 +23,7 @@ export default async function EditarHuespedPage({
   const { data } = await supabase
     .from('huespedes')
     .select(
-      'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, condicion_iva, notas',
+      'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, condicion_iva, residente_exterior, notas',
     )
     .eq('id', id)
     .single()

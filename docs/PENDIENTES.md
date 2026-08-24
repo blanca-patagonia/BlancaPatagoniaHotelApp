@@ -1,8 +1,8 @@
 # Pendientes
 
-> Estado al cerrar la rama `feat/booking-y-auditoria-rls`.
-> **1240 tests verdes en 76 archivos, cero salteados.** Lint, typecheck y build en verde.
-> Migraciones hasta la **0054**.
+> Estado al cerrar la rama `feat/relevamiento-cliente-agosto`.
+> **Tests verdes, cero salteados.** Lint, typecheck y build en verde.
+> Migraciones hasta la **0064**.
 
 Este archivo reemplaza a `docs/audit/00-pendientes.md` y `docs/audit/HANDOFF.md`, que
 quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior.
@@ -12,36 +12,23 @@ quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior.
 ## 1. Lo que falta del bloque Booking
 
 El plan completo está en `~/.claude/plans/peaceful-bubbling-yeti.md` y las decisiones en
-los ADRs 0021 y 0023. De los diez pasos hay **cinco hechos** (B1, B2, B4, B5, B6).
+los ADRs 0021 y 0023. De los diez pasos hay **ocho hechos** (B1, B2, B4, B5, B6, B8, B9, B10). Quedan **B3** y **B7**.
 
-### B9 · Reportes: neto de comisión y costo por canal
-Los datos ya están en `canal_cargos`; falta la pantalla que responda *cuánto me dejó
-Booking neto*. Vista `resumen_canal_mes` con `security_invoker` —es lo que pide el
-comentario de `app/panel/reportes/page.tsx:194`— más `lib/domain/metricas-canal.ts` puro.
+### ~~B9 · Reportes: neto de comisión y costo por canal~~ ✅ YA ESTABA HECHO
 
-> ⚠️ **El error fácil, que hay que dejar escrito en la pantalla:**
-> `tarifa_tipo = 'neto'` es un **tipo de tarifa** (agencia vs mostrador), **no**
-> «importe ya sin comisión». Neto de comisión = total − comisión. Restársela a un total
-> que alguien creyó ya neto da un número más bajo y **no falla**: se publica como si
-> estuviera bien.
+Verificado en el código, no asumido: `app/panel/reportes/page.tsx:193` lee la vista
+`resumen_canal_mes`, calcula neto, comisión efectiva y ADR bruto/neto con los
+ayudantes puros de `lib/domain/metricas-canal.ts`, y ordena **por neto y no por
+bruto** —la pregunta del hotel es cuál le deja más plata—.
 
-Y dos honestidades obligatorias: si no había cotización al importar, `monto_usd` queda
-nulo y el reporte tiene que **contar cuántas filas no pudo convertir** en vez de sumar
-cero; y para `directo`/`web` el costo de adquisición se muestra `—`, **nunca `USD 0`**
-—hay Google Ads y tiempo de mostrador, pero el sistema no los conoce—.
+Las dos honestidades que este pendiente exigía también están:
 
-### B8 · Programación de la sincronización
-**Hoy nadie sincroniza si nadie aprieta el botón.** No hay `vercel.json` ni tarea
-programada. `app/api/cron/canales/route.ts` + `CRON_SECRET`.
+- `costoAdquisicion` devuelve `null` para `directo`/`web` y la pantalla muestra
+  `—`, nunca `USD 0`.
+- `sin_comision_informada` se cuenta y se avisa en pantalla («al menos», «N sin
+  informar»): mientras sea > 0, el neto es un piso y así se declara.
 
-Dos cosas que hay que fijar: **si `CRON_SECRET` falta, el handler rechaza** (no «si
-falta, dejá pasar», que es un endpoint público que escribe en la base), y el header
-`x-vercel-cron` **no es autenticación** porque se puede falsificar. Y **el cron aterriza,
-no importa**: crear reservas confirmadas sin que nadie mire contradice el staging del
-ADR 0021.
-
-⚠️ El plan Hobby de Vercel permite **un cron por día**, no cada tres horas. Documentar
-GitHub Actions como plan B.
+Era el único pedido del relevamiento que seguía abierto («cuál nos conviene»).
 
 ### B7 · Feed iCal propio de salida + ADR 0022
 El `ical_token` ya está en `canal_config` (migración 0049). Falta
@@ -71,11 +58,11 @@ de `guardarEntrantes`, y el contrato `LectorInforme`.
 > **Criterio de terminado: los tests existentes pasan sin editar una línea.** Si hay que
 > tocar un test, el refactor cambió comportamiento y se revisa el código, no el test.
 
-### B10 · Documentación
-`docs/roadmap.md` **termina en la Fase 21**: quien lo lea concluye que canales no existe.
-Falta también `docs/modelo-datos.md` (6 tablas nuevas y ~15 columnas), el manual de
-usuario (bajar el informe, mapear columnas, conciliar la factura, importar reseñas) y la
-bitácora.
+### ~~B10 · Documentación~~ ✅ HECHO
+`README`, `docs/roadmap.md`, `docs/modelo-datos.md` y `docs/manual-usuario.md`
+actualizados contra el estado real del repo (números verificados ejecutando, no
+copiados). El manual cubre el flujo de canales: bajar el informe, mapear
+columnas, conciliar la factura e importar reseñas.
 
 ---
 
@@ -83,25 +70,37 @@ bitácora.
 
 | Qué | Dónde | Por qué importa |
 |---|---|---|
-| **Los tokens de firma y de portal no caducan ni se revocan** | `firmas.token`, `agencias.token`, `proveedores.token` | Dar de baja una agencia **no le cierra el portal**. Un token filtrado sirve para siempre. |
-| Trigger de stock y `cambiar_unidad_reserva` como `SECURITY INVOKER` | migraciones 0028 y la de stock | Mismo defecto que la 0033 ya corrigió en la numeración de comprobantes. |
-| Seis listados del panel no paginan | varios `page.tsx` | PostgREST corta en 1000 filas **sin avisar** (`traerTodo` de `lib/paginado.ts`). |
-| El portal del socio lee `firmas` **entera** con `service_role` en cada carga | `app/portal/[token]/page.tsx` | Lectura sin filtrar de una tabla que crece. |
-| No hay «olvidé mi contraseña» | `app/login` | Quien pierde la clave necesita a un admin. |
+| ~~Los tokens de portal no caducan ni se revocan~~ ✅ migración 0063 | — | El portal exige `activo` y `token_revocado_en is null`; hay botones para regenerar y dar de baja el enlace. **Queda `firmas.token`**: un contrato enviado y nunca firmado sigue abierto. Su ciclo de vida es del contrato, no del token: lo correcto es que el estado del contrato lo cierre. |
+| ~~Trigger de stock como `SECURITY INVOKER`~~ ✅ migración 0064 | — | **Era peor de lo que decía la sospecha:** no fallaba, descontaba **cero** en silencio. Con sesión de recepción el consumo se cobraba y el stock quedaba igual, porque RLS filtraba la fila y el `update` afectaba 0 filas sin error. Verificado (50 → 50 antes, 50 → 47 después) y con test de regresión que falla sin el arreglo. **`cambiar_unidad_reserva` se probó y NO tenía el problema**: funciona bien para recepción. |
+| ~~Listados sin paginar~~ ✅ parcial | — | Se paginaron mantenimiento, objetos perdidos y contratos —los que crecen—. **Proveedores y agencias NO se paginan a propósito**: filtran en memoria por saldo, que viene de una vista, así que paginar daría un filtro equivocado en cada página. Está escrito en el código. Si crecen, primero hay que mover el filtro a la base. |
+| ~~El portal del socio lee `firmas` entera~~ ✅ | — | Ahora se acota con `.in('contrato_id', …)` sobre los contratos del socio. Traía todos los tokens del sistema para usar tres, y pasadas las 1000 firmas el botón de firmar desaparecía en silencio. |
+| ~~No hay «olvidé mi contraseña»~~ ✅ | `/login/recuperar` | Con límite propio de 3/hora y respuesta uniforme exista o no el email. Verificado: el correo llega. |
 | Emitir factura en **una sola transacción SQL** | `app/panel/reservas/actions.ts` | El perdedor de una carrera gasta un número correlativo y pide un CAE sin fila: con AFIP real es un **salto de numeración**, que es obligación formal (ADR 0015). El test de concurrencia ya monta la carrera; falta afirmar que no hay salto. |
 
 ---
 
 ## 3. Auditoría
 
-- **Los 29 tests de Server Actions corren con la autorización mockeada.**
-  `tests/acciones/entorno.ts` reemplaza `requerirAcceso` por un admin fijo, así que
-  verifican la lógica de negocio y **no** la guarda que más importa.
-- **La matriz de escritura RLS es dirigida, no exhaustiva.** `tests/rls-escritura-por-rol.test.ts`
-  cubre 19 casos elegidos por consecuencia (escalada de privilegio, dinero, inventario,
-  borde público). Lo que no está, no está auditado — y el archivo lo dice.
-  La de **lectura** sí es exhaustiva: 40 tablas × 4 roles, con la lista traída de la base
-  para que una tabla nueva sin declarar haga fallar el test.
+- **La matriz de ESCRITURA RLS sigue siendo dirigida**, aunque creció: se sumaron los
+  casos de borrado (migración 0061) y un bloque nuevo de **credenciales por columna**
+  (tokens de portal y de firma, migración 0060), que audita algo que la matriz de tablas
+  no puede ver.
+- **Los 29 tests de Server Actions siguen corriendo con la autorización mockeada**
+  (`tests/acciones/entorno.ts` reemplaza `requerirAcceso` por un admin fijo), pero
+  el hueco que eso dejaba está cerrado por otro lado: `tests/guardas-de-sesion.test.ts`
+  prueba **la puerta misma** —que `requerirAcceso`, `requerirRol` y `requerirSesion`
+  rechacen de verdad—, que es el mecanismo del que dependen las 51 acciones.
+  Comprobado rompiendo la guarda a propósito: tres tests se ponen en rojo.
+  Migrar los 29 a sesiones reales sigue siendo deseable, pero ya no es lo único
+  que separa la suite de verificar la autorización.
+- **Qué cubre y qué no la matriz de escritura.**
+  `tests/rls-escritura-por-rol.test.ts` cubre casos elegidos por consecuencia
+  (escalada de privilegio, dinero, inventario, borde público, borrado). Lo que no
+  está, no está auditado — y el archivo lo dice.
+  La de **lectura** sí es exhaustiva: 43 tablas × 4 roles, con la lista traída de la
+  base para que una tabla nueva sin declarar haga fallar el test. Y hay un guardián
+  que reporta los casos negativos que pasaron «por tabla vacía» en vez de darlos por
+  verificados.
 
 ---
 
@@ -110,13 +109,22 @@ bitácora.
 Ninguno cuesta plata hoy, todos son «lo que un sistema serio necesita»:
 
 1. **79% del código en `app/`** — 190 llamadas `.from()` en 56 archivos de rutas contra 5 en `lib/`.
-2. `lib/domain/permisos.ts` no gobierna las escrituras: quedan lugares con el literal `['admin','gerencia']`.
+2. ~~`lib/domain/permisos.ts` no gobierna las escrituras~~ ✅ Los 23 literales se
+   eliminaron: 12 a `requerirAcceso(area)` y 11 a `requerirRol(...)`, que declara
+   que la restricción es más estrecha que el área **a propósito** (agencias incluye
+   recepción, mantenimiento incluye housekeeping: migrarlos a la matriz les habría
+   **dado** permisos que no tenían).
 3. `lib/env.ts` es perezoso y no valida `MERCADOPAGO_*`, `STRIPE_*` ni `RESEND_API_KEY`.
-4. Sin logging estructurado con correlation ID — hoy son `console.error` sueltos.
+4. ~~Sin logging estructurado con correlation ID~~ ✅ `lib/registro.ts`: una línea
+   JSON por evento, con id de petición y ocultamiento de datos sensibles en dos
+   capas (por nombre de campo y por contenido). Sin dependencias nuevas.
 5. Sin captura de errores en producción (Sentry o equivalente).
 6. Sin tests E2E ni de componentes.
-7. Sin `npm audit` en CI, sin Dependabot/Renovate.
-8. Sin Prettier ni pre-commit; sin migraciones reversibles; sin backup restaurado y probado.
+7. ~~Sin `npm audit` en CI, sin Dependabot~~ ✅ los dos configurados. El CI corre además
+   en **todas** las ramas, no solo en `main`.
+8. Sin Prettier ni pre-commit; sin migraciones reversibles; **sin backup restaurado y
+   probado** — éste es el punto ciego más grande que queda: un backup que nunca se
+   restauró no es un backup.
 
 **Diseño — fases D–F del portal público** (7 items, sin especificar en ningún doc):
 filtros laterales, galería con lightbox, barra sticky de reserva, señales de confianza y
@@ -125,6 +133,29 @@ mapa en SVG propio, desglose de precio en el checkout, la insignia de escasez co
 columnas en «Nueva reserva».
 
 ---
+
+## 4 bis. Del relevamiento del 15/08/2026 — lo que queda
+
+**Hecho:** P6 (documentación), P1 (exención de IVA, ADR 0024), P4 (fuente de la
+cotización declarada), P3 (desayuno suelto contado por la cocina), P2 (garantía
+de tarjeta tokenizada, ADR 0025).
+
+**P5 · Booking: bandeja, comentarios y analytics — DIFERIDO POR EL CLIENTE.**
+No arrancar sin confirmarlo con él. Las tablas `canal_mensajes` y `canal_resenas`
+ya existen (migración 0038) y hoy se cargan a mano. Lo primero a resolver **no es
+código** sino una pregunta: ¿qué de todo eso se puede obtener sin API de partner?
+Verificar qué exporta realmente el extranet antes de prometer nada.
+
+**Preguntas abiertas que condicionan lo entregado** (ninguna bloquea, las dos
+funciones andan con supuestos declarados en su ADR):
+
+| Pregunta | A qué afecta |
+|---|---|
+| ¿Facturan sin IVA a los extranjeros, o cobran y tramitan reintegro? | ADR 0024. El modelo soporta lo primero, que es lo que prevé la norma |
+| ¿Qué le piden al huésped para aplicar la exención? | Hoy se registra lo que recepción declara; el sistema no verifica el origen del pago |
+| ¿Tienen pasarela contratada? | ADR 0025. Sin pasarela la verificación de tarjeta responde `no_soportado` y lo dice en pantalla |
+| ¿La garantía es para cobrar no-shows o solo para «tener algo anotado»? | Si es lo segundo, con los últimos 4 dígitos alcanza |
+| El desayuno extra, ¿lleva IVA? ¿USD 15 fijo? | Hoy es un producto más del catálogo, gravado como cualquier consumo |
 
 ## 5. Acción del usuario — 11 items que el código no puede resolver
 

@@ -2,9 +2,16 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { hoyISO, diasEntre, formatoFechaCorta } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda, patronOr } from '@/lib/listados'
+import {
+  construirQuery,
+  terminoBusqueda,
+  patronOr,
+  paginaActual,
+  rangoDePagina,
+} from '@/lib/listados'
 import {
   BarraHerramientas,
+  Paginacion,
   BotonExportar,
   Buscador,
   Chip,
@@ -103,6 +110,7 @@ export default async function MantenimientoPage({
     ok?: string
     error?: string
     generadas?: string
+    pagina?: string
   }>
 }) {
   await requerirAcceso('mantenimiento')
@@ -114,9 +122,19 @@ export default async function MantenimientoPage({
     ? (sp.prioridad as Prioridad)
     : undefined
 
+  /*
+    Pagina. Sin esto la consulta traía la tabla entera y PostgREST la cortaba en
+    1000 filas **sin avisar**: el listado se quedaba mudo a partir de ahí y nadie
+    podía saber que faltaban órdenes.
+  */
+  const pagina = paginaActual(sp.pagina)
+  const { desde, hasta } = rangoDePagina(pagina)
+
   let consulta = supabase
     .from('ordenes_mantenimiento')
-    .select('id, titulo, descripcion, prioridad, estado, creada_en, unidad:unidades(nombre)')
+    .select('id, titulo, descripcion, prioridad, estado, creada_en, unidad:unidades(nombre)', {
+      count: 'exact',
+    })
     .order('creada_en', { ascending: false })
 
   if (estado) consulta = consulta.eq('estado', estado)
@@ -124,26 +142,55 @@ export default async function MantenimientoPage({
   const termino = terminoBusqueda(sp.q)
   if (termino) consulta = consulta.or(`titulo.ilike.${patronOr(termino)},descripcion.ilike.${patronOr(termino)}`)
 
-  const [{ data: ordenesData }, { data: unidadesData }, { data: todasData }, { data: planesData }] =
-    await Promise.all([
-      consulta,
-      supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
-      // Sin filtrar: los indicadores deben reflejar el total, no la vista actual.
-      supabase.from('ordenes_mantenimiento').select('estado, prioridad'),
-      supabase
-        .from('planes_mantenimiento')
-        .select('id, titulo, cada_meses, proxima_ejecucion, activo, unidad:unidades(nombre)')
-        .eq('activo', true)
-        .order('proxima_ejecucion'),
-    ])
+  /*
+    Los indicadores se cuentan EN LA BASE, no trayendo la tabla.
+
+    Antes esto era `select('estado, prioridad')` sobre `ordenes_mantenimiento`
+    entera, y PostgREST corta en 1000 filas (`max_rows`, supabase/config.toml:10)
+    **con HTTP 200 y sin ningún aviso**. Verificado sembrando 1100 filas: la app
+    recibía 1000, `Content-Range: 0-999/*`, sin error. O sea que a partir de la
+    fila 1001 el KPI mostraba un número equivocado y nada lo delataba.
+
+    Con `count: 'exact', head: true` la cuenta la hace Postgres y no viaja ni una
+    fila: es correcto a cualquier volumen y además más barato.
+  */
+  const [
+    { data: ordenesData, count: enFiltro },
+    { data: unidadesData },
+    { count: pendientesCount },
+    { count: enProcesoCount },
+    { count: urgentesCount },
+    { data: planesData },
+  ] = await Promise.all([
+    consulta.range(desde, hasta),
+    supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
+    supabase
+      .from('ordenes_mantenimiento')
+      .select('*', { count: 'exact', head: true })
+      .eq('estado', 'pendiente'),
+    supabase
+      .from('ordenes_mantenimiento')
+      .select('*', { count: 'exact', head: true })
+      .eq('estado', 'en_proceso'),
+    supabase
+      .from('ordenes_mantenimiento')
+      .select('*', { count: 'exact', head: true })
+      .eq('prioridad', 'alta')
+      .neq('estado', 'resuelta'),
+    supabase
+      .from('planes_mantenimiento')
+      .select('id, titulo, cada_meses, proxima_ejecucion, activo, unidad:unidades(nombre)')
+      .eq('activo', true)
+      .order('proxima_ejecucion'),
+  ])
 
   const ordenes = (ordenesData ?? []) as unknown as Orden[]
+  const totalFiltrado = enFiltro ?? 0
   const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
-  const todas = (todasData ?? []) as { estado: EstadoM; prioridad: Prioridad }[]
 
-  const pendientes = todas.filter((o) => o.estado === 'pendiente').length
-  const enProceso = todas.filter((o) => o.estado === 'en_proceso').length
-  const urgentes = todas.filter((o) => o.prioridad === 'alta' && o.estado !== 'resuelta').length
+  const pendientes = pendientesCount ?? 0
+  const enProceso = enProcesoCount ?? 0
+  const urgentes = urgentesCount ?? 0
 
   const hoy = hoyISO()
   const planes = (planesData ?? []) as unknown as PlanPreventivo[]
@@ -396,6 +443,15 @@ export default async function MantenimientoPage({
             )
           })}
         </ul>
+      )}
+
+      {totalFiltrado > 0 && (
+        <Paginacion
+          base="/panel/mantenimiento"
+          params={{ q: sp.q, estado, prioridad }}
+          pagina={pagina}
+          total={totalFiltrado}
+        />
       )}
     </Pagina>
   )

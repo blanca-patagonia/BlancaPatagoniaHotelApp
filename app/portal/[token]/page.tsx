@@ -71,18 +71,46 @@ export default async function PortalSocioPage({
   const { token } = await params
   const admin = crearClienteAdmin()
 
-  // El token identifica a una agencia o a un proveedor: se prueban ambos.
+  /*
+    El token identifica a una agencia o a un proveedor: se prueban ambos.
+
+    ⚠️ Las dos condiciones de abajo no son decorativas. Antes esta consulta
+    resolvía solo por token, así que:
+
+      · dar de baja una agencia **no le cerraba el portal** — seguía viendo su
+        cuenta corriente, sus contratos y el enlace para firmarlos;
+      · un enlace filtrado servía para siempre, porque no había forma de
+        invalidarlo (migración 0063).
+
+    `activo` cierra el portal al dar de baja al socio; `token_revocado_en` lo
+    cierra al regenerar el enlace, que es lo que se hace cuando uno se filtró.
+  */
   const [{ data: agencia }, { data: proveedor }] = await Promise.all([
-    admin.from('agencias').select('id, nombre, email, cuit').eq('token', token).maybeSingle(),
-    admin.from('proveedores').select('id, nombre, email, cuit').eq('token', token).maybeSingle(),
+    admin
+      .from('agencias')
+      .select('id, nombre, email, cuit')
+      .eq('token', token)
+      .eq('activo', true)
+      .is('token_revocado_en', null)
+      .maybeSingle(),
+    admin
+      .from('proveedores')
+      .select('id, nombre, email, cuit')
+      .eq('token', token)
+      .eq('activo', true)
+      .is('token_revocado_en', null)
+      .maybeSingle(),
   ])
 
+  // `notFound()` y no un mensaje explicando que el enlace se dio de baja: a quien
+  // tiene un token que ya no sirve no hay por qué confirmarle que alguna vez fue
+  // válido, ni de qué socio era.
   const socio = (agencia ?? proveedor) as Socio | null
   if (!socio) notFound()
   const tipo: TipoContrato = agencia ? 'agencia' : 'proveedor'
   const esAgencia = tipo === 'agencia'
 
-  const [{ data: contratosData }, { data: movsData }, { data: firmasData }] = await Promise.all([
+  const [{ data: contratosData }, { data: movsData }] = await Promise.all([
     admin
       .from('contratos')
       .select('id, tipo, entidad_id, titulo, estado, vigencia_desde, vigencia_hasta')
@@ -100,7 +128,6 @@ export default async function PortalSocioPage({
           .select('tipo, monto, concepto, fecha, estado, vencimiento')
           .eq('proveedor_id', socio.id)
           .order('fecha', { ascending: false }),
-    admin.from('firmas').select('contrato_id, token, fecha_firma'),
   ])
 
   // El filtro por entidad ya lo hace la consulta; se vuelve a aplicar la regla
@@ -117,11 +144,40 @@ export default async function PortalSocioPage({
     movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento),
   )
 
+  /*
+    Las firmas se piden DESPUÉS y acotadas a los contratos de este socio.
+
+    Antes era `admin.from('firmas').select(...)` sin `.eq()` ni `.limit()`: la
+    tabla **entera**, con `service_role`, en cada visita de cualquier socio. Dos
+    problemas:
+
+    · **Funcional y silencioso.** PostgREST corta en 1000 filas sin error
+      (`max_rows`, supabase/config.toml:10). Pasadas las 1000 firmas, a algunos
+      socios les desaparecía el botón «Revisar y firmar» sin que nadie entendiera
+      por qué — el mapa no tenía su contrato.
+    · **De alcance.** Traer todos los tokens de firma del sistema a la memoria de
+      una página pública, cuando se necesitan tres, es una fuga a un `console.log`
+      de distancia.
+
+    Va en una segunda consulta y no en el `Promise.all` porque depende de los
+    contratos: es un viaje más, sobre una lista de a lo sumo unas decenas de ids.
+  */
+  const idsContrato = contratos.map((c) => c.id)
+  const { data: firmasData } = idsContrato.length
+    ? await admin
+        .from('firmas')
+        .select('contrato_id, token, fecha_firma')
+        .in('contrato_id', idsContrato)
+        .is('fecha_firma', null)
+    : { data: [] }
+
   const firmas = (firmasData ?? []) as {
     contrato_id: string
     token: string
     fecha_firma: string | null
   }[]
+  // El `.is('fecha_firma', null)` ya deja solo las pendientes; el filtro se
+  // mantiene para que la regla siga siendo evidente al leer esta línea.
   const tokenPorContrato = new Map(
     firmas.filter((f) => !f.fecha_firma).map((f) => [f.contrato_id, f.token]),
   )

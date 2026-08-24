@@ -3,6 +3,9 @@ import {
   desayunaEn,
   listaDeDesayuno,
   resumenDeVentas,
+  puedeCargarConsumo,
+  motivoNoCargable,
+  MENSAJES_NO_CARGABLE,
   type EstadiaServicio,
   type ConsumoVendido,
 } from '@/lib/domain/servicio'
@@ -163,5 +166,118 @@ describe('resumenDeVentas', () => {
       { productoCodigo: 'X', productoNombre: 'X', categoria: 'otro', cantidad: 3, precioUnitario: 0.1, fecha: '2026-03-10' },
     ]
     expect(resumenDeVentas(centavos, '2026-03-10', '2026-03-10').totalGeneral).toBe(0.3)
+  })
+})
+
+/**
+ * Desayuno vendido suelto (P3 del relevamiento del 15/08/2026).
+ *
+ * «Llegan los huéspedes a las 9 de la mañana, el check-in es recién a las 2 o 3
+ * de la tarde, y te dicen si se puede subir a desayunar. Tiene un costo de 15
+ * dólares.»
+ *
+ * Lo que importa acá no es cobrarlo —eso es un consumo más— sino que la COCINA
+ * lo cuente. Un cubierto vendido que no aparece en la lista es un desayuno que
+ * no se prepara, y es justo el problema que esta pantalla existe para evitar.
+ */
+describe('desayunos extra vendidos sueltos', () => {
+  const estadia: EstadiaServicio = {
+    reservaCodigo: 'BP-1',
+    unidad: '101',
+    huesped: 'Pérez, Ana',
+    checkIn: '2026-08-10',
+    checkOut: '2026-08-12',
+    huespedes: 2,
+  }
+
+  it('el extra suma al total de cubiertos que la cocina tiene que preparar', () => {
+    const sinExtra = listaDeDesayuno([estadia], '2026-08-11')
+    const conExtra = listaDeDesayuno([estadia], '2026-08-11', [
+      {
+        reservaCodigo: 'BP-2',
+        huesped: 'Gómez, Luis',
+        unidad: null,
+        cubiertos: 2,
+        fecha: '2026-08-11',
+      },
+    ])
+
+    expect(sinExtra.totalCubiertos).toBe(2)
+    expect(conExtra.totalCubiertos).toBe(4)
+    expect(conExtra.totalExtras).toBe(2)
+  })
+
+  it('el extra sin habitación asignada se muestra con guion, no vacío', () => {
+    // El huésped llegó antes del check-in: todavía no tiene unidad. Una celda
+    // vacía se lee como un dato que falta por error.
+    const lista = listaDeDesayuno([], '2026-08-11', [
+      {
+        reservaCodigo: 'BP-2',
+        huesped: 'Gómez, Luis',
+        unidad: null,
+        cubiertos: 1,
+        fecha: '2026-08-11',
+      },
+    ])
+    expect(lista.lineas[0].unidad).toBe('—')
+    expect(lista.lineas[0].esExtra).toBe(true)
+  })
+
+  it('un extra de OTRA fecha no se cuela en la lista del día', () => {
+    const lista = listaDeDesayuno([estadia], '2026-08-11', [
+      {
+        reservaCodigo: 'BP-2',
+        huesped: 'Gómez, Luis',
+        unidad: null,
+        cubiertos: 5,
+        fecha: '2026-08-20',
+      },
+    ])
+    expect(lista.totalExtras).toBe(0)
+    expect(lista.totalCubiertos).toBe(2)
+  })
+
+  it('las líneas incluidas siguen marcadas como NO extra', () => {
+    const lista = listaDeDesayuno([estadia], '2026-08-11')
+    expect(lista.lineas[0].esExtra).toBe(false)
+    expect(lista.totalExtras).toBe(0)
+  })
+
+  it('sin extras, la lista se comporta igual que antes', () => {
+    // Garantía de que el parámetro nuevo es opcional y no cambia nada existente.
+    const lista = listaDeDesayuno([estadia], '2026-08-11')
+    expect(lista.totalCubiertos).toBe(2)
+    expect(lista.lineas).toHaveLength(1)
+  })
+})
+
+describe('cuándo se le puede cargar un consumo a una reserva', () => {
+  it('al que llegó temprano y todavía no hizo check-in SÍ se le puede cobrar', () => {
+    // Es el caso del pedido: son las 9, el check-in es a las 15, desayuna igual.
+    expect(puedeCargarConsumo('confirmada')).toBe(true)
+    expect(puedeCargarConsumo('pagada')).toBe(true)
+  })
+
+  it('al que ya hizo check-out esta mañana también, porque desayunó de verdad', () => {
+    expect(puedeCargarConsumo('checkout')).toBe(true)
+  })
+
+  it('lo que cierra la cuenta es la FACTURA, no el check-out', () => {
+    // Un cargo posterior no entraría en el comprobante ya emitido, y `facturas`
+    // es inmutable (migración 0034).
+    expect(puedeCargarConsumo('checkout', true)).toBe(false)
+    expect(motivoNoCargable('checkout', true)).toBe('cargo_ya_facturada')
+    expect(puedeCargarConsumo('in_house', true)).toBe(false)
+  })
+
+  it('una reserva cancelada o no-show no admite cargos: no hubo servicio', () => {
+    expect(puedeCargarConsumo('cancelada')).toBe(false)
+    expect(puedeCargarConsumo('no_show')).toBe(false)
+    expect(motivoNoCargable('cancelada', false)).toBe('cargo_anulada')
+  })
+
+  it('cada motivo explica qué hacer, no solo que no se puede', () => {
+    expect(MENSAJES_NO_CARGABLE.cargo_ya_facturada).toMatch(/cobralo aparte/i)
+    expect(MENSAJES_NO_CARGABLE.cargo_anulada.length).toBeGreaterThan(30)
   })
 })

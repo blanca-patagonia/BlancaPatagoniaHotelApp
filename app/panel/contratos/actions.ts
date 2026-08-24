@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
+import { requerirAcceso } from '@/lib/auth/session'
 import { hoyISO } from '@/lib/fechas'
 import {
   puedeEnviar,
@@ -24,8 +25,7 @@ export interface EstadoContratoForm {
 
 /** Los contratos los gestionan solo admin y gerencia (RLS lo repite en la base). */
 async function exigirGestion() {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  const sesion = await requerirAcceso('contratos')
   return sesion
 }
 
@@ -101,8 +101,16 @@ export async function enviarAFirmar(formData: FormData): Promise<void> {
     redirect(`/panel/contratos/${id}?error=no_enviable`)
   }
 
-  // La base genera el token (`gen_random_uuid()`); el proveedor arma la URL.
-  const { data: firma, error: errorFirma } = await supabase
+  /*
+    La base genera el token (`gen_random_uuid()`); el proveedor arma la URL.
+
+    Va por `crearClienteAdmin` porque desde la migración 0060 `firmas.token` no
+    es legible con el cliente del usuario: es la credencial que permite firmar el
+    contrato. El `insert` lo hace el mismo cliente para poder devolverlo en el
+    `select` de la misma sentencia; la autorización ya la impuso el
+    `requerirAcceso` de arriba.
+  */
+  const { data: firma, error: errorFirma } = await crearClienteAdmin()
     .from('firmas')
     .insert({
       contrato_id: id,

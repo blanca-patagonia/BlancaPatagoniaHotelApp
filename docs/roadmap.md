@@ -106,6 +106,61 @@ diseño / implementación / pruebas de la tesis.
 - [x] 21 Catálogo público de alojamientos (`/alojamientos` + detalle por tipo),
       con precios por temporada. Pendiente: incorporar las fotos del hotel
 
+## Modernización WinPAX (numeración propia de 11 pasos) — ✅ 2026-08-16
+
+El cliente venía de **WinPAX** (Oracle Forms, ~año 2000) y se cubrieron sus
+funciones core. El plan completo, con el porqué de cada decisión, está en
+[`docs/modernizacion-winpax.md`](modernizacion-winpax.md). Migraciones `0036`–`0043`.
+
+- [x] 1 Cotización de divisas automática con respaldo manual (ADR 0020, cierra el ADR 0003)
+- [x] 2 Fila resumen de la grilla y estados legibles sin color
+- [x] 3 Diez vistas operativas del listado de reservas, con saldo
+- [x] 4-5 Canales de venta: informe CSV de Booking y feed iCal (ADR 0021)
+- [x] 6 Ficha de reserva completa (VIP, ocupantes, plan, garantía, segmento, voucher)
+- [x] 7 Punto de venta con grilla por departamento y número de comanda
+- [x] 8 Folios A/B con split y jerarquía de departamentos
+- [x] 9 Housekeeping móvil ordenado por prioridad real
+- [x] 10 Piso y bloque en `unidades`
+- [x] 11 Respaldos verificables
+
+Tres áreas nuevas del panel: `canales`, `punto_venta` y `respaldos`.
+
+> ⚠️ **La sincronización con Booking NO evita el overbooking.** Los dos caminos
+> posibles sin ser Connectivity Partner son de **solo lectura**: nadie le informa
+> a Booking qué queda libre. La solución real es un channel manager y es una
+> contratación del hotel (ADR 0021). No quitar esas advertencias de la pantalla.
+
+## Bloque Booking (B1–B10)
+
+- [x] **B1** Costos y comisiones por canal (migración 0049)
+- [x] **B2** Modalidad de cobro del canal (migración 0050)
+- [x] **B4** Mapeo manual de columnas del informe (migración 0051)
+- [x] **B5** Conflicto de cupo detectado al aterrizar (migración 0052)
+- [x] **B6** Ingesta de reseñas y vínculo con la reserva (migración 0054)
+- [x] **B8** Sincronización automática: cron diario que **aterriza, no importa**
+      (`app/api/cron/canales/route.ts`, `vercel.json`, PR #14).
+      Ver [`docs/sincronizacion-automatica.md`](sincronizacion-automatica.md)
+- [ ] **B3** Importador general (refactor sin valor visible por sí solo)
+- [ ] **B7** Feed iCal propio de salida + ADR 0022
+- [ ] **B9** Reporte de neto de comisión y costo por canal.
+      **Tiene demanda del cliente:** en el relevamiento del 15/08/2026 preguntó
+      «cuál nos conviene». La vista `resumen_canal_mes` (0055) ya existe
+- [x] **B10** Documentación al día (este archivo, README, modelo de datos, manual)
+
+## Relevamiento con el cliente — 15/08/2026
+
+Franco (Blanca Patagonia) mostró WinPAX 9 y el extranet de Booking. La mayoría de
+lo pedido ya estaba; lo que faltaba se abordó así:
+
+- [x] **P6** Sincronizar la documentación con el estado real
+- [x] **P1** Exención de IVA a turistas extranjeros (RG 3971) — ADR 0024
+- [x] **P4** Declarar en pantalla la fuente y la antigüedad de la cotización
+- [x] **P3** Desayuno como ítem cobrable fuera de la estadía
+- [x] **P2** Verificar la tarjeta de garantía **sin guardar el número** — ADR 0025
+- [ ] **P5** Booking: bandeja, comentarios y analytics. **Diferido por el propio
+      cliente.** Antes de prometer nada hay que verificar qué exporta realmente el
+      extranet sin API de partner
+
 ## Auditoría de seguridad (numeración propia)
 - [x] Fase 0 — Reconocimiento sin modificar código (`docs/AUDITORIA_INICIAL.md`)
 - [x] Fase 1 — Límite de tasa en entradas públicas y login (migración 0029),
@@ -113,17 +168,27 @@ diseño / implementación / pruebas de la tesis.
 - [x] Fase 2 — Cuatro bugs leyendo el código: precio neto de agencia expuesto a
       `anon` (migración 0030), webhook de pagos que fallaba abierto, inyección de
       condiciones en los filtros `or` y el último `<details>`
-- [ ] Auditar las ~60 políticas RLS una por una: que estén activadas en las 33
-      tablas no dice qué permite cada una. **No se pudo hacer en el entorno de
-      trabajo**: exige ejecutar las políticas contra una base con los cuatro roles
-      y el *pull* de las imágenes de Supabase está bloqueado por política de
-      egreso (403 contra las CDN de los registries)
+- [x] Fase 3 — Alta de usuario sin privilegios (ADR 0017), baja efectiva,
+      numeración operable, tokens de firma fuera del alcance del staff, facturas
+      inmutables, 51 Server Actions con verificación de rol, firma HMAC real en el
+      webhook y simuladores que fallan fuerte en producción (ADR 0018).
+      Migraciones `0032`–`0035`, **aplicadas y verificadas contra Postgres**
+- [x] Matriz de **lectura** RLS exhaustiva: 43 tablas × 4 roles
+      (`tests/rls-por-rol.test.ts`), con la lista traída de la base para que una
+      tabla nueva sin declarar haga fallar el test
+- [ ] Matriz de **escritura** RLS: hoy es dirigida (20 casos elegidos por
+      consecuencia), no exhaustiva. El archivo lo declara. Es el pendiente de
+      seguridad más importante que queda
 - [x] Cerrar el segundo camino al precio neto (migración 0031, ADR 0016): dos
       funciones en vez de una con parámetro, `execute` revocado a `anon` sobre la
       que conoce el neto y privilegios por columna sobre `tarifas`. Se descartó
       `security definer`, que habría desactivado en silencio la guarda de la 0030
 - [ ] Atomicidad de los flujos de varios pasos de `reservas`: hoy un fallo a mitad
       de camino avisa, pero deja los datos a medias. Pide función SQL transaccional
+- [ ] Los tokens de firma y de portal no caducan ni se revocan
 
 ## Pendiente — AFIP WSFE/CAE real
 - [ ] Facturación electrónica real (certificados, punto de venta, CAE)
+- [ ] Emitir la factura en **una sola transacción SQL**: hoy el correlativo se
+      consume antes de pedir el CAE, así que un rechazo deja un salto de
+      numeración, que es obligación formal (ADR 0015)

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import {
@@ -44,9 +44,8 @@ export default async function EditarAgenciaPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const sesion = await requerirAcceso('agencias')
+  await requerirAcceso('agencias')
   const { id } = await params
-  if (!['admin', 'gerencia'].includes(sesion.rol)) redirect(`/panel/agencias/${id}`)
 
   const supabase = await crearClienteServidor()
   const { data } = await supabase

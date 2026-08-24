@@ -44,3 +44,6 @@ supabase/.temp
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Artefactos de la verificación con navegador (Playwright MCP).
+.playwright-mcp/

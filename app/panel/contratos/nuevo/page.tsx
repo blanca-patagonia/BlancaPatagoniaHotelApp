@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
@@ -15,8 +14,7 @@ import type { TipoContrato } from '@/lib/domain/contratos'
  * selects encadenados.
  */
 export default async function NuevoContratoPage() {
-  const sesion = await requerirAcceso('contratos')
-  if (!['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel/contratos')
+  await requerirAcceso('contratos')
 
   const supabase = await crearClienteServidor()
   const [{ data: agencias }, { data: proveedores }, { data: empleados }] = await Promise.all([

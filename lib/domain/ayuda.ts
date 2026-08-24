@@ -85,6 +85,11 @@ export const CAPITULOS: Capitulo[] = [
         detalle:
           'Al irse, apretá "Check-out": se suman los puntos de fidelidad y se le manda la encuesta. Recién ahí aparece el botón para facturar.',
       },
+      {
+        titulo: 'Turistas del exterior: cuándo NO se cobra IVA',
+        detalle:
+          'La exención pide DOS cosas juntas: que el huésped resida en el exterior (se marca en su ficha) y que pague desde el exterior, con tarjeta emitida afuera o transferencia. Un extranjero que paga en efectivo en pesos SÍ paga IVA. Cargá de dónde sale el pago en el bloque "Exención de IVA" de la reserva: el sistema decide solo y te muestra cuánto sale con y sin impuesto. El frigobar y las excursiones siguen con IVA siempre.',
+      },
     ],
   },
   {

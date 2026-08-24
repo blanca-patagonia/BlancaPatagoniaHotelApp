@@ -2,18 +2,22 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda } from '@/lib/listados'
+import {
+  construirQuery,
+  terminoBusqueda,
+  paginaActual,
+  rangoDePagina,
+} from '@/lib/listados'
 import {
   ESTADOS_CONTRATO,
   ETIQUETAS_ESTADO_CONTRATO,
   ETIQUETAS_TIPO_CONTRATO,
-  estaVigente,
-  vencidoPorFecha,
   type EstadoContrato,
   type TipoContrato,
 } from '@/lib/domain/contratos'
 import {
   BarraHerramientas,
+  Paginacion,
   Buscador,
   Chip,
   Encabezado,
@@ -58,7 +62,7 @@ interface ContratoRow {
 export default async function ContratosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; estado?: string; tipo?: string; ok?: string; error?: string }>
+  searchParams: Promise<{ q?: string; estado?: string; tipo?: string; pagina?: string; ok?: string; error?: string }>
 }) {
   const sesion = await requerirAcceso('contratos')
   // Redactar lo restringe la acción a admin y gerencia: la pantalla no ofrece
@@ -74,9 +78,19 @@ export default async function ContratosPage({
     ? (sp.tipo as TipoContrato)
     : undefined
 
+  /*
+    Pagina. Sin esto la consulta traía la tabla entera y PostgREST la cortaba en
+    1000 filas **sin avisar**.
+  */
+  const pagina = paginaActual(sp.pagina)
+  const { desde, hasta } = rangoDePagina(pagina)
+
   let consulta = supabase
     .from('contratos')
-    .select('id, tipo, entidad_id, titulo, estado, vigencia_desde, vigencia_hasta, fecha_firma')
+    .select(
+      'id, tipo, entidad_id, titulo, estado, vigencia_desde, vigencia_hasta, fecha_firma',
+      { count: 'exact' },
+    )
     .order('creado_en', { ascending: false })
 
   if (estado) consulta = consulta.eq('estado', estado)
@@ -86,9 +100,9 @@ export default async function ContratosPage({
 
   // Las entidades son polimórficas: se traen las tres tablas y se arma un mapa
   // de nombres para mostrar con quién se firma cada contrato.
-  const [{ data }, { data: agencias }, { data: proveedores }, { data: empleados }] =
+  const [{ data, count: enFiltro }, { data: agencias }, { data: proveedores }, { data: empleados }] =
     await Promise.all([
-      consulta,
+      consulta.range(desde, hasta),
       supabase.from('agencias').select('id, nombre').order('nombre'),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
       supabase.from('perfiles').select('id, nombre').eq('activo', true).order('nombre'),
@@ -101,11 +115,42 @@ export default async function ContratosPage({
   for (const e of empleados ?? []) nombres.set(e.id as string, e.nombre as string)
 
   const hoy = hoyISO()
-  const vigentes = contratos.filter((c) => estaVigente(c, hoy)).length
-  const pendientesFirma = contratos.filter((c) => c.estado === 'enviado').length
-  const porVencer = contratos.filter(
-    (c) => c.estado === 'enviado' && vencidoPorFecha(c.vigencia_hasta, hoy),
-  ).length
+
+  /*
+    Los KPI se cuentan EN LA BASE, sobre todos los contratos y no sobre la página.
+
+    Al paginar el listado, calcularlos con `contratos.filter(...)` los habría dejado
+    contando solo las 25 filas visibles: los indicadores dirían una cosa distinta en
+    cada página. Es el mismo error que la auditoría encontró en mantenimiento y en
+    objetos perdidos, que ahí venía de PostgREST cortando en 1000 filas y acá vendría
+    de la paginación. La regla es la misma: un indicador se cuenta, no se filtra.
+
+    `vigentes` reproduce `estaVigente()` en SQL: firmado, ya empezado y no vencido.
+    Si esa regla cambia en el dominio hay que cambiarla acá — el test de
+    `lib/domain/contratos.ts` la fija, y este comentario avisa dónde está la copia.
+  */
+  const [{ count: vigentesCount }, { count: pendientesCount }, { count: porVencerCount }] =
+    await Promise.all([
+      supabase
+        .from('contratos')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'firmado')
+        .or(`vigencia_desde.is.null,vigencia_desde.lte.${hoy}`)
+        .or(`vigencia_hasta.is.null,vigencia_hasta.gte.${hoy}`),
+      supabase
+        .from('contratos')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'enviado'),
+      supabase
+        .from('contratos')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'enviado')
+        .lt('vigencia_hasta', hoy),
+    ])
+
+  const vigentes = vigentesCount ?? 0
+  const pendientesFirma = pendientesCount ?? 0
+  const porVencer = porVencerCount ?? 0
 
   const filtros = { q: sp.q, estado, tipo }
   const hayFiltros = Boolean(sp.q || estado || tipo)
@@ -290,6 +335,14 @@ export default async function ContratosPage({
               ))}
             </tbody>
           </Tabla>
+        )}
+        {(enFiltro ?? 0) > 0 && (
+          <Paginacion
+            base="/panel/contratos"
+            params={{ q: sp.q, estado, tipo }}
+            pagina={pagina}
+            total={enFiltro ?? 0}
+          />
         )}
       </Tarjeta>
     </Pagina>

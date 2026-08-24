@@ -1,7 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { enviarPlantilla } from '@/lib/email'
 import { EVENTOS_EMAIL, type EventoEmail } from '@/lib/domain/plantillas'
 
@@ -13,8 +13,7 @@ import { EVENTOS_EMAIL, type EventoEmail } from '@/lib/domain/plantillas'
  * en el servidor y la pantalla lo aclara.
  */
 export async function enviarPlantillaPrueba(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  const sesion = await requerirAcceso('config')
 
   const evento = String(formData.get('evento') ?? '') as EventoEmail
   const para = String(formData.get('para') ?? '').trim()

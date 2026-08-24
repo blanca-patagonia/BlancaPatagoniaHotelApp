@@ -1,0 +1,34 @@
+# Dependabot — actualizaciones de dependencias.
+#
+# Por qué existe: la auditoría encontró 8 vulnerabilidades abiertas (6 altas) y
+# Next.js dos versiones de parche atrás. Ninguna era difícil de arreglar; el
+# problema era que nada avisaba. El paso `npm audit` del CI detecta lo que ya
+# está instalado; esto propone la actualización.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      # Semanal y no diario: un PR por día de dependencias se deja de leer, y un
+      # Dependabot que se ignora es peor que no tenerlo.
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # En español, como el resto del repo.
+    commit-message:
+      prefix: 'deps'
+      prefix-development: 'deps(dev)'
+    groups:
+      # Los parches de todo junto en un solo PR: son los que casi siempre se
+      # mergean sin discusión, y separarlos genera ruido.
+      parches:
+        update-types: ['patch']
+      # React y Next van juntos o no van: subir uno sin el otro rompe tipos.
+      react-y-next:
+        patterns: ['next', 'react', 'react-dom', '@types/react', '@types/react-dom', 'eslint-config-next']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

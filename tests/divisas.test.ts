@@ -12,6 +12,8 @@ import {
   textoEstado,
   validarCotizacion,
   validarCotizacionManual,
+  DESCRIPCION_FUENTE,
+  ETIQUETAS_FUENTE,
   type Cotizacion,
 } from '@/lib/domain/divisas'
 
@@ -329,5 +331,112 @@ describe('textoEstado', () => {
       AHORA,
     )!
     expect(textoEstado(vigente)).toContain('verificá antes de cobrar')
+  })
+})
+
+/**
+ * Honestidad sobre la fuente (P4 del relevamiento del 15/08/2026).
+ *
+ * El pedido del cliente fue «conectarlo al Banco Nación». El BNA no publica un
+ * servicio para consultarlo, así que se usa un tercero que replica el valor. El
+ * ADR 0020 lo dice desde el primer día; lo que faltaba era que **la pantalla**
+ * lo dijera. Estos tests fijan que la aclaración no se pierda en un refactor.
+ */
+describe('de dónde sale la cotización · lo que la pantalla declara', () => {
+  it('ninguna fuente automática se presenta como el Banco Nación', () => {
+    for (const fuente of ['dolarapi', 'argentinadatos'] as const) {
+      const descripcion = DESCRIPCION_FUENTE[fuente]
+      expect(descripcion, `la fuente ${fuente} no aclara que no es el BNA`).toMatch(
+        /no es el Banco Nación/i,
+      )
+    }
+  })
+
+  it('la etiqueta corta ya no dice «oficial», que se leía como que era el BNA', () => {
+    // Decía «DolarAPI (oficial)». «Oficial» describe la cotización, no la
+    // fuente, y quien la leía concluía que el número venía del Banco Nación.
+    expect(ETIQUETAS_FUENTE.dolarapi).toBe('DolarAPI')
+  })
+
+  it('el valor manual se declara como lo que es: cargado a mano y con prioridad', () => {
+    expect(DESCRIPCION_FUENTE.manual).toMatch(/mano/i)
+    expect(DESCRIPCION_FUENTE.manual).toMatch(/gana al autom/i)
+  })
+
+  it('las tres fuentes tienen descripción: una sin declarar es la que engaña', () => {
+    for (const fuente of ['dolarapi', 'argentinadatos', 'manual'] as const) {
+      expect(DESCRIPCION_FUENTE[fuente]?.length ?? 0).toBeGreaterThan(20)
+    }
+  })
+})
+
+describe('los tres estados que la pantalla tiene que distinguir', () => {
+  it('automática fresca: se puede cobrar con esto', () => {
+    const v = resolverVigente(
+      [{ cotizacion: { ...oficial, obtenidaEn: haceMinutos(5) }, origen: 'vivo' }],
+      AHORA,
+    )!
+    expect(v.vencida).toBe(false)
+    expect(v.requiereAdvertencia).toBe(false)
+    expect(textoEstado(v)).toBe('En vivo · hace 5 minutos')
+  })
+
+  it('automática vieja: sirve, pero hay que avisarlo', () => {
+    const v = resolverVigente(
+      [{ cotizacion: { ...oficial, obtenidaEn: haceMinutos(MINUTOS_ADVERTENCIA + 60) }, origen: 'almacenada' }],
+      AHORA,
+    )!
+    expect(v.vencida).toBe(true)
+    expect(v.requiereAdvertencia).toBe(true)
+    expect(textoEstado(v)).toContain('verificá antes de cobrar')
+  })
+
+  it('override manual: el valor que el gerente acaba de cargar le gana al automático viejo', () => {
+    /*
+      Es el caso que el cliente pidió y el que `resolverVigente` documenta: el
+      administrador carga un valor a mano porque la API venía dando cualquier
+      cosa, y ese valor tiene que ganarle al automático de hace dos horas.
+
+      La regla es «gana la más reciente, sin privilegiar la fuente», no «el
+      manual siempre gana». La diferencia importa: un manual de la semana pasada
+      NO debe pisar al automático de hace un minuto, porque entonces una carga
+      olvidada congelaría el sistema para siempre. El test de abajo fija esa
+      contracara.
+    */
+    const v = resolverVigente(
+      [
+        { cotizacion: { ...oficial, obtenidaEn: haceMinutos(120) }, origen: 'vivo' },
+        {
+          cotizacion: { ...oficial, venta: 1510, fuente: 'manual', obtenidaEn: haceMinutos(10) },
+          origen: 'manual',
+        },
+      ],
+      AHORA,
+    )!
+    expect(v.origen).toBe('manual')
+    expect(v.venta).toBe(1510)
+    expect(textoEstado(v)).toContain('Valor manual')
+  })
+
+  it('un manual viejo NO congela el sistema: el automático reciente le gana', () => {
+    // La contracara de la regla anterior. Sin esto, una carga manual olvidada
+    // hace un mes seguiría siendo «la vigente» para siempre.
+    const v = resolverVigente(
+      [
+        { cotizacion: { ...oficial, venta: 1490, obtenidaEn: haceMinutos(2) }, origen: 'vivo' },
+        {
+          cotizacion: {
+            ...oficial,
+            venta: 1200,
+            fuente: 'manual',
+            obtenidaEn: haceMinutos(60 * 24 * 30),
+          },
+          origen: 'manual',
+        },
+      ],
+      AHORA,
+    )!
+    expect(v.origen).toBe('vivo')
+    expect(v.venta).toBe(1490)
   })
 })

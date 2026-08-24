@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirRol } from '@/lib/auth/session'
 import { puedeAvanzar, type EtapaComercial } from '@/lib/domain/comercial'
 import { TIPOS_CUENTA } from '@/lib/domain/cuentas'
 import { cortarSiFalla } from '@/lib/acciones'
@@ -19,8 +19,7 @@ export async function crearAgencia(
   _prev: EstadoAgencia,
   formData: FormData,
 ): Promise<EstadoAgencia> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirRol('admin', 'gerencia')
 
   const nombre = String(formData.get('nombre') ?? '').trim()
   const tipo = String(formData.get('tipo') ?? 'agencia')
@@ -53,8 +52,7 @@ export async function crearAgencia(
  * competencia de gerencia.
  */
 export async function registrarMovimiento(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirRol('admin', 'gerencia')
 
   const agenciaId = String(formData.get('agencia_id') ?? '')
   const tipo = String(formData.get('tipo') ?? '')
@@ -83,8 +81,7 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
  * mismo que testea Vitest: no se puede saltear de «contacto» a «activa».
  */
 export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirRol('admin', 'gerencia')
 
   const id = String(formData.get('agencia_id') ?? '')
   const nueva = String(formData.get('etapa') ?? '') as EtapaComercial
@@ -110,8 +107,7 @@ export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
 
 /** Actualiza los datos de la agencia (incluida su condición frente al IVA). */
 export async function actualizarAgencia(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirRol('admin', 'gerencia')
 
   const id = String(formData.get('agencia_id') ?? '')
   const descuento = Number(formData.get('descuento_pct'))
@@ -140,8 +136,7 @@ export async function actualizarAgencia(formData: FormData): Promise<void> {
  * históricas siguen apuntando a ella.
  */
 export async function alternarActivoAgencia(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirRol('admin', 'gerencia')
 
   const id = String(formData.get('agencia_id') ?? '')
   const activo = String(formData.get('activo') ?? '') === 'true'
@@ -152,4 +147,63 @@ export async function alternarActivoAgencia(formData: FormData): Promise<void> {
   }
   revalidatePath('/panel/agencias')
   redirect(`/panel/agencias/${id}`)
+}
+
+/**
+ * Regenera el enlace del portal de una agencia.
+ *
+ * Es la salida cuando un enlace se filtró: un reenvío de correo, el historial de
+ * un navegador compartido, alguien que dejó la empresa. Antes no había ninguna
+ * —el token se generaba al crear la agencia y servía para siempre—.
+ *
+ * El token viejo se marca revocado **en la misma sentencia** en que nace el
+ * nuevo. Si fueran dos pasos, entre uno y otro habría un instante con los dos
+ * enlaces vivos, que es justo lo contrario de lo que se quiere.
+ */
+export async function regenerarEnlacePortal(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  if (!id) redirect('/panel/agencias')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('agencias')
+    .update({
+      token: crypto.randomUUID(),
+      // Se deja constancia de cuándo se rotó. La columna se llama «revocado» por
+      // el enlace anterior, que es lo que deja de servir en este instante.
+      token_revocado_en: null,
+    })
+    .eq('id', id)
+
+  cortarSiFalla(error, `/panel/agencias/${id}`, 'enlace')
+
+  revalidatePath(`/panel/agencias/${id}`)
+  redirect(`/panel/agencias/${id}?ok=enlace`)
+}
+
+/**
+ * Da de baja el enlace del portal sin generar otro.
+ *
+ * Distinto de regenerar: acá el socio queda **sin acceso** hasta que alguien le
+ * genere uno nuevo. Es lo que corresponde cuando se corta la relación pero la
+ * cuenta sigue abierta por saldos pendientes.
+ */
+export async function revocarEnlacePortal(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  if (!id) redirect('/panel/agencias')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('agencias')
+    .update({ token_revocado_en: new Date().toISOString() })
+    .eq('id', id)
+
+  cortarSiFalla(error, `/panel/agencias/${id}`, 'enlace')
+
+  revalidatePath(`/panel/agencias/${id}`)
+  redirect(`/panel/agencias/${id}?ok=enlace_revocado`)
 }

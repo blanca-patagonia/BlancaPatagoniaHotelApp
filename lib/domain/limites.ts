@@ -10,7 +10,7 @@
  * nadie real y sí frena a un script.
  */
 
-export type AccionLimitada = 'reserva_publica' | 'login' | 'encuesta'
+export type AccionLimitada = 'reserva_publica' | 'login' | 'encuesta' | 'recuperar_password'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -47,6 +47,27 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 10,
     minutos: 15,
     motivo: 'Fuerza bruta contra las cuentas del personal.',
+  },
+
+  /*
+    Recuperación de contraseña. Tres por hora y por IP.
+
+    Dos cosas que protege, y la segunda es la que importa:
+
+    · Que nadie use el formulario como ametralladora de correos contra la casilla
+      de un empleado.
+    · Que no se pueda **enumerar cuentas**. La pantalla responde siempre lo mismo
+      exista o no el email —eso ya cierra la vía obvia—, pero sin límite un script
+      podría medir tiempos de respuesta sobre miles de direcciones. Tres por hora
+      hace que eso no escale.
+
+    Es más bajo que el del login a propósito: olvidarse la contraseña y pedir el
+    enlace tres veces en una hora ya es raro; teclearla mal diez veces, no.
+  */
+  recuperar_password: {
+    maximo: 3,
+    minutos: 60,
+    motivo: 'Enumeración de cuentas del staff y correo no solicitado.',
   },
 
   /*

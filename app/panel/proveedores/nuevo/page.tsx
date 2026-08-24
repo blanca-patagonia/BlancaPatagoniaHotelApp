@@ -1,13 +1,11 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
 import { FormularioProveedor } from '../formulario'
 
 /** Alta de proveedor en su propia pantalla (antes plegada dentro del listado). */
 export default async function NuevoProveedorPage() {
-  const sesion = await requerirAcceso('proveedores')
-  if (!['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel/proveedores')
+  await requerirAcceso('proveedores')
 
   return (
     <Pagina ancho="angosto">

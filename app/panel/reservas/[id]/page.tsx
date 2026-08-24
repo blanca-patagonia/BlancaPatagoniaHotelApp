@@ -37,8 +37,25 @@ import {
   emitirFactura,
   reprogramarReserva,
   cambiarUnidadReserva,
+  fijarOrigenDelPago,
+  verificarTarjetaGarantia,
 } from '../actions'
 import { motivoNoFacturable, MENSAJES_NO_FACTURABLE } from '@/lib/domain/facturacion'
+import { MENSAJES_NO_CARGABLE } from '@/lib/domain/servicio'
+import {
+  exentoDeIva,
+  motivoSinExencion,
+  desglosarConExencion,
+  MENSAJES_SIN_EXENCION,
+} from '@/lib/domain/exencion-iva'
+import {
+  ETIQUETAS_VERIFICACION,
+  MENSAJES_GARANTIA,
+  garantiaSirveParaCobrar,
+  motivoGarantiaNoSirve,
+  tarjetaEnmascarada,
+  type EstadoVerificacionTarjeta,
+} from '@/lib/domain/garantia-tarjeta'
 import { puedeCambiarUnidad, MENSAJES_RECHAZO_MUDANZA } from '@/lib/domain/mudanzas'
 import { unidadesDisponibles } from '@/lib/availability/disponibilidad'
 import { BotonEnvio } from '../../_components/boton-envio'
@@ -128,6 +145,16 @@ const MENSAJES_ERROR: Record<string, string> = {
   tarifa_destino:
     'La mudanza se hizo, pero no hay tarifa cargada para el tipo de destino: el total quedó sin recotizar.',
   mudanza: 'No se pudo cambiar la unidad.',
+  origen_pago:
+    'No se pudo guardar el origen del pago. La exención de IVA quedó como estaba: revisala antes de facturar.',
+  // Cargos que la cuenta ya no admite (P3).
+  ...MENSAJES_NO_CARGABLE,
+  // Garantía de tarjeta (P2, ADR 0025).
+  tarjeta_incompleta: 'Faltan el número y el vencimiento de la tarjeta.',
+  tarjeta_sin_proveedor:
+    'No hay una pasarela configurada para verificar tarjetas. Avisá antes de confiar en esta garantía.',
+  tarjeta:
+    'No se pudo guardar el resultado de la verificación. La garantía quedó como estaba: revisala antes del check-in.',
 }
 
 const ACCION_ESTADO: Record<EstadoReserva, { verbo: string; color: string }> = {
@@ -157,12 +184,22 @@ interface Reserva {
   garantia: Garantia
   segmento: Segmento
   voucher: string
+  agencia_id: string | null
+  /** Origen del pago para la exención de IVA (RG 3971). `null` = sin definir. */
+  pago_desde_exterior: boolean | null
+  /* Garantía de tarjeta (ADR 0025). NUNCA hay acá un número de tarjeta. */
+  tarjeta_ultimos4: string | null
+  tarjeta_marca: string | null
+  tarjeta_vencimiento: string | null
+  tarjeta_verificacion: EstadoVerificacionTarjeta
+  tarjeta_verificada_en: string | null
   huesped: {
     apellido: string
     nombre: string
     email: string | null
     doc_numero: string
     vip: boolean
+    residente_exterior: boolean | null
   } | null
   estadias: {
     periodo: string
@@ -206,7 +243,7 @@ export default async function DetalleReservaPage({
   const { data } = await supabase
     .from('reservas')
     .select(
-      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
+      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, agencia_id, pago_desde_exterior, tarjeta_ultimos4, tarjeta_marca, tarjeta_vencimiento, tarjeta_verificacion, tarjeta_verificada_en, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip, residente_exterior), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
     )
     .eq('id', id)
     .single()
@@ -227,6 +264,64 @@ export default async function DetalleReservaPage({
   const periodo = estadia ? parsearPeriodo(estadia.periodo) : null
   const noches = periodo ? diasEntre(periodo.desde, periodo.hasta) : 0
   const transiciones = transicionesPosibles(reserva.estado)
+
+  /*
+    Exención de IVA al turista del exterior (RG 3971, ADR 0024).
+
+    Se calcula con la MISMA función que usa `emitirFactura`, para que lo que la
+    pantalla anuncia y lo que el comprobante hace no puedan separarse. Si acá se
+    reimplantara la regla, un cambio en una sola de las dos copias haría que la
+    ficha prometiera una exención que la factura después no aplica.
+  */
+  const condicionExencion = {
+    residenteExterior: Boolean(reserva.huesped?.residente_exterior),
+    pagoDesdeExterior: reserva.pago_desde_exterior,
+  }
+  const exento = !reserva.agencia_id && exentoDeIva(condicionExencion)
+  const motivoExencion = motivoSinExencion(condicionExencion)
+
+  /*
+    El importe que la ficha anuncia sale de `desglosarConExencion`, la MISMA
+    función que usa `emitirFactura`. No de `reserva.total_neto`.
+
+    Se hacía así y estaba mal: `total_neto` es una columna que puebla el alta
+    (migración 0039) y **puede venir en cero** —una reserva creada por un camino
+    que no la completa, o anterior a esa migración—. Con `total_neto = 0` la
+    pantalla anunciaba «sale sin IVA: USD 0,00 en vez de USD 363,00», un número
+    absurdo dicho con total confianza. Y peor: la factura sí calculaba bien los
+    USD 300, así que **la ficha prometía una cosa y el comprobante hacía otra**.
+
+    Detectado abriendo la pantalla en el navegador; ningún test lo veía porque el
+    número venía de la base y no del dominio.
+
+    Acá se pasa `consumosConIva: 0` a propósito: es una **vista previa del
+    alojamiento**, que es lo que cambia con la exención. Los consumos se suman en
+    la cuenta y siguen gravados, y el texto lo aclara.
+  */
+  const ALICUOTA_PREVIA = 21
+  const previaExencion = desglosarConExencion({
+    alojamientoConIva: Number(reserva.total),
+    consumosConIva: 0,
+    alicuota: ALICUOTA_PREVIA,
+    exento: true,
+  })
+
+  /*
+    Garantía de tarjeta (ADR 0025).
+
+    La pregunta que responde no es «¿la tarjeta es válida hoy?» sino «¿va a
+    servir el día que haya que cobrar un no-show?». Por eso la fecha de
+    referencia es la del check-in y no la de hoy: una tarjeta que vence el mes
+    que viene no sirve para una estadía de dentro de dos meses.
+  */
+  const garantiaTarjeta = {
+    estado: reserva.tarjeta_verificacion,
+    verificadaEn: reserva.tarjeta_verificada_en,
+    vencimiento: reserva.tarjeta_vencimiento,
+  }
+  const fechaGarantia = periodo?.desde ?? hoyISO()
+  const garantiaOk = garantiaSirveParaCobrar(garantiaTarjeta, fechaGarantia)
+  const motivoGarantia = motivoGarantiaNoSirve(garantiaTarjeta, fechaGarantia)
 
   // Preview del cargo por cancelación (política estándar).
   let cargo: { dias: number; monto: number } | null = null
@@ -451,6 +546,107 @@ export default async function DetalleReservaPage({
                 (noShowEsCobrable(reserva.garantia) ? '' : ' — un no-show no sería cobrable')
               }
             />
+
+            {/* ── Tarjeta de garantía (ADR 0025) ───────────────────────────
+                El sistema NO guarda el número de tarjeta: guarda el token que
+                devuelve la pasarela, los últimos cuatro dígitos y el resultado
+                de la verificación. Ver el ADR antes de agregar campos acá. */}
+            <div className="border-t border-stone-100 pt-3">
+              <dt className="text-xs tracking-wide text-stone-600 uppercase">
+                Tarjeta de garantía
+              </dt>
+              <dd className="mt-1.5 space-y-2 text-sm">
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="tabular font-medium text-stone-800">
+                    {tarjetaEnmascarada(reserva.tarjeta_ultimos4, reserva.tarjeta_marca)}
+                  </span>
+                  <Etiqueta
+                    tono={
+                      garantiaOk
+                        ? 'exito'
+                        : reserva.tarjeta_verificacion === 'rechazada'
+                          ? 'peligro'
+                          : 'alerta'
+                    }
+                  >
+                    {ETIQUETAS_VERIFICACION[reserva.tarjeta_verificacion]}
+                  </Etiqueta>
+                </p>
+
+                {motivoGarantia && (
+                  <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-700">
+                    {MENSAJES_GARANTIA[motivoGarantia]}
+                  </p>
+                )}
+
+                {/* Formulario SIEMPRE visible: `CLAUDE.md` prohíbe esconder una
+                    acción detrás de un `<details>`, y acá pesa doble — si la
+                    garantía no sirve, cargar otra tarjeta es justo lo que hay
+                    que hacer y no puede estar a un clic de distancia.
+                    `autoComplete="off"` en el número y el código: no tienen por
+                    qué quedar en el historial de un puesto compartido. */}
+                <div className="rounded-lg border border-stone-200 p-3 text-xs">
+                  <p className="mb-2 font-medium text-stone-700">
+                    {reserva.tarjeta_ultimos4 ? 'Cambiar la tarjeta' : 'Cargar una tarjeta'}
+                  </p>
+                  <form
+                    action={verificarTarjetaGarantia}
+                    autoComplete="off"
+                    className="grid gap-2 sm:grid-cols-2"
+                  >
+                    <input type="hidden" name="reserva_id" value={reserva.id} />
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-stone-600">Número de tarjeta</span>
+                      <input
+                        name="tarjeta_numero"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        required
+                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-stone-600">Vencimiento (MM/AA)</span>
+                      <input
+                        name="tarjeta_vencimiento"
+                        placeholder="12/28"
+                        pattern="(0[1-9]|1[0-2])/[0-9]{2}"
+                        required
+                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-stone-600">Código de seguridad</span>
+                      <input
+                        name="tarjeta_cvv"
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-stone-600">Titular</span>
+                      <input
+                        name="tarjeta_titular"
+                        autoComplete="off"
+                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                      />
+                    </label>
+                    <p className="text-[11px] leading-snug text-stone-500 sm:col-span-2">
+                      El sistema <strong>no guarda</strong> el número ni el código de seguridad:
+                      se los manda a la pasarela y conserva solo los últimos cuatro dígitos y el
+                      resultado.
+                    </p>
+                    <div className="sm:col-span-2">
+                      <BotonEnvio variante="secundario" cargando="Verificando…">
+                        Verificar tarjeta
+                      </BotonEnvio>
+                    </div>
+                  </form>
+                </div>
+              </dd>
+            </div>
             {reserva.voucher && <Dato etiqueta="Voucher" valor={reserva.voucher} />}
 
             {/* ── Desglose fiscal ──────────────────────────────────────────
@@ -500,6 +696,65 @@ export default async function DetalleReservaPage({
                 </div>
               </dd>
             </div>
+
+            {/* ── Exención de IVA al turista del exterior (RG 3971, ADR 0024) ──
+                Se muestra solo cuando puede aplicar: si el huésped no reside en
+                el exterior, este bloque sería ruido en la pantalla de todos los
+                días. Una reserva por agencia tampoco lo muestra: ahí el receptor
+                del comprobante es la agencia, no el turista. */}
+            {reserva.huesped?.residente_exterior && !reserva.agencia_id && (
+              <div className="border-t border-stone-100 pt-3">
+                <dt className="text-xs tracking-wide text-stone-600 uppercase">
+                  Exención de IVA · turista del exterior
+                </dt>
+                <dd className="mt-2 space-y-2 text-sm">
+                  {exento ? (
+                    <p className="rounded-lg bg-lenga-50 px-3 py-2 text-lenga-900">
+                      <strong>Corresponde la exención.</strong> Al facturar, el
+                      alojamiento sale sin IVA:{' '}
+                      <span className="tabular font-semibold">
+                        {formatearUSD(previaExencion.exento)}
+                      </span>{' '}
+                      en vez de {formatearUSD(Number(reserva.total))}. Los
+                      consumos (frigobar, excursiones) siguen gravados.
+                    </p>
+                  ) : (
+                    <p className="rounded-lg bg-stone-50 px-3 py-2 text-stone-700">
+                      {motivoExencion && MENSAJES_SIN_EXENCION[motivoExencion]}
+                    </p>
+                  )}
+
+                  <form action={fijarOrigenDelPago} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="reserva_id" value={reserva.id} />
+                    <label className="flex-1 text-xs text-stone-600">
+                      <span className="mb-1 block">¿De dónde sale el pago?</span>
+                      <select
+                        name="origen_pago"
+                        defaultValue={
+                          reserva.pago_desde_exterior === true
+                            ? 'exterior'
+                            : reserva.pago_desde_exterior === false
+                              ? 'local'
+                              : 'sin_definir'
+                        }
+                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                      >
+                        <option value="sin_definir">Todavía no se sabe</option>
+                        <option value="exterior">
+                          Del exterior — tarjeta emitida afuera o transferencia
+                        </option>
+                        <option value="local">
+                          Local — efectivo, tarjeta o transferencia del país
+                        </option>
+                      </select>
+                    </label>
+                    <BotonEnvio variante="secundario" cargando="Guardando…">
+                      Guardar
+                    </BotonEnvio>
+                  </form>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
       </div>
@@ -806,12 +1061,23 @@ export default async function DetalleReservaPage({
                   <span className="font-medium text-stone-800">
                     {formatearUSD((c.cantidad * Number(c.precio_unitario)))}
                   </span>
+                  {/* Quitar un cargo es un borrado irreversible de dinero de la
+                      cuenta del huésped. Antes era un `<button>` crudo con `✕`:
+                      sin confirmación, sin estado de envío y sin nombre
+                      accesible —un lector de pantalla anunciaba «botón»—.
+                      `anularComanda` ya hacía lo correcto para el lote; esto
+                      quedó afuera. */}
                   <form action={quitarConsumo}>
                     <input type="hidden" name="reserva_id" value={reserva.id} />
                     <input type="hidden" name="consumo_id" value={c.id} />
-                    <button className="text-xs text-stone-600 transition hover:text-red-600" title="Quitar">
+                    <BotonEnvio
+                      variante="fantasma"
+                      cargando="Quitando…"
+                      aria-label={`Quitar ${c.producto?.nombre ?? 'el consumo'} de la cuenta`}
+                      confirmar={`¿Quitar ${c.cantidad}× ${c.producto?.nombre ?? 'este consumo'} por ${formatearUSD(c.cantidad * Number(c.precio_unitario))} de la cuenta? No se puede deshacer.`}
+                    >
                       ✕
-                    </button>
+                    </BotonEnvio>
                   </form>
                 </span>
               </li>

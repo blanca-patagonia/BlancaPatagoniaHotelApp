@@ -13,7 +13,7 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**486 tests en verde** (47 archivos, cero salteados contra la base local) · typecheck,
+**1292 tests en verde** (79 archivos, cero salteados contra la base local) · typecheck,
 lint y build limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
@@ -31,6 +31,10 @@ lint y build limpios · CI verificado en GitHub.
 | **Agencias y proveedores** | Cuentas corrientes, pipeline comercial, conciliación, antigüedad de saldos (*aging*) y portal de socios por token |
 | **Reportes** | Ocupación, ingresos, ADR y RevPAR con prorrateo, comparativa contra el mes anterior, evolución de 6 meses, ranking de canales y NPS |
 | **Contratos** | Redacción, envío, firma electrónica por token desde vista pública y verificación de integridad por hash |
+| **Canales de venta** | Importación del informe CSV de Booking y del feed iCal, mapeo manual de columnas, zona de recepción de entrantes, costos y comisiones por canal, conciliación de la factura del canal, mensajes y reseñas. **Solo lectura: no evita el overbooking** ([ADR 0021](docs/decisiones/0021-canales-de-venta-solo-lectura.md)) |
+| **Punto de venta** | Grilla por departamento con buscador, total en vivo, número de comanda y anulación con detalle del importe |
+| **Respaldos** | Exportación verificable de los datos operativos, con el alcance declarado en pantalla. **No es un backup de Postgres**: eso lo hace la plataforma |
+| **Divisas** | Cotización automática con respaldo manual del gerente ([ADR 0020](docs/decisiones/0020-cotizacion-de-divisas.md)) |
 | **Interno** | Conversaciones por canal en tiempo real, avisos fijables, buscador global por rol, auditoría *append-only* y sección de Ayuda |
 
 ### Garantías que impone la base de datos
@@ -39,25 +43,39 @@ La integridad crítica no depende de la aplicación:
 
 - **Anti-overbooking** — restricción de exclusión GiST sobre `estadias`; dos
   reservas no pueden solapar la misma unidad aunque la app falle ([ADR 0002](docs/decisiones/0002-motor-de-disponibilidad.md)).
-- **RLS activado en las 33 tablas**, con lectura pública solo del catálogo.
+- **RLS activado en las 43 tablas** (90 políticas), con lectura pública solo del catálogo.
 - **Auditoría *append-only*** por trigger genérico: el staff lee, no escribe.
 - **Límite de tasa** en las entradas públicas, atómico (inserta y después cuenta).
 
 ### Lo que todavía no está
 
-Los cinco bordes externos son **adapters con stub**, listos para enchufar un
-proveedor real vía variable de entorno, pero **ninguno está integrado**:
-`PaymentProvider`, `EmailProvider`, `FirmaElectronicaProvider`,
-`AsistenteProvider` y `FacturacionElectronicaProvider`. No se procesan pagos ni
-se envían correos reales, y el CAE es simulado.
+Hay **siete puertos** con el mismo patrón (interfaz + implementación
+seleccionable por variable de entorno). Los cinco primeros tienen **simulador y
+ninguno está integrado**: `PaymentProvider`, `EmailProvider`,
+`FirmaElectronicaProvider`, `AsistenteProvider` y
+`FacturacionElectronicaProvider`. **No se procesan pagos ni se envían correos
+reales, y el CAE es simulado.**
 
-El **deploy** (Vercel + Supabase cloud) está pendiente.
+Los otros dos son distintos: `CotizacionProvider` (divisas) y
+`CanalVentaProvider` (OTA) hablan con fuentes públicas sin credenciales, así que
+**no tienen un simulador que mienta**. El respaldo de divisas es el valor que
+cargó un admin a mano; el de canales sí es simulado y no habla con nadie.
+
+Si un simulador queda seleccionado en producción, el sistema **falla al
+arrancar** a propósito ([ADR 0018](docs/decisiones/0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md)).
+
+El **deploy** (Vercel + Supabase cloud) está pendiente. La sincronización
+automática de canales ya tiene su tarea programada (`vercel.json`), documentada
+en [`docs/sincronizacion-automatica.md`](docs/sincronizacion-automatica.md) —
+con la advertencia de que el plan Hobby de Vercel corre **una vez por día**,
+no cada tres horas.
 
 Tres pendientes técnicos, anotados donde viven y no solo acá:
 
-- **Auditar las ~60 políticas RLS una por una.** Que estén activadas en las 33
-  tablas no dice qué permite cada una. Exige ejecutarlas contra una base con los
-  cuatro roles.
+- **Auditar las 90 políticas RLS una por una.** Que estén activadas en las 43
+  tablas no dice qué permite cada una. La matriz de **lectura** ya es exhaustiva
+  (43 tablas × 4 roles, `tests/rls-por-rol.test.ts`); la de **escritura** es
+  dirigida, no exhaustiva, y está declarado en el propio archivo.
 - **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
   de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
   transaccional.
@@ -129,7 +147,7 @@ Toda la documentación vive en [`docs/`](docs/), en español:
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
 - [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
 - [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
-- [Decisiones (ADR)](docs/decisiones/) — 19 decisiones de arquitectura numeradas.
+- [Decisiones (ADR)](docs/decisiones/) — 22 decisiones de arquitectura numeradas.
 - [Auditoría de seguridad](docs/audit/) — qué se corrigió y qué queda abierto.
 - [Manual de usuario](docs/manual-usuario.md) · [Manual técnico](docs/manual-tecnico.md)
 - [Seguridad](docs/SEGURIDAD.md) · [Auditoría inicial](docs/AUDITORIA_INICIAL.md) ·
@@ -145,11 +163,11 @@ app/            # Next.js App Router
   firmar/       #   firma de contratos por token
   encuesta/     #   encuesta de satisfacción por token
   portal/       #   portal de agencias y proveedores por token
-  api/          #   route handlers y webhooks
-lib/            # dominio puro, disponibilidad, pagos, clientes Supabase
-supabase/       # 35 migraciones SQL numeradas + seed
+  api/          #   route handlers, webhooks y cron
+lib/            # dominio puro, disponibilidad, pagos, canales, divisas, clientes Supabase
+supabase/       # 57 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 486 tests (Vitest)
+tests/          # 1292 tests (Vitest)
 ```
 
 ## Scripts
@@ -167,7 +185,7 @@ tests/          # 486 tests (Vitest)
 El test de integración anti-overbooking necesita la base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.
 
-Para correr los 486 en local hay que exportar las tres variables — vitest no lee
+Para correr los 1292 en local hay que exportar las tres variables — vitest no lee
 `.env.local`, y sin la clave publicable los 4 tests del borde público saltean sin
 avisar aunque `EXIGIR_DB=1` esté puesto:
 

@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoProveedor {
@@ -14,8 +14,7 @@ export interface EstadoProveedor {
 }
 
 async function exigirGestion() {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirAcceso('proveedores')
 }
 
 export async function crearProveedor(

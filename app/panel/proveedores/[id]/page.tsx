@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { saldoCuenta, type TipoMovimiento, type Movimiento } from '@/lib/domain/cuentas'
 import { registrarMovimientoProveedor, marcarComprobantePagado } from '../actions'
 import {
@@ -25,7 +26,6 @@ interface Proveedor {
   email: string | null
   telefono: string | null
   activo: boolean
-  token: string
 }
 interface MovRow {
   id: string
@@ -68,17 +68,26 @@ export default async function ProveedorDetallePage({
   const { ok: okParam, error: errorParam } = await searchParams
   const supabase = await crearClienteServidor()
 
-  const [{ data: provData }, { data: movsData }] = await Promise.all([
-    supabase.from('proveedores').select('id, nombre, rubro, cuit, email, telefono, token, activo').eq('id', id).single(),
+  /*
+    El token va por `crearClienteAdmin`; el resto, por el cliente del usuario.
+    Desde la migración 0060 `proveedores.token` no es legible con una sesión de
+    staff: es la credencial de `/portal/<token>`, que expone la cuenta corriente
+    del socio y permite firmar contratos en su nombre.
+  */
+  const [{ data: provData }, { data: movsData }, { data: tokenData }] = await Promise.all([
+    supabase.from('proveedores').select('id, nombre, rubro, cuit, email, telefono, activo').eq('id', id).single(),
     supabase
       .from('movimientos_proveedor')
       .select('id, tipo, monto, concepto, fecha, estado, vencimiento, comprobante')
       .eq('proveedor_id', id)
       .order('fecha', { ascending: false })
       .order('creado_en', { ascending: false }),
+    crearClienteAdmin().from('proveedores').select('token').eq('id', id).maybeSingle(),
   ])
   if (!provData) notFound()
   const proveedor = provData as Proveedor
+  // Accesorio a la ficha: si la lectura privilegiada falla, la pantalla sigue.
+  const tokenPortal = (tokenData as { token: string } | null)?.token ?? null
   const cabeceras = await headers()
   const origen = `${cabeceras.get('x-forwarded-proto') ?? 'http'}://${cabeceras.get('host') ?? 'localhost:3000'}`
   const movs = (movsData ?? []) as MovRow[]
@@ -186,10 +195,10 @@ export default async function ProveedorDetallePage({
           accede: mandalo solo al contacto de la empresa.
         </p>
         <code className="mt-3 block rounded-lg bg-stone-50 px-3 py-2 font-mono text-xs break-all text-stone-700 ring-1 ring-stone-200">
-          {origen}/portal/{proveedor.token}
+          {origen}/portal/{tokenPortal}
         </code>
         <a
-          href={`/portal/${proveedor.token}`}
+          href={`/portal/${tokenPortal}`}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-3 inline-block rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"

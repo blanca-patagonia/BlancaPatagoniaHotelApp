@@ -34,9 +34,7 @@ import { LIMITES, type AccionLimitada } from '@/lib/domain/limites'
  * Detrás de un proxy distinto habría que ajustar este orden. Es preferible eso
  * a un limitador que aparenta funcionar.
  */
-async function ipActual(): Promise<string | null> {
-  const cabeceras = await headers()
-
+export function ipDeCabeceras(cabeceras: Headers): string | null {
   const vercel = cabeceras.get('x-vercel-forwarded-for')?.trim()
   if (vercel) return vercel
 
@@ -52,6 +50,20 @@ async function ipActual(): Promise<string | null> {
     .filter(Boolean)
 
   return saltos.at(-1) ?? null
+}
+
+/**
+ * La misma resolución, leyendo las cabeceras de la petición en curso.
+ *
+ * ⚠️ Es **la única** implementación de esto en el proyecto, y tiene que seguir
+ * siéndolo. Antes había dos: ésta y `ipDePeticion` en `lib/firma/index.ts`, que
+ * había quedado con el bug del primer `x-forwarded-for` que ésta arregló. La
+ * copia vieja alimentaba el límite del asistente público —evadible rotando la
+ * cabecera— y, peor, la IP que se guarda en `firmas.ip` como constancia de quién
+ * firmó un contrato: un dato probatorio que elegía el propio firmante.
+ */
+async function ipActual(): Promise<string | null> {
+  return ipDeCabeceras(await headers())
 }
 
 /**

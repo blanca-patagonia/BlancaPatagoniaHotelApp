@@ -4,7 +4,7 @@ import { headers } from 'next/headers'
 
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { obtenerAsistente } from '@/lib/asistente'
-import { ipDePeticion } from '@/lib/firma'
+import { ipDeCabeceras } from '@/lib/limites'
 import type { RespuestaAsistente } from '@/lib/domain/asistente'
 import { registrarFalla } from '@/lib/acciones'
 
@@ -44,7 +44,7 @@ export async function preguntarAlAsistente(pregunta: string): Promise<RespuestaA
 
   if (respuesta.derivar) {
     const admin = crearClienteAdmin()
-    const ip = ipDePeticion(await headers())
+    const ip = ipDeCabeceras(await headers())
 
     // El conteo lo hace la base, que tiene el índice; la decisión, la app.
     const { data: recientes } = await admin.rpc('consultas_recientes_de_ip', {
