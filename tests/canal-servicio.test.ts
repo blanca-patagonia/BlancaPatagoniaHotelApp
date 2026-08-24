@@ -167,6 +167,42 @@ describe.skipIf(!hayDB)('capa de canales contra la base', () => {
     expect(Number(data!.importe_canal)).toBe(300)
   })
 
+  /*
+    La lectura previa de existentes se hace en UNA consulta por canal (no una por
+    entrante), y eso introdujo un riesgo propio: la identidad de una entrante es
+    **(canal, external_id)**, no el `external_id` solo. Si el mapa se llaveara
+    únicamente por id, dos canales que reusaran el mismo número —cosa que ningún
+    acuerdo impide— se pisarían entre sí: la de Expedia se tomaría como una
+    actualización de la de Booking y se perdería una reserva.
+
+    Este test existe por ese cambio y falla si alguien simplifica la clave.
+  */
+  it('dos canales con el MISMO external_id son dos reservas distintas', async () => {
+    const id = `BK-${sufijo}-multicanal`
+
+    const r = await guardarEntrantes(
+      db,
+      [
+        entrante({ externalId: id, canal: 'booking' }),
+        entrante({ externalId: id, canal: 'expedia' }),
+      ],
+      contexto,
+    )
+
+    expect(r.nuevas, 'una de las dos se tomó como actualización de la otra').toBe(2)
+
+    const { data } = await db
+      .from('canal_reservas')
+      .select('canal')
+      .eq('external_id', id)
+      .order('canal')
+
+    expect((data ?? []).map((f) => (f as { canal: string }).canal)).toEqual([
+      'booking',
+      'expedia',
+    ])
+  })
+
   it('reimportar el mismo informe no duplica', async () => {
     // Es el caso normal: quien baja el informe el lunes y el martes trae las
     // mismas reservas de la semana.

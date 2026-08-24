@@ -2608,3 +2608,23 @@ ver el bug no protege de él. Se comprobó volviendo la función a invoker: la s
 rojo con «expected 50 to be 47».
 
 **1392 tests verdes en 85 archivos.**
+
+### Addendum del 2026-08-24 — el N+1 de la sincronización de canales
+
+`guardarEntrantes` hacía un `select` por entrante antes de decidir si insertar o
+actualizar. Con el insert/update y el devengo de comisión, eran **3·N viajes**: un informe
+de 40 reservas, ~125 round-trips en serie. Con el cron (`maxDuration = 60`) eso no era solo
+lento — un informe grande podía no llegar a terminar.
+
+Ahora los existentes se traen en **una consulta por canal** antes del bucle: de 3·N a
+2·N + 1. Es el mismo patrón que `marcarConflictosDeCupo` ya usaba veinte líneas más abajo.
+
+**Los 20 tests de canales pasaron sin editar una línea**, que es el criterio de terminado
+que el propio repo fija para un refactor.
+
+Se sumó un test por el riesgo que introduce el cambio: la identidad de una entrante es
+**(canal, external_id)**, no el id solo. Si el mapa se llaveara solo por id, dos canales que
+reusaran el mismo número se pisarían y se perdería una reserva. El test falla si alguien
+simplifica la clave.
+
+**1393 tests verdes.**
