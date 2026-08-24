@@ -72,7 +72,7 @@ columnas, conciliar la factura e importar reseñas.
 |---|---|---|
 | ~~Los tokens de portal no caducan ni se revocan~~ ✅ migración 0063 | — | El portal exige `activo` y `token_revocado_en is null`; hay botones para regenerar y dar de baja el enlace. **Queda `firmas.token`**: un contrato enviado y nunca firmado sigue abierto. Su ciclo de vida es del contrato, no del token: lo correcto es que el estado del contrato lo cierre. |
 | ~~Trigger de stock como `SECURITY INVOKER`~~ ✅ migración 0064 | — | **Era peor de lo que decía la sospecha:** no fallaba, descontaba **cero** en silencio. Con sesión de recepción el consumo se cobraba y el stock quedaba igual, porque RLS filtraba la fila y el `update` afectaba 0 filas sin error. Verificado (50 → 50 antes, 50 → 47 después) y con test de regresión que falla sin el arreglo. **`cambiar_unidad_reserva` se probó y NO tenía el problema**: funciona bien para recepción. |
-| Seis listados del panel no paginan | varios `page.tsx` | PostgREST corta en 1000 filas **sin avisar** (`traerTodo` de `lib/paginado.ts`). |
+| ~~Listados sin paginar~~ ✅ parcial | — | Se paginaron mantenimiento, objetos perdidos y contratos —los que crecen—. **Proveedores y agencias NO se paginan a propósito**: filtran en memoria por saldo, que viene de una vista, así que paginar daría un filtro equivocado en cada página. Está escrito en el código. Si crecen, primero hay que mover el filtro a la base. |
 | ~~El portal del socio lee `firmas` entera~~ ✅ | — | Ahora se acota con `.in('contrato_id', …)` sobre los contratos del socio. Traía todos los tokens del sistema para usar tres, y pasadas las 1000 firmas el botón de firmar desaparecía en silencio. |
 | ~~No hay «olvidé mi contraseña»~~ ✅ | `/login/recuperar` | Con límite propio de 3/hora y respuesta uniforme exista o no el email. Verificado: el correo llega. |
 | Emitir factura en **una sola transacción SQL** | `app/panel/reservas/actions.ts` | El perdedor de una carrera gasta un número correlativo y pide un CAE sin fila: con AFIP real es un **salto de numeración**, que es obligación formal (ADR 0015). El test de concurrencia ya monta la carrera; falta afirmar que no hay salto. |
@@ -85,9 +85,14 @@ columnas, conciliar la factura e importar reseñas.
   casos de borrado (migración 0061) y un bloque nuevo de **credenciales por columna**
   (tokens de portal y de firma, migración 0060), que audita algo que la matriz de tablas
   no puede ver.
-- **Los 29 tests de Server Actions corren con la autorización mockeada.**
-  `tests/acciones/entorno.ts` reemplaza `requerirAcceso` por un admin fijo, así que
-  verifican la lógica de negocio y **no** la guarda que más importa.
+- **Los 29 tests de Server Actions siguen corriendo con la autorización mockeada**
+  (`tests/acciones/entorno.ts` reemplaza `requerirAcceso` por un admin fijo), pero
+  el hueco que eso dejaba está cerrado por otro lado: `tests/guardas-de-sesion.test.ts`
+  prueba **la puerta misma** —que `requerirAcceso`, `requerirRol` y `requerirSesion`
+  rechacen de verdad—, que es el mecanismo del que dependen las 51 acciones.
+  Comprobado rompiendo la guarda a propósito: tres tests se ponen en rojo.
+  Migrar los 29 a sesiones reales sigue siendo deseable, pero ya no es lo único
+  que separa la suite de verificar la autorización.
 - **Qué cubre y qué no la matriz de escritura.**
   `tests/rls-escritura-por-rol.test.ts` cubre casos elegidos por consecuencia
   (escalada de privilegio, dinero, inventario, borde público, borrado). Lo que no
@@ -104,9 +109,15 @@ columnas, conciliar la factura e importar reseñas.
 Ninguno cuesta plata hoy, todos son «lo que un sistema serio necesita»:
 
 1. **79% del código en `app/`** — 190 llamadas `.from()` en 56 archivos de rutas contra 5 en `lib/`.
-2. `lib/domain/permisos.ts` no gobierna las escrituras: quedan lugares con el literal `['admin','gerencia']`.
+2. ~~`lib/domain/permisos.ts` no gobierna las escrituras~~ ✅ Los 23 literales se
+   eliminaron: 12 a `requerirAcceso(area)` y 11 a `requerirRol(...)`, que declara
+   que la restricción es más estrecha que el área **a propósito** (agencias incluye
+   recepción, mantenimiento incluye housekeeping: migrarlos a la matriz les habría
+   **dado** permisos que no tenían).
 3. `lib/env.ts` es perezoso y no valida `MERCADOPAGO_*`, `STRIPE_*` ni `RESEND_API_KEY`.
-4. Sin logging estructurado con correlation ID — hoy son `console.error` sueltos.
+4. ~~Sin logging estructurado con correlation ID~~ ✅ `lib/registro.ts`: una línea
+   JSON por evento, con id de petición y ocultamiento de datos sensibles en dos
+   capas (por nombre de campo y por contenido). Sin dependencias nuevas.
 5. Sin captura de errores en producción (Sentry o equivalente).
 6. Sin tests E2E ni de componentes.
 7. ~~Sin `npm audit` en CI, sin Dependabot~~ ✅ los dos configurados. El CI corre además

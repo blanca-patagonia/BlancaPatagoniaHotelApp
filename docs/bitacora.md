@@ -2713,3 +2713,32 @@ con razón: no conocía `requerirRol` y marcó seis acciones como «sin verifica
 enseñó la forma nueva, con el porqué escrito en el propio test.
 
 Quedan **0 literales en código** (uno en un comentario que explica la migración).
+
+### Addendum del 2026-08-24 — quién prueba la puerta
+
+El proyecto tenía las dos mitades de la verificación de autorización y le faltaba el medio:
+
+- `tests/permisos.test.ts` prueba `puedeAcceder(rol, area)` — la **regla**.
+- `tests/autorizacion-acciones.test.ts` prueba que las 51 Server Actions **llamen** a una
+  guarda — análisis estático.
+- **Nadie probaba que la guarda rechace de verdad.**
+
+Y el hueco importa: los 29 tests de Server Actions reemplazan `requerirAcceso` por un no-op
+que devuelve un admin fijo. Si esa función dejara de redirigir, la suite entera seguiría en
+verde.
+
+`tests/guardas-de-sesion.test.ts` cubre el mecanismo: 16 casos sobre `requerirSesion`,
+`requerirAcceso`, `requerirRol` y `obtenerSesion`. Entre ellos, los tres que más valen:
+
+- **un usuario dado de baja no tiene sesión** aunque su login siga siendo válido (la garantía
+  de la migración 0033);
+- **un área apagada no la abre nadie, ni el admin** (`AREAS_OCULTAS`);
+- **recepción tiene el área `agencias` pero no puede mover su cuenta corriente**, que es el
+  caso que justifica que `requerirRol` exista.
+
+Comprobado rompiendo `requerirAcceso` a propósito: **tres tests se ponen en rojo**.
+
+Esto no reemplaza migrar los 29 a sesiones reales —sigue siendo deseable—, pero ya no es lo
+único que separa a la suite de verificar la autorización.
+
+**1416 tests verdes en 87 archivos.**
