@@ -81,7 +81,7 @@ Tarifario 2025/2026 (Anexo A).
 - Dev `npm run dev` · Tests `npm test` · Typecheck `npm run typecheck` · Lint `npm run lint`.
 - **CI (`.github/workflows/ci.yml`): verde y verificado en GitHub** desde la
   corrida #31. Levanta Supabase con Docker, crea el admin y corre typecheck,
-  lint, los 386 tests con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
+  lint, la suite completa con `EXIGIR_DB=1` y el build. Dos cosas a respetar si se
   toca: el paso del seed invoca `node scripts/seed-usuarios.mjs` **directo** y no
   `npm run seed:usuarios` (ese script usa `--env-file-if-exists`, que necesita
   Node ≥ 20.12 y no hay `.env.local` en el runner); y sin ese paso la tabla
@@ -182,7 +182,7 @@ Tarifario 2025/2026 (Anexo A).
   envuelve cada migración en una transacción y Postgres corta con SQLSTATE 55P04;
   el `db reset` falla ahí y **no aplica nada de lo que sigue**. Es lo que le pasó a
   la `0032` y por eso existe la `0035`.
-- **882 tests verdes** (66 archivos), **cero salteados** contra la base local. Para
+- **Tests:** cero salteados contra la base local. Para
   que no salteen hay que exportar `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` **y**
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: vitest no lee `.env.local`, y `EXIGIR_DB=1`
   protege `hayDB` pero **no** `hayAnon` (`tests/db.ts:40`), así que sin la clave
@@ -199,13 +199,26 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 21 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 24 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
   `reservas.garantia` dice si hay de dónde cobrar un no-show) · **ADR 0020**
   cotización de divisas, que **cierra el 0003** · **ADR 0021** canales de venta de
-  solo lectura, con la limitación declarada.
+  solo lectura, con la limitación declarada · **ADR 0023** contabilidad de la
+  comisión de canal · **ADR 0024** exención de IVA al turista del exterior, que se
+  **deriva y no se tilda** · **ADR 0025** verificar la tarjeta de garantía **sin
+  guardar el número** (el simulador declara que no puede, no inventa un «válida»).
+- **Relevamiento con el cliente (15/08/2026), cerrado el 2026-08-24.** Franco
+  mostró WinPAX 9 y el extranet de Booking. La mayoría ya estaba; se hicieron los
+  cinco pedidos que faltaban: documentación al día, exención de IVA (migración
+  0058), fuente de la cotización declarada en pantalla, desayuno suelto contado
+  por la cocina y garantía de tarjeta tokenizada (migración 0059).
+  **Queda solo P5** —bandeja, comentarios y analytics de Booking—, que **difirió
+  el propio cliente**: antes de prometer nada hay que verificar qué exporta el
+  extranet sin API de partner.
+- **1351 tests verdes** (81 archivos), cero salteados, verificados contra una base
+  levantada **desde cero** con las **59** migraciones.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.

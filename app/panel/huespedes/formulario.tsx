@@ -31,6 +31,8 @@ export interface DatosHuesped {
   telefono?: string | null
   nacionalidad?: string | null
   condicion_iva?: CondicionIva
+  /** Una de las dos condiciones de la exención de IVA (RG 3971, ADR 0024). */
+  residente_exterior?: boolean | null
   notas?: string
 }
 
@@ -100,6 +102,26 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
 
       <Campo etiqueta="Nacionalidad">
         <input name="nacionalidad" defaultValue={v.nacionalidad ?? huesped?.nacionalidad ?? ''} className={CAMPO} />
+      </Campo>
+
+      <Campo
+        etiqueta="Residencia"
+        ayuda="La exención de IVA del turista del exterior (RG 3971) exige que el huésped resida afuera Y que pague desde el exterior. La nacionalidad sola no alcanza: el origen del pago se carga en cada reserva."
+      >
+        <label className="flex items-start gap-2 text-sm text-stone-700">
+          <input
+            type="checkbox"
+            name="residente_exterior"
+            value="1"
+            defaultChecked={
+              v.residente_exterior !== undefined
+                ? v.residente_exterior === '1'
+                : Boolean(huesped?.residente_exterior)
+            }
+            className="mt-0.5 h-4 w-4 rounded border-stone-300 text-lago-600"
+          />
+          <span>Reside en el exterior</span>
+        </label>
       </Campo>
 
       <Campo

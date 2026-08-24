@@ -60,7 +60,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
     supabase
       .from('facturas')
       .select(
-        'numero, emitida_en, tipo_comprobante, numero_fiscal, neto, iva, alicuota_iva, cae, cae_vto, cuit_receptor, condicion_iva_receptor',
+        'numero, emitida_en, tipo_comprobante, numero_fiscal, neto, iva, alicuota_iva, exento, motivo_exencion, cae, cae_vto, cuit_receptor, condicion_iva_receptor',
       )
       .eq('reserva_id', id)
       .maybeSingle(),
@@ -82,6 +82,10 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
     neto: number | string | null
     iva: number | string | null
     alicuota_iva: number | string | null
+    /** Parte del `neto` que no tributa (RG 3971). Subconjunto, no sumando. */
+    exento: number | string | null
+    /** Fundamento legal de la exención, impreso al pie del comprobante. */
+    motivo_exencion: string | null
     cae: string | null
     cae_vto: string | null
     cuit_receptor: string | null
@@ -183,13 +187,31 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
             ))}
           </tbody>
           <tfoot>
+            {/* Operación exenta (RG 3971, ADR 0024).
+                Se muestra en TODA letra de comprobante, no solo en la A: el
+                monto no gravado es un dato del comprobante, no una
+                discriminación de impuesto. Una factura B a un turista del
+                exterior también tiene que decir cuánto salió exento y por qué. */}
+            {esFiscal && Number(fac!.exento) > 0 && (
+              <tr className="border-t border-stone-200">
+                <td className="py-1.5 text-stone-600">Operaciones exentas</td>
+                <td className="tabular py-1.5 text-right text-stone-700">
+                  {importe(Number(fac!.exento))}
+                </td>
+              </tr>
+            )}
             {/* La factura A discrimina el IVA; la B y la C lo llevan incluido. */}
             {esFiscal && fac!.tipo_comprobante === 'A' && (
               <>
                 <tr className="border-t border-stone-200">
-                  <td className="py-1.5 text-stone-600">Neto gravado</td>
+                  <td className="py-1.5 text-stone-600">
+                    Neto gravado
+                    {Number(fac!.exento) > 0 && (
+                      <span className="text-stone-500"> (sin lo exento)</span>
+                    )}
+                  </td>
                   <td className="tabular py-1.5 text-right text-stone-700">
-                    {Number(fac!.neto).toLocaleString('es-AR')}
+                    {importe(Number(fac!.neto) - Number(fac!.exento))}
                   </td>
                 </tr>
                 <tr>
@@ -238,6 +260,16 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
                 <span className="text-stone-800">
                   {ETIQUETAS_CONDICION_IVA[fac!.condicion_iva_receptor]}
                 </span>
+              </p>
+            )}
+            {/* El fundamento va IMPRESO, no solo guardado: una exención sin la
+                norma citada en el comprobante no es oponible ante una
+                inspección. La restricción `facturas_exencion_fundada` de la
+                migración 0058 garantiza que si hay monto exento, este texto
+                existe. */}
+            {fac!.motivo_exencion && (
+              <p className="mt-2 border-t border-stone-100 pt-2 text-xs text-stone-600">
+                {fac!.motivo_exencion}
               </p>
             )}
             {!caeVigente(fac!.cae_vto, hoyISO()) && (

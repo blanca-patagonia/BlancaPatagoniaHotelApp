@@ -5,8 +5,13 @@
  *  - `precioNeto`  → canal agencia.
  *  - `precioRack`  → canal mostrador / directo.
  * Los montos del tarifario son SIN IVA ("IVA discriminado"); el IVA se calcula
- * sobre el neto (21 % por defecto; los turistas extranjeros pueden estar exentos,
- * lo que se resuelve en la facturación — Fase 5).
+ * sobre el neto (21 % por defecto).
+ *
+ * ⚠️ La **exención del turista del exterior** (RG 3971) NO se resuelve acá: se
+ * decide al emitir la factura, porque depende de cómo se pagó y eso se conoce
+ * recién al cobrar. Vive en `lib/domain/exencion-iva.ts` (ADR 0024). Este módulo
+ * siempre cotiza con IVA, que es el máximo que el huésped podría deber; el
+ * importe sin IVA ya está disponible como `ResumenPrecio.totalNeto`.
  */
 
 export type TarifaTipo = 'neto' | 'rack'

@@ -1,8 +1,8 @@
 # Pendientes
 
-> Estado al cerrar la rama `feat/booking-y-auditoria-rls`.
-> **1240 tests verdes en 76 archivos, cero salteados.** Lint, typecheck y build en verde.
-> Migraciones hasta la **0054**.
+> Estado al cerrar la rama `feat/relevamiento-cliente-agosto`.
+> **Tests verdes, cero salteados.** Lint, typecheck y build en verde.
+> Migraciones hasta la **0059**.
 
 Este archivo reemplaza a `docs/audit/00-pendientes.md` y `docs/audit/HANDOFF.md`, que
 quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior.
@@ -30,18 +30,12 @@ nulo y el reporte tiene que **contar cuántas filas no pudo convertir** en vez d
 cero; y para `directo`/`web` el costo de adquisición se muestra `—`, **nunca `USD 0`**
 —hay Google Ads y tiempo de mostrador, pero el sistema no los conoce—.
 
-### B8 · Programación de la sincronización
-**Hoy nadie sincroniza si nadie aprieta el botón.** No hay `vercel.json` ni tarea
-programada. `app/api/cron/canales/route.ts` + `CRON_SECRET`.
-
-Dos cosas que hay que fijar: **si `CRON_SECRET` falta, el handler rechaza** (no «si
-falta, dejá pasar», que es un endpoint público que escribe en la base), y el header
-`x-vercel-cron` **no es autenticación** porque se puede falsificar. Y **el cron aterriza,
-no importa**: crear reservas confirmadas sin que nadie mire contradice el staging del
-ADR 0021.
-
-⚠️ El plan Hobby de Vercel permite **un cron por día**, no cada tres horas. Documentar
-GitHub Actions como plan B.
+### ~~B8 · Programación de la sincronización~~ ✅ HECHO (PR #14)
+`app/api/cron/canales/route.ts` + `vercel.json` (`0 6 * * *`) + `CRON_SECRET`.
+El cron **aterriza, no importa**. Si `CRON_SECRET` falta, el handler rechaza; la
+cabecera `x-vercel-cron` no se usa como autenticación. Documentado en
+`docs/sincronizacion-automatica.md`, con la trampa del plan Hobby (una corrida
+por día, no cada tres horas) y GitHub Actions como plan B.
 
 ### B7 · Feed iCal propio de salida + ADR 0022
 El `ical_token` ya está en `canal_config` (migración 0049). Falta
@@ -71,11 +65,11 @@ de `guardarEntrantes`, y el contrato `LectorInforme`.
 > **Criterio de terminado: los tests existentes pasan sin editar una línea.** Si hay que
 > tocar un test, el refactor cambió comportamiento y se revisa el código, no el test.
 
-### B10 · Documentación
-`docs/roadmap.md` **termina en la Fase 21**: quien lo lea concluye que canales no existe.
-Falta también `docs/modelo-datos.md` (6 tablas nuevas y ~15 columnas), el manual de
-usuario (bajar el informe, mapear columnas, conciliar la factura, importar reseñas) y la
-bitácora.
+### ~~B10 · Documentación~~ ✅ HECHO
+`README`, `docs/roadmap.md`, `docs/modelo-datos.md` y `docs/manual-usuario.md`
+actualizados contra el estado real del repo (números verificados ejecutando, no
+copiados). El manual cubre el flujo de canales: bajar el informe, mapear
+columnas, conciliar la factura e importar reseñas.
 
 ---
 
@@ -125,6 +119,29 @@ mapa en SVG propio, desglose de precio en el checkout, la insignia de escasez co
 columnas en «Nueva reserva».
 
 ---
+
+## 4 bis. Del relevamiento del 15/08/2026 — lo que queda
+
+**Hecho:** P6 (documentación), P1 (exención de IVA, ADR 0024), P4 (fuente de la
+cotización declarada), P3 (desayuno suelto contado por la cocina), P2 (garantía
+de tarjeta tokenizada, ADR 0025).
+
+**P5 · Booking: bandeja, comentarios y analytics — DIFERIDO POR EL CLIENTE.**
+No arrancar sin confirmarlo con él. Las tablas `canal_mensajes` y `canal_resenas`
+ya existen (migración 0038) y hoy se cargan a mano. Lo primero a resolver **no es
+código** sino una pregunta: ¿qué de todo eso se puede obtener sin API de partner?
+Verificar qué exporta realmente el extranet antes de prometer nada.
+
+**Preguntas abiertas que condicionan lo entregado** (ninguna bloquea, las dos
+funciones andan con supuestos declarados en su ADR):
+
+| Pregunta | A qué afecta |
+|---|---|
+| ¿Facturan sin IVA a los extranjeros, o cobran y tramitan reintegro? | ADR 0024. El modelo soporta lo primero, que es lo que prevé la norma |
+| ¿Qué le piden al huésped para aplicar la exención? | Hoy se registra lo que recepción declara; el sistema no verifica el origen del pago |
+| ¿Tienen pasarela contratada? | ADR 0025. Sin pasarela la verificación de tarjeta responde `no_soportado` y lo dice en pantalla |
+| ¿La garantía es para cobrar no-shows o solo para «tener algo anotado»? | Si es lo segundo, con los últimos 4 dígitos alcanza |
+| El desayuno extra, ¿lleva IVA? ¿USD 15 fijo? | Hoy es un producto más del catálogo, gravado como cualquier consumo |
 
 ## 5. Acción del usuario — 11 items que el código no puede resolver
 

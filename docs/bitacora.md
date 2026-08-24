@@ -2311,3 +2311,135 @@ test no cubre: que la exclusión GiST del ADR 0002 siga en pie, que `crear_reser
 sola** versión en `pg_proc` (no una sobrecarga), que el trigger de la jerarquía de departamentos
 rechace el tercer nivel, que `anon` no pueda leer ninguna de las tablas nuevas, y que las 22
 tablas del respaldo existan de verdad.
+
+## 2026-08-24 — Relevamiento con el cliente del 15/08: P6, P1, P4, P3 y P2
+
+**Resumen:** Franco (Blanca Patagonia) mandó 8 audios y 12 capturas mostrando WinPAX 9 y el
+extranet de Booking. La mayoría de lo que pidió ya estaba hecho; se abordaron los cinco
+pedidos que no. Dos migraciones nuevas (`0058`, `0059`), dos ADRs (`0024`, `0025`).
+**1351 tests verdes en 81 archivos, cero salteados**, verificados contra una base levantada
+**desde cero** con las 59 migraciones. Lint, typecheck y build en verde.
+
+Lo pedido y no hecho quedó en un solo lugar: **P5** (bandeja, comentarios y analytics de
+Booking), que **el propio cliente difirió** y que no se arrancó a propósito.
+
+### P6 · La documentación decía tres generaciones atrás
+
+El README hablaba de 486 tests y 35 migraciones cuando había 1292 y 57, y no mencionaba el
+módulo de canales —de lo más trabajado del sistema—. `docs/roadmap.md` terminaba en la Fase 21,
+así que quien lo leyera concluía que canales no existe.
+
+Se actualizaron README, roadmap, modelo de datos y manual de usuario **verificando cada número
+contra el repo**, no copiándolo del pedido: el propio pedido decía «77 archivos de test» y eran
+79. El manual pasó de 21 líneas a cubrir el flujo real de canales (bajar el informe, mapear
+columnas, conciliar la factura, importar reseñas), con las advertencias que importan: que
+Booking es de solo lectura y que `/panel/respaldos` **no es un backup de Postgres**.
+
+### P1 · Exención de IVA al turista del exterior (ADR 0024)
+
+Era lo único del relevamiento que **no estaba implementado en absoluto**. El toggle «con/sin
+IVA» del listado es de presentación: no exime a nadie.
+
+La decisión central: **la exención se DERIVA de dos hechos y no hay ninguna casilla que
+tildar.** La RG 3971 exige residencia en el exterior **y** pago desde el exterior; un extranjero
+que paga en efectivo **no está exento**, y es el error más fácil de cometer a mano. Una casilla
+convertiría una regla fiscal en una decisión de quien está apurado en el mostrador.
+
+Tres decisiones más, con su porqué en el ADR:
+
+- **La residencia va en el huésped, el origen del pago en la reserva.** Uno es una propiedad de
+  la persona; el otro cambia en cada estadía.
+- **`pago_desde_exterior` tiene tres estados, no dos.** «No sé» y «pagó local» son cosas
+  distintas aunque las dos cobren IVA. Ante un valor inesperado se cae en `null`: **ante la
+  duda, se cobra el impuesto.**
+- **Se decide al facturar, no al cotizar.** La forma de pago se conoce recién al cobrar. La ficha
+  muestra qué pasaría —«USD 122,89 en vez de USD 148,70»— y la factura aplica. El sentido del
+  error importa: cotizar de más y facturar de menos es una corrección a favor del huésped.
+
+En la factura, `exento` es un **subconjunto de `neto`**, no un tercer sumando: así
+`neto + iva = total` sigue siendo cierto, que es una garantía que el sistema tiene testeada en
+todos lados. Es además cómo lo modela AFIP (`ImpNeto` / `ImpOpEx` / `ImpIVA`).
+
+### P4 · La cotización ya era automática; lo que faltaba era decir de dónde sale
+
+Estaba resuelto desde el ADR 0020: automática, cacheada, con override manual del gerente. Lo que
+faltaba era chico y no cosmético: la etiqueta decía **«DolarAPI (oficial)»**, y quien la lee
+concluye razonablemente que el número viene del Banco Nación. **El BNA no publica un servicio
+para consultarlo**; se usa un tercero que replica el valor.
+
+Ahora la pantalla lo declara: fuente, antigüedad, si es automático o manual, y una línea que
+dice que **no es el Banco Nación informando**. La aclaración va junto a la frase que menciona al
+BNA en Configuración, que es donde se produce el malentendido.
+
+### P3 · Desayuno vendido suelto: el problema era la cocina, no el cobro
+
+«Llegan a las 9 de la mañana, el check-in es a las 2 o 3 de la tarde, y te dicen si se puede
+subir a desayunar. Tiene un costo de 15 dólares.»
+
+Al revisarlo, **cobrarlo ya funcionaba**: el punto de venta lista las estadías activas que tocan
+hoy, y una reserva que llega hoy en estado `confirmada` está ahí. El hueco real era otro: la
+lista de cocina se arma con **quién durmió anoche**, así que ese cubierto vendido **no aparecía**
+y la cocina preparaba de menos — justo el problema que la pantalla existe para evitar.
+
+Ahora `listaDeDesayuno` recibe los desayunos vendidos del día y los suma al total, marcados como
+extra y con guion en la columna de unidad cuando el huésped todavía no tiene habitación.
+
+Y se fijó dónde se cierra la cuenta: **en la factura, no en el check-out**. Es lo que permite los
+dos casos reales —el que llega temprano y el que desayunó la mañana que se va—. Lo que corta es
+el comprobante emitido: un cargo posterior no entraría en él, y `facturas` es inmutable.
+
+### P2 · Verificar la tarjeta sin guardar el número (ADR 0025)
+
+Este pedido **choca con una decisión ya tomada** y se resolvió al revés de como se pidió.
+
+WinPAX guardaba número, vencimiento, autorización y **PIN**. Guardar un PAN sacaría al hotel del
+alcance SAQ-A de PCI-DSS; guardar un PIN está prohibido incluso cifrado. Pero la necesidad de
+Franco no es *tener el número*: es **saber si la tarjeta sirve para cobrar**. Son cosas distintas
+y la segunda se resuelve sin la primera, con preautorización tokenizada.
+
+**El simulador declara que NO puede verificar.** `capacidades()` devuelve
+`{ verificaTarjeta: false }` y el resultado trae `noSoportado: true`. Un stub que dijera «válida»
+generaría la confianza falsa que el ADR 0021 evitó con el overbooking: recepción dejaría pasar un
+check-in confiando en una garantía que nadie comprobó. Por eso `noSoportado` es un campo aparte
+de `ok`: «el emisor la rechazó» y «no hay con qué probarla» llevan a acciones distintas.
+
+### Cinco cosas que conviene recordar
+
+1. **La exención no se puede forzar.** No hay campo «exento» en ninguna tabla. Si alguien agrega
+   uno, rompe la garantía entera del ADR 0024.
+
+2. **El test-contrato de PCI se vio fallar.** Se agregó a propósito
+   `alter table reservas add column tarjeta_numero text;` y la suite se puso en rojo con el
+   mensaje correcto; después se revirtió. Un test-contrato que nunca se vio fallar no protege
+   nada.
+
+3. **Las barreras contra el PAN son de la base.** La `0059` rechaza 12 o más dígitos seguidos en
+   el token y en el detalle. Los comentarios se ignoran; una restricción no.
+
+4. **`create type` sí puede usarse en la misma migración; `alter type ... add value` no.** La
+   `0059` crea el enum y lo usa en el mismo archivo, y aplica bien. La regla del SQLSTATE 55P04
+   (que motivó dividir la `0032`) aplica solo a agregar valores a un enum **ya existente**.
+
+5. **El typecheck atrapó una colisión de claves real.** `MENSAJES_NO_CARGABLE` usaba `anulada` y
+   `ya_facturada`, que ya existían en `MENSAJES_NO_FACTURABLE` con otro significado; al
+   combinarse en la ficha, una de las dos explicaciones desaparecía. Se les puso el prefijo
+   `cargo_`.
+
+### Un error propio, para que no se repita
+
+La primera versión del bloque de la tarjeta usaba `<details>` para plegar el formulario.
+`CLAUDE.md` lo **prohíbe explícitamente** desde la Fase 15 (se eliminaron los 11 que había), y
+acá pesaba doble: si la garantía no sirve, cargar otra tarjeta es justo lo que hay que hacer y no
+puede estar escondido. Se corrigió a un bloque siempre visible.
+
+### Verificación
+
+`npm run check` exit 0. **1351 tests (81 archivos), cero salteados**, con `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` exportadas. Las dos migraciones se
+aplicaron primero con `migration up` y después se verificó lo que de verdad importa: se levantó
+el stack **desde cero** (`supabase stop --no-backup` + `start`), las **59** migraciones
+aplicaron limpias y la suite completa volvió a pasar. Es el mismo camino que hace el CI.
+
+Además se comprobó a mano, contra Postgres, lo que un test no cubre: que las cuatro
+restricciones de la `0059` rechacen un PAN, una verificación sin fecha y un exento mayor que el
+neto; y que las de la `0058` rechacen una exención sin fundamento legal.

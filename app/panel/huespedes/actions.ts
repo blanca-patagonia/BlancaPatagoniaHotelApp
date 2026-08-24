@@ -58,6 +58,15 @@ function leerCampos(formData: FormData) {
     telefono: String(formData.get('telefono') ?? '').trim() || null,
     nacionalidad: String(formData.get('nacionalidad') ?? '').trim() || null,
     condicion_iva: String(formData.get('condicion_iva') ?? 'consumidor_final') as CondicionIva,
+    /*
+      Una de las dos condiciones de la exención de IVA del turista del exterior
+      (RG 3971, ADR 0024). La otra —el origen del pago— vive en la reserva,
+      porque cambia en cada estadía.
+
+      Ojo: NO se deriva de `nacionalidad`. Un argentino puede residir afuera y un
+      extranjero puede vivir acá; confundirlos es el error que la norma castiga.
+    */
+    residente_exterior: formData.get('residente_exterior') === '1',
     notas: String(formData.get('notas') ?? '').trim(),
   }
 }
@@ -81,10 +90,19 @@ function validar(c: ReturnType<typeof leerCampos>): string | null {
   return null
 }
 
-/** Convierte los campos leídos a strings, para reponerlos en el formulario. */
+/**
+ * Convierte los campos leídos a strings, para reponerlos en el formulario.
+ *
+ * Los booleanos van como `'1'` / `''` y no como `'true'` / `'false'`: es el
+ * valor que manda una casilla marcada, así que el formulario la repone leyendo
+ * lo mismo que había enviado.
+ */
 function aValores(c: ReturnType<typeof leerCampos>): EstadoHuesped['valores'] {
   return Object.fromEntries(
-    Object.entries(c).map(([k, v]) => [k, v == null ? '' : String(v)]),
+    Object.entries(c).map(([k, v]) => [
+      k,
+      typeof v === 'boolean' ? (v ? '1' : '') : v == null ? '' : String(v),
+    ]),
   ) as EstadoHuesped['valores']
 }
 

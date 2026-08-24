@@ -97,9 +97,32 @@ export const FUENTES = ['dolarapi', 'argentinadatos', 'manual'] as const
 export type Fuente = (typeof FUENTES)[number]
 
 export const ETIQUETAS_FUENTE: Record<Fuente, string> = {
-  dolarapi: 'DolarAPI (oficial)',
+  dolarapi: 'DolarAPI',
   argentinadatos: 'ArgentinaDatos',
   manual: 'Carga manual',
+}
+
+/**
+ * Qué es cada fuente, en una línea, para mostrar donde alguien decide cobrar.
+ *
+ * ── Por qué esto existe ─────────────────────────────────────────────────────
+ *
+ * El pedido del cliente fue «que se conecte al Banco Nación». **El BNA no publica
+ * un servicio para consultar su cotización**, así que se usa un tercero que
+ * replica ese valor. El ADR 0020 lo dice desde el primer día, pero la pantalla
+ * decía «DolarAPI (oficial)» y nada más: quien la lee concluye, razonablemente,
+ * que el número viene del Banco Nación.
+ *
+ * No es una diferencia académica. Si el tercero se atrasa o publica otro valor,
+ * el hotel cobra con un dólar que no es el que cree estar usando, y nadie tiene
+ * cómo enterarse. Declarar la fuente es lo que permite dudar de ella.
+ */
+export const DESCRIPCION_FUENTE: Record<Fuente, string> = {
+  dolarapi:
+    'Servicio público que replica el dólar oficial. No es el Banco Nación: el BNA no publica un servicio para consultarlo.',
+  argentinadatos:
+    'Servicio público que replica el dólar oficial. No es el Banco Nación: el BNA no publica un servicio para consultarlo.',
+  manual: 'Valor cargado a mano desde Configuración. Le gana al automático mientras esté vigente.',
 }
 
 export interface Cotizacion {

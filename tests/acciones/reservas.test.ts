@@ -148,6 +148,167 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       expect(f.numero_fiscal).toMatch(/^\d{4}-\d{8}$/)
     })
 
+    /*
+      Exención de IVA al turista del exterior (RG 3971, ADR 0024).
+
+      El primero es el que más importa y por eso va primero: un extranjero que
+      paga en efectivo NO está exento. Es el error que la norma hace fácil de
+      cometer a mano, y facturar exento sin que corresponda es IVA que el hotel
+      no ingresó.
+    */
+    describe('exención de IVA al turista del exterior', () => {
+      /** Emite y devuelve la factura resultante, registrándola para el borrado. */
+      async function facturaDe(reservaId: string) {
+        await destinoDe(() => emitirFactura(formulario({ reserva_id: reservaId })))
+        const { data } = await ctx.db
+          .from('facturas')
+          .select('id, neto, iva, total, exento, motivo_exencion, alicuota_iva')
+          .eq('reserva_id', reservaId)
+          .single()
+        const f = data as {
+          id: string
+          neto: number | string
+          iva: number | string
+          total: number | string
+          exento: number | string
+          motivo_exencion: string | null
+          alicuota_iva: number | string
+        }
+        ctx.aBorrar.push({ tabla: 'facturas', id: f.id })
+        return f
+      }
+
+      it('un extranjero que paga en EFECTIVO local NO queda exento', async () => {
+        const huespedId = await crearHuespedDePrueba(ctx, { residente_exterior: true })
+        const { data } = await ctx.db
+          .from('reservas')
+          .insert({
+            huesped_id: huespedId,
+            estado: 'checkout',
+            total: 121,
+            pago_desde_exterior: false, // efectivo en pesos
+          })
+          .select('id')
+          .single()
+        const id = (data as { id: string }).id
+        ctx.aBorrar.push({ tabla: 'reservas', id })
+
+        const f = await facturaDe(id)
+
+        expect(Number(f.exento), 'se eximió a alguien que pagó en efectivo local').toBe(0)
+        expect(f.motivo_exencion).toBeNull()
+        expect(Number(f.iva)).toBeGreaterThan(0)
+        expect(Number(f.total)).toBe(121)
+      })
+
+      it('mientras no se sepa cómo paga, tampoco se exime', async () => {
+        const huespedId = await crearHuespedDePrueba(ctx, { residente_exterior: true })
+        const { data } = await ctx.db
+          .from('reservas')
+          // `pago_desde_exterior` queda en null: es el estado inicial.
+          .insert({ huesped_id: huespedId, estado: 'checkout', total: 121 })
+          .select('id')
+          .single()
+        const id = (data as { id: string }).id
+        ctx.aBorrar.push({ tabla: 'reservas', id })
+
+        const f = await facturaDe(id)
+        expect(Number(f.exento)).toBe(0)
+        expect(Number(f.iva)).toBeGreaterThan(0)
+      })
+
+      it('residente en el exterior que paga desde el exterior SÍ queda exento', async () => {
+        const huespedId = await crearHuespedDePrueba(ctx, { residente_exterior: true })
+        const { data } = await ctx.db
+          .from('reservas')
+          .insert({
+            huesped_id: huespedId,
+            estado: 'checkout',
+            total: 121,
+            pago_desde_exterior: true,
+          })
+          .select('id')
+          .single()
+        const id = (data as { id: string }).id
+        ctx.aBorrar.push({ tabla: 'reservas', id })
+
+        const f = await facturaDe(id)
+
+        expect(Number(f.exento)).toBe(100)
+        expect(Number(f.iva)).toBe(0)
+        expect(Number(f.total)).toBe(100)
+        expect(f.motivo_exencion).toMatch(/3971/)
+        // La garantía del sistema no se rompe con exención.
+        expect(Number(f.neto) + Number(f.iva)).toBeCloseTo(Number(f.total), 2)
+      })
+
+      it('un residente local no queda exento aunque pague desde el exterior', async () => {
+        const huespedId = await crearHuespedDePrueba(ctx, { residente_exterior: false })
+        const { data } = await ctx.db
+          .from('reservas')
+          .insert({
+            huesped_id: huespedId,
+            estado: 'checkout',
+            total: 121,
+            pago_desde_exterior: true,
+          })
+          .select('id')
+          .single()
+        const id = (data as { id: string }).id
+        ctx.aBorrar.push({ tabla: 'reservas', id })
+
+        const f = await facturaDe(id)
+        expect(Number(f.exento)).toBe(0)
+        expect(Number(f.iva)).toBeGreaterThan(0)
+      })
+
+      it('la base rechaza un monto exento mayor que el neto', async () => {
+        // La garantía es de la base, no del código que la llama: si mañana un
+        // camino nuevo calcula mal el desglose, la restricción lo frena.
+        const huespedId = await crearHuespedDePrueba(ctx)
+        const { data } = await ctx.db
+          .from('reservas')
+          .insert({ huesped_id: huespedId, estado: 'checkout', total: 121 })
+          .select('id')
+          .single()
+        const id = (data as { id: string }).id
+        ctx.aBorrar.push({ tabla: 'reservas', id })
+
+        const { error } = await ctx.db.from('facturas').insert({
+          reserva_id: id,
+          numero: `EXC-${ctx.sufijo}`,
+          total: 100,
+          neto: 100,
+          iva: 0,
+          exento: 500,
+          motivo_exencion: 'inventado',
+        })
+        expect(error?.code, 'la base aceptó un exento mayor que el neto').toBe('23514')
+      })
+
+      it('la base rechaza un monto exento sin fundamento legal', async () => {
+        const huespedId = await crearHuespedDePrueba(ctx)
+        const { data } = await ctx.db
+          .from('reservas')
+          .insert({ huesped_id: huespedId, estado: 'checkout', total: 121 })
+          .select('id')
+          .single()
+        const id = (data as { id: string }).id
+        ctx.aBorrar.push({ tabla: 'reservas', id })
+
+        const { error } = await ctx.db.from('facturas').insert({
+          reserva_id: id,
+          numero: `EXF-${ctx.sufijo}`,
+          total: 100,
+          neto: 100,
+          iva: 0,
+          exento: 50,
+          // sin motivo_exencion
+        })
+        expect(error?.code, 'la base aceptó una exención sin fundamento').toBe('23514')
+      })
+    })
+
     it('no emite dos comprobantes para la misma reserva', async () => {
       const id = await reservaEnEstado('checkout')
       await destinoDe(() => emitirFactura(formulario({ reserva_id: id })))

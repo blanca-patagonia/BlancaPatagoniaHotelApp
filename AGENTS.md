@@ -28,7 +28,7 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 | **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | verificado, exit 0 |
 | Lint | `npm run lint` | verificado, exit 0 |
 | Typecheck | `npm run typecheck` | verificado, exit 0 |
-| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **897 pasan / 0 saltean** con base y las 3 variables |
+| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **1351 pasan / 0 saltean** con base y las 3 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
 | Base local | `npx supabase start` · `npx supabase db reset` | necesita Docker |
@@ -44,12 +44,12 @@ app/rutas ──124──> app/panel/_components (UI compartida)
           ───89──> lib/{auth,pricing,payments,email,firma,facturacion,availability,canales,divisas}
           ───60──> lib/supabase        ← puentea la capa de datos (deuda conocida)
 lib/servicios ──> lib/domain ──> lib/fechas
-lib/supabase ──> Postgres + RLS (~75 políticas sobre 40 tablas)
+lib/supabase ──> Postgres + RLS (90 políticas sobre 43 tablas)
 ```
 
 Reglas de dependencia, verificables con `rg`:
 
-- **`lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 36 módulos de
+- **`lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 50 módulos de
   reglas testeables sin base. **Nunca** metas un cliente de datos ahí.
 - **`lib/` nunca importa de `app/`.** Cero excepciones (hoy hay cero aristas).
 - La lógica de negocio va en `lib/domain/`. Las páginas y acciones orquestan; no calculan reglas.
@@ -179,6 +179,26 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **Los importes van por `formatearUSD`/`importe` de `lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Ya se migraron los 67 del panel; las cantidades (filas, puntos) sí van con `toLocaleString`.
 - **Booking es de solo lectura y NO evita el overbooking.** `capacidades()` lo declara y
   `ResultadoEnvio.noSoportado` distingue «no puedo» de «fallé». No borrar esas advertencias (ADR 0021).
+- **NUNCA agregues una columna que pueda guardar datos de tarjeta** (`tarjeta_numero`, `pan`,
+  `cvv`, `codigo_seguridad`, `pin`…). Saca al hotel del alcance SAQ-A de PCI-DSS. Hay un
+  **test-contrato** que recorre las migraciones y falla si aparece una (`tests/garantia-tarjeta.test.ts`),
+  más restricciones en la `0059` que rechazan 12+ dígitos seguidos en el token y en el detalle.
+  Se resuelve con preautorización tokenizada (ADR 0025).
+- **La exención de IVA NO se tilda, se deriva.** No existe ni debe existir un campo «exento»:
+  sale de `huespedes.residente_exterior` + `reservas.pago_desde_exterior` vía `exentoDeIva()`
+  (ADR 0024). Un extranjero que paga en efectivo **no está exento**, y ése es el error caro.
+  En la factura, `exento` es un **subconjunto de `neto`**, no un sumando: así `neto + iva = total`
+  sigue siendo cierto.
+- **`create type` sí puede usarse en la misma migración que lo crea.** La regla del SQLSTATE
+  55P04 —la que obligó a dividir la `0032`— aplica solo a `alter type ... add value` sobre un
+  enum **ya existente**. La `0059` crea un enum y lo usa en el mismo archivo, y aplica bien.
+- **Un `revoke select (columna)` NO recorta un `grant` de tabla previo.** Postgres lo acepta sin
+  error pero no tiene efecto: el GRANT de tabla (`relacl`) y el de columna (`attacl`) son
+  catálogos distintos. La `0034` intentó eso sobre `firmas.token` y el privilegio sigue ahí
+  (verificable con `has_column_privilege`). Para que surta efecto hay que revocar el de tabla y
+  reponer por columna — y eso rompe a quien lea esa columna con el cliente del usuario.
+- **La cuenta se cierra con la FACTURA, no con el check-out** (`motivoNoCargable`, ADR/P3). Es lo
+  que permite cobrarle el desayuno al que llegó a las 9 y al que se va a las 10.
 
 ## Automatizaciones (hooks activos)
 
