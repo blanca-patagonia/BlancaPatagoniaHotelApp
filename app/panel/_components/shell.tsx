@@ -4,9 +4,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import { areasDe, ETIQUETAS_AREA, type Area } from '@/lib/domain/permisos'
-import { agruparAreas } from '@/lib/domain/navegacion'
+import { agruparAreas, type GrupoNavegacion } from '@/lib/domain/navegacion'
+import { guardarPreferencia, usePreferencia } from './preferencias'
 import type { Rol } from '@/lib/domain/roles'
 import { Icono, Logotipo, type NombreIcono } from './iconos'
+
+/** Dónde se recuerda qué grupos del menú quedaron plegados. */
+const CLAVE_PLEGADOS = 'panel:nav:grupo:'
 
 /** Ruta e icono de cada área del panel. */
 const NAV: Record<Area, { href: string; icono: NombreIcono }> = {
@@ -45,68 +49,140 @@ function estaActivo(pathname: string, area: Area, href: string): boolean {
  * encontrar uno obligaba a leer la lista entera. Ahora cada grupo lleva un
  * encabezado, y la navegación pasa a ser dos saltos cortos en vez de un barrido.
  *
- * Los encabezados son `<p>` dentro de un `<ul>` propio por grupo, y cada grupo
- * se anuncia con `aria-labelledby`: para un lector de pantalla son cinco listas
- * con nombre, no una sola de 18 elementos.
+ * Cada encabezado es un `<button>` dentro de un `<h2>` que pliega su grupo, y
+ * cada `<ul>` se anuncia con `aria-labelledby` apuntando a ese botón: para un
+ * lector de pantalla son cinco listas con nombre —no una sola de 18 elementos—,
+ * y el `aria-expanded` + `aria-controls` dicen qué esconde cada una.
+ *
+ * El plegado se recuerda en `localStorage` porque una preferencia de menú que
+ * se pierde en cada navegación es peor que no tenerla: obliga a replegar cinco
+ * veces por minuto. No va al servidor: no vale una columna en `perfiles`, y
+ * cada quien usa su propia máquina en el mostrador.
  */
 function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alNavegar?: () => void }) {
   const grupos = agruparAreas(areasDe(rol))
 
   return (
-    <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3" aria-label="Secciones del panel">
-      {grupos.map((grupo, i) => {
-        const idTitulo = `nav-grupo-${i}`
-        return (
-          <div key={grupo.titulo ?? 'sin-titulo'}>
-            {grupo.titulo && (
-              <p
-                id={idTitulo}
-                className="px-3 pb-1.5 text-[11px] font-semibold tracking-[0.12em] text-lago-200/70 uppercase"
-              >
-                {grupo.titulo}
-              </p>
-            )}
-            <ul className="flex flex-col gap-0.5" aria-labelledby={grupo.titulo ? idTitulo : undefined}>
-              {grupo.areas.map((area) => {
-                const { href, icono } = NAV[area]
-                const activo = estaActivo(pathname, area, href)
-                return (
-                  <li key={area}>
-                    <Link
-                      href={href}
-                      onClick={alNavegar}
-                      aria-current={activo ? 'page' : undefined}
-                      /* `min-h-11` = 44 px. El mínimo táctil que `globals.css`
-                         ya aplica bajo `pointer: coarse` alcanza a `button` y
-                         `select`, pero no a un `<a>`, y el panel se usa en
-                         tablet desde el mostrador. */
-                      className={`group relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        activo
-                          ? 'bg-white/15 text-white'
-                          : 'text-lago-100/80 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      {activo && (
-                        <span
-                          className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-lenga-400"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span
-                        className={activo ? 'text-lenga-300' : 'text-lago-300/70 group-hover:text-lago-200'}
-                      >
-                        <Icono nombre={icono} tam={18} />
-                      </span>
-                      {ETIQUETAS_AREA[area]}
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        )
-      })}
+    <nav className="flex flex-1 flex-col gap-3 overflow-y-auto p-3" aria-label="Secciones del panel">
+      {grupos.map((grupo, i) => (
+        <GrupoNav
+          key={grupo.titulo ?? 'sin-titulo'}
+          grupo={grupo}
+          indice={i}
+          pathname={pathname}
+          alNavegar={alNavegar}
+        />
+      ))}
     </nav>
+  )
+}
+
+/**
+ * Un grupo del menú, con su encabezado plegable.
+ *
+ * Es un componente propio y no un bloque dentro del `.map` de `Enlaces` porque
+ * lee una preferencia con un hook, y un hook no puede vivir dentro de un
+ * callback: React exige que la cantidad y el orden de los hooks sea el mismo en
+ * cada render.
+ */
+function GrupoNav({
+  grupo,
+  indice,
+  pathname,
+  alNavegar,
+}: {
+  grupo: GrupoNavegacion
+  indice: number
+  pathname: string
+  alNavegar?: () => void
+}) {
+  const clave = `${CLAVE_PLEGADOS}${grupo.titulo ?? ''}`
+  const abierto = usePreferencia(clave, true)
+
+  const idTitulo = `nav-grupo-${indice}`
+  const idLista = `nav-lista-${indice}`
+
+  /*
+    Un grupo que contiene la pantalla actual se dibuja SIEMPRE desplegado,
+    aunque esté plegado en la preferencia guardada. Si no, quien pliega
+    «Administración» y entra a Configuración pierde de vista dónde está parado,
+    y el menú le miente sobre su propia ubicación.
+  */
+  const tieneActivo = grupo.areas.some((a) => estaActivo(pathname, a, NAV[a].href))
+  const plegado = grupo.titulo !== null && !abierto && !tieneActivo
+
+  return (
+    <div>
+      {grupo.titulo && (
+        <h2>
+          <button
+            type="button"
+            id={idTitulo}
+            onClick={() => guardarPreferencia(clave, plegado)}
+            aria-expanded={!plegado}
+            aria-controls={idLista}
+            className="flex w-full items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold tracking-[0.12em] text-lago-200/70 uppercase transition hover:bg-white/10 hover:text-lago-100"
+          >
+            <span
+              aria-hidden="true"
+              className={`shrink-0 text-lago-300/70 transition-transform duration-150 ${
+                plegado ? '' : 'rotate-90'
+              }`}
+            >
+              <Icono nombre="siguiente" tam={12} />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-left">{grupo.titulo}</span>
+            {/* Con el grupo plegado se dice cuántas secciones esconde: sin esto,
+                plegar borra la única pista de que ahí hay algo. */}
+            {plegado && (
+              <span className="shrink-0 tabular-nums text-lago-300/60">{grupo.areas.length}</span>
+            )}
+          </button>
+        </h2>
+      )}
+      <ul
+        id={idLista}
+        hidden={plegado}
+        className="flex flex-col gap-0.5"
+        aria-labelledby={grupo.titulo ? idTitulo : undefined}
+      >
+        {grupo.areas.map((area) => {
+          const { href, icono } = NAV[area]
+          const activo = estaActivo(pathname, area, href)
+          return (
+            <li key={area}>
+              <Link
+                href={href}
+                onClick={alNavegar}
+                aria-current={activo ? 'page' : undefined}
+                /* `min-h-11` = 44 px. El mínimo táctil que `globals.css` ya
+                   aplica bajo `pointer: coarse` alcanza a `button` y `select`,
+                   pero no a un `<a>`, y el panel se usa en tablet desde el
+                   mostrador. */
+                className={`group relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  activo
+                    ? 'bg-white/15 text-white'
+                    : 'text-lago-100/80 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {activo && (
+                  <span
+                    className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-lenga-400"
+                    aria-hidden="true"
+                  />
+                )}
+                <span
+                  className={activo ? 'text-lenga-300' : 'text-lago-300/70 group-hover:text-lago-200'}
+                >
+                  <Icono nombre={icono} tam={18} />
+                </span>
+                {ETIQUETAS_AREA[area]}
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
@@ -279,11 +355,32 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
         Saltar al contenido
       </a>
 
-      {/* Barra lateral — escritorio */}
-      <aside className={`hidden w-60 shrink-0 flex-col lg:flex ${FONDO_LATERAL}`}>
-        <Marca />
+      {/* Barra lateral — escritorio.
+
+          `sticky top-0` + `h-dvh` + `self-start` son las tres a la vez, y cada
+          una hace falta:
+
+          · Sin `h-dvh`, el `<aside>` se estira hasta el alto del contenido —es
+            un hijo de flex, que por defecto es `stretch`—, así que `sticky` no
+            tiene contra qué pegarse y la barra se va de pantalla al bajar. Era
+            el síntoma: en una pantalla larga (Configuración, Ayuda) el menú
+            desaparecía y había que volver arriba del todo para cambiar de
+            sección.
+          · `self-start` cancela ese `stretch` para que `h-dvh` mande.
+          · `dvh` y no `vh`: en el navegador del teléfono la barra de
+            direcciones entra y sale, y `vh` deja un pedazo cortado.
+
+          Con la altura acotada, el `overflow-y-auto` que `Enlaces` ya tenía por
+          fin sirve para algo: si los grupos no entran, el menú scrollea solo,
+          sin arrastrar la página. */}
+      <aside
+        className={`sticky top-0 hidden h-dvh w-60 shrink-0 flex-col self-start lg:flex ${FONDO_LATERAL}`}
+      >
+        <div className="shrink-0">
+          <Marca />
+        </div>
         <Enlaces rol={rol} pathname={pathname} />
-        <p className="border-t border-white/10 px-4 py-3 text-[11px] text-lago-200/70">
+        <p className="shrink-0 border-t border-white/10 px-4 py-3 text-[11px] text-lago-200/70">
           El Calafate · Santa Cruz
         </p>
       </aside>

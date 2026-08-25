@@ -1042,7 +1042,7 @@ export default async function CanalesPage({
                           <span className="font-medium text-stone-800">
                             {c.entrante.huesped_apellido}
                           </span>
-                          <span className="block font-mono text-xs text-stone-500">
+                          <span className="block font-mono text-xs break-all text-stone-500">
                             {c.entrante.reserva?.codigo ?? c.entrante.external_id}
                           </span>
                           {/* En móvil la estadía no tiene columna: se pliega acá. */}
@@ -1307,7 +1307,7 @@ export default async function CanalesPage({
                           ) : c.entrante ? (
                             <span className="text-stone-700">
                               {c.entrante.huesped_apellido}
-                              <span className="block font-mono text-xs text-stone-500">
+                              <span className="block font-mono text-xs break-all text-stone-500">
                                 {c.entrante.external_id}
                               </span>
                             </span>

@@ -12,12 +12,12 @@ import {
   TD,
   TH,
   Tabla,
-  Tarjeta,
   botonClases,
   CAMPO,
   Campo,
   Pagina,
 } from '../_components/ui'
+import { TarjetaPlegable } from '../_components/plegable'
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
 import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
@@ -200,7 +200,8 @@ export default async function ConfigPage({
         />
       </div>
 
-      <Tarjeta
+      <TarjetaPlegable
+        id="tarifario"
         titulo="Tarifario"
         descripcion="Precios en USD sin IVA · Neto = agencia · Rack = mostrador"
         className="overflow-hidden"
@@ -295,7 +296,7 @@ export default async function ConfigPage({
             </tbody>
           </Tabla>
         )}
-      </Tarjeta>
+      </TarjetaPlegable>
 
       {!puedeEditar && (
         <p className="mt-2 text-xs text-stone-600">
@@ -304,7 +305,8 @@ export default async function ConfigPage({
       )}
 
       {/* Plantillas de comunicaciones al huésped. */}
-      <Tarjeta
+      <TarjetaPlegable
+        id="plantillas-correo"
         titulo="Plantillas de correo"
         descripcion={
           proveedorEmail.esReal()
@@ -362,9 +364,10 @@ export default async function ConfigPage({
             )
           })}
         </div>
-      </Tarjeta>
+      </TarjetaPlegable>
 
-      <Tarjeta
+      <TarjetaPlegable
+        id="inventario"
         titulo="Inventario"
         descripcion="Stock de frigobar y amenities; se descuenta solo al cargar un consumo."
         className="mt-6 overflow-hidden"
@@ -539,7 +542,7 @@ export default async function ConfigPage({
             </div>
           </form>
         )}
-      </Tarjeta>
+      </TarjetaPlegable>
 
       <SeccionDivisas puedeEditar={puedeEditar} />
       <SeccionUbicaciones puedeEditar={puedeEditar} />
@@ -579,7 +582,8 @@ async function SeccionUbicaciones({ puedeEditar }: { puedeEditar: boolean }) {
   const sinUbicar = unidades.filter((u) => !u.piso).length
 
   return (
-    <Tarjeta
+    <TarjetaPlegable
+      id="ubicaciones"
       titulo="Ubicación de las unidades"
       descripcion="Bloque, piso y orden de recorrido. Se usan para filtrar la grilla de ocupación y para ordenar el trabajo de limpieza."
     >
@@ -664,7 +668,7 @@ async function SeccionUbicaciones({ puedeEditar }: { puedeEditar: boolean }) {
           </Tabla>
         </div>
       </div>
-    </Tarjeta>
+    </TarjetaPlegable>
   )
 }
 
@@ -686,7 +690,8 @@ async function SeccionDivisas({ puedeEditar }: { puedeEditar: boolean }) {
   )
 
   return (
-    <Tarjeta
+    <TarjetaPlegable
+      id="divisas"
       titulo="Cotización de divisas"
       descripcion="Se actualiza sola desde una fuente pública. El valor manual es el respaldo para cuando esa fuente no responde."
     >
@@ -813,6 +818,6 @@ async function SeccionDivisas({ puedeEditar }: { puedeEditar: boolean }) {
           </p>
         )}
       </div>
-    </Tarjeta>
+    </TarjetaPlegable>
   )
 }

@@ -2900,3 +2900,88 @@ sino que desactiva el proveedor de email entero, incluido `signInWithPassword`. 
 decir: **nadie podría iniciar sesión en el panel**. `main` tiene la línea correcta,
 documentada y sostenida por `tests/auth-config.test.ts`, archivo que esa rama ni
 siquiera tiene.
+
+---
+
+## 2026-08-25 — El menú se queda quieto, y lo largo se puede plegar
+
+**Resumen:** cuatro arreglos de interfaz que salieron de usar el panel, no de
+leerlo. El menú lateral desaparecía al scrollear, Configuración era una sola
+pantalla de 800 líneas sin forma de compactarla, el índice de Ayuda quedaba
+cortado, y las tarjetas dejaban desbordar el texto largo.
+
+### El menú se iba de pantalla
+
+`<aside>` era un hijo de flex sin altura acotada. Por defecto un hijo de flex se
+estira (`stretch`), así que la barra medía lo que midiera el contenido: en
+Configuración o en Ayuda eso son varias pantallas, y al bajar el menú quedaba
+arriba, fuera de vista. Para cambiar de sección había que volver al principio.
+
+El arreglo son tres clases que sólo funcionan juntas: `sticky top-0` para que se
+pegue, `h-dvh` para darle una altura contra la cual pegarse, y `self-start` para
+cancelar el `stretch` que anulaba a `h-dvh`. `dvh` y no `vh` porque en el
+teléfono la barra de direcciones entra y sale. Recién con la altura acotada, el
+`overflow-y-auto` que `Enlaces` ya tenía sirve para algo.
+
+### Plegar sin romper el principio de «nada oculto»
+
+`CLAUDE.md` fija un principio del usuario —«nada oculto, pensado para gente que
+no usa mucho la computadora»— y prohíbe `<details>` para esconder una acción o
+un formulario; se habían eliminado los 11 que había. Configuración tiene cinco
+bloques largos con formularios adentro, así que el pedido de plegarla chocaba de
+frente con esa regla.
+
+Se resolvió respetando las dos cosas, con tres decisiones:
+
+1. **Arranca todo desplegado.** Nada nace escondido; plegar es una elección de
+   quien usa el sistema, no un default del diseño. En el servidor, donde no hay
+   `localStorage`, el default es siempre «abierto».
+2. **El control se ve como un control**: un `<button>` con chevron, foco visible
+   y `aria-expanded`/`aria-controls`. El problema de los `<details>` que se
+   sacaron era que *parecían un título*.
+3. **Las acciones del encabezado quedan afuera del botón** y siguen visibles con
+   la tarjeta plegada. Plegar oculta la lectura, nunca el camino para hacer algo.
+
+Además, un grupo del menú que contiene la pantalla actual se dibuja siempre
+desplegado aunque esté plegado en la preferencia: si no, quien pliega
+«Administración» y entra a Configuración pierde de vista dónde está parado.
+
+### `useSyncExternalStore`, y no `useState` + `useEffect`
+
+La primera versión leía `localStorage` en un efecto y llamaba a `setState`.
+El lint lo rechazó (`react-hooks/set-state-in-effect`) y tenía razón: provoca un
+render extra y un parpadeo. `localStorage` es estado externo al árbol de React y
+no existe en el servidor, que es exactamente el caso para el que existe
+`useSyncExternalStore`: recibe una lectura para el cliente y otra para el
+servidor, y React garantiza que la primera pintura coincida.
+
+Quedó en `app/panel/_components/preferencias.ts`, con el primer hook propio del
+repo. Se llama `usePreferencia` —prefijo en inglés, contra el castellano de todo
+lo demás— porque `use` no es un nombre sino una marca que React y el lint leen
+para verificar dónde se lo puede llamar.
+
+### Los desbordes venían de las primitivas
+
+Las letras se salían de las tarjetas por una sola causa, repetida: un hijo de un
+contenedor `flex` arranca con `min-width: auto`, que le impide encogerse por
+debajo de su palabra más larga. Sin `min-w-0`, un correo, el nombre de una
+agencia o un importe largo empujan hasta pasarse del borde redondeado.
+
+Se arregló en `Encabezado`, `Tarjeta` y `Kpi` —las tres primitivas—, así que la
+corrección alcanza a todas las pantallas de una vez. En `Kpi` además pasó de
+`leading-none` a `leading-tight`: un importe que cae en dos renglones con
+interlineado cero se toca consigo mismo. **No se trunca ningún importe**: cortar
+«USD 1.234.567,89» en «USD 1.234…» se lee como otra cifra, que es peor que
+partirlo en dos líneas.
+
+Fuera de las primitivas quedaban dos `external_id` de Booking —identificadores
+opacos y sin espacios— que podían estirar la tabla de canales; llevan `break-all`.
+
+### El índice de Ayuda quedaba cortado
+
+Estaba `sticky` pero sin altura acotada. Con el rol de admin son catorce
+capítulos: lo que no entraba en la pantalla quedaba por debajo y era imposible de
+alcanzar, porque la página ya estaba abajo de todo y la tarjeta no scrolleaba por
+su cuenta. Se acota la `<ul>` —no la tarjeta— para que el rótulo «Contenido» no
+se vaya con el scroll. Sus tres enlaces pasaron a `min-h-11`, el mínimo táctil
+que `globals.css` no aplica a los `<a>` y que el mostrador necesita en tablet.

@@ -34,14 +34,25 @@ export default async function AyudaPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
-        {/* Índice. En pantallas chicas queda arriba, como una lista de atajos. */}
+        {/* Índice. En pantallas chicas queda arriba, como una lista de atajos.
+
+            El `max-h` + `overflow-y-auto` de la lista NO son decorativos: el
+            índice tiene un capítulo por área visible y con el rol de admin son
+            catorce. Pegado con `sticky` y sin altura acotada, lo que no entraba
+            en la pantalla quedaba cortado por debajo y era IMPOSIBLE de
+            alcanzar: la página ya estaba abajo de todo y la tarjeta no
+            scrolleaba por su cuenta. Se acota la `<ul>` y no la tarjeta entera
+            para que el rótulo «Contenido» no se vaya con el scroll.
+
+            La cuenta: `100dvh` menos las `5rem` del `top-20`, menos el alto del
+            encabezado de la tarjeta y un respiro abajo. */}
         <nav aria-label="Índice de la ayuda" className="lg:sticky lg:top-20 lg:self-start">
           <Tarjeta titulo="Contenido">
-            <ul className="flex flex-col gap-0.5 p-3 text-sm">
+            <ul className="flex flex-col gap-0.5 overflow-y-auto p-3 text-sm lg:max-h-[calc(100dvh-9.5rem)]">
               <li>
                 <a
                   href="#primeros-pasos"
-                  className="block rounded-lg px-3 py-2 text-stone-600 transition hover:bg-lago-50 hover:text-lago-800"
+                  className="flex min-h-11 items-center rounded-lg px-3 py-2 text-stone-600 transition hover:bg-lago-50 hover:text-lago-800"
                 >
                   Para empezar
                 </a>
@@ -50,7 +61,7 @@ export default async function AyudaPage() {
                 <li key={c.area}>
                   <a
                     href={`#${c.area}`}
-                    className="block rounded-lg px-3 py-2 text-stone-600 transition hover:bg-lago-50 hover:text-lago-800"
+                    className="flex min-h-11 items-center rounded-lg px-3 py-2 text-stone-600 transition hover:bg-lago-50 hover:text-lago-800"
                   >
                     {tituloCapitulo(c)}
                   </a>
@@ -59,7 +70,7 @@ export default async function AyudaPage() {
               <li>
                 <a
                   href="#glosario"
-                  className="block rounded-lg px-3 py-2 text-stone-600 transition hover:bg-lago-50 hover:text-lago-800"
+                  className="flex min-h-11 items-center rounded-lg px-3 py-2 text-stone-600 transition hover:bg-lago-50 hover:text-lago-800"
                 >
                   Qué significa cada palabra
                 </a>

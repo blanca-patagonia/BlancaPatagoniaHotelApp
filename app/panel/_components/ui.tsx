@@ -91,17 +91,23 @@ interface EncabezadoProps {
 export function Encabezado({ titulo, descripcion, icono, acciones }: EncabezadoProps) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-stone-200 pb-4">
-      <div className="flex items-start gap-3">
+      {/* `min-w-0` en los dos niveles: un hijo de flex arranca con
+          `min-width: auto`, que le impide encogerse por debajo de su palabra
+          más larga. Sin esto, un título largo —el nombre de una agencia, un
+          correo— se sale del borde en vez de partirse. */}
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         {icono && (
           <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-lago-50 text-lago-700 ring-1 ring-lago-100">
             <Icono nombre={icono} tam={20} />
           </span>
         )}
-        <div>
-          <h1 className="font-display text-2xl leading-tight font-semibold tracking-tight text-stone-900">
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl leading-tight font-semibold tracking-tight break-words text-stone-900">
             {titulo}
           </h1>
-          {descripcion && <p className="mt-0.5 text-sm text-stone-500">{descripcion}</p>}
+          {descripcion && (
+            <p className="mt-0.5 text-sm break-words text-stone-500">{descripcion}</p>
+          )}
         </div>
       </div>
       {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
@@ -125,9 +131,15 @@ export function Tarjeta({ titulo, descripcion, acciones, children, className = '
     <section className={`rounded-2xl border border-stone-200 bg-white shadow-sm ${className}`}>
       {(titulo || acciones) && (
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-5 py-3.5">
-          <div>
-            {titulo && <h2 className="font-display text-base font-semibold text-stone-900">{titulo}</h2>}
-            {descripcion && <p className="text-xs text-stone-500">{descripcion}</p>}
+          {/* Ver la nota de `Encabezado`: sin `min-w-0` el bloque de texto no
+              puede encogerse y desborda la tarjeta por la derecha. */}
+          <div className="min-w-0 flex-1">
+            {titulo && (
+              <h2 className="font-display text-base font-semibold break-words text-stone-900">
+                {titulo}
+              </h2>
+            )}
+            {descripcion && <p className="text-xs break-words text-stone-500">{descripcion}</p>}
           </div>
           {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
         </header>
@@ -153,20 +165,27 @@ interface KpiProps {
 export function Kpi({ titulo, valor, detalle, icono, tono = 'lago', href }: KpiProps) {
   const contenido = (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">{titulo}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 text-xs font-medium tracking-wide break-words text-stone-500 uppercase">
+          {titulo}
+        </p>
         {icono && (
           <span
-            className={`flex size-7 items-center justify-center rounded-lg ring-1 ${TONO_ETIQUETA[tono]}`}
+            className={`flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ${TONO_ETIQUETA[tono]}`}
           >
             <Icono nombre={icono} tam={15} />
           </span>
         )}
       </div>
-      <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
+      {/* `leading-tight` y no `leading-none`: un importe largo —«USD 1.234.567,89»
+          en una columna angosta— pasa a dos renglones, y con interlineado cero
+          las dos líneas se tocan. `break-words` cubre el caso patológico de un
+          valor sin espacios. NO se trunca: cortar un importe es peor que
+          partirlo, porque «USD 1.234…» se lee como una cifra distinta. */}
+      <p className="tabular mt-2 font-display text-3xl leading-tight font-semibold break-words text-stone-900">
         {valor}
       </p>
-      {detalle && <p className="mt-1.5 text-xs text-stone-600">{detalle}</p>}
+      {detalle && <p className="mt-1.5 text-xs break-words text-stone-600">{detalle}</p>}
     </>
   )
 
