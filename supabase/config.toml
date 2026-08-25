@@ -55,5 +55,31 @@ enable_signup = false
 enable_signup = true
 enable_confirmations = false
 
+# ── Google ───────────────────────────────────────────────────────────────────
+# Comodidad para el staff: en un puesto de recepción compartido, entrar con la
+# cuenta del hotel evita tipear una contraseña delante del huésped.
+#
+# ⚠️ ESTO NO ABRE EL REGISTRO. `[auth].enable_signup = false` de arriba impide que
+# GoTrue **cree** un usuario por cualquier proveedor, Google incluido. Iniciar
+# sesión con Google solo funciona para alguien cuyo email ya fue dado de alta
+# desde `app/panel/usuarios` (ADR 0005 y 0017). Y si esa línea se aflojara, la
+# segunda barrera sigue: un perfil creado fuera del alta nace `sin_rol` y
+# `activo = false` (migraciones 0032 y 0035).
+#
+# Las credenciales salen de Google Cloud → APIs y servicios → Credenciales →
+# ID de cliente de OAuth (tipo «aplicación web»), con este URI de redirección
+# autorizado:
+#     http://127.0.0.1:54321/auth/v1/callback        (local)
+#     https://<proyecto>.supabase.co/auth/v1/callback (hosted)
+#
+# `enabled` queda en false: mientras no haya credenciales, la pantalla tampoco
+# muestra el botón (`AUTH_GOOGLE_HABILITADO`), así que no hay forma de encontrarse
+# con una función que no anda.
+[auth.external.google]
+enabled = false
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_CLIENT_SECRET)"
+redirect_uri = ""
+
 [storage]
 enabled = true

@@ -157,3 +157,64 @@ export async function fijarNuevaPassword(
 
   redirect('/panel')
 }
+
+/**
+ * ¿Está configurado el inicio de sesión con Google?
+ *
+ * Se declara con una variable explícita y no se adivina mirando si hay claves,
+ * por el criterio del ADR 0018: un botón que existe pero falla es peor que un
+ * botón que no está. Mientras el hotel no cree las credenciales en Google Cloud
+ * y las cargue, la pantalla no lo ofrece.
+ */
+export async function googleHabilitado(): Promise<boolean> {
+  return process.env.AUTH_GOOGLE_HABILITADO === '1'
+}
+
+/**
+ * Inicia el intercambio con Google.
+ *
+ * Devuelve una redirección del navegador a la pantalla de Google; la vuelta la
+ * atiende `app/auth/callback/route.ts`, que es donde se canjea el código y —más
+ * importante— donde se verifica que la persona además tenga acceso al panel.
+ *
+ * ── Por qué esto NO abre la puerta a cualquiera ─────────────────────────────
+ *
+ * `[auth].enable_signup = false` (supabase/config.toml) impide que GoTrue **cree**
+ * un usuario nuevo por cualquier proveedor, Google incluido. Así que iniciar
+ * sesión con Google solo funciona para alguien cuyo email **ya existe** porque un
+ * administrador lo dio de alta desde `app/panel/usuarios`. El ADR 0005 y el 0017
+ * siguen valiendo tal cual.
+ *
+ * Y si esa configuración se aflojara, la segunda barrera sigue en pie: un perfil
+ * creado fuera del alta nace `sin_rol` y `activo = false` (migraciones 0032 y
+ * 0035), así que no vería nada.
+ */
+export async function iniciarSesionConGoogle(): Promise<void> {
+  if (!(await googleHabilitado())) {
+    redirect('/login?error=google_no_configurado')
+  }
+
+  // El límite es el mismo del login con contraseña: un botón que dispara un
+  // intercambio OAuth también se puede usar para hacer ruido.
+  if (!(await permitirIntento('login'))) {
+    redirect('/login?error=demasiados_intentos')
+  }
+
+  const supabase = await crearClienteServidor()
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${urlDelSitio()}/auth/callback`,
+      // `prompt: 'select_account'` para que en un puesto compartido de recepción
+      // Google no entre solo con la última cuenta usada.
+      queryParams: { prompt: 'select_account' },
+    },
+  })
+
+  if (error || !data?.url) {
+    console.error('[login] no se pudo iniciar el intercambio con Google:', error?.message)
+    redirect('/login?error=google')
+  }
+
+  redirect(data.url)
+}
