@@ -74,3 +74,42 @@ export function agruparAreas(visibles: readonly Area[]): GrupoNavegacion[] {
     areas: g.areas.filter((a) => visibles.includes(a)),
   })).filter((g) => g.areas.length > 0)
 }
+
+/**
+ * Ruta de cada área del panel.
+ *
+ * Vivía dentro de `NAV`, en `app/panel/_components/shell.tsx`, junto con el
+ * icono. El icono es cosa de la interfaz y se queda allá; la ruta no, porque la
+ * necesita también el buscador global para poder ofrecer «ir a la sección».
+ *
+ * Está acá y no duplicada en los dos lugares por lo de siempre: dos listas de
+ * veintidós rutas que hay que acordarse de tocar juntas terminan divergiendo, y
+ * el síntoma sería un enlace que lleva a ninguna parte. `shell.tsx` la importa.
+ *
+ * ⚠️ Casi todas se derivan del nombre del área cambiando `_` por `-`, pero
+ * `dashboard` NO: es `/panel` a secas. Por eso es una tabla explícita y no una
+ * función; una derivación con una excepción escondida es peor que una lista.
+ */
+export const RUTA_AREA: Record<Area, string> = {
+  dashboard: '/panel',
+  ocupacion: '/panel/ocupacion',
+  servicio: '/panel/servicio',
+  reservas: '/panel/reservas',
+  punto_venta: '/panel/punto-venta',
+  huespedes: '/panel/huespedes',
+  housekeeping: '/panel/housekeeping',
+  mantenimiento: '/panel/mantenimiento',
+  objetos_perdidos: '/panel/objetos-perdidos',
+  avisos: '/panel/avisos',
+  conversaciones: '/panel/conversaciones',
+  agencias: '/panel/agencias',
+  proveedores: '/panel/proveedores',
+  contratos: '/panel/contratos',
+  canales: '/panel/canales',
+  auditoria: '/panel/auditoria',
+  reportes: '/panel/reportes',
+  config: '/panel/config',
+  usuarios: '/panel/usuarios',
+  respaldos: '/panel/respaldos',
+  ayuda: '/panel/ayuda',
+}

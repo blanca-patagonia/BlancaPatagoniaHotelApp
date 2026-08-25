@@ -367,12 +367,32 @@ export const CAPITULOS: Capitulo[] = [
   },
   {
     area: 'config',
-    resumen: 'Tarifas, temporadas y productos.',
+    resumen: 'Tarifas, temporadas, productos, cotización del dólar y ubicación de las unidades.',
     pasos: [
       {
         titulo: 'Antes de tocar una tarifa',
         detalle:
           'Cambiar un precio afecta todas las cotizaciones nuevas, no las reservas ya cargadas. Queda registrado quién lo cambió.',
+      },
+      {
+        titulo: 'Cargar la cotización del dólar',
+        detalle:
+          'El sistema trabaja en dólares y muestra el equivalente en pesos con la cotización que haya cargada. Si no hay ninguna, los importes se muestran solo en USD: no inventa un tipo de cambio. En pantalla se aclara de dónde salió el valor y de cuándo es.',
+      },
+      {
+        titulo: 'Temporadas',
+        detalle:
+          'Cada rango de fechas tiene su precio. Si una fecha no cae en ninguna temporada cargada, la reserva sale en cero: es el error más común y se arregla completando el calendario.',
+      },
+      {
+        titulo: 'Productos e inventario',
+        detalle:
+          'Lo que se le puede cargar a la cuenta de un huésped: frigobar, excursiones, lavandería. Los que llevan control de stock avisan cuando quedan pocos.',
+      },
+      {
+        titulo: 'Piso y bloque de cada unidad',
+        detalle:
+          'Sirve para que housekeeping recorra en orden y para filtrar la grilla de ocupación por sector.',
       },
     ],
   },

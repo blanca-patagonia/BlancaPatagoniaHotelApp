@@ -64,6 +64,12 @@ const EXENTAS: Record<string, string> = {
     'Opera sobre la cuenta de quien la invoca (updateUser trabaja sobre el usuario del token), ' +
     'así que no hay área que verificar y la necesitan los cuatro roles. Exige sesión y, además, ' +
     'la contraseña actual.',
+  'app/panel/cuenta/actions.ts:guardarMisDatos':
+    'Mismo caso: edita el nombre y el teléfono de quien la invoca, apuntando a `sesion.userId` y ' +
+    'no a un identificador del formulario. La necesitan los cuatro roles, así que no hay área que ' +
+    'verificar. Lo que impide el auto-ascenso NO es una guarda de rol acá sino la base: la ' +
+    'migración 0066 acota el UPDATE de `perfiles` por columna a `nombre` y `telefono`, y hay un ' +
+    'test que lo comprueba atacándola con el cliente publicable (`tests/mis-datos.test.ts`).',
 }
 
 interface Accion {
