@@ -129,8 +129,13 @@ export default async function ContratosPage({
     Si esa regla cambia en el dominio hay que cambiarla acá — el test de
     `lib/domain/contratos.ts` la fija, y este comentario avisa dónde está la copia.
   */
-  const [{ count: vigentesCount }, { count: pendientesCount }, { count: porVencerCount }] =
-    await Promise.all([
+  const [
+    { count: totalCount },
+    { count: vigentesCount },
+    { count: pendientesCount },
+    { count: porVencerCount },
+  ] = await Promise.all([
+      supabase.from('contratos').select('*', { count: 'exact', head: true }),
       supabase
         .from('contratos')
         .select('*', { count: 'exact', head: true })
@@ -148,6 +153,7 @@ export default async function ContratosPage({
         .lt('vigencia_hasta', hoy),
     ])
 
+  const total = totalCount ?? 0
   const vigentes = vigentesCount ?? 0
   const pendientesFirma = pendientesCount ?? 0
   const porVencer = porVencerCount ?? 0
@@ -195,7 +201,16 @@ export default async function ContratosPage({
       )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Kpi titulo="Total" valor={String(contratos.length)} detalle="en el listado" icono="contratos" />
+        {/*
+          El total se cuenta en la base, no con `contratos.length`.
+
+          `contratos` es la PÁGINA (25 filas como máximo), así que con 137 contratos
+          cargados el indicador decía «25» y el paginador, dos centímetros más abajo,
+          «1–25 de 137». Se cuenta global —sin aplicar los filtros— para que los cuatro
+          indicadores hablen de lo mismo: los otros tres ya se contaban así. El
+          subconjunto que el filtro deja a la vista lo informa el paginador.
+        */}
+        <Kpi titulo="Total" valor={String(total)} detalle="contratos cargados" icono="contratos" />
         <Kpi titulo="Vigentes" valor={String(vigentes)} detalle="firmados y en fecha" icono="ok" tono="exito" />
         <Kpi
           titulo="Esperando firma"

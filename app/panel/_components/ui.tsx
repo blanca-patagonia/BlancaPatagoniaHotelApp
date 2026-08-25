@@ -122,7 +122,22 @@ interface TarjetaProps {
 /** Contenedor blanco con borde suave, unidad visual básica del panel. */
 export function Tarjeta({ titulo, descripcion, acciones, children, className = '' }: TarjetaProps) {
   return (
-    <section className={`rounded-2xl border border-stone-200 bg-white shadow-sm ${className}`}>
+    /*
+      `min-w-0` no es decorativo: es lo que impide que una tarjeta ensanche a su
+      contenedor.
+
+      Una tarjeta casi siempre es ítem de una grilla o de un flex, y ahí rige
+      `min-width: auto`: la caja no baja del ancho mínimo de su contenido. Basta
+      con un `truncate` adentro —que incluye `white-space: nowrap`— para que ese
+      mínimo sea la línea ENTERA. En el hub, «Fernández de la Vega Etchegoyen,
+      María de los Ángeles Guadalupe» daba 515 px de mínimo y estiraba la tarjeta a
+      557 px dentro de una pantalla de 320: la página entera se iba de lado y el
+      `truncate`, que estaba justamente para evitarlo, no llegaba a activarse nunca.
+
+      Poniéndolo acá y no en cada llamador, la regla vale para las ~90 tarjetas del
+      panel. Solo relaja una restricción: una tarjeta que hoy entra, sigue entrando.
+    */
+    <section className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm ${className}`}>
       {(titulo || acciones) && (
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-5 py-3.5">
           <div>

@@ -283,7 +283,7 @@ export default async function ProveedoresPage({
                       />
                     </div>
                     <span className="tabular w-24 text-right font-medium text-stone-700">
-                      {antiguedad[t].toLocaleString('es-AR')}
+                      {formatearUSD(antiguedad[t])}
                     </span>
                   </div>
                 ))}

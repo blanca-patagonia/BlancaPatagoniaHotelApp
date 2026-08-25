@@ -279,8 +279,26 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
         Saltar al contenido
       </a>
 
-      {/* Barra lateral — escritorio */}
-      <aside className={`hidden w-60 shrink-0 flex-col lg:flex ${FONDO_LATERAL}`}>
+      {/*
+        Barra lateral — escritorio.
+
+        Va pegada a la ventana (`sticky top-0 h-screen`) y **eso es lo que arregla el
+        bug**: antes era `static`, y como es un ítem flex de un contenedor que estira,
+        la caja azul medía lo que midiera la página entera —5.739 px en Ayuda—. Se veía
+        la franja de color de arriba abajo, pero los enlaces vivían en los primeros
+        400 px y se iban con el scroll: en Ayuda, a media página, el menú estaba 1.296 px
+        más arriba y no había forma de navegar sin volver al principio. Pasaba en todo
+        el panel, y en las pantallas largas —Ayuda, reservas, ocupación— siempre.
+
+        El scroll de la lista NO se pone acá: el `<nav>` de `Enlaces` ya es
+        `flex-1 overflow-y-auto`. Poner un segundo `overflow` en el aside dejaría dos
+        contenedores de scroll anidados peleándose por la rueda. Repartido así, la marca
+        y el pie quedan siempre a la vista y solo scrollea la lista, que es lo que
+        conviene cuando la ventana es baja.
+      */}
+      <aside
+        className={`hidden w-60 shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:h-screen ${FONDO_LATERAL}`}
+      >
         <Marca />
         <Enlaces rol={rol} pathname={pathname} />
         <p className="border-t border-white/10 px-4 py-3 text-[11px] text-lago-200/70">

@@ -5,7 +5,7 @@ import { cerrarComanda, type EstadoComanda } from './actions'
 import { filtrarCatalogo, subtotalLinea } from '@/lib/domain/punto-venta'
 import { ETIQUETAS_FOLIO, FOLIOS, type Folio } from '@/lib/domain/folios'
 import { ETIQUETAS_CATEGORIA_PRODUCTO, type CategoriaProducto } from '@/lib/domain/consumos'
-import { CAMPO, Campo, Mensaje, botonClases } from '../_components/ui'
+import { CAMPO, Campo, Mensaje, Tabla, botonClases } from '../_components/ui'
 import { formatearUSD } from '@/lib/domain/moneda'
 
 export interface ProductoPos {
@@ -158,11 +158,19 @@ export function GrillaPos({
               <h3 className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-semibold tracking-wide text-stone-600 uppercase">
                 {ETIQUETAS_CATEGORIA_PRODUCTO[categoria]}
               </h3>
-              <table className="min-w-full text-sm">
-                <caption className="sr-only">
-                  Productos de {ETIQUETAS_CATEGORIA_PRODUCTO[categoria]} con su precio y la cantidad
-                  a cargar
-                </caption>
+              {/*
+                El scroll horizontal va acá adentro, envolviendo solo la tabla.
+
+                El `overflow-hidden` del div de arriba no se saca: recorta las esquinas
+                redondeadas contra el encabezado gris de la categoría. Pero recortar era
+                todo lo que hacía, y sin un scrollport propio la tabla quedaba cortada:
+                en un teléfono la fila suma nombre + precio + el input de cantidad +
+                subtotal, se pasa del ancho útil, y las dos últimas columnas —cantidad y
+                subtotal, o sea la comanda entera— desaparecían sin forma de alcanzarlas.
+              */}
+              <Tabla
+                resumen={`Productos de ${ETIQUETAS_CATEGORIA_PRODUCTO[categoria]} con su precio y la cantidad a cargar`}
+              >
                 <thead className="sr-only">
                   <tr>
                     <th>Producto</th>
@@ -219,11 +227,9 @@ export function GrillaPos({
                         <td className="tabular px-4 py-2 text-right whitespace-nowrap">
                           {cantidad > 0 ? (
                             <span className="font-semibold text-stone-900">
-                              USD{' '}
-                              {subtotalLinea({
-                                cantidad,
-                                precioUnitario: p.precio,
-                              }).toLocaleString('es-AR')}
+                              {formatearUSD(
+                                subtotalLinea({ cantidad, precioUnitario: p.precio }),
+                              )}
                             </span>
                           ) : (
                             <span className="text-stone-300">—</span>
@@ -233,7 +239,7 @@ export function GrillaPos({
                     )
                   })}
                 </tbody>
-              </table>
+              </Tabla>
             </div>
           ))}
         </div>

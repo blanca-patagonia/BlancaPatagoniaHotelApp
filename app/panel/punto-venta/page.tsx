@@ -9,6 +9,7 @@ import {
 } from '@/lib/domain/departamentos'
 import { BotonEnvio } from '../_components/boton-envio'
 import {
+  COL_SECUNDARIA,
   Encabezado,
   EstadoVacio,
   FILA,
@@ -233,8 +234,8 @@ export default async function PuntoVentaPage({
                   <tr>
                     <th className={TH}>Comanda</th>
                     <th className={TH}>Habitación</th>
-                    <th className={TH}>Depto. / folio</th>
-                    <th className={TH}>Líneas</th>
+                    <th className={`${TH} ${COL_SECUNDARIA}`}>Depto. / folio</th>
+                    <th className={`${TH} ${COL_SECUNDARIA}`}>Líneas</th>
                     <th className={`${TH} text-right`}>Total</th>
                     <th className={TH}>Acción</th>
                   </tr>
@@ -255,8 +256,15 @@ export default async function PuntoVentaPage({
                           <span className="block text-xs text-stone-500">
                             {primera.reserva?.codigo} · {primera.fecha}
                           </span>
+                          {/* En el teléfono las columnas de depto./folio y de líneas
+                              se ocultan, pero el folio decide a QUIÉN se le cobra:
+                              se pliega acá en vez de desaparecer. */}
+                          <span className="block text-xs text-stone-500 sm:hidden">
+                            {resolverDepto(primera.departamento_id).etiqueta} · folio{' '}
+                            {primera.folio} · {lineas.length} línea(s)
+                          </span>
                         </td>
-                        <td className={`${TD} text-stone-600`}>
+                        <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
                           {resolverDepto(primera.departamento_id).etiqueta}
                           {/* El folio con texto: es lo que decide a quién se le
                               cobra, y no puede quedar solo insinuado. */}
@@ -264,7 +272,7 @@ export default async function PuntoVentaPage({
                             Folio {primera.folio}
                           </span>
                         </td>
-                        <td className={`${TD} text-stone-600`}>
+                        <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
                           <ul className="text-xs">
                             {lineas.map((l) => (
                               <li key={l.id}>

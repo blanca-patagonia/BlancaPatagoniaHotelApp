@@ -219,11 +219,26 @@ interface Reserva {
   }[]
 }
 
+/**
+ * Un par etiqueta/valor de la ficha.
+ *
+ * El `wrap-anywhere` del valor no es decorativo. Acá se muestran Email y Voucher,
+ * que son cadenas largas y **sin espacios**: sin permitir el corte, un email como
+ * `maria.fernanda.gonzalez.iturriaga@corporativoempresarial.com.ar` se sale de la
+ * tarjeta blanca y se superpone con la columna de al lado.
+ *
+ * Es `wrap-anywhere` y no `break-words` a propósito, y la diferencia es la que
+ * arregla el problema: las dos permiten partir la palabra al pintar, pero solo
+ * `overflow-wrap: anywhere` cuenta ese corte al calcular el ancho **mínimo** del
+ * contenido. Con `break-words`, la tarjeta —que es un ítem de grilla, o sea
+ * `min-width: auto`— igual se ensancha hasta que el email entre de una pieza, y el
+ * desborde se muda del texto a la grilla entera. Los ítems llevan además `min-w-0`.
+ */
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs uppercase tracking-wide text-stone-600">{etiqueta}</dt>
-      <dd className="mt-0.5 text-stone-800">{valor}</dd>
+      <dd className="mt-0.5 wrap-anywhere text-stone-800">{valor}</dd>
     </div>
   )
 }
@@ -466,7 +481,7 @@ export default async function DetalleReservaPage({
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <div className="flex min-w-0 flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Huésped</h2>
           <dl className="flex flex-col gap-3">
             <Dato
@@ -488,7 +503,7 @@ export default async function DetalleReservaPage({
           </dl>
         </div>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Estadía</h2>
           <dl className="flex flex-col gap-3">
             <Dato
@@ -669,10 +684,7 @@ export default async function DetalleReservaPage({
                       Descuento {Number(reserva.descuento_pct)}%
                     </span>
                     <span className="tabular text-stone-700">
-                      −USD{' '}
-                      {(Number(reserva.subtotal) - Number(reserva.total_neto)).toLocaleString(
-                        'es-AR',
-                      )}
+                      −{formatearUSD(Number(reserva.subtotal) - Number(reserva.total_neto))}
                     </span>
                   </div>
                 )}

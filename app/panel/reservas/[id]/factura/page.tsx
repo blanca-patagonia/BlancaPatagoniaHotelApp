@@ -171,8 +171,8 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
               <td className="py-2 text-stone-700">
                 Alojamiento · {estadia?.unidad?.tipo?.nombre ?? ''} ({noches} noches)
               </td>
-              <td className="py-2 text-right text-stone-800">
-                {cuenta.alojamiento.toLocaleString('es-AR')}
+              <td className="tabular py-2 text-right text-stone-800">
+                {importe(cuenta.alojamiento)}
               </td>
             </tr>
             {consumos.map((c, i) => (
@@ -180,8 +180,8 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
                 <td className="py-2 text-stone-700">
                   {c.cantidad}× {c.producto?.nombre}
                 </td>
-                <td className="py-2 text-right text-stone-800">
-                  {(c.cantidad * Number(c.precio_unitario)).toLocaleString('es-AR')}
+                <td className="tabular py-2 text-right text-stone-800">
+                  {importe(c.cantidad * Number(c.precio_unitario))}
                 </td>
               </tr>
             ))}

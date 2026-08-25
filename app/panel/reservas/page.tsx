@@ -272,14 +272,21 @@ export default async function ReservasPage({
         <form method="get" action="/panel/reservas" className="flex flex-wrap items-center gap-2">
           {sp.q && <input type="hidden" name="q" value={sp.q} />}
           {estado && <input type="hidden" name="estado" value={estado} />}
-          <label className="flex items-center gap-1.5 text-sm text-stone-600">
+          {/*
+            El par de fechas se envuelve solo en pantalla chica.
+
+            La etiqueta agrupa «Estadías entre» + fecha + «y» + fecha: unos 400 px
+            que, como ítem flex con `min-width: auto`, no bajaban de ahí y se
+            llevaban toda la barra fuera de la pantalla en un teléfono.
+          */}
+          <label className="flex w-full min-w-0 flex-wrap items-center gap-1.5 text-sm text-stone-600 sm:w-auto">
             <span className="text-xs text-stone-500">Estadías entre</span>
             <input
               type="date"
               name="desde"
               defaultValue={sp.desde ?? ''}
               aria-label="Fecha desde"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="min-w-0 flex-1 basis-32 rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:flex-none sm:basis-auto"
             />
             <span className="text-stone-600">y</span>
             <input
@@ -287,14 +294,14 @@ export default async function ReservasPage({
               name="hasta"
               defaultValue={sp.hasta ?? ''}
               aria-label="Fecha hasta"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="min-w-0 flex-1 basis-32 rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:flex-none sm:basis-auto"
             />
           </label>
           <select
             name="canal"
             defaultValue={canal ?? ''}
             aria-label="Canal de venta"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todos los canales</option>
             {CANALES.map((c) => (
@@ -310,7 +317,7 @@ export default async function ReservasPage({
             name="plan"
             defaultValue={plan ?? ''}
             aria-label="Plan o pensión"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todos los planes</option>
             {PLANES.map((p) => (
@@ -323,7 +330,7 @@ export default async function ReservasPage({
             name="garantia"
             defaultValue={garantia ?? ''}
             aria-label="Garantía"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Toda garantía</option>
             {GARANTIAS.map((g) => (
@@ -336,7 +343,7 @@ export default async function ReservasPage({
             name="segmento"
             defaultValue={segmento ?? ''}
             aria-label="Segmento"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todo segmento</option>
             {SEGMENTOS.map((s) => (
@@ -353,7 +360,7 @@ export default async function ReservasPage({
             name="unidad"
             defaultValue={unidad ?? ''}
             aria-label="Habitación"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Toda habitación</option>
             {unidades.map((u) => (
@@ -366,7 +373,7 @@ export default async function ReservasPage({
             name="tipo"
             defaultValue={tipoUnidad ?? ''}
             aria-label="Tipo de habitación"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todo tipo</option>
             {tipos.map((t) => (
@@ -380,7 +387,7 @@ export default async function ReservasPage({
               name="contrato"
               defaultValue={contrato ?? ''}
               aria-label="Contrato"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
             >
               <option value="">Todo contrato</option>
               {contratos.map((c) => (
@@ -390,7 +397,10 @@ export default async function ReservasPage({
               ))}
             </select>
           )}
-          <button type="submit" className={botonClases('secundario')}>
+          <button
+            type="submit"
+            className={botonClases('secundario', 'w-full justify-center sm:w-auto')}
+          >
             Aplicar
           </button>
         </form>
