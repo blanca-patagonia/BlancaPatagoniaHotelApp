@@ -2900,3 +2900,149 @@ sino que desactiva el proveedor de email entero, incluido `signInWithPassword`. 
 decir: **nadie podría iniciar sesión en el panel**. `main` tiene la línea correcta,
 documentada y sostenida por `tests/auth-config.test.ts`, archivo que esa rama ni
 siquiera tiene.
+
+## 2026-08-25 — Rediseño azul y blanco, y los bugs de scroll que aparecieron al medirlo
+
+Pedido del usuario: paleta y tipografía del registro de las plataformas de reserva,
+entrada con Google, arreglar los desbordes de las tarjetas al scrollear, compactar
+la Ayuda y que todo sea responsive.
+
+### La paleta cambia de valor, no de nombre (ADR 0026)
+
+`lago` pasa a azul de acción, `calafate` a azul marino, `lenga` a ámbar. Los rojos
+de error y los verdes de éxito no se tocan: significan lo mismo en cualquier
+interfaz y cambiarlos por estética le quitaría información a quien lee rápido.
+
+**Los nombres de los tokens no cambiaron, y es la decisión importante.** Tienen 244,
+15 y 98 usos. El riesgo de renombrar no es el tamaño del diff sino su naturaleza:
+Tailwind resuelve las clases **por texto**, así que un `bg-azul-600` mal tipeado no
+rompe el typecheck ni el linter — simplemente no pinta. Cambiar el valor repinta
+todo desde `app/globals.css` y no puede romper una clase que funcionaba.
+
+La tipografía de Booking es propietaria y no se usa; va Inter, que es libre y tiene
+un aire parecido. El ADR deja escrito el costo: se pierde la identidad propia que
+el ADR 0009 había construido, y parecerse a la plataforma de la que el proyecto
+busca reducir la dependencia tiene algo de contradictorio. Es decisión del dueño
+del producto.
+
+### Entrada con Google
+
+No abre el registro: `[auth].enable_signup = false` impide que GoTrue cree un
+usuario por cualquier proveedor, y un perfil creado fuera del alta nace `sin_rol` y
+`activo = false` (ADR 0005 y 0017). El callback atiende el caso intermedio que sí
+ocurre —autenticado en Google pero sin acceso al panel—: sin eso rebotaría entre
+`/login` y `/panel` sin entender por qué. El botón solo se muestra si está
+configurado: uno que existe y falla es peor que uno que no está (ADR 0018).
+
+### El menú lateral se iba con el scroll, en TODO el panel
+
+Lo destapó una captura del usuario. `<aside>` era `position: static` y, como ítem
+flex de un contenedor que estira, la caja azul medía lo que midiera la página:
+**5.739 px en Ayuda**. Se veía la franja de color de arriba abajo pero los enlaces
+vivían en los primeros 400 px, así que a media página el menú estaba 1.296 px más
+arriba y no había forma de navegar sin volver al principio.
+
+Ahora es `sticky top-0 h-screen`. El scroll de la lista **no** se puso en el aside:
+el `<nav>` de `Enlaces` ya es `flex-1 overflow-y-auto`, y un segundo `overflow`
+habría dejado dos scrollports anidados peleándose por la rueda.
+
+### Tres arrastres laterales en el teléfono, tres causas distintas
+
+Buscados con la prueba que importa —`scrollTo(9999,0)` y ver si `scrollX` se
+mueve—, no mirando capturas.
+
+**Hub (+253 px a 320).** La causa era un arreglo propio anterior: `truncate`
+incluye `white-space: nowrap`, así que el ancho **mínimo** de ese span es la línea
+entera. Un apellido compuesto daba 515 px y la tarjeta —ítem de grilla, o sea
+`min-width: auto`— se estiraba a 557 dentro de una pantalla de 320. El `truncate`
+que estaba justamente para evitarlo nunca llegaba a activarse. El `min-w-0` va en
+el componente `Tarjeta`, no en el llamador: vale para las ~90 tarjetas del panel.
+
+**Reservas (+91 px).** Siete `<select>` sin `min-w-0`. `w-full` no alcanza en un
+ítem flex, porque `min-width: auto` lo ancla a su opción más ancha: 361 px medidos.
+
+**Ocupación (+276 px).** El más raro: el desborde era hacia espacio **vacío**, nada
+cortado. Lo causan las celdas `sticky` de la columna congelada, que extienden la
+región scrolleable de sus ancestros y se escapan del recorte del scrollport.
+Descartados por medición, uno por uno: `overflow-x: hidden` en el `main` **no** lo
+frena, ni sacar el `whitespace-nowrap`, ni el `max-width`, ni `table-layout: fixed`.
+`contain: paint` sí.
+
+### La grilla de ocupación no se pegaba, aunque el comentario dijera que sí
+
+El `tfoot` era `sticky bottom-0` y un comentario afirmaba que quedaba pegado. No lo
+estaba: con `overflow-x: auto` el `overflow-y` computa a `auto`, así que ese div ya
+era el scrollport — pero sin altura acotada su `scrollTop` era siempre 0 y el
+sticky no tenía contra qué pegarse. Con `max-h-[70vh]` la grilla se lee como una
+planilla. Verificado a 0 px de offset con la grilla scrolleada a fondo en los dos
+ejes.
+
+Se sumó el estado vacío que faltaba —era el único listado del módulo sin uno—: con
+los filtros sin resultados mostraba un pie con seis filas de ceros, que se lee como
+«el hotel está vacío» cuando lo que pasa es que el filtro no dejó pasar nada.
+
+### Ayuda: de 6,3 a 4,8 pantallas, sin esconder nada
+
+Diez de los diecisiete capítulos tienen uno o dos pasos y aun así costaban
+172-210 px cada uno: casi todo marco de tarjeta. Se reparten en dos columnas con
+`columns` y no con `grid`, porque miden de 172 a 543 px y una grilla alinea por
+fila —cada fila queda tan alta como su tarjeta más alta y al lado sobra un hueco—.
+
+Los tres umbrales salieron de medir una matriz, no de estimar, y el primer intento
+**empeoró** el 1024 un 10 %: el índice al costado dejaba los capítulos en 704 px y
+dos columnas internas de 330 px desperdician más de lo que ahorran. Corregido:
+1024 px −30 %, 1180 px −25 %, 1440 px −22 %.
+
+Sigue sin acordeones: lo que se achica es el alto, no lo que está a la vista.
+Ctrl+F sigue encontrando todo, que es como se busca en un manual.
+
+### Las cuatro variantes de botón ahora miden lo mismo
+
+`secundario` y `peligro` llevaban `border` y `primario` y `fantasma` no: 38 px
+contra 36 con el mismo padding. En cada fila de acciones del `Encabezado` el botón
+principal quedaba 1 px más bajo que sus vecinos, y en `canales` —donde la variante
+cambia según el estado— el botón cambiaba de alto solo.
+
+Ocho botones de estado vacío escritos a mano medían **33 px**, no los ~36 que decía
+el diagnóstico: son `<a>` sin `inline-flex`, así que quedan en caja de línea y el
+`py-2` ni se aplica entero. El mínimo táctil de 44 px de `globals.css` alcanza a
+`button` y `select`, **no a un `<a>` suelto** — por eso `botonClases` incluye la
+clase `toque`, y por eso estos ocho quedaban fuera de una garantía que el resto del
+panel sí tenía.
+
+### Trece hallazgos de una revisión por agentes
+
+Verificados uno por uno contra el código antes de aplicar. Cuatro de importes con
+`toLocaleString` en vez de `formatearUSD` —el peor en el comprobante impreso, que
+mezclaba «1.234,5» en el ítem con «1.234,50» en el total de la misma columna—; la
+tabla del punto de venta con `overflow-hidden` que cortaba cantidad y subtotal en el
+teléfono; el email desbordando la ficha de reserva; y el KPI «Total» de contratos
+que mostraba 25 mientras el paginador decía «1–25 de 137».
+
+En contratos se hizo distinto de lo propuesto: el agente sugería usar `enFiltro`,
+pero los otros tres indicadores se cuentan globales y habría quedado uno filtrado al
+lado de tres que no lo están.
+
+### Dos notas de método, para no repetir los errores
+
+**El código de salida no es el resultado.** Se reportó «tests en verde (exit 0)»
+mirando solo el exit code; leyendo la salida, tres archivos fallaban por variables
+de entorno. `npm run check` **devuelve 0 con tests rojos** cuando no hay `.env.local`
+—es justo la trampa que `tests/db.ts` documenta querer evitar, pero el guardián
+(`EXIGIR_DB=1`) no está en ese script—. Queda anotado como pendiente.
+
+**Una captura del usuario mostrando la app pintada en una esquina no era un bug.**
+El navegador que maneja Playwright estaba conectado a la ventana del usuario, y un
+`setViewportSize(1440×560)` puesto para probar el sticky le impuso ese tamaño de
+render. De ahí en más la verificación se hizo con un navegador headless aparte.
+
+### Verificación
+
+**38 pantallas** —las 35 del panel y las 3 del portal— barridas a 360, 768 y 1440:
+ninguna arrastra de lado, ninguna tarjeta recorta contenido sin forma de alcanzarlo.
+1446 tests en 89 archivos contra la base local con `EXIGIR_DB=1`. Lint y build
+limpios.
+
+Detalle del arnés, porque confunde: varias pantallas daban «no carga» y no era la
+app. Navegar dos veces seguidas en modo dev devuelve `ERR_ABORTED` a los ~90 ms —no
+es un timeout—; con un reintento espaciado dan 38/38.

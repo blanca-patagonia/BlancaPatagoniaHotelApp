@@ -228,6 +228,31 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   (`tests/truncado-mil-filas.test.ts`).
 - **La cuenta se cierra con la FACTURA, no con el check-out** (`motivoNoCargable`, ADR/P3). Es lo
   que permite cobrarle el desayuno al que llegó a las 9 y al que se va a las 10.
+- **`truncate` no achica: agranda el ancho MÍNIMO.** Incluye `white-space: nowrap`, así que el
+  min-content de ese elemento pasa a ser la línea entera. Si algún ancestro es ítem de grilla o de
+  flex —o sea `min-width: auto`— la caja se estira hasta que la línea entre, y el `truncate` no se
+  activa nunca: en el hub un apellido compuesto daba 515 px de mínimo y estiraba la tarjeta a 557
+  dentro de una pantalla de 320. `Tarjeta` ya trae `min-w-0`; si armás un contenedor a mano,
+  ponéselo. Lo mismo con un `<select>`: `w-full` **no** alcanza, porque `min-width: auto` lo ancla
+  a su opción más ancha.
+- **Una celda `sticky` dentro de un contenedor con scroll se escapa del recorte.** Extiende la
+  región scrolleable de sus ancestros y hace que la PÁGINA arrastre de lado hacia espacio vacío —no
+  se ve nada cortado, así que es difícil de atribuir—. Verificado que no lo frenan `overflow-x:
+  hidden` en el `main`, ni sacar el `whitespace-nowrap`, ni el `max-width`, ni `table-layout: fixed`.
+  Se resuelve con `contain-paint` en el scrollport (ver la grilla de `ocupacion`).
+- **`overflow-x: auto` convierte al elemento en scrollport de los DOS ejes** (el `overflow-y`
+  computa a `auto`). Un `sticky bottom-0` adentro se ancla a ese scrollport, no a la ventana; y si
+  el div no tiene altura acotada su `scrollTop` es siempre 0 y el sticky no hace nada. El `tfoot` de
+  la grilla de ocupación tenía un comentario afirmando que se pegaba, y no se pegaba.
+- **Una tabla en dos columnas puede ser MÁS ALTA que en una.** La grilla alinea por fila: cada fila
+  queda tan alta como su celda más alta, y con textos desparejos se desperdicia más de lo que se
+  ahorra. Pasó al compactar Ayuda: el primer intento empeoró el tramo de 1024 px un 10 %. Para
+  tarjetas de alturas dispares va `columns` (que equilibra sola), y conviene **medir** las variantes
+  antes de elegir.
+- **`npm run check` devuelve 0 con tests en rojo** si no hay `.env.local`: tres archivos fallan por
+  falta de `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` y el exit code igual da 0. Es la misma trampa
+  que `tests/db.ts` documenta querer evitar, pero el guardián (`EXIGIR_DB=1`) no está en ese script.
+  **Leé la salida, no el exit code**, o exportá las tres variables antes.
 
 ## Automatizaciones (hooks activos)
 

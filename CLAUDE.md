@@ -117,7 +117,9 @@ Tarifario 2025/2026 (Anexo A).
   sistema a mano (el más caro: «USD 0» al reservar, por falta de temporadas
   cargadas) · **Fase 19** buscador global por rol, confirmaciones y encabezado ·
   **Fase 20** ningún fallo de escritura en silencio (ver `lib/acciones.ts`) ·
-  **Fase 21** catálogo público de alojamientos (`/alojamientos` + detalle).
+  **Fase 21** catálogo público de alojamientos (`/alojamientos` + detalle) ·
+  **Fase 22** interfaz azul y blanca (ADR 0026), entrada con Google, el menú
+  lateral fijo y las 38 pantallas sin arrastre lateral en el teléfono.
 - **Modernización WinPAX ✅ (2026-08-16, numeración propia de 11 pasos).** El cliente
   venía de WinPAX (Oracle Forms, ~año 2000) y se cubrieron sus funciones core.
   **El plan completo, con el porqué de cada decisión, está en
@@ -199,7 +201,7 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 25 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 26 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -209,7 +211,11 @@ Tarifario 2025/2026 (Anexo A).
   publica la ocupación y **angosta la ventana del overbooking sin cerrarla**, por
   eso `publicaDisponibilidad` sigue en `false` · **ADR 0023** contabilidad de la
   comisión de canal · **ADR 0024** exención de IVA al turista del exterior, que se
-  **deriva y no se tilda** · **ADR 0025** verificar la tarjeta de garantía **sin
+  **deriva y no se tilda** · **ADR 0026** interfaz azul y blanca, que reemplaza al
+  **0009 solo en paleta y tipografía** (los componentes compartidos siguen vigentes);
+  ⚠️ los NOMBRES de los tokens no cambiaron —`lago` es azul, `lenga` es ámbar—
+  porque Tailwind resuelve las clases por texto y un renombre masivo rompe sin
+  que el typecheck lo vea · **ADR 0025** verificar la tarjeta de garantía **sin
   guardar el número** (el simulador declara que no puede, no inventa un «válida»).
 - **Relevamiento con el cliente (15/08/2026), cerrado el 2026-08-24.** Franco
   mostró WinPAX 9 y el extranet de Booking. La mayoría ya estaba; se hicieron los
