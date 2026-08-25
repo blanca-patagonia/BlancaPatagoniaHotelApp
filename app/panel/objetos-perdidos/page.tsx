@@ -193,14 +193,14 @@ export default async function ObjetosPerdidosPage({
               hayFiltros ? (
                 <Link
                   href="/panel/objetos-perdidos"
-                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                  className={botonClases('secundario')}
                 >
                   Quitar filtros
                 </Link>
               ) : (
                 <Link
                   href="/panel/objetos-perdidos/nuevo"
-                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                  className={botonClases('primario')}
                 >
                   Registrar el primero
                 </Link>

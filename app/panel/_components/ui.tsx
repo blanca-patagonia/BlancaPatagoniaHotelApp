@@ -28,12 +28,27 @@ const TONO_ETIQUETA: Record<Tono, string> = {
 
 export type VarianteBoton = 'primario' | 'secundario' | 'fantasma' | 'peligro'
 
+/*
+  Las CUATRO variantes llevan borde, y las dos que no lo necesitan lo llevan
+  transparente. Es lo que hace que midan todas lo mismo.
+
+  Antes `secundario` y `peligro` tenían `border` y `primario` y `fantasma` no.
+  Con el mismo `px-3 py-2`, eso son 38 px contra 36: medido en el navegador,
+  «+ Nueva reserva» daba 36 px al lado de «Ver ocupación» con 38, en la misma fila
+  del `Encabezado` y alineados al centro, así que el botón principal quedaba 1 px
+  más bajo arriba y abajo que sus vecinos. Pasaba en seis pantallas, y además
+  `canales` alterna la variante según el estado: el botón cambiaba de alto solo.
+
+  Un borde transparente no se ve —`background-clip` es `border-box`, así que el
+  fondo propio del botón se pinta por debajo— y no toca el contraste ni el foco.
+*/
 const BOTON: Record<VarianteBoton, string> = {
   primario:
-    'bg-lago-700 text-white shadow-sm hover:bg-lago-800 active:bg-lago-900 disabled:bg-stone-300',
+    'border border-transparent bg-lago-700 text-white shadow-sm hover:bg-lago-800 active:bg-lago-900 disabled:bg-stone-300',
   secundario:
     'border border-stone-300 bg-white text-stone-700 hover:border-stone-400 hover:bg-stone-50 disabled:text-stone-400',
-  fantasma: 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+  fantasma:
+    'border border-transparent text-stone-600 hover:bg-stone-100 hover:text-stone-900',
   peligro: 'border border-red-200 bg-white text-red-700 hover:bg-red-50',
 }
 

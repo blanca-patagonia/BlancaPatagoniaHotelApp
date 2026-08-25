@@ -288,14 +288,14 @@ export default async function ContratosPage({
               hayFiltros ? (
                 <Link
                   href="/panel/contratos"
-                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                  className={botonClases('secundario')}
                 >
                   Quitar filtros
                 </Link>
               ) : (
                 <Link
                   href="/panel/contratos/nuevo"
-                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                  className={botonClases('primario')}
                 >
                   Crear el primero
                 </Link>
