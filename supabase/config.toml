@@ -72,9 +72,25 @@ enable_confirmations = false
 #     http://127.0.0.1:54321/auth/v1/callback        (local)
 #     https://<proyecto>.supabase.co/auth/v1/callback (hosted)
 #
-# `enabled` queda en false: mientras no haya credenciales, la pantalla tampoco
-# muestra el botón (`AUTH_GOOGLE_HABILITADO`), así que no hay forma de encontrarse
-# con una función que no anda.
+# ─────────────────────────────────────────────────────────────────────────────
+# ESTE `enabled` ES EL ÚNICO INTERRUPTOR. La pantalla de login le pregunta a
+# GoTrue por `/auth/v1/settings` y muestra el botón solo si acá dice `true`.
+#
+# Antes había dos: éste y `AUTH_GOOGLE_HABILITADO` en la app. Con la variable en
+# `1` y esto en `false`, el botón aparecía y GoTrue respondía un JSON crudo
+# —«Unsupported provider: provider is not enabled»— sin vuelta atrás. Ya no puede
+# pasar: la app no adivina, pregunta.
+#
+# Para encenderlo hacen falta LOS TRES PASOS, en este orden:
+#   1. Crear las credenciales en Google Cloud (ver arriba) y exportar
+#      GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET.
+#   2. Poner `enabled = true` acá abajo.
+#   3. **Reiniciar el contenedor**: `npx supabase stop && npx supabase start`.
+#      GoTrue lee esta configuración al arrancar, así que sin el reinicio el
+#      cambio no tiene ningún efecto y parece que no funcionara.
+#
+# `AUTH_GOOGLE_HABILITADO` sigue existiendo, pero solo en `0` y solo para APAGAR:
+# esconde el botón sin tocar Supabase. Encenderlo ya no depende de esa variable.
 [auth.external.google]
 enabled = false
 client_id = "env(GOOGLE_CLIENT_ID)"

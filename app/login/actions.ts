@@ -5,7 +5,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { permitirIntento } from '@/lib/limites'
 import { mensajeLimite } from '@/lib/domain/limites'
 import { LARGO_MINIMO_PASSWORD } from '@/lib/domain/cuenta'
-import { urlDelSitio } from '@/lib/env'
+import { envPublico, urlDelSitio } from '@/lib/env'
 
 export interface EstadoLogin {
   error?: string
@@ -161,13 +161,53 @@ export async function fijarNuevaPassword(
 /**
  * ¿Está configurado el inicio de sesión con Google?
  *
- * Se declara con una variable explícita y no se adivina mirando si hay claves,
- * por el criterio del ADR 0018: un botón que existe pero falla es peor que un
- * botón que no está. Mientras el hotel no cree las credenciales en Google Cloud
- * y las cargue, la pantalla no lo ofrece.
+ * ── Se le pregunta a GoTrue, no se adivina ──────────────────────────────────
+ *
+ * Esto antes leía `AUTH_GOOGLE_HABILITADO`, una variable de **la app Next**. El
+ * problema es que quien atiende el intercambio OAuth no es la app: es **GoTrue**,
+ * otro servicio, con su propia configuración (`[auth.external.google]` en
+ * `supabase/config.toml`, o el panel de Supabase en la nube).
+ *
+ * Eran dos interruptores independientes que tenían que coincidir, y nada
+ * verificaba que coincidieran. Con la variable en `1` y el proveedor apagado, el
+ * botón aparecía, redirigía a GoTrue y GoTrue contestaba un JSON crudo:
+ * `{"code":400,"error_code":"validation_failed","msg":"Unsupported provider:
+ * provider is not enabled"}`. Sin vuelta atrás y sin explicación — exactamente el
+ * botón que existe y falla que el ADR 0018 dice que no hay que tener.
+ *
+ * `/auth/v1/settings` es un endpoint público de GoTrue que informa qué
+ * proveedores tiene realmente habilitados. Preguntándole, la pantalla no puede
+ * volver a ofrecer algo que no funciona: se acabó la clase entera de error, en
+ * vez de documentarla.
+ *
+ * Dos decisiones acompañan:
+ *
+ * - **Falla cerrado.** Si la consulta no responde, se devuelve `false`. Un botón
+ *   que falta se nota y se pregunta; uno que rompe deja a alguien trabado en una
+ *   pantalla de JSON.
+ * - **`AUTH_GOOGLE_HABILITADO=0` sigue sirviendo, pero solo para APAGAR.** Deja al
+ *   hotel esconder el botón aunque el proveedor esté configurado. Encenderlo ya no
+ *   depende de esa variable, que es lo que causaba el problema.
  */
 export async function googleHabilitado(): Promise<boolean> {
-  return process.env.AUTH_GOOGLE_HABILITADO === '1'
+  // Interruptor de apagado explícito: gana sobre lo que diga GoTrue.
+  if (process.env.AUTH_GOOGLE_HABILITADO === '0') return false
+
+  try {
+    const { NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: clave } = envPublico()
+    const respuesta = await fetch(`${url}/auth/v1/settings`, {
+      headers: { apikey: clave },
+      // La respuesta solo cambia cuando se reinicia el contenedor o se toca la
+      // configuración del proyecto. Media hora de caché evita una llamada de red
+      // en cada render del login sin quedarse pegado a un valor viejo.
+      next: { revalidate: 1800 },
+    })
+    if (!respuesta.ok) return false
+    const ajustes = (await respuesta.json()) as { external?: Record<string, boolean> }
+    return ajustes.external?.google === true
+  } catch {
+    return false
+  }
 }
 
 /**
