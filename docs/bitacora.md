@@ -2312,6 +2312,53 @@ sola** versión en `pg_proc` (no una sobrecarga), que el trigger de la jerarquí
 rechace el tercer nivel, que `anon` no pueda leer ninguna de las tablas nuevas, y que las 22
 tablas del respaldo existan de verdad.
 
+---
+
+## 2026-08-22 — Booking B7: el calendario que el hotel le publica al canal
+
+**Resumen:** el feed iCal de **salida**. Hasta acá la integración era de una sola
+dirección —entraban reservas, no salía nada— y cuando el hotel se llenaba, alguien
+tenía que entrar al extranet a cerrar fechas a mano. Eso falla justo el día de mucho
+trabajo, que es el día en que el hotel se llena.
+
+**Detalle de lo realizado:**
+- `lib/canales/ical-saliente.ts` (puro): `calcularBloquesOcupados`, `generarIcal`
+  (RFC 5545 con plegado a 75 octetos y escape de comas) y `describirUltimaLectura`.
+- `app/api/canales/ical/[token]/route.ts`: token al portador, límite de tasa,
+  `?tipo=` y `?unidad=`, ventana de un año.
+- Migración `0065`: `canal_config.ical_leido_en`.
+- Nueva vista **Calendario para el canal** en `/panel/canales` con las direcciones
+  armadas para copiar, y la advertencia de overbooking **matizada, no borrada**.
+- `docs/decisiones/0022-feed-ical-saliente.md`.
+- 28 tests nuevos (19 puros + 9 contra la base).
+
+**Decisiones:**
+- **Una noche se marca ocupada sólo cuando no queda ninguna unidad activa del tipo
+  libre.** Un calendario dice «ocupado», no «me queda una»: cerrar el tipo al vender
+  la primera unidad le costaría ventas reales al hotel. La contracara —que con varias
+  unidades por tipo el feed avisa tarde— está dicha en la pantalla, tipo por tipo.
+- **`capacidades().publicaDisponibilidad` sigue en `false`.** El feed no da ninguna de
+  las garantías que ese `true` promete: el canal lo lee cuando quiere y nadie confirma
+  que lo aplicó. Angosta la ventana del overbooking; no la cierra.
+- **Si la consulta de estadías queda truncada, el handler responde 503 y no sirve un
+  calendario parcial.** Un calendario incompleto no se ve roto: se ve como uno con
+  menos bloqueos, o sea publicando como libres noches que están llenas.
+- El registro de la lectura sí es accesorio: si falla, el calendario se sirve igual.
+- **Hallazgo de paso, y era un test de seguridad rompiéndose al azar:**
+  `interpretarCsvBooking` estaba documentada como pura pero leía el reloj adentro
+  (`emitidaEn` cae en el momento de importación cuando el informe no trae fecha de
+  reserva). El test-contrato que verifica que **ningún dato de tarjeta** quede en el
+  resultado serializa todo y busca subcadenas, así que fallaba una de cada mil veces:
+  los milisegundos formaban «737», el CVC del caso de prueba. Se confirmó el
+  mecanismo en vez de suponerlo, el reloj pasó a entrar por parámetro y quedó un test
+  que fija la determinismo. Un test de seguridad que falla al azar termina desactivado
+  por molesto.
+- Se eliminó una guarda de «cero unidades activas» que parecía necesaria: una prueba
+  de mutación mostró que borrarla no cambiaba ni un resultado. El camino general ya
+  hacía lo mismo.
+
+---
+
 ## 2026-08-24 — Relevamiento con el cliente del 15/08: P6, P1, P4, P3 y P2
 
 **Resumen:** Franco (Blanca Patagonia) mandó 8 audios y 12 capturas mostrando WinPAX 9 y el
@@ -2807,3 +2854,49 @@ alcanzaba: el dominio es puro, los de integración van contra Postgres y la guar
 lee el código fuente. Un test de componente los habría visto, pero exige dependencias nuevas.
 Mientras tanto, **abrir la pantalla sigue siendo la única verificación que cubre esa capa**, y
 conviene hacerlo antes de replicar un patrón a doce archivos.
+
+---
+
+## 2026-08-25 — Integración a `main`: el feed iCal y el relevamiento, juntos
+
+**Resumen:** las ramas vivas eran dos y las dos colgaban del tip de `main`:
+`feat/relevamiento-cliente-agosto` (+6901 líneas, migraciones 0058–0064) y
+`feat/5-ical-saliente` (+1454, B7). Se integraron en una sola rama verificada.
+**1446 tests verdes en 89 archivos, cero salteados**, más typecheck, lint, `npm
+audit --audit-level=high` y build: las cinco puertas del CI.
+
+### El hallazgo: dos migraciones `0058` no conviven
+
+Las dos ramas nacieron del mismo commit y **las dos crearon una `0058`**: la
+exención de IVA y la lectura del feed iCal. Parecía un detalle cosmético de
+numeración. No lo era.
+
+Supabase registra la migración aplicada **por el prefijo numérico**, no por el
+nombre del archivo. La base local ya tenía anotado `0058 | lectura_del_feed_ical`
+de cuando se trabajó esa rama, así que al correr `migration up` el CLI dio el
+número 0058 por aplicado y **salteó `0058_exencion_iva_turista_extranjero.sql`
+sin decir una palabra**. El síntoma apareció lejos de la causa: 16 tests rojos
+con `Could not find the 'residente_exterior' column of 'huespedes' in the schema
+cache`, que parece un problema de caché de PostgREST y era una migración que
+nunca corrió.
+
+La migración del iCal pasó a ser la **`0065`**. Se actualizaron las dos
+referencias al número —`docs/bitacora.md` y el ADR 0022—, y la cabecera del
+propio archivo. La de IVA conserva la `0058`, que es la que ya estaba publicada.
+
+### Lo que NO se mergeó, y por qué
+
+Cuatro ramas viejas (`audit/fase-1-seguridad-critica`, `feat/4-booking-integracion`,
+`feat/booking-y-auditoria-rls`, `historia/detalle-hasta-0057`) figuraban como «sin
+mergear» porque `main` es historia lineal de squashes: los SHA nunca coinciden. Al
+comparar **contenido** resultó que las cuatro ya estaban absorbidas por los squashes
+#9, #10, #11 y #14, y que lo único que aportaban eran revisiones viejas de código que
+`main` ya mejoró.
+
+Mergearlas habría **revertido** trabajo. El caso más caro:
+`audit/fase-1-seguridad-critica` trae `[auth.email].enable_signup = false`, que no
+bloquea el auto-registro —eso lo hace `[auth].enable_signup = false`, que ya está—
+sino que desactiva el proveedor de email entero, incluido `signInWithPassword`. Es
+decir: **nadie podría iniciar sesión en el panel**. `main` tiene la línea correcta,
+documentada y sostenida por `tests/auth-config.test.ts`, archivo que esa rama ni
+siquiera tiene.

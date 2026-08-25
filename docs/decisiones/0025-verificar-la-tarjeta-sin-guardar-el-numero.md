@@ -113,7 +113,7 @@ Verificadas ejecutándolas contra Postgres, no asumiendo que andan.
 
 ### 5. Un test-contrato que falla si alguien agrega una columna de tarjeta
 
-`tests/garantia-tarjeta.test.ts` recorre las 59 migraciones y falla si alguna
+`tests/garantia-tarjeta.test.ts` recorre las 65 migraciones y falla si alguna
 define una columna llamada `tarjeta_numero`, `pan`, `cvv`, `codigo_seguridad`,
 `tarjeta_pin` o similar.
 

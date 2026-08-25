@@ -13,7 +13,7 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**1292 tests en verde** (79 archivos, cero salteados contra la base local) · typecheck,
+**1446 tests en verde** (89 archivos, cero salteados contra la base local) · typecheck,
 lint y build limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
@@ -167,7 +167,7 @@ app/            # Next.js App Router
 lib/            # dominio puro, disponibilidad, pagos, canales, divisas, clientes Supabase
 supabase/       # 57 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 1292 tests (Vitest)
+tests/          # 1446 tests (Vitest)
 ```
 
 ## Scripts
@@ -185,7 +185,7 @@ tests/          # 1292 tests (Vitest)
 El test de integración anti-overbooking necesita la base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.
 
-Para correr los 1292 en local hay que exportar las tres variables — vitest no lee
+Para correr los 1446 en local hay que exportar las tres variables — vitest no lee
 `.env.local`, y sin la clave publicable los 4 tests del borde público saltean sin
 avisar aunque `EXIGIR_DB=1` esté puesto:
 

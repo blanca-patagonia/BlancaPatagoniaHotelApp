@@ -199,13 +199,15 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 24 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 25 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
   `reservas.garantia` dice si hay de dónde cobrar un no-show) · **ADR 0020**
   cotización de divisas, que **cierra el 0003** · **ADR 0021** canales de venta de
-  solo lectura, con la limitación declarada · **ADR 0023** contabilidad de la
+  solo lectura, con la limitación declarada · **ADR 0022** feed iCal de salida:
+  publica la ocupación y **angosta la ventana del overbooking sin cerrarla**, por
+  eso `publicaDisponibilidad` sigue en `false` · **ADR 0023** contabilidad de la
   comisión de canal · **ADR 0024** exención de IVA al turista del exterior, que se
   **deriva y no se tilda** · **ADR 0025** verificar la tarjeta de garantía **sin
   guardar el número** (el simulador declara que no puede, no inventa un «válida»).
@@ -217,14 +219,18 @@ Tarifario 2025/2026 (Anexo A).
   **Queda solo P5** —bandeja, comentarios y analytics de Booking—, que **difirió
   el propio cliente**: antes de prometer nada hay que verificar qué exporta el
   extranet sin API de partner.
-- **1389 tests verdes** (84 archivos), cero salteados, verificados contra una base
-  levantada **desde cero** con las **63** migraciones.
 - **Auditoría técnica aplicada (2026-08-24).** Doce fases de auditoría y sus hallazgos
   corregidos: tokens de socio fuera del alcance del staff (0060), el borrado de dinero
   con permiso revocado y auditado (0061), índices del listado y `canal` acotado (0062),
   enlaces del portal revocables (0063), recuperación de contraseña, y las dependencias
   de 8 vulnerabilidades a 1 baja. Cada hallazgo se verificó **ejecutándolo** antes y
   después; el detalle está en la bitácora.
+- **1446 tests verdes** (89 archivos), **cero salteados**, verificados contra la base
+  local con las **65** migraciones aplicadas en orden. El feed iCal de salida (B7,
+  ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
+  0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos
+  migraciones con el mismo número **no conviven**: Supabase registra la versión por
+  el prefijo, da la segunda por aplicada y la saltea en silencio.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.
