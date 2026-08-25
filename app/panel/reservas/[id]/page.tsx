@@ -480,7 +480,16 @@ export default async function DetalleReservaPage({
       */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <div className="flex min-w-0 flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+      {/*
+        `items-start`: cada tarjeta mide lo suyo.
+
+        Sin esto la grilla las estira a la altura de la más alta —es el
+        comportamiento por omisión— y «Huésped», que tiene cuatro datos, quedaba
+        con mil píxeles de blanco al lado de «Estadía», que trae además el
+        formulario de tarjeta y el desglose de importes. La pantalla se veía rota
+        aunque no lo estuviera.
+      */}
+      <div className="grid gap-4 sm:grid-cols-2 sm:items-start lg:grid-cols-1 xl:grid-cols-2">
         <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Huésped</h2>
           <dl className="flex flex-col gap-3">
@@ -562,106 +571,6 @@ export default async function DetalleReservaPage({
               }
             />
 
-            {/* ── Tarjeta de garantía (ADR 0025) ───────────────────────────
-                El sistema NO guarda el número de tarjeta: guarda el token que
-                devuelve la pasarela, los últimos cuatro dígitos y el resultado
-                de la verificación. Ver el ADR antes de agregar campos acá. */}
-            <div className="border-t border-stone-100 pt-3">
-              <dt className="text-xs tracking-wide text-stone-600 uppercase">
-                Tarjeta de garantía
-              </dt>
-              <dd className="mt-1.5 space-y-2 text-sm">
-                <p className="flex flex-wrap items-center gap-2">
-                  <span className="tabular font-medium text-stone-800">
-                    {tarjetaEnmascarada(reserva.tarjeta_ultimos4, reserva.tarjeta_marca)}
-                  </span>
-                  <Etiqueta
-                    tono={
-                      garantiaOk
-                        ? 'exito'
-                        : reserva.tarjeta_verificacion === 'rechazada'
-                          ? 'peligro'
-                          : 'alerta'
-                    }
-                  >
-                    {ETIQUETAS_VERIFICACION[reserva.tarjeta_verificacion]}
-                  </Etiqueta>
-                </p>
-
-                {motivoGarantia && (
-                  <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-700">
-                    {MENSAJES_GARANTIA[motivoGarantia]}
-                  </p>
-                )}
-
-                {/* Formulario SIEMPRE visible: `CLAUDE.md` prohíbe esconder una
-                    acción detrás de un `<details>`, y acá pesa doble — si la
-                    garantía no sirve, cargar otra tarjeta es justo lo que hay
-                    que hacer y no puede estar a un clic de distancia.
-                    `autoComplete="off"` en el número y el código: no tienen por
-                    qué quedar en el historial de un puesto compartido. */}
-                <div className="rounded-lg border border-stone-200 p-3 text-xs">
-                  <p className="mb-2 font-medium text-stone-700">
-                    {reserva.tarjeta_ultimos4 ? 'Cambiar la tarjeta' : 'Cargar una tarjeta'}
-                  </p>
-                  <form
-                    action={verificarTarjetaGarantia}
-                    autoComplete="off"
-                    className="grid gap-2 sm:grid-cols-2"
-                  >
-                    <input type="hidden" name="reserva_id" value={reserva.id} />
-                    <label className="sm:col-span-2">
-                      <span className="mb-1 block text-stone-600">Número de tarjeta</span>
-                      <input
-                        name="tarjeta_numero"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        required
-                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-stone-600">Vencimiento (MM/AA)</span>
-                      <input
-                        name="tarjeta_vencimiento"
-                        placeholder="12/28"
-                        pattern="(0[1-9]|1[0-2])/[0-9]{2}"
-                        required
-                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-stone-600">Código de seguridad</span>
-                      <input
-                        name="tarjeta_cvv"
-                        type="password"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
-                      />
-                    </label>
-                    <label className="sm:col-span-2">
-                      <span className="mb-1 block text-stone-600">Titular</span>
-                      <input
-                        name="tarjeta_titular"
-                        autoComplete="off"
-                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
-                      />
-                    </label>
-                    <p className="text-[11px] leading-snug text-stone-500 sm:col-span-2">
-                      El sistema <strong>no guarda</strong> el número ni el código de seguridad:
-                      se los manda a la pasarela y conserva solo los últimos cuatro dígitos y el
-                      resultado.
-                    </p>
-                    <div className="sm:col-span-2">
-                      <BotonEnvio variante="secundario" cargando="Verificando…">
-                        Verificar tarjeta
-                      </BotonEnvio>
-                    </div>
-                  </form>
-                </div>
-              </dd>
-            </div>
             {reserva.voucher && <Dato etiqueta="Voucher" valor={reserva.voucher} />}
 
             {/* ── Desglose fiscal ──────────────────────────────────────────
@@ -671,6 +580,34 @@ export default async function DetalleReservaPage({
                 daba un número aproximado y silenciosamente equivocado. */}
             <div className="border-t border-stone-100 pt-3">
               <dt className="text-xs tracking-wide text-stone-600 uppercase">Importes</dt>
+              {/*
+                Si el desglose no cierra contra el total, se dice en vez de
+                publicarlo.
+
+                `neto + iva` tiene que dar `total`. Cuando no da —una reserva
+                importada de un canal, una migrada de WinPAX, una cargada por un
+                script— la pantalla mostraba «Subtotal USD 0,00 / Neto USD 0,00 /
+                IVA USD 0,00 / Total USD 363,00» con toda naturalidad. Eso es peor
+                que no mostrar nada: se lee como un comprobante y no cierra, y
+                alguien lo puede copiar a una factura.
+
+                Se comparan con un centavo de tolerancia, porque los importes se
+                redondean a dos decimales en varios puntos del camino.
+              */}
+              {Math.abs(Number(reserva.total_neto) + Number(reserva.iva) - Number(reserva.total)) >
+              0.01 ? (
+                <dd className="mt-1 space-y-1 text-sm">
+                  <div className="flex justify-between font-semibold text-stone-900">
+                    <span>Total con IVA</span>
+                    <span className="tabular">{formatearUSD(Number(reserva.total))}</span>
+                  </div>
+                  <p className="rounded-lg bg-lenga-50 px-3 py-2 text-xs text-lenga-800 ring-1 ring-lenga-100">
+                    Esta reserva no tiene cargado el desglose entre neto e IVA, así que no se
+                    muestra: los números no cerrarían con el total. El importe que se cobra es el
+                    de arriba. Si hace falta facturarla, cargá el desglose antes de emitir.
+                  </p>
+                </dd>
+              ) : (
               <dd className="mt-1 space-y-0.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-stone-500">Subtotal sin IVA</span>
@@ -707,6 +644,7 @@ export default async function DetalleReservaPage({
                   </span>
                 </div>
               </dd>
+              )}
             </div>
 
             {/* ── Exención de IVA al turista del exterior (RG 3971, ADR 0024) ──
@@ -1017,6 +955,118 @@ export default async function DetalleReservaPage({
           Seña sugerida (primera noche): {formatearUSD(senia)}. Las pasarelas
           (MercadoPago / Stripe) ingresan por webhook.
         </p>
+      </div>
+
+      {/* ── Tarjeta de garantía (ADR 0025) ─────────────────────────────────
+          Vive en la columna de la plata y no en «Estadía», que es donde estaba.
+
+          Dos razones. La de fondo: una tarjeta de garantía no describe la
+          estadía, es lo que permite COBRAR un no-show, así que su lugar está
+          junto a los pagos y la cuenta. La práctica: el formulario ocupa unos
+          450 px y siempre está abierto —no se puede plegar, el proyecto lo
+          prohíbe—, así que dejaba la tarjeta «Estadía» en 1.100 px, más del
+          triple que cualquier otra, y toda la columna derecha en blanco.
+
+          El sistema NO guarda el número de tarjeta: guarda el token que
+          devuelve la pasarela, los últimos cuatro dígitos y el resultado de la
+          verificación. Ver el ADR antes de agregar campos acá. */}
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <h2 className="mb-3 text-sm font-medium text-stone-700">Tarjeta de garantía</h2>
+        <dl>
+              <div>
+                <dd className="space-y-2 text-sm">
+                  <p className="flex flex-wrap items-center gap-2">
+                    <span className="tabular font-medium text-stone-800">
+                      {tarjetaEnmascarada(reserva.tarjeta_ultimos4, reserva.tarjeta_marca)}
+                    </span>
+                    <Etiqueta
+                      tono={
+                        garantiaOk
+                          ? 'exito'
+                          : reserva.tarjeta_verificacion === 'rechazada'
+                            ? 'peligro'
+                            : 'alerta'
+                      }
+                    >
+                      {ETIQUETAS_VERIFICACION[reserva.tarjeta_verificacion]}
+                    </Etiqueta>
+                  </p>
+
+                  {motivoGarantia && (
+                    <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-700">
+                      {MENSAJES_GARANTIA[motivoGarantia]}
+                    </p>
+                  )}
+
+                  {/* Formulario SIEMPRE visible: `CLAUDE.md` prohíbe esconder una
+                      acción detrás de un `<details>`, y acá pesa doble — si la
+                      garantía no sirve, cargar otra tarjeta es justo lo que hay
+                      que hacer y no puede estar a un clic de distancia.
+                      `autoComplete="off"` en el número y el código: no tienen por
+                      qué quedar en el historial de un puesto compartido. */}
+                  <div className="rounded-lg border border-stone-200 p-3 text-xs">
+                    <p className="mb-2 font-medium text-stone-700">
+                      {reserva.tarjeta_ultimos4 ? 'Cambiar la tarjeta' : 'Cargar una tarjeta'}
+                    </p>
+                    <form
+                      action={verificarTarjetaGarantia}
+                      autoComplete="off"
+                      className="grid gap-2 sm:grid-cols-2"
+                    >
+                      <input type="hidden" name="reserva_id" value={reserva.id} />
+                      <label className="sm:col-span-2">
+                        <span className="mb-1 block text-stone-600">Número de tarjeta</span>
+                        <input
+                          name="tarjeta_numero"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          required
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-1 block text-stone-600">Vencimiento (MM/AA)</span>
+                        <input
+                          name="tarjeta_vencimiento"
+                          placeholder="12/28"
+                          pattern="(0[1-9]|1[0-2])/[0-9]{2}"
+                          required
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-1 block text-stone-600">Código de seguridad</span>
+                        <input
+                          name="tarjeta_cvv"
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <label className="sm:col-span-2">
+                        <span className="mb-1 block text-stone-600">Titular</span>
+                        <input
+                          name="tarjeta_titular"
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <p className="text-[11px] leading-snug text-stone-500 sm:col-span-2">
+                        El sistema <strong>no guarda</strong> el número ni el código de seguridad:
+                        se los manda a la pasarela y conserva solo los últimos cuatro dígitos y el
+                        resultado.
+                      </p>
+                      <div className="sm:col-span-2">
+                        <BotonEnvio variante="secundario" cargando="Verificando…">
+                          Verificar tarjeta
+                        </BotonEnvio>
+                      </div>
+                    </form>
+                  </div>
+                </dd>
+              </div>
+        </dl>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">

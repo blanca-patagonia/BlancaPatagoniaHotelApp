@@ -195,3 +195,39 @@ export function estadosDesconocidos(): string[] {
   }
   return malos
 }
+
+/**
+ * Estados que NO tienen ya una vista propia.
+ *
+ * ── El problema que resuelve ────────────────────────────────────────────────
+ *
+ * La pantalla mostraba dos filas de chips: las diez vistas operativas arriba y
+ * los siete estados abajo. **Cinco de los siete estados hacían exactamente lo
+ * mismo que una vista**: «Pendiente» = la vista Pendientes, «In house» = En el
+ * hotel, y lo mismo con Check-out, Cancelada y No-show.
+ *
+ * Dos caminos idénticos para el mismo resultado no son una comodidad: obligan a
+ * pararse a decidir cuál usar, y hacen sospechar que dan resultados distintos.
+ * Encima son excluyentes —elegir uno borra el otro de la URL—, así que la
+ * pantalla ofrecía diecisiete chips para once cortes reales.
+ *
+ * Quedan los dos que sí agregan algo: «Confirmada» y «Pagada» por separado,
+ * porque la vista «Confirmadas» las junta y a veces hace falta distinguirlas —
+ * saber quién todavía debe la seña no es lo mismo que saber quién ya pagó.
+ *
+ * Se calcula en vez de escribirse a mano: si mañana se agrega una vista para un
+ * estado, su chip duplicado desaparece solo. Una lista fija habría vuelto a
+ * divergir en cuanto alguien tocara `VISTAS`.
+ */
+export function estadosSinVistaPropia(): EstadoReserva[] {
+  const conVistaPropia = new Set<EstadoReserva>()
+  for (const vista of VISTAS_RESERVAS) {
+    const def = VISTAS[vista]
+    // Solo cuenta como «vista propia» si la vista aísla ESE estado y nada más.
+    // «Confirmadas» agrupa dos, así que no deja sin sentido a ninguno de los dos.
+    if (def.estados?.length === 1 && !def.fecha && !def.agrupacion) {
+      conVistaPropia.add(def.estados[0])
+    }
+  }
+  return ESTADOS_RESERVA.filter((e) => !conVistaPropia.has(e))
+}
