@@ -66,9 +66,29 @@ export const CAPITULOS: Capitulo[] = [
           'Entrá a Reservas y apretá "Nueva reserva". Elegí las fechas y el tipo de habitación: el sistema muestra solo lo que está libre, así que no se puede vender dos veces la misma noche.',
       },
       {
-        titulo: 'Cobrar la seña',
+        titulo: 'Cobrar la seña en el mostrador',
         detalle:
-          'En la reserva, el bloque Pagos propone una seña sugerida. Se puede cargar efectivo, transferencia o tarjeta. El saldo queda a la vista.',
+          'En la reserva, el bloque Pagos propone una seña sugerida. Se puede cargar efectivo, transferencia o tarjeta, y elegir en qué moneda entró la plata: si el huésped paga en pesos, poné el importe en pesos y el sistema lo pasa a dólares con la cotización del día. Así la caja cierra contra el sistema.',
+      },
+      {
+        titulo: 'Si cobrás con el posnet',
+        detalle:
+          'Cargá el número de cupón y los últimos cuatro dígitos. Es lo que sirve para conciliar cuando la liquidación de la terminal no coincide con el sistema. El número completo de la tarjeta no se pide nunca y no se puede guardar.',
+      },
+      {
+        titulo: 'Mandarle un link de pago al huésped',
+        detalle:
+          'Es para el que reservó por teléfono o WhatsApp y no está para dar la tarjeta. En el bloque "Link de pago" elegís el medio y si cobrás la seña o el saldo, y el sistema arma un enlace para mandarle. Paga desde su celular y la reserva se marca sola, sin que nadie toque nada.',
+      },
+      {
+        titulo: 'Por qué a veces no deja generar otro link',
+        detalle:
+          'Si ya hay un enlace activo por ese saldo, el sistema muestra ése en vez de crear uno nuevo. Es a propósito: con dos enlaces vivos el huésped puede pagar dos veces, y devolver esa plata es un trámite con la pasarela. Los enlaces vencen a las 48 horas.',
+      },
+      {
+        titulo: 'El huésped también puede pagar desde la web',
+        detalle:
+          'En el correo de confirmación tiene un botón para pagar. Puede elegir tarjeta internacional en dólares o pagar en pesos con MercadoPago, débito, cuotas o efectivo en Rapipago. Cuando la plata entra, la reserva pasa a confirmada sola.',
       },
       {
         titulo: 'Check-in',

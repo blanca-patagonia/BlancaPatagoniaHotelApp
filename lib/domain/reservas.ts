@@ -85,6 +85,44 @@ export function puedeTransicionar(desde: EstadoReserva, hacia: EstadoReserva): b
   return TRANSICIONES[desde].includes(hacia)
 }
 
+/**
+ * El camino de estados para llegar de `desde` a `hacia`, o `null` si no hay.
+ *
+ * Existe porque **la máquina de estados no tiene un atajo de `pendiente` a
+ * `pagada`**, y ese salto es justo el que provoca un huésped que reserva por la
+ * web y paga todo de una: su reserva nace `pendiente` y tiene que pasar por
+ * `confirmada`.
+ *
+ * Sin esto, el pago se registraba y la transición se descartaba en silencio por
+ * inválida. La reserva quedaba `pendiente`, la expiración la liberaba a los 5
+ * días y el hotel revendía la unidad **con la plata del huésped ya cobrada**.
+ *
+ * El recorrido es a lo sumo de dos pasos, así que se resuelve con una búsqueda
+ * en anchura corta en vez de un grafo general: si algún día hiciera falta un
+ * camino de tres, este mismo código lo encuentra.
+ */
+export function caminoDeEstados(
+  desde: EstadoReserva,
+  hacia: EstadoReserva,
+): EstadoReserva[] | null {
+  if (desde === hacia) return []
+
+  const visitados = new Set<EstadoReserva>([desde])
+  const cola: { estado: EstadoReserva; camino: EstadoReserva[] }[] = [{ estado: desde, camino: [] }]
+
+  while (cola.length > 0) {
+    const { estado, camino } = cola.shift()!
+    for (const siguiente of TRANSICIONES[estado]) {
+      if (visitados.has(siguiente)) continue
+      const nuevo = [...camino, siguiente]
+      if (siguiente === hacia) return nuevo
+      visitados.add(siguiente)
+      cola.push({ estado: siguiente, camino: nuevo })
+    }
+  }
+  return null
+}
+
 /* ───────────────────────────────────────────── datos comerciales (paso 6) ──── */
 
 /**

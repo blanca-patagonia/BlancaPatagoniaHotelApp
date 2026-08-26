@@ -16,6 +16,7 @@ export type AccionLimitada =
   | 'encuesta'
   | 'recuperar_password'
   | 'ical'
+  | 'webhook_pago'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -101,6 +102,31 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 120,
     minutos: 60,
     motivo: 'Cada lectura recorre un año de estadías.',
+  },
+
+  /*
+    El webhook de pagos, y **solo cuando la firma no valida**.
+
+    Esta distinción es la decisión importante del límite, no el número. Un
+    webhook de pagos es lo último que se debe limitar por volumen: cada evento
+    que se descarta es un cobro del que el hotel no se entera. Si un fin de
+    semana largo entran más avisos de los previstos y el limitador empieza a
+    responder 429, la pasarela reintenta un rato y después se rinde: la plata
+    quedó cobrada y la reserva figura impaga.
+
+    Por eso el contador se incrementa **después** de rechazar la firma, nunca
+    antes. Un evento legítimo —firmado con el secreto que solo tiene la
+    pasarela— no pasa por acá jamás, por muchos que lleguen.
+
+    Lo que sí protege: que alguien sin el secreto martille el endpoint. Cada
+    intento cuesta un HMAC y, en MercadoPago, una consulta a su API. Veinte por
+    hora y por IP es muchísimo para un error de configuración real —que se nota
+    en el primer intento— y corta un bucle en seco.
+  */
+  webhook_pago: {
+    maximo: 20,
+    minutos: 60,
+    motivo: 'Martilleo del webhook de pagos por parte de quien no tiene el secreto.',
   },
 }
 

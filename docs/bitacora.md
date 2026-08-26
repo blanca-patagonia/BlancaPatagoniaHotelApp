@@ -3046,3 +3046,83 @@ limpios.
 Detalle del arnés, porque confunde: varias pantallas daban «no carga» y no era la
 app. Navegar dos veces seguidas en modo dev devuelve `ERR_ABORTED` a los ~90 ms —no
 es un timeout—; con un reintento espaciado dan 38/38.
+
+---
+
+## 2026-08-25 — Fase 23: la pasarela de pagos, enchufada
+
+**Resumen:** el puerto de pagos existía desde la Fase 3 y estaba **desenchufado**.
+Se conectó de punta a punta —web y mostrador—, con dos pasarelas reales
+(MercadoPago y Stripe), cobro en dos monedas y un simulador que permite recorrer
+el circuito completo sin contratar nada. En el camino aparecieron dos bugs que
+sólo existen cuando el cobro funciona de verdad, y el más caro se llevaba plata.
+
+**El diagnóstico, verificado sobre el código antes de tocar nada:**
+
+| Qué | Estado real |
+|---|---|
+| `crearCheckout()` | **Cero call sites.** Nadie cobraba en línea |
+| `/pago-simulado` | La URL que devolvía el stub **daba 404** |
+| Portal público | Creaba la reserva `pendiente` y decía «te escribimos para coordinar» |
+| Panel | `medio = 'tarjeta'` era una etiqueta sin cupón ni últimos 4 |
+| `PAGO_PROVIDER` | **No existía**: pagos era el único de los siete adaptadores fuera del ADR 0018 |
+| `MERCADOPAGO_ACCESS_TOKEN` | Declarado en `.env.example`, ningún archivo lo leía |
+| Webhook | Bien hecho (idempotente, HMAC, fail-closed) pero **sin límite de tasa** |
+
+**Detalle de lo realizado:**
+
+- **Migración 0067.** `pagos` gana `monto_cobrado`, `cotizacion`, `cupon`,
+  `ultimos4`, `tarjeta_marca`, `url_pago` y `vence_en`, más siete `check` que
+  imponen la coherencia de la conversión y **rechazan un PAN** en las columnas
+  nuevas (mismo criterio que la 0059).
+- **`lib/domain/cobro.ts`** (dominio puro): conversión de moneda con la
+  cotización congelada, contraste de importe al centavo, catálogo de medios y
+  vigencia del link.
+- **Tres adaptadores** con el mismo contrato: `ProveedorSimulado`,
+  `ProveedorMercadoPago` (Checkout Pro) y `ProveedorStripe` (Checkout Sessions).
+  Por HTTP, sin SDK y sin dependencias nuevas.
+- **`lib/payments/servicio.ts`** — `iniciarCobro`, el único camino por el que
+  nace un link, lo pida la web o el mostrador.
+- **Portal público:** botón de pago en la confirmación y pantalla de elección de
+  medio, con el importe en la moneda en la que se va a debitar.
+- **Panel:** link de pago para mandar por WhatsApp, moneda del cobro en el
+  formulario manual y rastro del posnet.
+- **`/pago-simulado`**, la pantalla que faltaba, que cierra el circuito
+  disparando el webhook real firmado.
+- **Límite de tasa del webhook**, contado **sólo después de rechazar la firma**.
+
+**Los dos bugs que aparecieron al conectarlo:**
+
+1. **La seña no confirmaba la reserva, y eso costaba plata.**
+   `pendiente → pagada` no es una transición válida: hay que pasar por
+   `confirmada`. Una reserva de la web nace `pendiente`, así que el pago se
+   registraba, la transición se descartaba **en silencio** por inválida y la
+   reserva quedaba `pendiente`. La expiración la liberaba a los 5 días y el hotel
+   revendía la unidad **con la plata del huésped ya cobrada**. Se resolvió con
+   `estadoSegunPagos` y `caminoDeEstados` en el dominio.
+
+2. **Un pago rechazado trababa el reintento.** `puedeAvanzarEstadoPago` trataba
+   `rechazado` como final, pero una pasarela real crea varios intentos bajo la
+   misma referencia: la tarjeta se rechaza por fondos, el huésped pone otra y
+   aprueba. El rechazo trababa la fila y la reserva no se saldaba nunca con la
+   plata ya cobrada.
+
+**Verificación (ejecutada, no supuesta):**
+- Migración 0067 aplicada a la base local; los siete `check` probados uno por uno
+  con `insert` que deben fallar, y comprobado que un pago en pesos bien formado sí
+  entra.
+- Circuito completo contra la app corriendo: reserva `pendiente` de USD 300 →
+  seña de USD 100 por webhook → **pasa a `confirmada`** → saldo de ARS 290.000 a
+  1450 → **pasa a `pagada`** con USD 300 imputados. El detalle guardado muestra
+  `USD 100 @ 1` y `ARS 290.000 @ 1450`.
+- `npm run check` completo: lint, typecheck, **1555 tests en verde con cero
+  salteados** (eran 1446) y build.
+
+**Decisiones:** [ADR 0027](decisiones/0027-cobro-en-linea-dos-pasarelas-y-una-sola-moneda-de-saldo.md).
+La más importante: **`pagos.monto` está siempre en USD**. `resumenPagos` suma esa
+columna sin mirar la moneda, así que guardar ahí un importe en pesos habría dado
+la reserva por pagada al instante y el huésped se iba sin pagar.
+
+**Pendiente:** contratar las pasarelas. Enchufarlas es cargar variables de
+entorno; no hay que tocar código. Ninguna de las dos verifica la tarjeta de
+garantía, y las tres implementaciones lo declaran (ADR 0025).

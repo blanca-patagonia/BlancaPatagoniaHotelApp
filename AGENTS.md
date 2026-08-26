@@ -249,6 +249,35 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   ahorra. Pasó al compactar Ayuda: el primer intento empeoró el tramo de 1024 px un 10 %. Para
   tarjetas de alturas dispares va `columns` (que equilibra sola), y conviene **medir** las variantes
   antes de elegir.
+- **`pagos.monto` está SIEMPRE en USD, sin importar en qué moneda se cobró.** `resumenPagos`
+  suma esa columna para decidir si la reserva quedó saldada y **no mira la moneda**: un cobro de
+  ARS 350.000 guardado ahí se sumaría como si fueran dólares y el huésped se iría sin pagar. Lo
+  que de verdad pasó por la pasarela va en `monto_cobrado` + `moneda` + `cotizacion`, y la
+  migración 0067 tiene los `check` que lo obligan (ADR 0027).
+- **La cotización se congela al crear el link, no al confirmar el pago.** Recalcularla movería el
+  saldo de una reserva con el dólar del día siguiente, y no habría forma de explicar de dónde
+  salió el importe en dólares que la saldó.
+- **`pendiente → pagada` NO es una transición válida:** hay que pasar por `confirmada`. Una
+  reserva de la web nace `pendiente`, así que el salto directo se descartaba en silencio, la
+  reserva quedaba pendiente, la expiración liberaba la unidad a los 5 días y el hotel la revendía
+  **con la plata ya cobrada**. Va por `caminoDeEstados` + `estadoSegunPagos`, nunca con un
+  `update` de estado a mano.
+- **`rechazado` NO es un estado final de un pago.** Una pasarela real crea varios intentos bajo la
+  misma referencia externa: la tarjeta se rechaza por fondos, el huésped pone otra y aprueba. Si
+  el rechazo trabara la fila, la reserva no se saldaría nunca con la plata cobrada. Terminales son
+  `aprobado` y `reembolsado`.
+- **Stripe cuenta en centavos y MercadoPago firma un manifiesto.** Mandarle `145.2` a Stripe cobra
+  un dólar cuarenta y cinco **sin ningún error**; firmar el cuerpo crudo para MercadoPago —en vez
+  de `id:…;request-id:…;ts:…;`— rechaza todos los eventos y el síntoma es «el hotel dejó de
+  enterarse de los pagos». Los dos casos tienen test (`tests/pasarelas-reales.test.ts`).
+- **Un webhook que responde 400 a un evento que no le interesa termina deshabilitado.** Stripe y
+  MercadoPago mandan decenas de tipos de evento; acumulan fallos y cortan el endpoint, y ahí se
+  pierden también los cobros buenos. Por eso `ResultadoWebhook` distingue `ignorar` (200),
+  `invalido` (400) y `reintentar` (500).
+- **El límite de tasa del webhook de pagos se cuenta DESPUÉS de rechazar la firma, nunca antes.**
+  Cada evento descartado por volumen es un cobro del que el hotel no se entera.
+- **La URL de retorno de una pasarela no es prueba de pago:** se puede abrir a mano sin haber
+  pagado. Quien confirma es el webhook; la pantalla de confirmación lee el estado de la base.
 - **`npm run check` devuelve 0 con tests en rojo** si no hay `.env.local`: tres archivos fallan por
   falta de `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` y el exit code igual da 0. Es la misma trampa
   que `tests/db.ts` documenta querer evitar, pero el guardián (`EXIGIR_DB=1`) no está en ese script.

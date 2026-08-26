@@ -39,7 +39,12 @@ import {
   cambiarUnidadReserva,
   fijarOrigenDelPago,
   verificarTarjetaGarantia,
+  generarLinkDePago,
 } from '../actions'
+import { proveedoresHabilitados, nombreClave } from '@/lib/payments'
+import { MEDIOS_DE_COBRO, MONEDA_BASE, motivoNoSeCobra } from '@/lib/domain/cobro'
+import { estadoDeCobro } from '@/lib/reservas/cobro'
+import { MONEDAS_EXTRANJERAS, ETIQUETAS_MONEDA, formatearLocal } from '@/lib/domain/divisas'
 import { motivoNoFacturable, MENSAJES_NO_FACTURABLE } from '@/lib/domain/facturacion'
 import { MENSAJES_NO_CARGABLE } from '@/lib/domain/servicio'
 import {
@@ -87,9 +92,17 @@ interface PagoRow {
   id: string
   medio: MedioPago
   tipo: TipoPago
+  /** SIEMPRE en USD: es lo único que salda la reserva (migración 0067). */
   monto: number | string
   estado: EstadoPago
   creado_en: string
+  /** Moneda que de verdad pasó por la caja o la pasarela. */
+  moneda: string | null
+  /** Importe en `moneda`. Nulo cuando se cobró en dólares. */
+  monto_cobrado: number | string | null
+  cupon: string | null
+  ultimos4: string | null
+  tarjeta_marca: string | null
 }
 
 interface ConsumoRow {
@@ -135,6 +148,18 @@ const MENSAJES_ERROR: Record<string, string> = {
     'Se pidió el CAE y se consumió el número de comprobante, pero la factura NO quedó guardada. Avisá antes de volver a emitir: el número ya se usó.',
   total: 'El cambio se hizo, pero no se pudo recalcular el precio. La reserva quedó con el total anterior.',
   repro: 'No se pudo reprogramar la estadía.',
+  // Cobro (Fase 23).
+  monto: 'El importe tiene que ser mayor que cero.',
+  pago: 'No se pudo registrar el pago. No quedó nada cobrado.',
+  moneda: 'Esa moneda no está entre las que el sistema sabe convertir.',
+  sin_cotizacion:
+    'No hay cotización vigente para esa moneda, así que no se puede pasar el importe a dólares. Cargá una en Configuración o registrá el pago en dólares.',
+  ultimos4: 'Los últimos cuatro dígitos tienen que ser exactamente cuatro números.',
+  link_sin_datos: 'No se pudo calcular el saldo para generar el link. Probá de nuevo.',
+  link_no_cobrable: 'Esta reserva no tiene un saldo que se pueda cobrar en línea.',
+  link_pago: 'No se pudo leer la reserva para generar el link de pago.',
+  link_pasarela:
+    'La pasarela no pudo crear el link. Probá con otro medio o cobrá desde el mostrador.',
   // Cambio de unidad.
   ...MENSAJES_RECHAZO_MUDANZA,
   ocupada: 'Esa unidad ya está ocupada en las fechas de la reserva.',
@@ -386,10 +411,15 @@ export default async function DetalleReservaPage({
 
   const { data: pagosData } = await supabase
     .from('pagos')
-    .select('id, medio, tipo, monto, estado, creado_en')
+    .select('id, medio, tipo, monto, estado, creado_en, moneda, monto_cobrado, cupon, ultimos4, tarjeta_marca')
     .eq('reserva_id', id)
     .order('creado_en')
   const pagos = (pagosData ?? []) as PagoRow[]
+
+  // Estado de cobro consolidado (alojamiento + consumos) y links de pago vivos.
+  // Es la misma lectura que usa el portal público, para que el huésped y
+  // recepción no vean saldos distintos.
+  const cobroEnLinea = await estadoDeCobro(supabase, id)
   const resumen = resumenPagos(
     Number(reserva.total),
     pagos.map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado }) as Pago),
@@ -887,12 +917,28 @@ export default async function DetalleReservaPage({
         {pagos.length > 0 && (
           <ul className="mt-4 divide-y divide-stone-100 text-sm">
             {pagos.map((p) => (
-              <li key={p.id} className="flex items-center justify-between py-2">
-                <span className="text-stone-600">
+              <li key={p.id} className="flex items-start justify-between gap-3 py-2">
+                <span className="min-w-0 text-stone-600">
                   {ETIQUETAS_TIPO_PAGO[p.tipo]} · {ETIQUETAS_MEDIO[p.medio]}
+                  {p.estado !== 'aprobado' && (
+                    <>
+                      {' '}
+                      <Etiqueta tono={p.estado === 'pendiente' ? 'alerta' : 'peligro'}>
+                        {p.estado === 'pendiente' ? 'Pendiente' : 'Rechazado'}
+                      </Etiqueta>
+                    </>
+                  )}
+                  {/* El rastro del posnet y el importe en moneda local. Es lo que
+                      permite conciliar contra la liquidación de la terminal
+                      cuando los números no cierran. */}
+                  {detalleDelCobro(p) && (
+                    <span className="mt-0.5 block text-xs text-stone-500">
+                      {detalleDelCobro(p)}
+                    </span>
+                  )}
                 </span>
                 <span
-                  className={`font-medium ${p.tipo === 'reembolso' ? 'text-red-600' : 'text-stone-800'}`}
+                  className={`shrink-0 font-medium ${p.tipo === 'reembolso' ? 'text-red-600' : 'text-stone-800'} ${p.estado !== 'aprobado' ? 'text-stone-400 line-through' : ''}`}
                 >
                   {p.tipo === 'reembolso' ? '−' : ''}{formatearUSD(Number(p.monto))}
                 </span>
@@ -930,8 +976,29 @@ export default async function DetalleReservaPage({
                 ))}
               </select>
             </label>
+            {/* La moneda del cobro. Un huésped que paga en efectivo en pesos es
+                el caso más común del hotel; antes había que hacer la conversión
+                a mano y anotar el resultado, así que no quedaba registro de
+                cuántos pesos entraron ni a qué cambio y la caja no cerraba
+                contra el sistema. `monto` se sigue guardando en USD —es lo único
+                que salda la reserva— y el importe real va aparte. */}
             <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
-              <span className="text-stone-500">Monto (USD)</span>
+              <span className="text-stone-500">Moneda</span>
+              <select
+                name="moneda"
+                defaultValue={MONEDA_BASE}
+                className="w-full min-w-0 rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-auto"
+              >
+                <option value={MONEDA_BASE}>Dólares (USD)</option>
+                {MONEDAS_EXTRANJERAS.map((m) => (
+                  <option key={m} value={m}>
+                    {ETIQUETAS_MONEDA[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+              <span className="text-stone-500">Monto</span>
               <input
                 name="monto"
                 type="number"
@@ -941,6 +1008,49 @@ export default async function DetalleReservaPage({
                 className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-32"
               />
             </label>
+
+            {/* Rastro del posnet. Se piden SIEMPRE, no sólo al elegir tarjeta:
+                esconderlos detrás de la selección del medio exigiría JavaScript
+                de cliente en una pantalla que hoy es un formulario de servidor, y
+                el proyecto prohíbe esconder campos. Son opcionales y la acción
+                los ignora si el medio no es tarjeta.
+                ⚠️ NO hay campo para el número de tarjeta y no debe haberlo: la
+                migración 0067 rechaza un PAN en estas columnas (ADR 0025). */}
+            <fieldset className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-stone-200 p-3">
+              <legend className="px-1 text-xs text-stone-500">
+                Si cobrás con el posnet (opcional)
+              </legend>
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                <span className="text-stone-500">Cupón / autorización</span>
+                <input
+                  name="cupon"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-36"
+                />
+              </label>
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                <span className="text-stone-500">Últimos 4 dígitos</span>
+                <input
+                  name="ultimos4"
+                  inputMode="numeric"
+                  maxLength={4}
+                  pattern="[0-9]{4}"
+                  autoComplete="off"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-28"
+                />
+              </label>
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                <span className="text-stone-500">Marca</span>
+                <input
+                  name="tarjeta_marca"
+                  autoComplete="off"
+                  placeholder="Visa"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-28"
+                />
+              </label>
+            </fieldset>
+
             {/* El caso que más importa: sin bloqueo, un segundo clic
                 registraba el pago dos veces. */}
             <BotonEnvio
@@ -952,10 +1062,15 @@ export default async function DetalleReservaPage({
           </form>
         )}
         <p className="mt-3 text-xs text-stone-600">
-          Seña sugerida (primera noche): {formatearUSD(senia)}. Las pasarelas
-          (MercadoPago / Stripe) ingresan por webhook.
+          Seña sugerida (primera noche): {formatearUSD(senia)}.
         </p>
       </div>
+
+      {/* ── Cobro en línea ────────────────────────────────────────────────
+          El caso del huésped que reservó por teléfono o WhatsApp: no está para
+          dar la tarjeta y no conviene que la dicte. Se le manda el link, paga
+          desde su celular y el webhook salda la reserva solo. */}
+      <CobroEnLinea reserva={reserva} cobro={cobroEnLinea} />
 
       {/* ── Tarjeta de garantía (ADR 0025) ─────────────────────────────────
           Vive en la columna de la plata y no en «Estadía», que es donde estaba.
@@ -1197,4 +1312,161 @@ export default async function DetalleReservaPage({
       </div>
     </Pagina>
   )
+}
+
+/* ─────────────────────────────────────────────────── cobro en línea ────── */
+
+/**
+ * Generar y reenviar el link de pago del huésped.
+ *
+ * Resuelve el caso del huésped que reservó por teléfono o WhatsApp: no está en
+ * el mostrador para dar la tarjeta y dictarla por teléfono es justo lo que no
+ * hay que hacer. Se le manda el link, paga desde su celular y el webhook salda
+ * la reserva sin que recepción toque nada.
+ *
+ * Cuando ya hay un link vivo **se muestra ése y no se ofrece crear otro**: dos
+ * links por el mismo saldo son dos cobros posibles, y devolver uno es un trámite
+ * manual con la pasarela más una discusión con el huésped.
+ */
+function CobroEnLinea({
+  reserva,
+  cobro,
+}: {
+  reserva: { id: string; estado: EstadoReserva }
+  cobro: Awaited<ReturnType<typeof estadoDeCobro>>
+}) {
+  if (!cobro) return null
+
+  const impedimento = motivoNoSeCobra(reserva.estado, cobro.saldo)
+  const habilitados = new Set(proveedoresHabilitados().map(nombreClave))
+
+  // El catálogo más el simulador, que no está en el catálogo porque no es un
+  // medio que se le ofrezca a nadie: es la herramienta de demostración.
+  const medios = [
+    ...MEDIOS_DE_COBRO.filter((m) => habilitados.has(m.id)).map((m) => ({
+      valor: m.id as string,
+      titulo: m.titulo,
+    })),
+    ...(habilitados.has('simulado')
+      ? [{ valor: 'simulado', titulo: 'Pago simulado (no mueve dinero)' }]
+      : []),
+  ]
+
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white p-5">
+      <h2 className="mb-1 text-sm font-medium text-stone-700">Link de pago</h2>
+      <p className="mb-3 text-xs leading-snug text-stone-500">
+        Para mandarle al huésped por correo o WhatsApp. Paga desde su teléfono y la reserva se
+        salda sola.
+      </p>
+
+      {cobro.linksVivos.length > 0 ? (
+        <div className="space-y-3">
+          {cobro.linksVivos.map((l) => (
+            <div key={l.externalId} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <p className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="font-medium text-stone-800">
+                  {l.tipo === 'senia' ? 'Seña' : 'Saldo'} · {formatearUSD(l.monto)}
+                </span>
+                {l.moneda !== MONEDA_BASE && l.montoCobrado !== null && (
+                  <span className="text-xs text-stone-500">
+                    se cobra{' '}
+                    {MONEDAS_EXTRANJERAS.includes(l.moneda as (typeof MONEDAS_EXTRANJERAS)[number])
+                      ? formatearLocal(
+                          l.montoCobrado,
+                          l.moneda as (typeof MONEDAS_EXTRANJERAS)[number],
+                        )
+                      : `${l.moneda} ${l.montoCobrado}`}
+                  </span>
+                )}
+              </p>
+
+              {/* El enlace completo y seleccionable, no un botón de «copiar»:
+                  copiar al portapapeles necesita JavaScript de cliente y falla
+                  en silencio si el navegador lo bloquea. Un texto que se puede
+                  leer y seleccionar funciona siempre. */}
+              <p className="mt-1 break-all rounded border border-stone-200 bg-white px-2 py-1.5 font-mono text-xs text-stone-600 select-all">
+                {l.url}
+              </p>
+
+              <p className="mt-1 text-xs text-stone-500">
+                {l.venceEn
+                  ? `Vence el ${formatoFechaCorta(l.venceEn.slice(0, 10))}.`
+                  : 'Sin vencimiento.'}
+              </p>
+            </div>
+          ))}
+          <p className="text-xs text-stone-500">
+            Ya hay un link activo por este saldo. No se genera otro para que el huésped no
+            pueda pagar dos veces.
+          </p>
+        </div>
+      ) : impedimento ? (
+        <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-600">
+          {impedimento}
+        </p>
+      ) : medios.length === 0 ? (
+        <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-600">
+          No hay ninguna pasarela habilitada. Se configura con la variable{' '}
+          <code className="font-mono">PAGO_PROVIDER</code>.
+        </p>
+      ) : (
+        <form action={generarLinkDePago} className="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="reserva_id" value={reserva.id} />
+          <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+            <span className="text-stone-500">Medio</span>
+            <select
+              name="medio"
+              className="w-full min-w-0 rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-auto"
+            >
+              {medios.map((m) => (
+                <option key={m.valor} value={m.valor}>
+                  {m.titulo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+            <span className="text-stone-500">Cobrar</span>
+            <select
+              name="tipo"
+              defaultValue={cobro.tieneSenia ? 'saldo' : 'senia'}
+              className="w-full min-w-0 rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-auto"
+            >
+              <option value="senia">Seña ({formatearUSD(Math.min(cobro.senia, cobro.saldo))})</option>
+              <option value="saldo">Saldo completo ({formatearUSD(cobro.saldo)})</option>
+            </select>
+          </label>
+          <BotonEnvio extra="w-full sm:w-auto" cargando="Generando…">
+            Generar link
+          </BotonEnvio>
+        </form>
+      )}
+    </div>
+  )
+}
+
+/**
+ * La línea chica bajo un pago: cuánto entró en moneda local y con qué cupón.
+ *
+ * Devuelve cadena vacía cuando no hay nada que agregar —un pago en dólares sin
+ * tarjeta— para no ensuciar la lista con una línea en blanco.
+ */
+function detalleDelCobro(p: PagoRow): string {
+  const partes: string[] = []
+
+  if (p.moneda && p.moneda !== MONEDA_BASE && p.monto_cobrado !== null) {
+    const monto = Number(p.monto_cobrado)
+    partes.push(
+      MONEDAS_EXTRANJERAS.includes(p.moneda as (typeof MONEDAS_EXTRANJERAS)[number])
+        ? formatearLocal(monto, p.moneda as (typeof MONEDAS_EXTRANJERAS)[number])
+        : `${p.moneda} ${monto}`,
+    )
+  }
+
+  if (p.tarjeta_marca) partes.push(p.tarjeta_marca)
+  if (p.ultimos4) partes.push(`•••• ${p.ultimos4}`)
+  if (p.cupon) partes.push(`cupón ${p.cupon}`)
+
+  return partes.join(' · ')
 }

@@ -201,7 +201,7 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 26 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 27 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -231,8 +231,23 @@ Tarifario 2025/2026 (Anexo A).
   enlaces del portal revocables (0063), recuperación de contraseña, y las dependencias
   de 8 vulnerabilidades a 1 baja. Cada hallazgo se verificó **ejecutándolo** antes y
   después; el detalle está en la bitácora.
-- **1446 tests verdes** (89 archivos), **cero salteados**, verificados contra la base
-  local con las **65** migraciones aplicadas en orden. El feed iCal de salida (B7,
+- **Fase 23 ✅ (2026-08-25) — la pasarela de pagos, enchufada (ADR 0027).** El puerto
+  existía desde la Fase 3 y **no lo llamaba nadie**: `crearCheckout` tenía cero call
+  sites, `/pago-simulado` daba 404 y no existía `PAGO_PROVIDER`. Hoy se cobra desde
+  la web y desde el mostrador, en dólares y en pesos, con **dos pasarelas a la vez**
+  (Stripe para la tarjeta internacional, MercadoPago para pesos, cuotas, billetera y
+  efectivo en Rapipago) porque el hotel es internacional y ninguna cubre las dos
+  puntas. Migración **0067**. ⚠️ Tres cosas antes de tocarlo:
+  1. **`pagos.monto` está SIEMPRE en USD.** `resumenPagos` suma esa columna sin mirar
+     la moneda; un cobro en pesos guardado ahí daba la reserva por pagada al instante.
+     Lo cobrado de verdad va en `monto_cobrado` + `moneda` + `cotizacion`.
+  2. **`pendiente → pagada` no existe**: se pasa por `confirmada` (`caminoDeEstados`).
+     El salto se descartaba en silencio y la reserva expiraba **con la plata cobrada**.
+  3. **`rechazado` no es final para un pago**: el huésped reintenta con otra tarjeta
+     bajo la misma referencia externa.
+  Ninguna pasarela verifica la tarjeta de garantía y las tres lo declaran (ADR 0025).
+- **1555 tests verdes** (94 archivos), **cero salteados**, verificados contra la base
+  local con las **67** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
   0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos
   migraciones con el mismo número **no conviven**: Supabase registra la versión por
@@ -296,11 +311,17 @@ Tarifario 2025/2026 (Anexo A).
 - **Cara al cliente (diferido a la vista pública `app/reservar`):** web check-in y
   encuestas de satisfacción NO van en la gestión.
 - **Deploy** (Vercel + Supabase cloud) pendiente — requiere cuentas del usuario.
-- No se integran pasarelas reales ni envío de email real (credenciales/dinero);
-  stubs listos para enchufar (`lib/payments`, `lib/email`).
+- **Pagos: los adaptadores reales están escritos** (MercadoPago Checkout Pro y
+  Stripe Checkout Sessions, por HTTP y sin SDK). Lo que falta es **contratar** las
+  pasarelas: enchufarlas es cargar `PAGO_PROVIDER` y las credenciales, no tocar
+  código (ADR 0027). El envío de email real sigue sin integrarse.
 - ⚠️ **Variables obligatorias en producción** (ADR 0018: si faltan, el sistema falla
   al arrancar, a propósito): `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,
-  `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER` y `CANAL_PROVIDER`. Opcionales:
+  `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER`, `CANAL_PROVIDER` y **`PAGO_PROVIDER`**
+  (ésta admite **varias separadas por comas**: `mercadopago,stripe`; es el único
+  adapter plural, porque el hotel ofrece varios medios a la vez). Con las pasarelas
+  van `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`
+  y `STRIPE_WEBHOOK_SECRET`. Opcionales:
   `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL` y
   `ARGENTINADATOS_URL`. Revisarlas **antes** del deploy.
 - Admin de dev: `admin@blancapatagonia.local` / `blancadev1234` (`npm run seed:usuarios`).

@@ -30,6 +30,11 @@ import {
 import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
 import { obtenerProveedor } from '@/lib/payments'
+import { iniciarCobro, falloElCobro } from '@/lib/payments/servicio'
+import { estadoDeCobro } from '@/lib/reservas/cobro'
+import { imputarEnUSD, motivoNoSeCobra, MONEDA_BASE } from '@/lib/domain/cobro'
+import { esMonedaExtranjera } from '@/lib/domain/divisas'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { enviarPlantilla } from '@/lib/email'
 import { urlDelSitio } from '@/lib/env'
 
@@ -388,14 +393,73 @@ export async function registrarPago(formData: FormData): Promise<void> {
   const reservaId = String(formData.get('reserva_id') ?? '')
   const medio = String(formData.get('medio') ?? 'efectivo')
   const tipo = String(formData.get('tipo') ?? 'saldo')
-  const monto = Number(formData.get('monto') ?? 0)
+  const montoIngresado = Number(formData.get('monto') ?? 0)
+  const moneda = String(formData.get('moneda') ?? MONEDA_BASE)
   if (!reservaId) redirect('/panel/reservas')
-  if (!(monto > 0)) redirect(`/panel/reservas/${reservaId}?error=monto`)
+  if (!(montoIngresado > 0)) redirect(`/panel/reservas/${reservaId}?error=monto`)
+
+  /*
+    El importe se ingresa en la moneda en la que se cobró, y se guarda en las
+    dos: `monto` en USD —que es lo único que salda la reserva— y `monto_cobrado`
+    con lo que de verdad entró a la caja.
+
+    Es la parte que faltaba para el mostrador. Un huésped que paga en efectivo en
+    pesos es el caso más común del hotel, y antes había que hacer la cuenta a
+    mano y anotar el resultado en dólares: sin registro de cuántos pesos entraron
+    ni a qué cambio, la caja no cierra contra el sistema.
+  */
+  let montoUSD = montoIngresado
+  let montoCobrado: number | null = null
+  let cotizacion: number | null = null
+
+  if (moneda !== MONEDA_BASE) {
+    if (!esMonedaExtranjera(moneda)) {
+      redirect(`/panel/reservas/${reservaId}?error=moneda`)
+    }
+    const vigente = await cotizacionVigente(moneda)
+    // `venta` es la que se cobra: cuántas unidades cuesta comprar un dólar.
+    const valor = vigente?.venta ?? null
+    if (!valor) redirect(`/panel/reservas/${reservaId}?error=sin_cotizacion`)
+
+    const enUSD = imputarEnUSD(montoIngresado, valor)
+    if (enUSD === null) redirect(`/panel/reservas/${reservaId}?error=monto`)
+
+    montoUSD = enUSD
+    montoCobrado = montoIngresado
+    cotizacion = valor
+  }
+
+  /*
+    Rastro del cobro con tarjeta.
+
+    Sin el cupón, un cobro con posnet se registra igual que uno en efectivo, y
+    cuando la liquidación de la terminal no cierra contra el sistema no hay por
+    dónde empezar a buscar. Los últimos cuatro dígitos PCI-DSS los permite; el
+    número entero no se pide, no se guarda y la migración 0067 lo rechaza.
+  */
+  const esTarjeta = medio === 'tarjeta'
+  const cupon = esTarjeta ? String(formData.get('cupon') ?? '').trim() : ''
+  const ultimos4 = esTarjeta ? String(formData.get('ultimos4') ?? '').trim() : ''
+  const marca = esTarjeta ? String(formData.get('tarjeta_marca') ?? '').trim() : ''
+
+  if (ultimos4 && !/^[0-9]{4}$/.test(ultimos4)) {
+    redirect(`/panel/reservas/${reservaId}?error=ultimos4`)
+  }
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase
-    .from('pagos')
-    .insert({ reserva_id: reservaId, medio, tipo, monto, estado: 'aprobado' })
+  const { error } = await supabase.from('pagos').insert({
+    reserva_id: reservaId,
+    medio,
+    tipo,
+    monto: montoUSD,
+    moneda,
+    monto_cobrado: montoCobrado,
+    cotizacion,
+    estado: 'aprobado',
+    cupon: cupon || null,
+    ultimos4: ultimos4 || null,
+    tarjeta_marca: marca || null,
+  })
   if (error) redirect(`/panel/reservas/${reservaId}?error=pago`)
 
   // ¿Quedó saldada? → intentar pasar a 'pagada'.
@@ -411,6 +475,80 @@ export async function registrarPago(formData: FormData): Promise<void> {
   cortarSiFalla(eSaldada ? { message: eSaldada } : null, `/panel/reservas/${reservaId}`, 'saldada')
 
   redirect(`/panel/reservas/${reservaId}`)
+}
+
+/**
+ * Genera un link de pago y se lo deja a recepción para mandárselo al huésped.
+ *
+ * Para qué sirve en el mostrador. Es el caso del huésped que reserva por
+ * teléfono o por WhatsApp: no está para dar la tarjeta, no quiere dictarla por
+ * teléfono —y el hotel no debería anotarla— y todavía hay que asegurarle la
+ * reserva. Se le manda el link, paga desde su celular y el webhook salda solo.
+ *
+ * Toda la parte delicada —congelar la cotización, escribir el pago pendiente, no
+ * dejar dos links vivos— vive en `iniciarCobro`, que es el mismo camino que usa
+ * el portal público. Acá sólo se decide qué se cobra y a dónde vuelve.
+ */
+export async function generarLinkDePago(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  const medio = String(formData.get('medio') ?? '')
+  const tipoPedido = String(formData.get('tipo') ?? 'saldo')
+  if (!reservaId) redirect('/panel/reservas')
+
+  const supabase = await crearClienteServidor()
+
+  const { data: reserva, error: eReserva } = await supabase
+    .from('reservas')
+    .select('id, codigo, estado, token, huesped:huespedes!reservas_huesped_id_fkey(email)')
+    .eq('id', reservaId)
+    .maybeSingle()
+
+  cortarSiFalla(eReserva, `/panel/reservas/${reservaId}`, 'link_pago')
+  if (!reserva) redirect('/panel/reservas')
+
+  const cobro = await estadoDeCobro(supabase, reservaId)
+  if (!cobro) redirect(`/panel/reservas/${reservaId}?error=link_sin_datos`)
+
+  // Mismo criterio que en el portal: la seña sólo mientras no se haya pagado.
+  const tipo = tipoPedido === 'senia' && !cobro.tieneSenia ? 'senia' : 'saldo'
+  const monto = tipo === 'senia' ? Math.min(cobro.senia, cobro.saldo) : cobro.saldo
+
+  const impedimento = motivoNoSeCobra(reserva.estado as EstadoReserva, cobro.saldo)
+  if (impedimento) redirect(`/panel/reservas/${reservaId}?error=link_no_cobrable`)
+
+  const base = urlDelSitio().replace(/\/$/, '')
+  // El huésped vuelve a SU pantalla, no al panel: el link se abre desde su
+  // teléfono y ahí no tiene —ni debe tener— sesión de staff.
+  const volver = `${base}/reservar/confirmacion/${reserva.token}`
+
+  const resultado = await iniciarCobro(supabase, {
+    reservaId,
+    tipo,
+    montoUSD: monto,
+    proveedor: medio,
+    descripcion: `Hotel Blanca Patagonia · reserva ${reserva.codigo} · ${tipo === 'senia' ? 'seña' : 'saldo'}`,
+    emailComprador: emailDelHuesped(reserva.huesped),
+    urls: { exito: volver, error: volver, pendiente: volver },
+  })
+
+  if (falloElCobro(resultado)) {
+    console.error(`[link de pago] ${reserva.codigo}: ${resultado.error}`)
+    redirect(`/panel/reservas/${reservaId}?error=link_pasarela`)
+  }
+
+  redirect(`/panel/reservas/${reservaId}`)
+}
+
+/**
+ * El email del huésped, venga como objeto o como array.
+ *
+ * PostgREST devuelve un embed to-one como objeto, pero el tipo generado lo
+ * declara como array cuando no puede probar la cardinalidad.
+ */
+function emailDelHuesped(huesped: unknown): string | undefined {
+  const h = Array.isArray(huesped) ? huesped[0] : huesped
+  return (h as { email?: string } | null)?.email ?? undefined
 }
 
 /** Carga un consumo (producto × cantidad) a la cuenta de la reserva. */

@@ -1,11 +1,15 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { seniaSugerida } from '@/lib/domain/pagos'
+import { estadoDeCobro, type EstadoCobro } from '@/lib/reservas/cobro'
+import { motivoNoSeCobra } from '@/lib/domain/cobro'
+import { formatearUSD } from '@/lib/domain/moneda'
+import type { EstadoReserva } from '@/lib/domain/reservas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { Marco, Mensaje, Tarjeta, botonPublico } from '../../../_publico/ui'
 
 interface Reserva {
+  id: string
   codigo: string
   estado: string
   total: number | string
@@ -27,7 +31,7 @@ export default async function ConfirmacionPage({
   const { data } = await admin
     .from('reservas')
     .select(
-      'codigo, estado, total, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email), estadias(periodo, unidad:unidades(nombre, tipo:tipos_unidad(nombre)))',
+      'id, codigo, estado, total, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email), estadias(periodo, unidad:unidades(nombre, tipo:tipos_unidad(nombre)))',
     )
     .eq('token', token)
     .single()
@@ -37,7 +41,11 @@ export default async function ConfirmacionPage({
   const estadia = reserva.estadias?.[0]
   const periodo = estadia ? parsearPeriodo(estadia.periodo) : null
   const noches = periodo ? diasEntre(periodo.desde, periodo.hasta) : 0
-  const senia = seniaSugerida(Number(reserva.total), noches)
+
+  // El estado de cobro sale de la base, no de la vuelta de la pasarela: la URL
+  // de retorno de un checkout se puede abrir a mano sin haber pagado nada.
+  // Quien confirma un cobro es el webhook, y esto lee lo que él escribió.
+  const cobro = await estadoDeCobro(admin, reserva.id)
 
   return (
     <Marco ancho="angosto">
@@ -93,16 +101,23 @@ export default async function ConfirmacionPage({
               <Fila etiqueta="Noches" valor={String(noches)} />
             </>
           )}
-          <Fila etiqueta="Total" valor={`USD ${Number(reserva.total).toLocaleString('es-AR')}`} />
-          <Fila etiqueta="Seña a abonar" valor={`USD ${senia.toLocaleString('es-AR')}`} destacado />
+          <Fila etiqueta="Total" valor={formatearUSD(cobro?.total ?? Number(reserva.total))} />
+          {cobro && cobro.pagado > 0 && (
+            <Fila etiqueta="Pagado" valor={formatearUSD(cobro.pagado)} />
+          )}
+          {cobro && (
+            <Fila
+              etiqueta={cobro.saldada ? 'Saldo' : cobro.tieneSenia ? 'Saldo a abonar' : 'Seña a abonar'}
+              valor={formatearUSD(
+                cobro.saldada ? 0 : cobro.tieneSenia ? cobro.saldo : Math.min(cobro.senia, cobro.saldo),
+              )}
+              destacado
+            />
+          )}
         </dl>
 
         <div className="border-t border-stone-100 px-6 py-5 sm:px-8">
-          <Mensaje tono="aviso">
-            <strong className="font-medium">La reserva todavía no está confirmada.</strong> Queda
-            tomada por 5 días; para asegurarla hay que abonar la seña. Te escribimos
-            {reserva.huesped?.email ? ` a ${reserva.huesped.email}` : ''} para coordinar cómo.
-          </Mensaje>
+          <EstadoDePago token={token} reserva={reserva} cobro={cobro} />
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href="/" className={botonPublico('secundario')}>
@@ -119,6 +134,66 @@ export default async function ConfirmacionPage({
         Guardá esta página en favoritos: podés volver a abrirla cuando quieras con el mismo enlace.
       </p>
     </Marco>
+  )
+}
+
+/**
+ * Qué le decimos al huésped sobre su pago, y qué puede hacer al respecto.
+ *
+ * Los cuatro casos son distintos y llevan a acciones distintas; mostrarlos con
+ * un texto único —«hay que abonar la seña»— era lo que había antes, y le pedía
+ * la seña incluso a quien ya la había pagado.
+ */
+function EstadoDePago({
+  token,
+  reserva,
+  cobro,
+}: {
+  token: string
+  reserva: Reserva
+  cobro: EstadoCobro | null
+}) {
+  // Sin datos de cobro no se inventa un estado: se dice que no se pudo calcular.
+  if (!cobro) {
+    return (
+      <Mensaje tono="aviso">
+        No pudimos calcular el saldo en este momento. Escribinos y lo revisamos con vos.
+      </Mensaje>
+    )
+  }
+
+  if (cobro.saldada) {
+    return (
+      <Mensaje tono="ok">
+        <strong className="font-medium">Está todo pago.</strong> No tenés que hacer nada más;
+        te esperamos el día de la llegada.
+      </Mensaje>
+    )
+  }
+
+  const impedimento = motivoNoSeCobra(reserva.estado as EstadoReserva, cobro.saldo)
+
+  return (
+    <>
+      <Mensaje tono="aviso">
+        <strong className="font-medium">
+          {cobro.tieneSenia
+            ? 'Queda un saldo pendiente.'
+            : 'La reserva todavía no está confirmada.'}
+        </strong>{' '}
+        {cobro.tieneSenia
+          ? 'Podés abonarlo ahora o al llegar al hotel.'
+          : 'Queda tomada por 5 días; para asegurarla hay que abonar la seña.'}
+      </Mensaje>
+
+      {!impedimento && (
+        <div className="mt-4">
+          <Link href={`/reservar/pagar/${token}`} className={botonPublico('primario')}>
+            {cobro.tieneSenia ? 'Pagar el saldo' : 'Pagar la seña'}
+          </Link>
+        </div>
+      )}
+    </>
   )
 }
 

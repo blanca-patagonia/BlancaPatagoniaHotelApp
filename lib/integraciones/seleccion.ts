@@ -95,6 +95,70 @@ export function seleccionarProveedor<T>({
 }
 
 /**
+ * Igual que `seleccionarProveedor`, pero devuelve **varios**.
+ *
+ * Por qué existe una versión plural, si los otros seis adaptadores se arreglan
+ * con uno solo. Porque en pagos la pregunta del negocio es distinta: el hotel no
+ * elige «con qué pasarela trabaja», elige **qué medios de pago le ofrece al
+ * huésped**, y son varios a la vez. Un huésped de Alemania paga con su tarjeta
+ * en dólares por Stripe y uno de Buenos Aires paga en pesos y cuotas por
+ * MercadoPago; obligar a elegir una sola dejaría a la mitad de los huéspedes sin
+ * poder pagar. Correo, facturación o firma no tienen ese problema: hay un solo
+ * proveedor y punto.
+ *
+ * La variable se escribe separada por comas: `PAGO_PROVIDER=mercadopago,stripe`.
+ *
+ * Las garantías del singular se mantienen todas: fuera de producción cae al
+ * simulador sin ruido, y en producción **un nombre desconocido lanza** en vez de
+ * ignorarse. Que un error de tipeo achique en silencio la lista de medios de
+ * pago sería exactamente la degradación silenciosa que el ADR 0018 evita —el
+ * hotel perdería cobros sin que nadie vea un error—.
+ */
+export function seleccionarProveedores<T>({
+  variable,
+  proveedores,
+  simulado,
+  valor,
+}: OpcionesDeSeleccion<T>): T[] {
+  const disponibles = Object.keys(proveedores).join(', ')
+  const nombres = (valor ?? '')
+    .split(',')
+    .map((n) => n.trim())
+    .filter(Boolean)
+
+  if (nombres.length === 0) {
+    if (!esProduccion()) return [proveedores[simulado]]
+    throw new Error(
+      `Falta ${variable} y el sistema está en producción.\n` +
+        `Sin esa variable se usaría «${simulado}», que es un simulador y no cobra de verdad.\n` +
+        `Definí ${variable} con uno o varios de: ${disponibles} (separados por comas). ` +
+        `Si de verdad querés correr con el simulador, poné ${variable}=${simulado}.`,
+    )
+  }
+
+  const desconocidos = nombres.filter((n) => !proveedores[n])
+  if (desconocidos.length > 0) {
+    if (!esProduccion()) {
+      console.warn(
+        `[integraciones] ${variable} nombra proveedores que no existen: ${desconocidos.join(', ')}. ` +
+          `Disponibles: ${disponibles}.`,
+      )
+    } else {
+      throw new Error(
+        `${variable}="${valor}" nombra proveedores que no existen: ${desconocidos.join(', ')}.\n` +
+          `Disponibles: ${disponibles}.\n` +
+          `Se falla en vez de ignorarlos para que un error de tipeo no deje al hotel sin ese ` +
+          `medio de pago sin que nadie se entere.`,
+      )
+    }
+  }
+
+  // `Set` para que repetir un nombre no duplique el medio en la pantalla.
+  const elegidos = [...new Set(nombres)].filter((n) => proveedores[n]).map((n) => proveedores[n])
+  return elegidos.length > 0 ? elegidos : [proveedores[simulado]]
+}
+
+/**
  * Advierte cuando un proveedor simulado quedó activo en producción de forma
  * deliberada.
  *

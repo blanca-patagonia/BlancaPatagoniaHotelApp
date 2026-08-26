@@ -1,11 +1,11 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
-import { resumenPagos, type Pago } from '@/lib/domain/pagos'
-import { puedeTransicionar, type EstadoReserva } from '@/lib/domain/reservas'
+import { resumenPagos, estadoSegunPagos, type Pago } from '@/lib/domain/pagos'
+import { caminoDeEstados, type EstadoReserva } from '@/lib/domain/reservas'
 
 /**
- * «¿La reserva quedó saldada? Entonces pasala a `pagada`.»
+ * «¿Qué estado le corresponde a la reserva según lo que se cobró?»
  *
  * ── Por qué existe este módulo ───────────────────────────────────────────────
  *
@@ -41,6 +41,14 @@ export interface ResultadoSaldar {
   /** `true` solo si esta llamada movió la reserva a `pagada`. */
   marcadaPagada: boolean
   /**
+   * `true` si esta llamada la movió a `confirmada` por el cobro de la seña.
+   *
+   * Va aparte de `marcadaPagada` porque son dos cosas distintas para quien mira
+   * la pantalla: una dice «ya no debe nada», la otra «la unidad dejó de estar en
+   * riesgo de liberarse».
+   */
+  confirmada: boolean
+  /**
    * La reserva no existe.
    *
    * Va aparte de `error` porque los dos llamadores necesitan tratarlo distinto y
@@ -53,7 +61,12 @@ export interface ResultadoSaldar {
 }
 
 /** «No pasó nada»: el caso normal, y la base de los demás retornos. */
-const NADA: ResultadoSaldar = { error: null, marcadaPagada: false, noExiste: false }
+const NADA: ResultadoSaldar = {
+  error: null,
+  marcadaPagada: false,
+  confirmada: false,
+  noExiste: false,
+}
 
 /**
  * Recalcula la cuenta de la reserva y, si está cubierta, la pasa a `pagada`.
@@ -100,20 +113,36 @@ export async function saldarSiCorresponde(
   )
 
   const resumen = resumenPagos(cuenta.total, (pagos ?? []) as Pago[])
-  if (!resumen.saldada) return NADA
 
-  // Una reserva anulada que quedó saldada no se transiciona: la máquina de estados
-  // no lo permite. Queda fuera del alcance de esta función resolver qué hacer con
-  // esa plata; es una decisión del hotel, no del código.
-  if (!puedeTransicionar(reserva.estado as EstadoReserva, 'pagada')) return NADA
+  // La regla vive en el dominio: la seña confirma, la cuenta cubierta paga.
+  const destino = estadoSegunPagos(reserva.estado, resumen)
+  if (!destino) return NADA
 
-  const { error: eEstado } = await cliente
-    .from('reservas')
-    .update({ estado: 'pagada' })
-    .eq('id', reservaId)
-  if (eEstado) {
-    return { ...NADA, error: `no se pudo marcar la reserva como pagada: ${eEstado.message}` }
+  /*
+    El camino, no el salto.
+
+    `pendiente → pagada` NO es una transición válida: hay que pasar por
+    `confirmada`. Es exactamente lo que hace un huésped que reserva por la web
+    —su reserva nace `pendiente`— y paga todo de una.
+
+    Antes esto se descartaba en silencio con un `puedeTransicionar(...) === false`
+    y la reserva quedaba `pendiente`. La expiración la liberaba a los 5 días y el
+    hotel revendía la unidad **con la plata ya cobrada**. Una reserva anulada
+    sigue sin moverse, que es lo que aquella guarda quería proteger; la diferencia
+    es que ahora eso lo decide `estadoSegunPagos` y no un efecto lateral.
+  */
+  const camino = caminoDeEstados(reserva.estado as EstadoReserva, destino)
+  if (!camino || camino.length === 0) return NADA
+
+  for (const paso of camino) {
+    const { error: eEstado } = await cliente
+      .from('reservas')
+      .update({ estado: paso })
+      .eq('id', reservaId)
+    if (eEstado) {
+      return { ...NADA, error: `no se pudo pasar la reserva a «${paso}»: ${eEstado.message}` }
+    }
   }
 
-  return { ...NADA, marcadaPagada: true }
+  return { ...NADA, marcadaPagada: destino === 'pagada', confirmada: destino === 'confirmada' }
 }

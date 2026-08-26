@@ -239,18 +239,42 @@ describe('contrato PCI-DSS · ninguna columna puede guardar un número de tarjet
     expect(m0059!.texto).toMatch(/\[0-9\]\{12,\}/)
   })
 
-  it('el tipo DatosTarjeta que recibe el puerto NO se persiste en ningún lado', () => {
-    // `datos.numero` solo puede aparecer dentro de lib/payments (donde se usa
-    // para llamar a la pasarela y se descarta). Si aparece en una acción o en
-    // una página, alguien lo está por guardar.
-    const libPayments = readFileSync(
-      join(process.cwd(), 'lib', 'payments', 'index.ts'),
-      'utf8',
+  /*
+    Antes esto miraba un solo archivo (`lib/payments/index.ts`), y eso alcanzaba
+    mientras el puerto entero vivía ahí. Al partirse en un adapter por pasarela,
+    un archivo nuevo que guardara el número habría pasado el CI sin que nadie se
+    entere: el test seguía en verde mirando el archivo equivocado.
+
+    Ahora recorre **todos** los adapters, que es donde el número puede aparecer
+    legítimamente, y exige lo mismo de cada uno.
+  */
+  it('ningún adapter de pago devuelve ni guarda el número entero', () => {
+    const DIR_PAGOS = join(process.cwd(), 'lib', 'payments')
+    const archivos = readdirSync(DIR_PAGOS).filter((f) => f.endsWith('.ts'))
+
+    // Los que reciben `DatosTarjeta` tienen que usarlo solo para los últimos 4.
+    const conTarjeta = archivos.filter((f) =>
+      readFileSync(join(DIR_PAGOS, f), 'utf8').includes('datos.numero'),
     )
-    // Se usa para calcular los últimos 4 y nada más.
-    expect(libPayments).toContain('datos.numero.replace')
-    // Y nunca se devuelve entero.
-    expect(libPayments).not.toMatch(/numero:\s*datos\.numero/)
+    expect(conTarjeta.length, 'ningún adapter recibe ya los datos de la tarjeta').toBeGreaterThan(0)
+
+    for (const archivo of conTarjeta) {
+      const texto = readFileSync(join(DIR_PAGOS, archivo), 'utf8')
+      // Se usa para calcular los últimos 4 y nada más.
+      expect(texto, `${archivo} usa datos.numero sin recortarlo`).toContain('datos.numero.replace')
+      // Y nunca se devuelve entero.
+      expect(texto, `${archivo} devuelve el número entero`).not.toMatch(/numero:\s*datos\.numero/)
+    }
+  })
+
+  it('el número de tarjeta no sale de lib/payments', () => {
+    // Si `datos.numero` aparece en una Server Action o en una página, alguien lo
+    // está por guardar, loguear o mandar a la URL.
+    const fuera = recorrer(['app', 'lib']).filter(
+      (f) => !f.startsWith('lib/payments/') && leer(f).includes('datos.numero'),
+    )
+
+    expect(fuera, 'el número de tarjeta se está usando fuera de los adapters de pago').toEqual([])
   })
 
   it('los estados de verificación del dominio coinciden con el enum de la base', () => {
@@ -260,3 +284,26 @@ describe('contrato PCI-DSS · ninguna columna puede guardar un número de tarjet
     }
   })
 })
+
+/** Todos los `.ts`/`.tsx` bajo esas carpetas, con ruta relativa a la raíz. */
+function recorrer(raices: string[]): string[] {
+  const salida: string[] = []
+  const pendientes = [...raices]
+
+  while (pendientes.length > 0) {
+    const actual = pendientes.pop()!
+    for (const entrada of readdirSync(join(process.cwd(), actual), { withFileTypes: true })) {
+      const ruta = `${actual}/${entrada.name}`
+      if (entrada.isDirectory()) {
+        pendientes.push(ruta)
+      } else if (/\.tsx?$/.test(entrada.name)) {
+        salida.push(ruta)
+      }
+    }
+  }
+  return salida
+}
+
+function leer(relativa: string): string {
+  return readFileSync(join(process.cwd(), relativa), 'utf8')
+}
