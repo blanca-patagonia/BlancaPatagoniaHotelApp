@@ -1,8 +1,16 @@
 name: CI
 
 on:
+  # Todas las ramas, no solo `main`.
+  #
+  # Antes el workflow disparaba en push a `main` y en pull request, así que el
+  # trabajo de una rama se validaba recién al abrir el PR — con 40 commits
+  # encima. Si algo se rompió en el quinto, se descubría en el cuadragésimo.
+  # Llegó a haber cinco ramas divergidas, la mayor con 50 commits sin una sola
+  # corrida. El `concurrency` de abajo evita que esto multiplique las corridas:
+  # cancela la anterior de la misma rama.
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 # Varios push seguidos generaban corridas apiladas que competían por el runner.
@@ -103,6 +111,20 @@ jobs:
           node scripts/seed-usuarios.mjs
 
       # ── Verificación ──────────────────────────────────────────────────────
+
+      # Vulnerabilidades conocidas de las dependencias.
+      #
+      # Va PRIMERO y es barato: no necesita la base ni el build. Cuando se agregó
+      # había 8 vulnerabilidades abiertas —6 altas, incluidas SSRF en Server
+      # Actions y exposición de endpoints internos de Next— que nadie había visto
+      # porque nada las miraba.
+      #
+      # `--audit-level=high` y no `moderate`: con el umbral en moderate el paso se
+      # pone rojo por cosas que no se pueden arreglar hoy, y un CI que falla
+      # siempre deja de leerse. Las moderadas quedan visibles en la salida.
+      - name: Vulnerabilidades de dependencias (npm audit)
+        run: npm audit --audit-level=high
+
       - name: Typecheck (TypeScript)
         run: npm run typecheck
 

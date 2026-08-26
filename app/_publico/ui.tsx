@@ -128,7 +128,13 @@ export function Tarjeta({
   className?: string
 }) {
   return (
-    <section className={`rounded-2xl border border-stone-200 bg-white shadow-sm ${className}`}>
+    /* `min-w-0` por el mismo motivo que en la `Tarjeta` del panel, donde el
+       problema sí se manifestó: ver el comentario de `app/panel/_components/ui.tsx`.
+       Hoy acá es inerte —las siete tarjetas públicas son hijas de bloque—, pero la
+       primera que se ponga en un `grid` con un `truncate` adentro repetiría el
+       desbordamiento. Son dos componentes distintos con el mismo nombre; conviene
+       que no diverjan. */
+    <section className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm ${className}`}>
       {titulo && (
         <header className="border-b border-stone-100 px-5 py-4 sm:px-6">
           <h2 className="font-display text-lg font-semibold text-stone-900">{titulo}</h2>

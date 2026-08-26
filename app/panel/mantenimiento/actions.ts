@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion, requerirAcceso } from '@/lib/auth/session'
+import { requerirAcceso, requerirRol } from '@/lib/auth/session'
 import { periodicidadValida, primeraEjecucionSugerida } from '@/lib/domain/preventivo'
 import { hoyISO } from '@/lib/fechas'
 import { cortarSiFalla } from '@/lib/acciones'
@@ -55,8 +55,7 @@ export async function cambiarEstadoOrden(formData: FormData): Promise<void> {
  * para no llenar el tablero de órdenes apenas se carga el plan.
  */
 export async function crearPlanPreventivo(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirRol('admin', 'gerencia')
 
   const titulo = String(formData.get('titulo') ?? '').trim()
   const unidadId = String(formData.get('unidad_id') ?? '')
@@ -89,8 +88,7 @@ export async function crearPlanPreventivo(formData: FormData): Promise<void> {
  * cual sea el disparador.
  */
 export async function generarPreventivo(): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirRol('admin', 'gerencia')
 
   const supabase = await crearClienteServidor()
   const { data } = await supabase.rpc('generar_mantenimiento_preventivo')

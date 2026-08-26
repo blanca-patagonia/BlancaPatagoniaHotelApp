@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import { iniciarSesion, type EstadoLogin } from './actions'
 
 const ESTADO_INICIAL: EstadoLogin = {}
@@ -33,6 +34,13 @@ export function FormularioLogin() {
           placeholder="••••••••"
         />
       </label>
+
+      <Link
+        href="/login/recuperar"
+        className="-mt-2 self-end text-xs text-lago-700 hover:underline"
+      >
+        ¿Olvidaste tu contraseña?
+      </Link>
 
       {estado.error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">

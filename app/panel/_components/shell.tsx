@@ -3,35 +3,43 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
-import { areasDe, ETIQUETAS_AREA, type Area } from '@/lib/domain/permisos'
-import { agruparAreas } from '@/lib/domain/navegacion'
+import { AREAS, areasDe, ETIQUETAS_AREA, type Area } from '@/lib/domain/permisos'
+import { agruparAreas, RUTA_AREA } from '@/lib/domain/navegacion'
 import type { Rol } from '@/lib/domain/roles'
 import { Icono, Logotipo, type NombreIcono } from './iconos'
 
-/** Ruta e icono de cada área del panel. */
-const NAV: Record<Area, { href: string; icono: NombreIcono }> = {
-  dashboard: { href: '/panel', icono: 'inicio' },
-  ocupacion: { href: '/panel/ocupacion', icono: 'ocupacion' },
-  servicio: { href: '/panel/servicio', icono: 'reportes' },
-  reservas: { href: '/panel/reservas', icono: 'reservas' },
-  punto_venta: { href: '/panel/punto-venta', icono: 'objetos' },
-  huespedes: { href: '/panel/huespedes', icono: 'huespedes' },
-  housekeeping: { href: '/panel/housekeeping', icono: 'housekeeping' },
-  mantenimiento: { href: '/panel/mantenimiento', icono: 'mantenimiento' },
-  objetos_perdidos: { href: '/panel/objetos-perdidos', icono: 'objetos' },
-  avisos: { href: '/panel/avisos', icono: 'avisos' },
-  conversaciones: { href: '/panel/conversaciones', icono: 'chat' },
-  agencias: { href: '/panel/agencias', icono: 'agencias' },
-  proveedores: { href: '/panel/proveedores', icono: 'proveedores' },
-  contratos: { href: '/panel/contratos', icono: 'contratos' },
-  canales: { href: '/panel/canales', icono: 'canales' },
-  auditoria: { href: '/panel/auditoria', icono: 'auditoria' },
-  reportes: { href: '/panel/reportes', icono: 'reportes' },
-  config: { href: '/panel/config', icono: 'config' },
-  usuarios: { href: '/panel/usuarios', icono: 'usuarios' },
-  respaldos: { href: '/panel/respaldos', icono: 'descargar' },
-  ayuda: { href: '/panel/ayuda', icono: 'ayuda' },
+/*
+  Solo el ICONO vive acá. La ruta de cada área la da `RUTA_AREA`
+  (`lib/domain/navegacion.ts`), porque la necesita también el buscador global y
+  dos listas de veintidós rutas que hay que tocar juntas terminan divergiendo.
+*/
+const ICONO_AREA: Record<Area, NombreIcono> = {
+  dashboard: 'inicio',
+  ocupacion: 'ocupacion',
+  servicio: 'reportes',
+  reservas: 'reservas',
+  punto_venta: 'objetos',
+  huespedes: 'huespedes',
+  housekeeping: 'housekeeping',
+  mantenimiento: 'mantenimiento',
+  objetos_perdidos: 'objetos',
+  avisos: 'avisos',
+  conversaciones: 'chat',
+  agencias: 'agencias',
+  proveedores: 'proveedores',
+  contratos: 'contratos',
+  canales: 'canales',
+  auditoria: 'auditoria',
+  reportes: 'reportes',
+  config: 'config',
+  usuarios: 'usuarios',
+  respaldos: 'descargar',
+  ayuda: 'ayuda',
 }
+
+const NAV: Record<Area, { href: string; icono: NombreIcono }> = Object.fromEntries(
+  AREAS.map((a) => [a, { href: RUTA_AREA[a], icono: ICONO_AREA[a] }]),
+) as Record<Area, { href: string; icono: NombreIcono }>
 
 /** El área está activa si es la ruta exacta (Inicio) o un prefijo (el resto). */
 function estaActivo(pathname: string, area: Area, href: string): boolean {
@@ -279,8 +287,26 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
         Saltar al contenido
       </a>
 
-      {/* Barra lateral — escritorio */}
-      <aside className={`hidden w-60 shrink-0 flex-col lg:flex ${FONDO_LATERAL}`}>
+      {/*
+        Barra lateral — escritorio.
+
+        Va pegada a la ventana (`sticky top-0 h-screen`) y **eso es lo que arregla el
+        bug**: antes era `static`, y como es un ítem flex de un contenedor que estira,
+        la caja azul medía lo que midiera la página entera —5.739 px en Ayuda—. Se veía
+        la franja de color de arriba abajo, pero los enlaces vivían en los primeros
+        400 px y se iban con el scroll: en Ayuda, a media página, el menú estaba 1.296 px
+        más arriba y no había forma de navegar sin volver al principio. Pasaba en todo
+        el panel, y en las pantallas largas —Ayuda, reservas, ocupación— siempre.
+
+        El scroll de la lista NO se pone acá: el `<nav>` de `Enlaces` ya es
+        `flex-1 overflow-y-auto`. Poner un segundo `overflow` en el aside dejaría dos
+        contenedores de scroll anidados peleándose por la rueda. Repartido así, la marca
+        y el pie quedan siempre a la vista y solo scrollea la lista, que es lo que
+        conviene cuando la ventana es baja.
+      */}
+      <aside
+        className={`hidden w-60 shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:h-screen ${FONDO_LATERAL}`}
+      >
         <Marca />
         <Enlaces rol={rol} pathname={pathname} />
         <p className="border-t border-white/10 px-4 py-3 text-[11px] text-lago-200/70">
@@ -336,9 +362,35 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
             Blanca Patagonia
           </span>
 
-          {/* Buscador global: recepción necesita encontrar a alguien mientras
-              lo tiene al teléfono, sin adivinar en qué módulo está cargado. */}
-          <form action="/panel/buscar" method="get" className="ml-auto max-w-xs flex-1 lg:ml-6">
+          {/*
+            Espaciador izquierdo. Junto con su gemelo de la derecha es lo que
+            CENTRA de verdad el buscador: `mx-auto` no alcanza sobre un ítem flex
+            que crece, y con el menú de cuenta a un lado y nada al otro el campo
+            quedaba corrido 168 px a la izquierda (medido). Dos espaciadores con
+            el mismo `flex-1` reparten el sobrante en partes iguales, así que el
+            centro del campo cae en el centro de la barra pase lo que pase con el
+            largo del nombre de quien inició sesión.
+          */}
+          <div className="hidden flex-1 lg:block" aria-hidden="true" />
+
+          {/*
+            Buscador global, centrado en la barra.
+
+            Está en el medio y no arrinconado a la derecha porque hace dos cosas y
+            las dos son de las más usadas: encontrar a alguien mientras está al
+            teléfono, y encontrar EN QUÉ PARTE DEL SISTEMA se hace algo. Lo segundo
+            lo necesita sobre todo quien recién empieza, que es justamente a quien
+            menos le sirve un campo escondido en una esquina.
+
+            El centrado es `mx-auto` sobre un ancho máximo, no una grilla de tres
+            columnas: así el campo queda centrado respecto del contenido y no se
+            corre cuando el nombre de quien inició sesión es más largo o más corto.
+          */}
+          <form
+            action="/panel/buscar"
+            method="get"
+            className="w-full max-w-md flex-1 lg:max-w-lg lg:flex-none"
+          >
             <label className="sr-only" htmlFor="busqueda-global">
               Buscar en todo el sistema
             </label>
@@ -353,13 +405,13 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
                 id="busqueda-global"
                 type="search"
                 name="q"
-                placeholder="Buscar huésped, reserva…"
+                placeholder="Buscar huésped, reserva o una sección…"
                 className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-9 text-stone-800 outline-none transition placeholder:text-stone-500 focus:border-lago-600"
               />
             </div>
           </form>
 
-          <div className="lg:ml-auto">
+          <div className="ml-auto flex flex-1 justify-end lg:ml-0">
             <MenuCuenta nombre={nombre} rolEtiqueta={rolEtiqueta} salir={salir} />
           </div>
         </header>

@@ -37,8 +37,30 @@ import {
   emitirFactura,
   reprogramarReserva,
   cambiarUnidadReserva,
+  fijarOrigenDelPago,
+  verificarTarjetaGarantia,
+  generarLinkDePago,
 } from '../actions'
+import { proveedoresHabilitados, nombreClave } from '@/lib/payments'
+import { MEDIOS_DE_COBRO, MONEDA_BASE, motivoNoSeCobra } from '@/lib/domain/cobro'
+import { estadoDeCobro } from '@/lib/reservas/cobro'
+import { MONEDAS_EXTRANJERAS, ETIQUETAS_MONEDA, formatearLocal } from '@/lib/domain/divisas'
 import { motivoNoFacturable, MENSAJES_NO_FACTURABLE } from '@/lib/domain/facturacion'
+import { MENSAJES_NO_CARGABLE } from '@/lib/domain/servicio'
+import {
+  exentoDeIva,
+  motivoSinExencion,
+  desglosarConExencion,
+  MENSAJES_SIN_EXENCION,
+} from '@/lib/domain/exencion-iva'
+import {
+  ETIQUETAS_VERIFICACION,
+  MENSAJES_GARANTIA,
+  garantiaSirveParaCobrar,
+  motivoGarantiaNoSirve,
+  tarjetaEnmascarada,
+  type EstadoVerificacionTarjeta,
+} from '@/lib/domain/garantia-tarjeta'
 import { puedeCambiarUnidad, MENSAJES_RECHAZO_MUDANZA } from '@/lib/domain/mudanzas'
 import { unidadesDisponibles } from '@/lib/availability/disponibilidad'
 import { BotonEnvio } from '../../_components/boton-envio'
@@ -70,9 +92,17 @@ interface PagoRow {
   id: string
   medio: MedioPago
   tipo: TipoPago
+  /** SIEMPRE en USD: es lo único que salda la reserva (migración 0067). */
   monto: number | string
   estado: EstadoPago
   creado_en: string
+  /** Moneda que de verdad pasó por la caja o la pasarela. */
+  moneda: string | null
+  /** Importe en `moneda`. Nulo cuando se cobró en dólares. */
+  monto_cobrado: number | string | null
+  cupon: string | null
+  ultimos4: string | null
+  tarjeta_marca: string | null
 }
 
 interface ConsumoRow {
@@ -118,6 +148,18 @@ const MENSAJES_ERROR: Record<string, string> = {
     'Se pidió el CAE y se consumió el número de comprobante, pero la factura NO quedó guardada. Avisá antes de volver a emitir: el número ya se usó.',
   total: 'El cambio se hizo, pero no se pudo recalcular el precio. La reserva quedó con el total anterior.',
   repro: 'No se pudo reprogramar la estadía.',
+  // Cobro (Fase 23).
+  monto: 'El importe tiene que ser mayor que cero.',
+  pago: 'No se pudo registrar el pago. No quedó nada cobrado.',
+  moneda: 'Esa moneda no está entre las que el sistema sabe convertir.',
+  sin_cotizacion:
+    'No hay cotización vigente para esa moneda, así que no se puede pasar el importe a dólares. Cargá una en Configuración o registrá el pago en dólares.',
+  ultimos4: 'Los últimos cuatro dígitos tienen que ser exactamente cuatro números.',
+  link_sin_datos: 'No se pudo calcular el saldo para generar el link. Probá de nuevo.',
+  link_no_cobrable: 'Esta reserva no tiene un saldo que se pueda cobrar en línea.',
+  link_pago: 'No se pudo leer la reserva para generar el link de pago.',
+  link_pasarela:
+    'La pasarela no pudo crear el link. Probá con otro medio o cobrá desde el mostrador.',
   // Cambio de unidad.
   ...MENSAJES_RECHAZO_MUDANZA,
   ocupada: 'Esa unidad ya está ocupada en las fechas de la reserva.',
@@ -128,6 +170,16 @@ const MENSAJES_ERROR: Record<string, string> = {
   tarifa_destino:
     'La mudanza se hizo, pero no hay tarifa cargada para el tipo de destino: el total quedó sin recotizar.',
   mudanza: 'No se pudo cambiar la unidad.',
+  origen_pago:
+    'No se pudo guardar el origen del pago. La exención de IVA quedó como estaba: revisala antes de facturar.',
+  // Cargos que la cuenta ya no admite (P3).
+  ...MENSAJES_NO_CARGABLE,
+  // Garantía de tarjeta (P2, ADR 0025).
+  tarjeta_incompleta: 'Faltan el número y el vencimiento de la tarjeta.',
+  tarjeta_sin_proveedor:
+    'No hay una pasarela configurada para verificar tarjetas. Avisá antes de confiar en esta garantía.',
+  tarjeta:
+    'No se pudo guardar el resultado de la verificación. La garantía quedó como estaba: revisala antes del check-in.',
 }
 
 const ACCION_ESTADO: Record<EstadoReserva, { verbo: string; color: string }> = {
@@ -157,12 +209,22 @@ interface Reserva {
   garantia: Garantia
   segmento: Segmento
   voucher: string
+  agencia_id: string | null
+  /** Origen del pago para la exención de IVA (RG 3971). `null` = sin definir. */
+  pago_desde_exterior: boolean | null
+  /* Garantía de tarjeta (ADR 0025). NUNCA hay acá un número de tarjeta. */
+  tarjeta_ultimos4: string | null
+  tarjeta_marca: string | null
+  tarjeta_vencimiento: string | null
+  tarjeta_verificacion: EstadoVerificacionTarjeta
+  tarjeta_verificada_en: string | null
   huesped: {
     apellido: string
     nombre: string
     email: string | null
     doc_numero: string
     vip: boolean
+    residente_exterior: boolean | null
   } | null
   estadias: {
     periodo: string
@@ -182,11 +244,26 @@ interface Reserva {
   }[]
 }
 
+/**
+ * Un par etiqueta/valor de la ficha.
+ *
+ * El `wrap-anywhere` del valor no es decorativo. Acá se muestran Email y Voucher,
+ * que son cadenas largas y **sin espacios**: sin permitir el corte, un email como
+ * `maria.fernanda.gonzalez.iturriaga@corporativoempresarial.com.ar` se sale de la
+ * tarjeta blanca y se superpone con la columna de al lado.
+ *
+ * Es `wrap-anywhere` y no `break-words` a propósito, y la diferencia es la que
+ * arregla el problema: las dos permiten partir la palabra al pintar, pero solo
+ * `overflow-wrap: anywhere` cuenta ese corte al calcular el ancho **mínimo** del
+ * contenido. Con `break-words`, la tarjeta —que es un ítem de grilla, o sea
+ * `min-width: auto`— igual se ensancha hasta que el email entre de una pieza, y el
+ * desborde se muda del texto a la grilla entera. Los ítems llevan además `min-w-0`.
+ */
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs uppercase tracking-wide text-stone-600">{etiqueta}</dt>
-      <dd className="mt-0.5 text-stone-800">{valor}</dd>
+      <dd className="mt-0.5 wrap-anywhere text-stone-800">{valor}</dd>
     </div>
   )
 }
@@ -206,7 +283,7 @@ export default async function DetalleReservaPage({
   const { data } = await supabase
     .from('reservas')
     .select(
-      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
+      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, agencia_id, pago_desde_exterior, tarjeta_ultimos4, tarjeta_marca, tarjeta_vencimiento, tarjeta_verificacion, tarjeta_verificada_en, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip, residente_exterior), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
     )
     .eq('id', id)
     .single()
@@ -227,6 +304,64 @@ export default async function DetalleReservaPage({
   const periodo = estadia ? parsearPeriodo(estadia.periodo) : null
   const noches = periodo ? diasEntre(periodo.desde, periodo.hasta) : 0
   const transiciones = transicionesPosibles(reserva.estado)
+
+  /*
+    Exención de IVA al turista del exterior (RG 3971, ADR 0024).
+
+    Se calcula con la MISMA función que usa `emitirFactura`, para que lo que la
+    pantalla anuncia y lo que el comprobante hace no puedan separarse. Si acá se
+    reimplantara la regla, un cambio en una sola de las dos copias haría que la
+    ficha prometiera una exención que la factura después no aplica.
+  */
+  const condicionExencion = {
+    residenteExterior: Boolean(reserva.huesped?.residente_exterior),
+    pagoDesdeExterior: reserva.pago_desde_exterior,
+  }
+  const exento = !reserva.agencia_id && exentoDeIva(condicionExencion)
+  const motivoExencion = motivoSinExencion(condicionExencion)
+
+  /*
+    El importe que la ficha anuncia sale de `desglosarConExencion`, la MISMA
+    función que usa `emitirFactura`. No de `reserva.total_neto`.
+
+    Se hacía así y estaba mal: `total_neto` es una columna que puebla el alta
+    (migración 0039) y **puede venir en cero** —una reserva creada por un camino
+    que no la completa, o anterior a esa migración—. Con `total_neto = 0` la
+    pantalla anunciaba «sale sin IVA: USD 0,00 en vez de USD 363,00», un número
+    absurdo dicho con total confianza. Y peor: la factura sí calculaba bien los
+    USD 300, así que **la ficha prometía una cosa y el comprobante hacía otra**.
+
+    Detectado abriendo la pantalla en el navegador; ningún test lo veía porque el
+    número venía de la base y no del dominio.
+
+    Acá se pasa `consumosConIva: 0` a propósito: es una **vista previa del
+    alojamiento**, que es lo que cambia con la exención. Los consumos se suman en
+    la cuenta y siguen gravados, y el texto lo aclara.
+  */
+  const ALICUOTA_PREVIA = 21
+  const previaExencion = desglosarConExencion({
+    alojamientoConIva: Number(reserva.total),
+    consumosConIva: 0,
+    alicuota: ALICUOTA_PREVIA,
+    exento: true,
+  })
+
+  /*
+    Garantía de tarjeta (ADR 0025).
+
+    La pregunta que responde no es «¿la tarjeta es válida hoy?» sino «¿va a
+    servir el día que haya que cobrar un no-show?». Por eso la fecha de
+    referencia es la del check-in y no la de hoy: una tarjeta que vence el mes
+    que viene no sirve para una estadía de dentro de dos meses.
+  */
+  const garantiaTarjeta = {
+    estado: reserva.tarjeta_verificacion,
+    verificadaEn: reserva.tarjeta_verificada_en,
+    vencimiento: reserva.tarjeta_vencimiento,
+  }
+  const fechaGarantia = periodo?.desde ?? hoyISO()
+  const garantiaOk = garantiaSirveParaCobrar(garantiaTarjeta, fechaGarantia)
+  const motivoGarantia = motivoGarantiaNoSirve(garantiaTarjeta, fechaGarantia)
 
   // Preview del cargo por cancelación (política estándar).
   let cargo: { dias: number; monto: number } | null = null
@@ -276,10 +411,15 @@ export default async function DetalleReservaPage({
 
   const { data: pagosData } = await supabase
     .from('pagos')
-    .select('id, medio, tipo, monto, estado, creado_en')
+    .select('id, medio, tipo, monto, estado, creado_en, moneda, monto_cobrado, cupon, ultimos4, tarjeta_marca')
     .eq('reserva_id', id)
     .order('creado_en')
   const pagos = (pagosData ?? []) as PagoRow[]
+
+  // Estado de cobro consolidado (alojamiento + consumos) y links de pago vivos.
+  // Es la misma lectura que usa el portal público, para que el huésped y
+  // recepción no vean saldos distintos.
+  const cobroEnLinea = await estadoDeCobro(supabase, id)
   const resumen = resumenPagos(
     Number(reserva.total),
     pagos.map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado }) as Pago),
@@ -370,8 +510,17 @@ export default async function DetalleReservaPage({
       */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <div className="flex min-w-0 flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
+      {/*
+        `items-start`: cada tarjeta mide lo suyo.
+
+        Sin esto la grilla las estira a la altura de la más alta —es el
+        comportamiento por omisión— y «Huésped», que tiene cuatro datos, quedaba
+        con mil píxeles de blanco al lado de «Estadía», que trae además el
+        formulario de tarjeta y el desglose de importes. La pantalla se veía rota
+        aunque no lo estuviera.
+      */}
+      <div className="grid gap-4 sm:grid-cols-2 sm:items-start lg:grid-cols-1 xl:grid-cols-2">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Huésped</h2>
           <dl className="flex flex-col gap-3">
             <Dato
@@ -393,7 +542,7 @@ export default async function DetalleReservaPage({
           </dl>
         </div>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Estadía</h2>
           <dl className="flex flex-col gap-3">
             <Dato
@@ -451,6 +600,7 @@ export default async function DetalleReservaPage({
                 (noShowEsCobrable(reserva.garantia) ? '' : ' — un no-show no sería cobrable')
               }
             />
+
             {reserva.voucher && <Dato etiqueta="Voucher" valor={reserva.voucher} />}
 
             {/* ── Desglose fiscal ──────────────────────────────────────────
@@ -460,6 +610,34 @@ export default async function DetalleReservaPage({
                 daba un número aproximado y silenciosamente equivocado. */}
             <div className="border-t border-stone-100 pt-3">
               <dt className="text-xs tracking-wide text-stone-600 uppercase">Importes</dt>
+              {/*
+                Si el desglose no cierra contra el total, se dice en vez de
+                publicarlo.
+
+                `neto + iva` tiene que dar `total`. Cuando no da —una reserva
+                importada de un canal, una migrada de WinPAX, una cargada por un
+                script— la pantalla mostraba «Subtotal USD 0,00 / Neto USD 0,00 /
+                IVA USD 0,00 / Total USD 363,00» con toda naturalidad. Eso es peor
+                que no mostrar nada: se lee como un comprobante y no cierra, y
+                alguien lo puede copiar a una factura.
+
+                Se comparan con un centavo de tolerancia, porque los importes se
+                redondean a dos decimales en varios puntos del camino.
+              */}
+              {Math.abs(Number(reserva.total_neto) + Number(reserva.iva) - Number(reserva.total)) >
+              0.01 ? (
+                <dd className="mt-1 space-y-1 text-sm">
+                  <div className="flex justify-between font-semibold text-stone-900">
+                    <span>Total con IVA</span>
+                    <span className="tabular">{formatearUSD(Number(reserva.total))}</span>
+                  </div>
+                  <p className="rounded-lg bg-lenga-50 px-3 py-2 text-xs text-lenga-800 ring-1 ring-lenga-100">
+                    Esta reserva no tiene cargado el desglose entre neto e IVA, así que no se
+                    muestra: los números no cerrarían con el total. El importe que se cobra es el
+                    de arriba. Si hace falta facturarla, cargá el desglose antes de emitir.
+                  </p>
+                </dd>
+              ) : (
               <dd className="mt-1 space-y-0.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-stone-500">Subtotal sin IVA</span>
@@ -473,10 +651,7 @@ export default async function DetalleReservaPage({
                       Descuento {Number(reserva.descuento_pct)}%
                     </span>
                     <span className="tabular text-stone-700">
-                      −USD{' '}
-                      {(Number(reserva.subtotal) - Number(reserva.total_neto)).toLocaleString(
-                        'es-AR',
-                      )}
+                      −{formatearUSD(Number(reserva.subtotal) - Number(reserva.total_neto))}
                     </span>
                   </div>
                 )}
@@ -499,7 +674,67 @@ export default async function DetalleReservaPage({
                   </span>
                 </div>
               </dd>
+              )}
             </div>
+
+            {/* ── Exención de IVA al turista del exterior (RG 3971, ADR 0024) ──
+                Se muestra solo cuando puede aplicar: si el huésped no reside en
+                el exterior, este bloque sería ruido en la pantalla de todos los
+                días. Una reserva por agencia tampoco lo muestra: ahí el receptor
+                del comprobante es la agencia, no el turista. */}
+            {reserva.huesped?.residente_exterior && !reserva.agencia_id && (
+              <div className="border-t border-stone-100 pt-3">
+                <dt className="text-xs tracking-wide text-stone-600 uppercase">
+                  Exención de IVA · turista del exterior
+                </dt>
+                <dd className="mt-2 space-y-2 text-sm">
+                  {exento ? (
+                    <p className="rounded-lg bg-lenga-50 px-3 py-2 text-lenga-900">
+                      <strong>Corresponde la exención.</strong> Al facturar, el
+                      alojamiento sale sin IVA:{' '}
+                      <span className="tabular font-semibold">
+                        {formatearUSD(previaExencion.exento)}
+                      </span>{' '}
+                      en vez de {formatearUSD(Number(reserva.total))}. Los
+                      consumos (frigobar, excursiones) siguen gravados.
+                    </p>
+                  ) : (
+                    <p className="rounded-lg bg-stone-50 px-3 py-2 text-stone-700">
+                      {motivoExencion && MENSAJES_SIN_EXENCION[motivoExencion]}
+                    </p>
+                  )}
+
+                  <form action={fijarOrigenDelPago} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="reserva_id" value={reserva.id} />
+                    <label className="flex-1 text-xs text-stone-600">
+                      <span className="mb-1 block">¿De dónde sale el pago?</span>
+                      <select
+                        name="origen_pago"
+                        defaultValue={
+                          reserva.pago_desde_exterior === true
+                            ? 'exterior'
+                            : reserva.pago_desde_exterior === false
+                              ? 'local'
+                              : 'sin_definir'
+                        }
+                        className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                      >
+                        <option value="sin_definir">Todavía no se sabe</option>
+                        <option value="exterior">
+                          Del exterior — tarjeta emitida afuera o transferencia
+                        </option>
+                        <option value="local">
+                          Local — efectivo, tarjeta o transferencia del país
+                        </option>
+                      </select>
+                    </label>
+                    <BotonEnvio variante="secundario" cargando="Guardando…">
+                      Guardar
+                    </BotonEnvio>
+                  </form>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
       </div>
@@ -682,12 +917,28 @@ export default async function DetalleReservaPage({
         {pagos.length > 0 && (
           <ul className="mt-4 divide-y divide-stone-100 text-sm">
             {pagos.map((p) => (
-              <li key={p.id} className="flex items-center justify-between py-2">
-                <span className="text-stone-600">
+              <li key={p.id} className="flex items-start justify-between gap-3 py-2">
+                <span className="min-w-0 text-stone-600">
                   {ETIQUETAS_TIPO_PAGO[p.tipo]} · {ETIQUETAS_MEDIO[p.medio]}
+                  {p.estado !== 'aprobado' && (
+                    <>
+                      {' '}
+                      <Etiqueta tono={p.estado === 'pendiente' ? 'alerta' : 'peligro'}>
+                        {p.estado === 'pendiente' ? 'Pendiente' : 'Rechazado'}
+                      </Etiqueta>
+                    </>
+                  )}
+                  {/* El rastro del posnet y el importe en moneda local. Es lo que
+                      permite conciliar contra la liquidación de la terminal
+                      cuando los números no cierran. */}
+                  {detalleDelCobro(p) && (
+                    <span className="mt-0.5 block text-xs text-stone-500">
+                      {detalleDelCobro(p)}
+                    </span>
+                  )}
                 </span>
                 <span
-                  className={`font-medium ${p.tipo === 'reembolso' ? 'text-red-600' : 'text-stone-800'}`}
+                  className={`shrink-0 font-medium ${p.tipo === 'reembolso' ? 'text-red-600' : 'text-stone-800'} ${p.estado !== 'aprobado' ? 'text-stone-400 line-through' : ''}`}
                 >
                   {p.tipo === 'reembolso' ? '−' : ''}{formatearUSD(Number(p.monto))}
                 </span>
@@ -725,8 +976,29 @@ export default async function DetalleReservaPage({
                 ))}
               </select>
             </label>
+            {/* La moneda del cobro. Un huésped que paga en efectivo en pesos es
+                el caso más común del hotel; antes había que hacer la conversión
+                a mano y anotar el resultado, así que no quedaba registro de
+                cuántos pesos entraron ni a qué cambio y la caja no cerraba
+                contra el sistema. `monto` se sigue guardando en USD —es lo único
+                que salda la reserva— y el importe real va aparte. */}
             <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
-              <span className="text-stone-500">Monto (USD)</span>
+              <span className="text-stone-500">Moneda</span>
+              <select
+                name="moneda"
+                defaultValue={MONEDA_BASE}
+                className="w-full min-w-0 rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-auto"
+              >
+                <option value={MONEDA_BASE}>Dólares (USD)</option>
+                {MONEDAS_EXTRANJERAS.map((m) => (
+                  <option key={m} value={m}>
+                    {ETIQUETAS_MONEDA[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+              <span className="text-stone-500">Monto</span>
               <input
                 name="monto"
                 type="number"
@@ -736,6 +1008,49 @@ export default async function DetalleReservaPage({
                 className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-32"
               />
             </label>
+
+            {/* Rastro del posnet. Se piden SIEMPRE, no sólo al elegir tarjeta:
+                esconderlos detrás de la selección del medio exigiría JavaScript
+                de cliente en una pantalla que hoy es un formulario de servidor, y
+                el proyecto prohíbe esconder campos. Son opcionales y la acción
+                los ignora si el medio no es tarjeta.
+                ⚠️ NO hay campo para el número de tarjeta y no debe haberlo: la
+                migración 0067 rechaza un PAN en estas columnas (ADR 0025). */}
+            <fieldset className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-stone-200 p-3">
+              <legend className="px-1 text-xs text-stone-500">
+                Si cobrás con el posnet (opcional)
+              </legend>
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                <span className="text-stone-500">Cupón / autorización</span>
+                <input
+                  name="cupon"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-36"
+                />
+              </label>
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                <span className="text-stone-500">Últimos 4 dígitos</span>
+                <input
+                  name="ultimos4"
+                  inputMode="numeric"
+                  maxLength={4}
+                  pattern="[0-9]{4}"
+                  autoComplete="off"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-28"
+                />
+              </label>
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                <span className="text-stone-500">Marca</span>
+                <input
+                  name="tarjeta_marca"
+                  autoComplete="off"
+                  placeholder="Visa"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-28"
+                />
+              </label>
+            </fieldset>
+
             {/* El caso que más importa: sin bloqueo, un segundo clic
                 registraba el pago dos veces. */}
             <BotonEnvio
@@ -747,9 +1062,126 @@ export default async function DetalleReservaPage({
           </form>
         )}
         <p className="mt-3 text-xs text-stone-600">
-          Seña sugerida (primera noche): {formatearUSD(senia)}. Las pasarelas
-          (MercadoPago / Stripe) ingresan por webhook.
+          Seña sugerida (primera noche): {formatearUSD(senia)}.
         </p>
+      </div>
+
+      {/* ── Cobro en línea ────────────────────────────────────────────────
+          El caso del huésped que reservó por teléfono o WhatsApp: no está para
+          dar la tarjeta y no conviene que la dicte. Se le manda el link, paga
+          desde su celular y el webhook salda la reserva solo. */}
+      <CobroEnLinea reserva={reserva} cobro={cobroEnLinea} />
+
+      {/* ── Tarjeta de garantía (ADR 0025) ─────────────────────────────────
+          Vive en la columna de la plata y no en «Estadía», que es donde estaba.
+
+          Dos razones. La de fondo: una tarjeta de garantía no describe la
+          estadía, es lo que permite COBRAR un no-show, así que su lugar está
+          junto a los pagos y la cuenta. La práctica: el formulario ocupa unos
+          450 px y siempre está abierto —no se puede plegar, el proyecto lo
+          prohíbe—, así que dejaba la tarjeta «Estadía» en 1.100 px, más del
+          triple que cualquier otra, y toda la columna derecha en blanco.
+
+          El sistema NO guarda el número de tarjeta: guarda el token que
+          devuelve la pasarela, los últimos cuatro dígitos y el resultado de la
+          verificación. Ver el ADR antes de agregar campos acá. */}
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <h2 className="mb-3 text-sm font-medium text-stone-700">Tarjeta de garantía</h2>
+        <dl>
+              <div>
+                <dd className="space-y-2 text-sm">
+                  <p className="flex flex-wrap items-center gap-2">
+                    <span className="tabular font-medium text-stone-800">
+                      {tarjetaEnmascarada(reserva.tarjeta_ultimos4, reserva.tarjeta_marca)}
+                    </span>
+                    <Etiqueta
+                      tono={
+                        garantiaOk
+                          ? 'exito'
+                          : reserva.tarjeta_verificacion === 'rechazada'
+                            ? 'peligro'
+                            : 'alerta'
+                      }
+                    >
+                      {ETIQUETAS_VERIFICACION[reserva.tarjeta_verificacion]}
+                    </Etiqueta>
+                  </p>
+
+                  {motivoGarantia && (
+                    <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-700">
+                      {MENSAJES_GARANTIA[motivoGarantia]}
+                    </p>
+                  )}
+
+                  {/* Formulario SIEMPRE visible: `CLAUDE.md` prohíbe esconder una
+                      acción detrás de un `<details>`, y acá pesa doble — si la
+                      garantía no sirve, cargar otra tarjeta es justo lo que hay
+                      que hacer y no puede estar a un clic de distancia.
+                      `autoComplete="off"` en el número y el código: no tienen por
+                      qué quedar en el historial de un puesto compartido. */}
+                  <div className="rounded-lg border border-stone-200 p-3 text-xs">
+                    <p className="mb-2 font-medium text-stone-700">
+                      {reserva.tarjeta_ultimos4 ? 'Cambiar la tarjeta' : 'Cargar una tarjeta'}
+                    </p>
+                    <form
+                      action={verificarTarjetaGarantia}
+                      autoComplete="off"
+                      className="grid gap-2 sm:grid-cols-2"
+                    >
+                      <input type="hidden" name="reserva_id" value={reserva.id} />
+                      <label className="sm:col-span-2">
+                        <span className="mb-1 block text-stone-600">Número de tarjeta</span>
+                        <input
+                          name="tarjeta_numero"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          required
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-1 block text-stone-600">Vencimiento (MM/AA)</span>
+                        <input
+                          name="tarjeta_vencimiento"
+                          placeholder="12/28"
+                          pattern="(0[1-9]|1[0-2])/[0-9]{2}"
+                          required
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-1 block text-stone-600">Código de seguridad</span>
+                        <input
+                          name="tarjeta_cvv"
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <label className="sm:col-span-2">
+                        <span className="mb-1 block text-stone-600">Titular</span>
+                        <input
+                          name="tarjeta_titular"
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-stone-300 px-2 py-1.5"
+                        />
+                      </label>
+                      <p className="text-[11px] leading-snug text-stone-500 sm:col-span-2">
+                        El sistema <strong>no guarda</strong> el número ni el código de seguridad:
+                        se los manda a la pasarela y conserva solo los últimos cuatro dígitos y el
+                        resultado.
+                      </p>
+                      <div className="sm:col-span-2">
+                        <BotonEnvio variante="secundario" cargando="Verificando…">
+                          Verificar tarjeta
+                        </BotonEnvio>
+                      </div>
+                    </form>
+                  </div>
+                </dd>
+              </div>
+        </dl>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
@@ -806,12 +1238,23 @@ export default async function DetalleReservaPage({
                   <span className="font-medium text-stone-800">
                     {formatearUSD((c.cantidad * Number(c.precio_unitario)))}
                   </span>
+                  {/* Quitar un cargo es un borrado irreversible de dinero de la
+                      cuenta del huésped. Antes era un `<button>` crudo con `✕`:
+                      sin confirmación, sin estado de envío y sin nombre
+                      accesible —un lector de pantalla anunciaba «botón»—.
+                      `anularComanda` ya hacía lo correcto para el lote; esto
+                      quedó afuera. */}
                   <form action={quitarConsumo}>
                     <input type="hidden" name="reserva_id" value={reserva.id} />
                     <input type="hidden" name="consumo_id" value={c.id} />
-                    <button className="text-xs text-stone-600 transition hover:text-red-600" title="Quitar">
+                    <BotonEnvio
+                      variante="fantasma"
+                      cargando="Quitando…"
+                      aria-label={`Quitar ${c.producto?.nombre ?? 'el consumo'} de la cuenta`}
+                      confirmar={`¿Quitar ${c.cantidad}× ${c.producto?.nombre ?? 'este consumo'} por ${formatearUSD(c.cantidad * Number(c.precio_unitario))} de la cuenta? No se puede deshacer.`}
+                    >
                       ✕
-                    </button>
+                    </BotonEnvio>
                   </form>
                 </span>
               </li>
@@ -869,4 +1312,161 @@ export default async function DetalleReservaPage({
       </div>
     </Pagina>
   )
+}
+
+/* ─────────────────────────────────────────────────── cobro en línea ────── */
+
+/**
+ * Generar y reenviar el link de pago del huésped.
+ *
+ * Resuelve el caso del huésped que reservó por teléfono o WhatsApp: no está en
+ * el mostrador para dar la tarjeta y dictarla por teléfono es justo lo que no
+ * hay que hacer. Se le manda el link, paga desde su celular y el webhook salda
+ * la reserva sin que recepción toque nada.
+ *
+ * Cuando ya hay un link vivo **se muestra ése y no se ofrece crear otro**: dos
+ * links por el mismo saldo son dos cobros posibles, y devolver uno es un trámite
+ * manual con la pasarela más una discusión con el huésped.
+ */
+function CobroEnLinea({
+  reserva,
+  cobro,
+}: {
+  reserva: { id: string; estado: EstadoReserva }
+  cobro: Awaited<ReturnType<typeof estadoDeCobro>>
+}) {
+  if (!cobro) return null
+
+  const impedimento = motivoNoSeCobra(reserva.estado, cobro.saldo)
+  const habilitados = new Set(proveedoresHabilitados().map(nombreClave))
+
+  // El catálogo más el simulador, que no está en el catálogo porque no es un
+  // medio que se le ofrezca a nadie: es la herramienta de demostración.
+  const medios = [
+    ...MEDIOS_DE_COBRO.filter((m) => habilitados.has(m.id)).map((m) => ({
+      valor: m.id as string,
+      titulo: m.titulo,
+    })),
+    ...(habilitados.has('simulado')
+      ? [{ valor: 'simulado', titulo: 'Pago simulado (no mueve dinero)' }]
+      : []),
+  ]
+
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white p-5">
+      <h2 className="mb-1 text-sm font-medium text-stone-700">Link de pago</h2>
+      <p className="mb-3 text-xs leading-snug text-stone-500">
+        Para mandarle al huésped por correo o WhatsApp. Paga desde su teléfono y la reserva se
+        salda sola.
+      </p>
+
+      {cobro.linksVivos.length > 0 ? (
+        <div className="space-y-3">
+          {cobro.linksVivos.map((l) => (
+            <div key={l.externalId} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <p className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="font-medium text-stone-800">
+                  {l.tipo === 'senia' ? 'Seña' : 'Saldo'} · {formatearUSD(l.monto)}
+                </span>
+                {l.moneda !== MONEDA_BASE && l.montoCobrado !== null && (
+                  <span className="text-xs text-stone-500">
+                    se cobra{' '}
+                    {MONEDAS_EXTRANJERAS.includes(l.moneda as (typeof MONEDAS_EXTRANJERAS)[number])
+                      ? formatearLocal(
+                          l.montoCobrado,
+                          l.moneda as (typeof MONEDAS_EXTRANJERAS)[number],
+                        )
+                      : `${l.moneda} ${l.montoCobrado}`}
+                  </span>
+                )}
+              </p>
+
+              {/* El enlace completo y seleccionable, no un botón de «copiar»:
+                  copiar al portapapeles necesita JavaScript de cliente y falla
+                  en silencio si el navegador lo bloquea. Un texto que se puede
+                  leer y seleccionar funciona siempre. */}
+              <p className="mt-1 break-all rounded border border-stone-200 bg-white px-2 py-1.5 font-mono text-xs text-stone-600 select-all">
+                {l.url}
+              </p>
+
+              <p className="mt-1 text-xs text-stone-500">
+                {l.venceEn
+                  ? `Vence el ${formatoFechaCorta(l.venceEn.slice(0, 10))}.`
+                  : 'Sin vencimiento.'}
+              </p>
+            </div>
+          ))}
+          <p className="text-xs text-stone-500">
+            Ya hay un link activo por este saldo. No se genera otro para que el huésped no
+            pueda pagar dos veces.
+          </p>
+        </div>
+      ) : impedimento ? (
+        <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-600">
+          {impedimento}
+        </p>
+      ) : medios.length === 0 ? (
+        <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-600">
+          No hay ninguna pasarela habilitada. Se configura con la variable{' '}
+          <code className="font-mono">PAGO_PROVIDER</code>.
+        </p>
+      ) : (
+        <form action={generarLinkDePago} className="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="reserva_id" value={reserva.id} />
+          <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+            <span className="text-stone-500">Medio</span>
+            <select
+              name="medio"
+              className="w-full min-w-0 rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-auto"
+            >
+              {medios.map((m) => (
+                <option key={m.valor} value={m.valor}>
+                  {m.titulo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+            <span className="text-stone-500">Cobrar</span>
+            <select
+              name="tipo"
+              defaultValue={cobro.tieneSenia ? 'saldo' : 'senia'}
+              className="w-full min-w-0 rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-auto"
+            >
+              <option value="senia">Seña ({formatearUSD(Math.min(cobro.senia, cobro.saldo))})</option>
+              <option value="saldo">Saldo completo ({formatearUSD(cobro.saldo)})</option>
+            </select>
+          </label>
+          <BotonEnvio extra="w-full sm:w-auto" cargando="Generando…">
+            Generar link
+          </BotonEnvio>
+        </form>
+      )}
+    </div>
+  )
+}
+
+/**
+ * La línea chica bajo un pago: cuánto entró en moneda local y con qué cupón.
+ *
+ * Devuelve cadena vacía cuando no hay nada que agregar —un pago en dólares sin
+ * tarjeta— para no ensuciar la lista con una línea en blanco.
+ */
+function detalleDelCobro(p: PagoRow): string {
+  const partes: string[] = []
+
+  if (p.moneda && p.moneda !== MONEDA_BASE && p.monto_cobrado !== null) {
+    const monto = Number(p.monto_cobrado)
+    partes.push(
+      MONEDAS_EXTRANJERAS.includes(p.moneda as (typeof MONEDAS_EXTRANJERAS)[number])
+        ? formatearLocal(monto, p.moneda as (typeof MONEDAS_EXTRANJERAS)[number])
+        : `${p.moneda} ${monto}`,
+    )
+  }
+
+  if (p.tarjeta_marca) partes.push(p.tarjeta_marca)
+  if (p.ultimos4) partes.push(`•••• ${p.ultimos4}`)
+  if (p.cupon) partes.push(`cupón ${p.cupon}`)
+
+  return partes.join(' · ')
 }

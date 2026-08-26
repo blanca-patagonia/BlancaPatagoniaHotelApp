@@ -2311,3 +2311,818 @@ test no cubre: que la exclusión GiST del ADR 0002 siga en pie, que `crear_reser
 sola** versión en `pg_proc` (no una sobrecarga), que el trigger de la jerarquía de departamentos
 rechace el tercer nivel, que `anon` no pueda leer ninguna de las tablas nuevas, y que las 22
 tablas del respaldo existan de verdad.
+
+---
+
+## 2026-08-22 — Booking B7: el calendario que el hotel le publica al canal
+
+**Resumen:** el feed iCal de **salida**. Hasta acá la integración era de una sola
+dirección —entraban reservas, no salía nada— y cuando el hotel se llenaba, alguien
+tenía que entrar al extranet a cerrar fechas a mano. Eso falla justo el día de mucho
+trabajo, que es el día en que el hotel se llena.
+
+**Detalle de lo realizado:**
+- `lib/canales/ical-saliente.ts` (puro): `calcularBloquesOcupados`, `generarIcal`
+  (RFC 5545 con plegado a 75 octetos y escape de comas) y `describirUltimaLectura`.
+- `app/api/canales/ical/[token]/route.ts`: token al portador, límite de tasa,
+  `?tipo=` y `?unidad=`, ventana de un año.
+- Migración `0065`: `canal_config.ical_leido_en`.
+- Nueva vista **Calendario para el canal** en `/panel/canales` con las direcciones
+  armadas para copiar, y la advertencia de overbooking **matizada, no borrada**.
+- `docs/decisiones/0022-feed-ical-saliente.md`.
+- 28 tests nuevos (19 puros + 9 contra la base).
+
+**Decisiones:**
+- **Una noche se marca ocupada sólo cuando no queda ninguna unidad activa del tipo
+  libre.** Un calendario dice «ocupado», no «me queda una»: cerrar el tipo al vender
+  la primera unidad le costaría ventas reales al hotel. La contracara —que con varias
+  unidades por tipo el feed avisa tarde— está dicha en la pantalla, tipo por tipo.
+- **`capacidades().publicaDisponibilidad` sigue en `false`.** El feed no da ninguna de
+  las garantías que ese `true` promete: el canal lo lee cuando quiere y nadie confirma
+  que lo aplicó. Angosta la ventana del overbooking; no la cierra.
+- **Si la consulta de estadías queda truncada, el handler responde 503 y no sirve un
+  calendario parcial.** Un calendario incompleto no se ve roto: se ve como uno con
+  menos bloqueos, o sea publicando como libres noches que están llenas.
+- El registro de la lectura sí es accesorio: si falla, el calendario se sirve igual.
+- **Hallazgo de paso, y era un test de seguridad rompiéndose al azar:**
+  `interpretarCsvBooking` estaba documentada como pura pero leía el reloj adentro
+  (`emitidaEn` cae en el momento de importación cuando el informe no trae fecha de
+  reserva). El test-contrato que verifica que **ningún dato de tarjeta** quede en el
+  resultado serializa todo y busca subcadenas, así que fallaba una de cada mil veces:
+  los milisegundos formaban «737», el CVC del caso de prueba. Se confirmó el
+  mecanismo en vez de suponerlo, el reloj pasó a entrar por parámetro y quedó un test
+  que fija la determinismo. Un test de seguridad que falla al azar termina desactivado
+  por molesto.
+- Se eliminó una guarda de «cero unidades activas» que parecía necesaria: una prueba
+  de mutación mostró que borrarla no cambiaba ni un resultado. El camino general ya
+  hacía lo mismo.
+
+---
+
+## 2026-08-24 — Relevamiento con el cliente del 15/08: P6, P1, P4, P3 y P2
+
+**Resumen:** Franco (Blanca Patagonia) mandó 8 audios y 12 capturas mostrando WinPAX 9 y el
+extranet de Booking. La mayoría de lo que pidió ya estaba hecho; se abordaron los cinco
+pedidos que no. Dos migraciones nuevas (`0058`, `0059`), dos ADRs (`0024`, `0025`).
+**1351 tests verdes en 81 archivos, cero salteados**, verificados contra una base levantada
+**desde cero** con las 59 migraciones. Lint, typecheck y build en verde.
+
+Lo pedido y no hecho quedó en un solo lugar: **P5** (bandeja, comentarios y analytics de
+Booking), que **el propio cliente difirió** y que no se arrancó a propósito.
+
+### P6 · La documentación decía tres generaciones atrás
+
+El README hablaba de 486 tests y 35 migraciones cuando había 1292 y 57, y no mencionaba el
+módulo de canales —de lo más trabajado del sistema—. `docs/roadmap.md` terminaba en la Fase 21,
+así que quien lo leyera concluía que canales no existe.
+
+Se actualizaron README, roadmap, modelo de datos y manual de usuario **verificando cada número
+contra el repo**, no copiándolo del pedido: el propio pedido decía «77 archivos de test» y eran
+79. El manual pasó de 21 líneas a cubrir el flujo real de canales (bajar el informe, mapear
+columnas, conciliar la factura, importar reseñas), con las advertencias que importan: que
+Booking es de solo lectura y que `/panel/respaldos` **no es un backup de Postgres**.
+
+### P1 · Exención de IVA al turista del exterior (ADR 0024)
+
+Era lo único del relevamiento que **no estaba implementado en absoluto**. El toggle «con/sin
+IVA» del listado es de presentación: no exime a nadie.
+
+La decisión central: **la exención se DERIVA de dos hechos y no hay ninguna casilla que
+tildar.** La RG 3971 exige residencia en el exterior **y** pago desde el exterior; un extranjero
+que paga en efectivo **no está exento**, y es el error más fácil de cometer a mano. Una casilla
+convertiría una regla fiscal en una decisión de quien está apurado en el mostrador.
+
+Tres decisiones más, con su porqué en el ADR:
+
+- **La residencia va en el huésped, el origen del pago en la reserva.** Uno es una propiedad de
+  la persona; el otro cambia en cada estadía.
+- **`pago_desde_exterior` tiene tres estados, no dos.** «No sé» y «pagó local» son cosas
+  distintas aunque las dos cobren IVA. Ante un valor inesperado se cae en `null`: **ante la
+  duda, se cobra el impuesto.**
+- **Se decide al facturar, no al cotizar.** La forma de pago se conoce recién al cobrar. La ficha
+  muestra qué pasaría —«USD 122,89 en vez de USD 148,70»— y la factura aplica. El sentido del
+  error importa: cotizar de más y facturar de menos es una corrección a favor del huésped.
+
+En la factura, `exento` es un **subconjunto de `neto`**, no un tercer sumando: así
+`neto + iva = total` sigue siendo cierto, que es una garantía que el sistema tiene testeada en
+todos lados. Es además cómo lo modela AFIP (`ImpNeto` / `ImpOpEx` / `ImpIVA`).
+
+### P4 · La cotización ya era automática; lo que faltaba era decir de dónde sale
+
+Estaba resuelto desde el ADR 0020: automática, cacheada, con override manual del gerente. Lo que
+faltaba era chico y no cosmético: la etiqueta decía **«DolarAPI (oficial)»**, y quien la lee
+concluye razonablemente que el número viene del Banco Nación. **El BNA no publica un servicio
+para consultarlo**; se usa un tercero que replica el valor.
+
+Ahora la pantalla lo declara: fuente, antigüedad, si es automático o manual, y una línea que
+dice que **no es el Banco Nación informando**. La aclaración va junto a la frase que menciona al
+BNA en Configuración, que es donde se produce el malentendido.
+
+### P3 · Desayuno vendido suelto: el problema era la cocina, no el cobro
+
+«Llegan a las 9 de la mañana, el check-in es a las 2 o 3 de la tarde, y te dicen si se puede
+subir a desayunar. Tiene un costo de 15 dólares.»
+
+Al revisarlo, **cobrarlo ya funcionaba**: el punto de venta lista las estadías activas que tocan
+hoy, y una reserva que llega hoy en estado `confirmada` está ahí. El hueco real era otro: la
+lista de cocina se arma con **quién durmió anoche**, así que ese cubierto vendido **no aparecía**
+y la cocina preparaba de menos — justo el problema que la pantalla existe para evitar.
+
+Ahora `listaDeDesayuno` recibe los desayunos vendidos del día y los suma al total, marcados como
+extra y con guion en la columna de unidad cuando el huésped todavía no tiene habitación.
+
+Y se fijó dónde se cierra la cuenta: **en la factura, no en el check-out**. Es lo que permite los
+dos casos reales —el que llega temprano y el que desayunó la mañana que se va—. Lo que corta es
+el comprobante emitido: un cargo posterior no entraría en él, y `facturas` es inmutable.
+
+### P2 · Verificar la tarjeta sin guardar el número (ADR 0025)
+
+Este pedido **choca con una decisión ya tomada** y se resolvió al revés de como se pidió.
+
+WinPAX guardaba número, vencimiento, autorización y **PIN**. Guardar un PAN sacaría al hotel del
+alcance SAQ-A de PCI-DSS; guardar un PIN está prohibido incluso cifrado. Pero la necesidad de
+Franco no es *tener el número*: es **saber si la tarjeta sirve para cobrar**. Son cosas distintas
+y la segunda se resuelve sin la primera, con preautorización tokenizada.
+
+**El simulador declara que NO puede verificar.** `capacidades()` devuelve
+`{ verificaTarjeta: false }` y el resultado trae `noSoportado: true`. Un stub que dijera «válida»
+generaría la confianza falsa que el ADR 0021 evitó con el overbooking: recepción dejaría pasar un
+check-in confiando en una garantía que nadie comprobó. Por eso `noSoportado` es un campo aparte
+de `ok`: «el emisor la rechazó» y «no hay con qué probarla» llevan a acciones distintas.
+
+### Cinco cosas que conviene recordar
+
+1. **La exención no se puede forzar.** No hay campo «exento» en ninguna tabla. Si alguien agrega
+   uno, rompe la garantía entera del ADR 0024.
+
+2. **El test-contrato de PCI se vio fallar.** Se agregó a propósito
+   `alter table reservas add column tarjeta_numero text;` y la suite se puso en rojo con el
+   mensaje correcto; después se revirtió. Un test-contrato que nunca se vio fallar no protege
+   nada.
+
+3. **Las barreras contra el PAN son de la base.** La `0059` rechaza 12 o más dígitos seguidos en
+   el token y en el detalle. Los comentarios se ignoran; una restricción no.
+
+4. **`create type` sí puede usarse en la misma migración; `alter type ... add value` no.** La
+   `0059` crea el enum y lo usa en el mismo archivo, y aplica bien. La regla del SQLSTATE 55P04
+   (que motivó dividir la `0032`) aplica solo a agregar valores a un enum **ya existente**.
+
+5. **El typecheck atrapó una colisión de claves real.** `MENSAJES_NO_CARGABLE` usaba `anulada` y
+   `ya_facturada`, que ya existían en `MENSAJES_NO_FACTURABLE` con otro significado; al
+   combinarse en la ficha, una de las dos explicaciones desaparecía. Se les puso el prefijo
+   `cargo_`.
+
+### Un error propio, para que no se repita
+
+La primera versión del bloque de la tarjeta usaba `<details>` para plegar el formulario.
+`CLAUDE.md` lo **prohíbe explícitamente** desde la Fase 15 (se eliminaron los 11 que había), y
+acá pesaba doble: si la garantía no sirve, cargar otra tarjeta es justo lo que hay que hacer y no
+puede estar escondido. Se corrigió a un bloque siempre visible.
+
+### Verificación
+
+`npm run check` exit 0. **1351 tests (81 archivos), cero salteados**, con `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` exportadas. Las dos migraciones se
+aplicaron primero con `migration up` y después se verificó lo que de verdad importa: se levantó
+el stack **desde cero** (`supabase stop --no-backup` + `start`), las **59** migraciones
+aplicaron limpias y la suite completa volvió a pasar. Es el mismo camino que hace el CI.
+
+Además se comprobó a mano, contra Postgres, lo que un test no cubre: que las cuatro
+restricciones de la `0059` rechacen un PAN, una verificación sin fecha y un exento mayor que el
+neto; y que las de la `0058` rechacen una exención sin fundamento legal.
+
+## 2026-08-24 — Auditoría técnica: los hallazgos aplicados
+
+**Resumen:** se corrieron doce fases de auditoría (arquitectura, seguridad, rendimiento,
+escalabilidad, datos, calidad, CI/CD, integraciones, pagos y UX) y acá se aplican los
+hallazgos. Cuatro migraciones (`0060`–`0063`), **1389 tests verdes en 84 archivos**, cero
+salteados. Las vulnerabilidades de dependencias pasaron de **8 (6 altas) a 1 baja**.
+
+Lo que distingue esta entrada de una lista de mejoras: **cada hallazgo se verificó
+ejecutándolo antes de arreglarlo, y se volvió a ejecutar después**. Las sondas están
+descritas abajo con su salida real.
+
+### Los dos hallazgos ALTA
+
+**1 · Una mucama podía firmar un contrato en nombre de una agencia** (migración `0060`)
+
+Dos políticas escritas como `rol_actual() is not null` —«cualquiera con sesión»— dejaban
+`agencias` y `proveedores` legibles por los cuatro roles, **token incluido**. Verificado
+con una sesión de housekeeping, que ni siquiera tiene esas áreas en `permisos.ts`:
+
+```
+── housekeeping ──
+   agencias    : LEYÓ 1 fila(s) → tokens visibles: 1
+   ejemplo: Agencia Sonda = 5f276040-f54b-4505-96a8-1b2569e4f2a4
+```
+
+Y el token no es un dato: abre `/portal/<token>`, que muestra la cuenta corriente completa
+del socio y enlaza a `/firmar/<token>`, donde `firmarContrato` **no exige sesión**.
+
+Es el escenario que la migración 0034 describe como su razón de ser («un token no es un
+dato: es una credencial»), alcanzado por una puerta que quedó abierta.
+
+Al arreglarlo apareció un segundo hallazgo: **el `revoke select (token)` de la 0034 nunca
+tuvo efecto.** En Postgres un revoke de columna no recorta un grant de tabla previo —el de
+`0006_grants_api.sql`—, y Postgres lo acepta sin error, así que el arreglo *parecía*
+aplicado. Comprobado con `has_column_privilege`, que devolvía `true`. La 0060 lo hace de la
+forma que sí funciona: quita el grant de tabla y lo repone columna por columna.
+
+Después: los cuatro roles reciben `42501` al pedir el token, la matriz de lectura coincide
+exactamente con `lib/domain/permisos.ts`, y el portal sigue funcionando con `service_role`.
+
+**2 · Recepción borraba una reserva y se llevaba la plata** (migración `0061`)
+
+```
+ANTES:   {"pagos":1,"consumos":1,"estadias":1}
+DELETE como recepción: ACEPTADO
+DESPUÉS: {"pagos":0,"consumos":0,"estadias":0}
+```
+
+Se fueron USD 150 de seña aprobada, un consumo y la estadía, arrastrados por las cascadas
+de las 0009 y 0010. Del borrado de la reserva no quedaba rastro: su trigger de auditoría es
+`after update`.
+
+Se revocó `delete` a `authenticated` en las siete tablas donde ninguna pantalla lo usa, y se
+sumaron triggers de auditoría de DELETE en `reservas`, `estadias`, `consumos` y los dos
+`movimientos_*`. Después: `42501: permission denied for table reservas`, y los tres
+registros siguen ahí.
+
+**Las cascadas se dejaron a propósito**, y está argumentado en la migración: el agujero ya
+lo cierra el revoke, y para `service_role` una limpieza legítima *tiene* que llevarse los
+hijos. Cambiar cuatro claves foráneas era un cambio más grande que el problema.
+
+### Corrección de un error propio en la sonda
+
+La primera versión de la sonda de borrado apuntaba a un **id inexistente**. Eso mide el
+GRANT de tabla, **no la política RLS**: una policy que filtra filas devuelve «0 filas, sin
+error», idéntico a una que permite. Reportaba «PERMITIDO» en 13 tablas para los cuatro
+roles, housekeeping incluido, y habría sido un falso positivo grave. Se rehízo creando filas
+reales y comprobando si sobrevivían. **El método importa tanto como el hallazgo.**
+
+### Lo demás, en una línea cada uno
+
+- **Una sola implementación de la IP del cliente.** `ipDePeticion` en `lib/firma` había
+  quedado con el bug del primer `x-forwarded-for` que `lib/limites` ya había arreglado.
+  Alimentaba el límite del asistente público —evadible rotando la cabecera— y la IP que se
+  guarda en `firmas.ip` como constancia de quién firmó: un dato probatorio que elegía el
+  propio firmante. Se borró la copia.
+- **El proveedor de email ya no loguea el cuerpo.** Es el proveedor por omisión y los
+  cuerpos llevan tokens vivos: cada reserva pública dejaba en el log el email del huésped y
+  un enlace a su ficha. Ahora van metadatos; el cuerpo solo con `EMAIL_LOG_CUERPO=1`.
+- **El webhook de pagos ya no da por aprobado un evento sin estado.** Era
+  `?? 'aprobado'`: fail-open sobre dinero. Y el `as EstadoPago` no verificaba nada, así que
+  un valor fuera del enum explotaba recién en el insert y la pasarela reintentaba en bucle.
+- **Recuperación de contraseña** (`/login/recuperar`). No existía: quien perdía la clave
+  dependía de un admin disponible, y hoy hay **un solo usuario**. La respuesta es siempre la
+  misma exista o no el email —si no, el formulario es un verificador de cuentas del staff— y
+  tiene límite propio de 3/hora. Verificado de punta a punta: el correo llega a Mailpit.
+- **Los enlaces del portal se pueden cerrar** (migración `0063`). Dar de baja una agencia
+  **no le cerraba el portal**, y un enlace filtrado servía para siempre. Ahora la consulta
+  exige `activo` y `token_revocado_en is null`, y hay botones para regenerar y para dar de
+  baja el enlace.
+- **Tres KPIs dejaron de mentir.** `mantenimiento`, `objetos-perdidos` y el portal contaban
+  filas trayéndolas, y PostgREST corta en 1000 **con HTTP 200 y sin aviso**. Verificado
+  sembrando 1100 filas: llegaban 1000, `Content-Range: 0-999/*`, sin error. Ahora cuenta la
+  base. El portal además traía **todos los tokens de firma del sistema** para usar tres.
+- **Índices del listado de reservas** (migración `0062`). Ordena por `creada_en` y filtra
+  por `estado`, y ninguna tenía índice. Medido con EXPLAIN sobre 30.000 filas: **2,599 ms →
+  0,101 ms**, y de 755 a 27 páginas tocadas.
+- **`reservas.canal` dejó de ser texto libre.** Alimenta el reporte de rentabilidad y la
+  conciliación de comisiones; un typo creaba un canal fantasma **sin fallar**. El CHECK usa
+  exactamente la lista de `CANALES` del dominio, ni un valor de más.
+- **La sesión se resuelve una vez por request.** Eran 3 llamadas a Auth y 2 SELECT sobre
+  `perfiles`, en serie, antes de empezar. Un `cache()` de React.
+- **Quitar un cargo pide confirmación.** Era un `<button>` crudo con `✕`: borrado
+  irreversible de dinero, sin confirmar, sin estado de envío y sin nombre accesible.
+  `BotonEnvio` ahora acepta `aria-label`.
+- **El CI corre en todas las ramas** y tiene `npm audit --audit-level=high`. Había cinco
+  ramas divergidas, la mayor con 50 commits sin una sola corrida. Se sumó Dependabot.
+- **Next 16.2.9 → 16.3.2.** Cerraba SSRF en Server Actions y exposición no autenticada de
+  endpoints internos, entre otras. De 8 vulnerabilidades a 1 baja.
+
+### Tres cosas que conviene recordar
+
+1. **Un `revoke select (columna)` NO recorta un `grant` de tabla previo.** Postgres lo acepta
+   sin error y no hace nada. Hay que revocar el de tabla y reponer por columna — y eso rompe
+   a quien lea esa columna con el cliente del usuario, así que van juntos.
+
+2. **La matriz de lectura RLS ahora sondea con `id` en las tres tablas con columna revocada.**
+   Con `select('*')` daría 42501 para todos, incluido admin, y el test diría «admin no puede
+   leer agencias», que es falso. La protección por columna tiene su propio bloque de tests.
+
+3. **El guardián de la auditoría hizo su trabajo.** Al agregar tres casos negativos nuevos, el
+   test que verifica que ningún caso pasó «por tabla vacía» los reportó como no auditados —con
+   razón—. Hubo que sembrar `agencias` y `proveedores`. Un caso que pasa sobre una tabla vacía
+   no prueba nada.
+
+### Verificación
+
+`npm run check` exit 0 · **1389 tests (84 archivos), cero salteados** · **63 migraciones**
+aplicadas · `npm audit`: 1 baja. Cada sonda se corrió **antes y después** del arreglo, y las
+que crearon datos los borraron.
+
+### Addendum del 2026-08-24 — el stock que no se descontaba
+
+Al verificar un pendiente que estaba anotado como **sospecha** («trigger de stock y
+`cambiar_unidad_reserva` como `SECURITY INVOKER`, mismo defecto que la 0033») apareció que
+uno de los dos era un bug real y **peor de lo que decía la sospecha**.
+
+Con una sesión de recepción —el rol que carga consumos todos los días—:
+
+```
+stock inicial: 50
+cargar consumo como recepción: OK        ← sin error
+stock después: 50                        ← NO descontó
+```
+
+No fallaba: descontaba **cero**. `descontar_stock_consumo()` corre con los privilegios de
+quien inserta el consumo, su `update` sobre `productos_servicios` choca con la política
+`admin/gerencia gestionan`, RLS filtra la fila y el update afecta cero filas — que para
+Postgres es un éxito. El consumo se cobraba y el inventario quedaba mintiendo.
+
+La diferencia con el caso de la 0033 es que aquél **fallaba ruidosamente** (no se podía
+emitir ninguna factura, así que se notó) y éste no falla. Por eso duró.
+
+Migración `0064`: `security definer` con `search_path` fijo. Después: 50 → 47.
+
+**`cambiar_unidad_reserva` se probó y no tenía el problema**: devuelve `{"ok":true,...}` con
+sesión de recepción. Queda anotado en la migración para que nadie lo «arregle».
+
+El test (`tests/stock-descuento.test.ts`) corre como **recepción y no con `service_role`**:
+con el cliente privilegiado el bug no se reproduce porque saltea RLS, y un test que no puede
+ver el bug no protege de él. Se comprobó volviendo la función a invoker: la suite se pone en
+rojo con «expected 50 to be 47».
+
+**1392 tests verdes en 85 archivos.**
+
+### Addendum del 2026-08-24 — el N+1 de la sincronización de canales
+
+`guardarEntrantes` hacía un `select` por entrante antes de decidir si insertar o
+actualizar. Con el insert/update y el devengo de comisión, eran **3·N viajes**: un informe
+de 40 reservas, ~125 round-trips en serie. Con el cron (`maxDuration = 60`) eso no era solo
+lento — un informe grande podía no llegar a terminar.
+
+Ahora los existentes se traen en **una consulta por canal** antes del bucle: de 3·N a
+2·N + 1. Es el mismo patrón que `marcarConflictosDeCupo` ya usaba veinte líneas más abajo.
+
+**Los 20 tests de canales pasaron sin editar una línea**, que es el criterio de terminado
+que el propio repo fija para un refactor.
+
+Se sumó un test por el riesgo que introduce el cambio: la identidad de una entrante es
+**(canal, external_id)**, no el id solo. Si el mapa se llaveara solo por id, dos canales que
+reusaran el mismo número se pisarían y se perdería una reserva. El test falla si alguien
+simplifica la clave.
+
+**1393 tests verdes.**
+
+### Addendum del 2026-08-24 — paginación, B9 y registro estructurado
+
+**B9 ya estaba hecho.** Al ir a implementarlo apareció que `app/panel/reportes/page.tsx:193`
+ya lee `resumen_canal_mes`, calcula neto y ADR, y ordena **por neto y no por bruto**. Las dos
+honestidades que el pendiente exigía también estaban: `—` en vez de `USD 0` para
+`directo`/`web`, y el aviso de cuántas reservas no informaron comisión. Era el último pedido
+del relevamiento que figuraba abierto; el pendiente estaba desactualizado, no el código.
+
+**Paginación en tres listados** (mantenimiento, objetos perdidos, contratos). Sin ella
+PostgREST cortaba en 1000 filas **sin avisar** y el listado se quedaba mudo a partir de ahí.
+
+Dos cosas que aparecieron al hacerlo, y que importan más que la paginación en sí:
+
+1. **Paginar rompe los KPI si se calculaban en memoria.** En contratos, `vigentes`,
+   `pendientesFirma` y `porVencer` salían de `contratos.filter(...)`: con paginación habrían
+   contado solo las 25 filas visibles y **dirían un número distinto en cada página**. Se
+   pasaron a conteos en la base. Es el mismo error que la auditoría encontró antes, con otra
+   causa.
+
+2. **Proveedores NO se pagina, y es una decisión escrita en el código.** Esa pantalla filtra
+   en memoria por saldo, y el saldo viene de la vista `saldos_proveedores`, no de la consulta.
+   Paginar aplicaría el filtro «solo con deuda» sobre la página en vez de sobre todos: el
+   resultado sería distinto en cada página y **equivocado, sin fallar**. La tabla es chica
+   —decenas de proveedores, no miles—, así que el riesgo de un filtro que miente es peor que
+   el de una lista larga. Si crece, primero hay que mover el filtro a la base.
+
+**Registro estructurado** (`lib/registro.ts`). Había ~29 `console.error`/`warn` sueltos, cada
+uno con su formato. Eso alcanza mientras alguien mira una terminal y deja de alcanzar el día
+del deploy: en un log con varias peticiones entrelazadas no hay forma de saber qué líneas son
+del mismo pedido.
+
+Ahora es **una línea JSON por evento**, con el id de la petición (`x-vercel-id`). Sin
+dependencias nuevas: lo que un logger aporta acá se reduce a emitir JSON a stdout, que es lo
+que cualquier plataforma indexa.
+
+Dos decisiones del módulo:
+
+- **Oculta datos sensibles en dos capas**: por nombre de campo (`token`, `password`, `cvv`…)
+  y por contenido (12+ dígitos seguidos → `[oculto]`). La segunda es la que salva cuando el
+  dato viaja anidado en un mensaje de error de la base, que es como se cuela de verdad.
+- **`registrarErrorSync` existe a propósito.** `cortarSiFalla` tiene que ser síncrona porque
+  lanza para **detener** la Server Action; si fuera `async` y alguien olvidara el `await`, el
+  redirect no ocurriría y la acción seguiría — un bug peor que el que se registraba. Como
+  `headers()` es async en Next 16, esa variante va sin id de petición y se acepta.
+
+**1400 tests verdes en 86 archivos.**
+
+### Addendum del 2026-08-24 — los 23 literales de permisos
+
+`['admin','gerencia'].includes(sesion.rol)` estaba repetido **23 veces en 12 archivos**.
+`AGENTS.md` pedía migrarlos a la matriz de `lib/domain/permisos.ts` al tocarlos.
+
+Al hacerlo apareció que **no todos se podían migrar**, y ésa es la parte interesante. Se
+comparó cada área contra la matriz antes de tocar nada:
+
+```
+agencias      → admin, gerencia, recepcion       ⚠️ migrar CAMBIARÍA permisos
+proveedores   → admin, gerencia                  ✅ el literal coincide
+contratos     → admin, gerencia                  ✅ el literal coincide
+config        → admin, gerencia                  ✅ el literal coincide
+mantenimiento → admin, gerencia, housekeeping    ⚠️ migrar CAMBIARÍA permisos
+```
+
+Usar `requerirAcceso('agencias')` le habría dado a **recepción** permiso de escritura sobre
+cuentas corrientes, y `requerirAcceso('mantenimiento')` se lo habría dado a **housekeeping**
+sobre los planes de preventivo. Un refactor «de limpieza» que amplía permisos en silencio es
+exactamente lo que no puede pasar en este archivo.
+
+Entonces se partió en dos:
+
+- **12 → `requerirAcceso(area)`**, donde el literal coincidía con la matriz. Tres de esos
+  eran además **dobles chequeos redundantes**: `requerirAcceso('proveedores')` seguido del
+  literal, que repetía la misma regla y podía divergir de la matriz sin que nada avisara.
+- **11 → `requerirRol('admin', 'gerencia')`**, una guarda nueva en `lib/auth/session.ts`. No
+  cambia el comportamiento, pero deja **una** implementación en vez de once copias, y sobre
+  todo **declara que la restricción es más estrecha que el área a propósito**.
+
+Verificado con la sonda de roles: la matriz de acceso quedó idéntica antes y después.
+
+**La guarda estructural (`tests/autorizacion-acciones.test.ts`) falló al hacer el cambio**, y
+con razón: no conocía `requerirRol` y marcó seis acciones como «sin verificar rol». Se le
+enseñó la forma nueva, con el porqué escrito en el propio test.
+
+Quedan **0 literales en código** (uno en un comentario que explica la migración).
+
+### Addendum del 2026-08-24 — quién prueba la puerta
+
+El proyecto tenía las dos mitades de la verificación de autorización y le faltaba el medio:
+
+- `tests/permisos.test.ts` prueba `puedeAcceder(rol, area)` — la **regla**.
+- `tests/autorizacion-acciones.test.ts` prueba que las 51 Server Actions **llamen** a una
+  guarda — análisis estático.
+- **Nadie probaba que la guarda rechace de verdad.**
+
+Y el hueco importa: los 29 tests de Server Actions reemplazan `requerirAcceso` por un no-op
+que devuelve un admin fijo. Si esa función dejara de redirigir, la suite entera seguiría en
+verde.
+
+`tests/guardas-de-sesion.test.ts` cubre el mecanismo: 16 casos sobre `requerirSesion`,
+`requerirAcceso`, `requerirRol` y `obtenerSesion`. Entre ellos, los tres que más valen:
+
+- **un usuario dado de baja no tiene sesión** aunque su login siga siendo válido (la garantía
+  de la migración 0033);
+- **un área apagada no la abre nadie, ni el admin** (`AREAS_OCULTAS`);
+- **recepción tiene el área `agencias` pero no puede mover su cuenta corriente**, que es el
+  caso que justifica que `requerirRol` exista.
+
+Comprobado rompiendo `requerirAcceso` a propósito: **tres tests se ponen en rojo**.
+
+Esto no reemplaza migrar los 29 a sesiones reales —sigue siendo deseable—, pero ya no es lo
+único que separa a la suite de verificar la autorización.
+
+**1416 tests verdes en 87 archivos.**
+
+### Addendum del 2026-08-24 — lo que solo se ve abriendo el navegador
+
+`docs/PENDIENTES.md` tenía dos cosas anotadas como **pendientes de verificación en el
+navegador**, y llevaban meses así. Se verificaron. Aparecieron **dos bugs que ningún test de
+los 1417 podía ver**, porque los dos viven en el borde entre React y el DOM.
+
+#### 1. Los `<select>` perdían lo elegido, y eso guardaba datos fiscales equivocados
+
+El pendiente preguntaba si el patrón de preservación de formularios funcionaba. La respuesta
+es **a medias**, y la mitad que fallaba era la peor.
+
+Se cargó un huésped con los nueve campos y un CUIT inválido a propósito:
+
+- Los **7 campos de texto se conservaron** ✅ (incluida la casilla de residencia)
+- Los **2 `<select>` no** ❌ — «Tipo de documento» volvió de CUIT a **DNI**, y «Condición
+  frente al IVA» de Responsable Inscripto a **Consumidor Final**
+
+La causa: `defaultValue` en un `<select>` marca la opción **al montar**; volver a renderizar
+con otro valor no toca el DOM, y el reseteo de formulario de React 19 devuelve el control a
+la opción de origen. Los `<input>` no tienen el problema porque ahí React sí actualiza el
+atributo `value`.
+
+**Por qué es grave y no una molestia.** Quien corrige solo el número del CUIT y reenvía
+guarda el huésped como **Consumidor Final** creyendo que puso Responsable Inscripto. De eso
+depende la letra del comprobante (ADR 0012). Es un dato fiscal equivocado, guardado en
+silencio, por un error de interfaz.
+
+Arreglado con `key` atado al valor, que fuerza el remontaje. Re-verificado en el navegador:
+CUIT y Responsable Inscripto ahora sobreviven.
+
+**Consecuencia para el pendiente UX-02:** el patrón sirve para los campos de texto, pero
+replicarlo a los otros formularios exige el `key` en cada `<select>`. Sin eso se estaría
+copiando el bug doce veces.
+
+#### 2. La ficha prometía una exención distinta de la que la factura aplicaba
+
+Al abrir una reserva de un huésped residente en el exterior, el aviso decía:
+
+> «Al facturar, el alojamiento sale sin IVA: **USD 0,00** en vez de USD 363,00»
+
+El número correcto es USD 300. La ficha leía `reservas.total_neto` —una columna que puede
+venir en cero— mientras que `emitirFactura` lo calcula bien con `desglosarConExencion`. O sea
+que **la pantalla y el comprobante se contradecían**, que es exactamente lo que el comentario
+del código decía estar evitando: ahí se usaba la misma función solo para el booleano, no para
+el importe.
+
+Arreglado: la ficha usa `desglosarConExencion`, la misma que la factura. Re-verificado:
+ahora dice USD 300,00. El caso quedó fijado en `tests/exencion-iva.test.ts` con los números
+exactos.
+
+#### Lo que sí estaba bien
+
+- `/panel/canales` y sus cinco vistas renderizan, con un estado vacío que dice qué hacer.
+- El bloque de garantía de tarjeta muestra «Sin tarjeta · Sin verificar» y el motivo.
+- `/login/recuperar` redirige al panel si ya hay sesión, como se codeó.
+- El enlace «¿Olvidaste tu contraseña?» está en el login.
+
+#### La lección
+
+Los dos bugs eran **de borde entre React y el DOM**, y ninguna de las tres capas de tests los
+alcanzaba: el dominio es puro, los de integración van contra Postgres y la guarda estructural
+lee el código fuente. Un test de componente los habría visto, pero exige dependencias nuevas.
+Mientras tanto, **abrir la pantalla sigue siendo la única verificación que cubre esa capa**, y
+conviene hacerlo antes de replicar un patrón a doce archivos.
+
+---
+
+## 2026-08-25 — Integración a `main`: el feed iCal y el relevamiento, juntos
+
+**Resumen:** las ramas vivas eran dos y las dos colgaban del tip de `main`:
+`feat/relevamiento-cliente-agosto` (+6901 líneas, migraciones 0058–0064) y
+`feat/5-ical-saliente` (+1454, B7). Se integraron en una sola rama verificada.
+**1446 tests verdes en 89 archivos, cero salteados**, más typecheck, lint, `npm
+audit --audit-level=high` y build: las cinco puertas del CI.
+
+### El hallazgo: dos migraciones `0058` no conviven
+
+Las dos ramas nacieron del mismo commit y **las dos crearon una `0058`**: la
+exención de IVA y la lectura del feed iCal. Parecía un detalle cosmético de
+numeración. No lo era.
+
+Supabase registra la migración aplicada **por el prefijo numérico**, no por el
+nombre del archivo. La base local ya tenía anotado `0058 | lectura_del_feed_ical`
+de cuando se trabajó esa rama, así que al correr `migration up` el CLI dio el
+número 0058 por aplicado y **salteó `0058_exencion_iva_turista_extranjero.sql`
+sin decir una palabra**. El síntoma apareció lejos de la causa: 16 tests rojos
+con `Could not find the 'residente_exterior' column of 'huespedes' in the schema
+cache`, que parece un problema de caché de PostgREST y era una migración que
+nunca corrió.
+
+La migración del iCal pasó a ser la **`0065`**. Se actualizaron las dos
+referencias al número —`docs/bitacora.md` y el ADR 0022—, y la cabecera del
+propio archivo. La de IVA conserva la `0058`, que es la que ya estaba publicada.
+
+### Lo que NO se mergeó, y por qué
+
+Cuatro ramas viejas (`audit/fase-1-seguridad-critica`, `feat/4-booking-integracion`,
+`feat/booking-y-auditoria-rls`, `historia/detalle-hasta-0057`) figuraban como «sin
+mergear» porque `main` es historia lineal de squashes: los SHA nunca coinciden. Al
+comparar **contenido** resultó que las cuatro ya estaban absorbidas por los squashes
+#9, #10, #11 y #14, y que lo único que aportaban eran revisiones viejas de código que
+`main` ya mejoró.
+
+Mergearlas habría **revertido** trabajo. El caso más caro:
+`audit/fase-1-seguridad-critica` trae `[auth.email].enable_signup = false`, que no
+bloquea el auto-registro —eso lo hace `[auth].enable_signup = false`, que ya está—
+sino que desactiva el proveedor de email entero, incluido `signInWithPassword`. Es
+decir: **nadie podría iniciar sesión en el panel**. `main` tiene la línea correcta,
+documentada y sostenida por `tests/auth-config.test.ts`, archivo que esa rama ni
+siquiera tiene.
+
+## 2026-08-25 — Rediseño azul y blanco, y los bugs de scroll que aparecieron al medirlo
+
+Pedido del usuario: paleta y tipografía del registro de las plataformas de reserva,
+entrada con Google, arreglar los desbordes de las tarjetas al scrollear, compactar
+la Ayuda y que todo sea responsive.
+
+### La paleta cambia de valor, no de nombre (ADR 0026)
+
+`lago` pasa a azul de acción, `calafate` a azul marino, `lenga` a ámbar. Los rojos
+de error y los verdes de éxito no se tocan: significan lo mismo en cualquier
+interfaz y cambiarlos por estética le quitaría información a quien lee rápido.
+
+**Los nombres de los tokens no cambiaron, y es la decisión importante.** Tienen 244,
+15 y 98 usos. El riesgo de renombrar no es el tamaño del diff sino su naturaleza:
+Tailwind resuelve las clases **por texto**, así que un `bg-azul-600` mal tipeado no
+rompe el typecheck ni el linter — simplemente no pinta. Cambiar el valor repinta
+todo desde `app/globals.css` y no puede romper una clase que funcionaba.
+
+La tipografía de Booking es propietaria y no se usa; va Inter, que es libre y tiene
+un aire parecido. El ADR deja escrito el costo: se pierde la identidad propia que
+el ADR 0009 había construido, y parecerse a la plataforma de la que el proyecto
+busca reducir la dependencia tiene algo de contradictorio. Es decisión del dueño
+del producto.
+
+### Entrada con Google
+
+No abre el registro: `[auth].enable_signup = false` impide que GoTrue cree un
+usuario por cualquier proveedor, y un perfil creado fuera del alta nace `sin_rol` y
+`activo = false` (ADR 0005 y 0017). El callback atiende el caso intermedio que sí
+ocurre —autenticado en Google pero sin acceso al panel—: sin eso rebotaría entre
+`/login` y `/panel` sin entender por qué. El botón solo se muestra si está
+configurado: uno que existe y falla es peor que uno que no está (ADR 0018).
+
+### El menú lateral se iba con el scroll, en TODO el panel
+
+Lo destapó una captura del usuario. `<aside>` era `position: static` y, como ítem
+flex de un contenedor que estira, la caja azul medía lo que midiera la página:
+**5.739 px en Ayuda**. Se veía la franja de color de arriba abajo pero los enlaces
+vivían en los primeros 400 px, así que a media página el menú estaba 1.296 px más
+arriba y no había forma de navegar sin volver al principio.
+
+Ahora es `sticky top-0 h-screen`. El scroll de la lista **no** se puso en el aside:
+el `<nav>` de `Enlaces` ya es `flex-1 overflow-y-auto`, y un segundo `overflow`
+habría dejado dos scrollports anidados peleándose por la rueda.
+
+### Tres arrastres laterales en el teléfono, tres causas distintas
+
+Buscados con la prueba que importa —`scrollTo(9999,0)` y ver si `scrollX` se
+mueve—, no mirando capturas.
+
+**Hub (+253 px a 320).** La causa era un arreglo propio anterior: `truncate`
+incluye `white-space: nowrap`, así que el ancho **mínimo** de ese span es la línea
+entera. Un apellido compuesto daba 515 px y la tarjeta —ítem de grilla, o sea
+`min-width: auto`— se estiraba a 557 dentro de una pantalla de 320. El `truncate`
+que estaba justamente para evitarlo nunca llegaba a activarse. El `min-w-0` va en
+el componente `Tarjeta`, no en el llamador: vale para las ~90 tarjetas del panel.
+
+**Reservas (+91 px).** Siete `<select>` sin `min-w-0`. `w-full` no alcanza en un
+ítem flex, porque `min-width: auto` lo ancla a su opción más ancha: 361 px medidos.
+
+**Ocupación (+276 px).** El más raro: el desborde era hacia espacio **vacío**, nada
+cortado. Lo causan las celdas `sticky` de la columna congelada, que extienden la
+región scrolleable de sus ancestros y se escapan del recorte del scrollport.
+Descartados por medición, uno por uno: `overflow-x: hidden` en el `main` **no** lo
+frena, ni sacar el `whitespace-nowrap`, ni el `max-width`, ni `table-layout: fixed`.
+`contain: paint` sí.
+
+### La grilla de ocupación no se pegaba, aunque el comentario dijera que sí
+
+El `tfoot` era `sticky bottom-0` y un comentario afirmaba que quedaba pegado. No lo
+estaba: con `overflow-x: auto` el `overflow-y` computa a `auto`, así que ese div ya
+era el scrollport — pero sin altura acotada su `scrollTop` era siempre 0 y el
+sticky no tenía contra qué pegarse. Con `max-h-[70vh]` la grilla se lee como una
+planilla. Verificado a 0 px de offset con la grilla scrolleada a fondo en los dos
+ejes.
+
+Se sumó el estado vacío que faltaba —era el único listado del módulo sin uno—: con
+los filtros sin resultados mostraba un pie con seis filas de ceros, que se lee como
+«el hotel está vacío» cuando lo que pasa es que el filtro no dejó pasar nada.
+
+### Ayuda: de 6,3 a 4,8 pantallas, sin esconder nada
+
+Diez de los diecisiete capítulos tienen uno o dos pasos y aun así costaban
+172-210 px cada uno: casi todo marco de tarjeta. Se reparten en dos columnas con
+`columns` y no con `grid`, porque miden de 172 a 543 px y una grilla alinea por
+fila —cada fila queda tan alta como su tarjeta más alta y al lado sobra un hueco—.
+
+Los tres umbrales salieron de medir una matriz, no de estimar, y el primer intento
+**empeoró** el 1024 un 10 %: el índice al costado dejaba los capítulos en 704 px y
+dos columnas internas de 330 px desperdician más de lo que ahorran. Corregido:
+1024 px −30 %, 1180 px −25 %, 1440 px −22 %.
+
+Sigue sin acordeones: lo que se achica es el alto, no lo que está a la vista.
+Ctrl+F sigue encontrando todo, que es como se busca en un manual.
+
+### Las cuatro variantes de botón ahora miden lo mismo
+
+`secundario` y `peligro` llevaban `border` y `primario` y `fantasma` no: 38 px
+contra 36 con el mismo padding. En cada fila de acciones del `Encabezado` el botón
+principal quedaba 1 px más bajo que sus vecinos, y en `canales` —donde la variante
+cambia según el estado— el botón cambiaba de alto solo.
+
+Ocho botones de estado vacío escritos a mano medían **33 px**, no los ~36 que decía
+el diagnóstico: son `<a>` sin `inline-flex`, así que quedan en caja de línea y el
+`py-2` ni se aplica entero. El mínimo táctil de 44 px de `globals.css` alcanza a
+`button` y `select`, **no a un `<a>` suelto** — por eso `botonClases` incluye la
+clase `toque`, y por eso estos ocho quedaban fuera de una garantía que el resto del
+panel sí tenía.
+
+### Trece hallazgos de una revisión por agentes
+
+Verificados uno por uno contra el código antes de aplicar. Cuatro de importes con
+`toLocaleString` en vez de `formatearUSD` —el peor en el comprobante impreso, que
+mezclaba «1.234,5» en el ítem con «1.234,50» en el total de la misma columna—; la
+tabla del punto de venta con `overflow-hidden` que cortaba cantidad y subtotal en el
+teléfono; el email desbordando la ficha de reserva; y el KPI «Total» de contratos
+que mostraba 25 mientras el paginador decía «1–25 de 137».
+
+En contratos se hizo distinto de lo propuesto: el agente sugería usar `enFiltro`,
+pero los otros tres indicadores se cuentan globales y habría quedado uno filtrado al
+lado de tres que no lo están.
+
+### Dos notas de método, para no repetir los errores
+
+**El código de salida no es el resultado.** Se reportó «tests en verde (exit 0)»
+mirando solo el exit code; leyendo la salida, tres archivos fallaban por variables
+de entorno. `npm run check` **devuelve 0 con tests rojos** cuando no hay `.env.local`
+—es justo la trampa que `tests/db.ts` documenta querer evitar, pero el guardián
+(`EXIGIR_DB=1`) no está en ese script—. Queda anotado como pendiente.
+
+**Una captura del usuario mostrando la app pintada en una esquina no era un bug.**
+El navegador que maneja Playwright estaba conectado a la ventana del usuario, y un
+`setViewportSize(1440×560)` puesto para probar el sticky le impuso ese tamaño de
+render. De ahí en más la verificación se hizo con un navegador headless aparte.
+
+### Verificación
+
+**38 pantallas** —las 35 del panel y las 3 del portal— barridas a 360, 768 y 1440:
+ninguna arrastra de lado, ninguna tarjeta recorta contenido sin forma de alcanzarlo.
+1446 tests en 89 archivos contra la base local con `EXIGIR_DB=1`. Lint y build
+limpios.
+
+Detalle del arnés, porque confunde: varias pantallas daban «no carga» y no era la
+app. Navegar dos veces seguidas en modo dev devuelve `ERR_ABORTED` a los ~90 ms —no
+es un timeout—; con un reintento espaciado dan 38/38.
+
+---
+
+## 2026-08-25 — Fase 23: la pasarela de pagos, enchufada
+
+**Resumen:** el puerto de pagos existía desde la Fase 3 y estaba **desenchufado**.
+Se conectó de punta a punta —web y mostrador—, con dos pasarelas reales
+(MercadoPago y Stripe), cobro en dos monedas y un simulador que permite recorrer
+el circuito completo sin contratar nada. En el camino aparecieron dos bugs que
+sólo existen cuando el cobro funciona de verdad, y el más caro se llevaba plata.
+
+**El diagnóstico, verificado sobre el código antes de tocar nada:**
+
+| Qué | Estado real |
+|---|---|
+| `crearCheckout()` | **Cero call sites.** Nadie cobraba en línea |
+| `/pago-simulado` | La URL que devolvía el stub **daba 404** |
+| Portal público | Creaba la reserva `pendiente` y decía «te escribimos para coordinar» |
+| Panel | `medio = 'tarjeta'` era una etiqueta sin cupón ni últimos 4 |
+| `PAGO_PROVIDER` | **No existía**: pagos era el único de los siete adaptadores fuera del ADR 0018 |
+| `MERCADOPAGO_ACCESS_TOKEN` | Declarado en `.env.example`, ningún archivo lo leía |
+| Webhook | Bien hecho (idempotente, HMAC, fail-closed) pero **sin límite de tasa** |
+
+**Detalle de lo realizado:**
+
+- **Migración 0067.** `pagos` gana `monto_cobrado`, `cotizacion`, `cupon`,
+  `ultimos4`, `tarjeta_marca`, `url_pago` y `vence_en`, más siete `check` que
+  imponen la coherencia de la conversión y **rechazan un PAN** en las columnas
+  nuevas (mismo criterio que la 0059).
+- **`lib/domain/cobro.ts`** (dominio puro): conversión de moneda con la
+  cotización congelada, contraste de importe al centavo, catálogo de medios y
+  vigencia del link.
+- **Tres adaptadores** con el mismo contrato: `ProveedorSimulado`,
+  `ProveedorMercadoPago` (Checkout Pro) y `ProveedorStripe` (Checkout Sessions).
+  Por HTTP, sin SDK y sin dependencias nuevas.
+- **`lib/payments/servicio.ts`** — `iniciarCobro`, el único camino por el que
+  nace un link, lo pida la web o el mostrador.
+- **Portal público:** botón de pago en la confirmación y pantalla de elección de
+  medio, con el importe en la moneda en la que se va a debitar.
+- **Panel:** link de pago para mandar por WhatsApp, moneda del cobro en el
+  formulario manual y rastro del posnet.
+- **`/pago-simulado`**, la pantalla que faltaba, que cierra el circuito
+  disparando el webhook real firmado.
+- **Límite de tasa del webhook**, contado **sólo después de rechazar la firma**.
+
+**Los dos bugs que aparecieron al conectarlo:**
+
+1. **La seña no confirmaba la reserva, y eso costaba plata.**
+   `pendiente → pagada` no es una transición válida: hay que pasar por
+   `confirmada`. Una reserva de la web nace `pendiente`, así que el pago se
+   registraba, la transición se descartaba **en silencio** por inválida y la
+   reserva quedaba `pendiente`. La expiración la liberaba a los 5 días y el hotel
+   revendía la unidad **con la plata del huésped ya cobrada**. Se resolvió con
+   `estadoSegunPagos` y `caminoDeEstados` en el dominio.
+
+2. **Un pago rechazado trababa el reintento.** `puedeAvanzarEstadoPago` trataba
+   `rechazado` como final, pero una pasarela real crea varios intentos bajo la
+   misma referencia: la tarjeta se rechaza por fondos, el huésped pone otra y
+   aprueba. El rechazo trababa la fila y la reserva no se saldaba nunca con la
+   plata ya cobrada.
+
+**Verificación (ejecutada, no supuesta):**
+- Migración 0067 aplicada a la base local; los siete `check` probados uno por uno
+  con `insert` que deben fallar, y comprobado que un pago en pesos bien formado sí
+  entra.
+- Circuito completo contra la app corriendo: reserva `pendiente` de USD 300 →
+  seña de USD 100 por webhook → **pasa a `confirmada`** → saldo de ARS 290.000 a
+  1450 → **pasa a `pagada`** con USD 300 imputados. El detalle guardado muestra
+  `USD 100 @ 1` y `ARS 290.000 @ 1450`.
+- `npm run check` completo: lint, typecheck, **1555 tests en verde con cero
+  salteados** (eran 1446) y build.
+
+**Decisiones:** [ADR 0027](decisiones/0027-cobro-en-linea-dos-pasarelas-y-una-sola-moneda-de-saldo.md).
+La más importante: **`pagos.monto` está siempre en USD**. `resumenPagos` suma esa
+columna sin mirar la moneda, así que guardar ahí un importe en pesos habría dado
+la reserva por pagada al instante y el huésped se iba sin pagar.
+
+**Pendiente:** contratar las pasarelas. Enchufarlas es cargar variables de
+entorno; no hay que tocar código. Ninguna de las dos verifica la tarjeta de
+garantía, y las tres implementaciones lo declaran (ADR 0025).

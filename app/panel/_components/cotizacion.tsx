@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import {
+  DESCRIPCION_FUENTE,
   ETIQUETAS_FUENTE,
   ETIQUETAS_ORIGEN,
   formatearLocal,
@@ -134,7 +135,17 @@ export async function WidgetCotizacion() {
         </span>
       </p>
 
-      <p className="mt-1 text-[11px] text-stone-500">{ETIQUETAS_FUENTE[c.fuente as Fuente]}</p>
+      {/* De dónde sale el número, y qué NO es.
+          El pedido del cliente fue «conectarlo al Banco Nación». El BNA no
+          publica un servicio para consultarlo, así que se usa un tercero que
+          replica ese valor. Decirlo acá —y no solo en el ADR 0020— es lo que
+          permite que quien cobra pueda dudar del número cuando corresponda. */}
+      <p className="mt-1 text-[11px] text-stone-500">
+        Fuente: {ETIQUETAS_FUENTE[c.fuente as Fuente]}
+      </p>
+      <p className="mt-0.5 text-[11px] leading-snug text-stone-400">
+        {DESCRIPCION_FUENTE[c.fuente as Fuente]}
+      </p>
     </div>
   )
 }

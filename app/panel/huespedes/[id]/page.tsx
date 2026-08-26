@@ -67,7 +67,7 @@ export default async function DetalleHuespedPage({
     supabase
       .from('huespedes')
       .select(
-        'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos, condicion_iva, notas',
+        'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos, condicion_iva, residente_exterior, notas',
       )
       .eq('id', id)
       .single(),

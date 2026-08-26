@@ -32,6 +32,8 @@ import {
   guardarUbicacionUnidad,
 } from './actions'
 import {
+  DESCRIPCION_FUENTE,
+  ETIQUETAS_FUENTE,
   ETIQUETAS_MONEDA,
   MONEDAS_EXTRANJERAS,
   formatearLocal,
@@ -690,10 +692,22 @@ async function SeccionDivisas({ puedeEditar }: { puedeEditar: boolean }) {
     >
       {/* El ancla la usan el widget del dashboard y los redirects de la acción. */}
       <div id="divisas" className="scroll-mt-20 px-5 py-4">
-        <p className="mb-3 text-xs text-stone-600">
+        <p className="mb-2 text-xs text-stone-600">
           Los precios del sistema viven en <strong>USD</strong> (ADR 0003). Se cobra al valor de{' '}
           <strong>venta</strong>, que es lo que fija el Tarifario: «cotización oficial de venta
           billete del Banco Nación del día de pago».
+        </p>
+
+        {/* La aclaración va JUNTO a la frase que menciona al Banco Nación, que es
+            donde se produce el malentendido: quien lee «Banco Nación» arriba
+            asume que el número de abajo viene de ahí. El BNA no publica un
+            servicio para consultarlo (ADR 0020). */}
+        <p className="mb-3 rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-600">
+          <strong>De dónde sale el número automático:</strong> el Banco Nación no publica un
+          servicio para consultar su cotización, así que el sistema la toma de un servicio público
+          que la replica. <strong>No es el Banco Nación informando el valor.</strong> Si el día de
+          cobro necesitás el valor exacto del BNA, cargalo a mano acá abajo: el valor manual le gana
+          al automático.
         </p>
 
         <div className="overflow-x-auto">
@@ -704,6 +718,7 @@ async function SeccionDivisas({ puedeEditar }: { puedeEditar: boolean }) {
                 <th className={`${TH} text-right`}>Compra</th>
                 <th className={`${TH} text-right`}>Venta</th>
                 <th className={TH}>Estado</th>
+                <th className={TH}>Fuente</th>
               </tr>
             </thead>
             <tbody>
@@ -736,6 +751,20 @@ async function SeccionDivisas({ puedeEditar }: { puedeEditar: boolean }) {
                       </Etiqueta>
                     ) : (
                       <Etiqueta tono="neutro">Sin cotización — se muestra en USD</Etiqueta>
+                    )}
+                  </td>
+                  <td className={TD}>
+                    {vigente ? (
+                      <>
+                        <span className="text-xs font-medium text-stone-700">
+                          {ETIQUETAS_FUENTE[vigente.fuente]}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-stone-500">
+                          {DESCRIPCION_FUENTE[vigente.fuente]}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-stone-400">—</span>
                     )}
                   </td>
                 </tr>

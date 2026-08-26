@@ -3,15 +3,15 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { formatearRango, rangoInvalido } from '@/lib/domain/temporadas'
 
 const RUTA = '/panel/config/temporadas'
 
 async function exigirGestion() {
-  const sesion = await obtenerSesion()
-  if (!sesion) redirect('/login')
-  if (!['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel/config')
+  // `requerirAcceso` resuelve las dos guardas: sin sesión manda al login y sin
+  // permiso sobre `config` manda al panel. El literal repetía la matriz.
+  await requerirAcceso('config')
 }
 
 /**

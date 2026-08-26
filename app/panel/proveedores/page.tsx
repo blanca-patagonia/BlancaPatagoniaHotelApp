@@ -56,6 +56,20 @@ export default async function ProveedoresPage({
   const { q, saldo: filtroSaldo } = sp
   const supabase = await crearClienteServidor()
 
+  /*
+    Este listado NO pagina, y es una decisión.
+
+    La pantalla filtra en memoria por saldo (`visibles`, más abajo), y el saldo sale
+    de la vista `saldos_proveedores`, no de esta consulta. Paginar en la base
+    aplicaría el filtro «solo con deuda» sobre las 25 filas de la página en vez de
+    sobre todos los proveedores: el resultado sería distinto en cada página y
+    **equivocado**, sin fallar.
+
+    Se deja sin paginar a propósito porque la tabla es chica —un hotel tiene decenas
+    de proveedores, no miles— y el riesgo de un filtro que miente es peor que el de
+    una lista larga. Si algún día crece, primero hay que mover el filtro de saldo a
+    la base; recién ahí tiene sentido paginar.
+  */
   let consulta = supabase.from('proveedores').select('id, nombre, rubro, activo').order('nombre')
   const termino = terminoBusqueda(q)
   if (termino) consulta = consulta.or(`nombre.ilike.${patronOr(termino)},rubro.ilike.${patronOr(termino)}`)
@@ -269,7 +283,7 @@ export default async function ProveedoresPage({
                       />
                     </div>
                     <span className="tabular w-24 text-right font-medium text-stone-700">
-                      {antiguedad[t].toLocaleString('es-AR')}
+                      {formatearUSD(antiguedad[t])}
                     </span>
                   </div>
                 ))}
@@ -302,14 +316,14 @@ export default async function ProveedoresPage({
               q || soloPendientes ? (
                 <Link
                   href="/panel/proveedores"
-                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                  className={botonClases('secundario')}
                 >
                   Quitar filtros
                 </Link>
               ) : (
                 <Link
                   href="/panel/proveedores/nuevo"
-                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                  className={botonClases('primario')}
                 >
                   Cargar el primero
                 </Link>

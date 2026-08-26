@@ -270,7 +270,10 @@ export default async function ReportesPage({
               name="mes"
               defaultValue={mes}
               aria-label="Mes analizado"
-              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              /* `py-2` y no `py-1.5`: el campo comparte una fila `items-end` con el
+                 botón «Ver», y con 34 px contra los 38 del botón el desnivel se veía.
+                 Se emparejan en 38. */
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-lago-500 focus:outline-none"
             />
           </label>
           <button className={botonClases('primario')}>Ver</button>

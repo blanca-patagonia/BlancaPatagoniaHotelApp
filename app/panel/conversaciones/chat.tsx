@@ -118,7 +118,12 @@ export function Chat({ canalId, usuarioId, iniciales, nombres }: Props) {
           autoComplete="off"
           placeholder="Escribí un mensaje⬦"
           aria-label="Mensaje"
-          className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
+          /* `min-w-0` junto al `flex-1`: sin él, el input conserva su ancho
+             intrínseco (~173 px) como mínimo automático y el formulario no baja de
+             ~300 px. Como la Tarjeta del chat es ítem de grilla Y lleva
+             `overflow-hidden`, en una pantalla de 320 px eso recorta el botón
+             «Enviar» en vez de desbordar, y no hay scrollport que lo rescate. */
+          className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
         />
         <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800">
           Enviar

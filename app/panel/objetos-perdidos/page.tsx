@@ -2,9 +2,16 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { formatoFechaCorta } from '@/lib/fechas'
-import { construirQuery, terminoBusqueda, patronOr } from '@/lib/listados'
+import {
+  construirQuery,
+  terminoBusqueda,
+  patronOr,
+  paginaActual,
+  rangoDePagina,
+} from '@/lib/listados'
 import {
   BarraHerramientas,
+  Paginacion,
   BotonExportar,
   Buscador,
   Chip,
@@ -44,7 +51,7 @@ const MENSAJES_ERROR: Record<string, string> = {
 export default async function ObjetosPerdidosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; estado?: string; error?: string }>
+  searchParams: Promise<{ q?: string; estado?: string; pagina?: string; error?: string }>
 }) {
   await requerirAcceso('objetos_perdidos')
   const sp = await searchParams
@@ -52,24 +59,50 @@ export default async function ObjetosPerdidosPage({
 
   const estado = sp.estado === 'guardado' || sp.estado === 'devuelto' ? sp.estado : undefined
 
+  /*
+    Pagina, como huéspedes y reservas. Sin esto la consulta traía la tabla entera
+    y PostgREST la cortaba en 1000 filas **sin avisar**: el listado se quedaba
+    mudo a partir de ahí y nadie podía saber que faltaban registros.
+  */
+  const pagina = paginaActual(sp.pagina)
+  const { desde, hasta } = rangoDePagina(pagina)
+
   let consulta = supabase
     .from('objetos_perdidos')
-    .select('id, descripcion, ubicacion, fecha_hallazgo, estado')
+    .select('id, descripcion, ubicacion, fecha_hallazgo, estado', { count: 'exact' })
     .order('fecha_hallazgo', { ascending: false })
 
   if (estado) consulta = consulta.eq('estado', estado)
   const termino = terminoBusqueda(sp.q)
   if (termino) consulta = consulta.or(`descripcion.ilike.${patronOr(termino)},ubicacion.ilike.${patronOr(termino)}`)
 
-  const [{ data }, { data: todosData }] = await Promise.all([
-    consulta,
-    supabase.from('objetos_perdidos').select('estado'),
+  /*
+    Los contadores los resuelve la base.
+
+    Antes traía `objetos_perdidos` entera para contarla en JavaScript, y PostgREST
+    corta en 1000 filas con HTTP 200 y sin aviso (`max_rows`,
+    supabase/config.toml:10). Comprobado con 1100 filas sembradas: llegaban 1000 y
+    el KPI decía 1000. Un número equivocado que no falla es peor que un error.
+  */
+  const [{ data, count: enFiltro }, { count: guardadosCount }, { count: devueltosCount }, { count: totalCount }] =
+    await Promise.all([
+    consulta.range(desde, hasta),
+    supabase
+      .from('objetos_perdidos')
+      .select('*', { count: 'exact', head: true })
+      .eq('estado', 'guardado'),
+    supabase
+      .from('objetos_perdidos')
+      .select('*', { count: 'exact', head: true })
+      .eq('estado', 'devuelto'),
+    supabase.from('objetos_perdidos').select('*', { count: 'exact', head: true }),
   ])
 
   const objetos = (data ?? []) as Objeto[]
-  const todos = (todosData ?? []) as { estado: string }[]
-  const guardados = todos.filter((o) => o.estado === 'guardado').length
-  const devueltos = todos.filter((o) => o.estado === 'devuelto').length
+  const guardados = guardadosCount ?? 0
+  const devueltos = devueltosCount ?? 0
+  const total = totalCount ?? 0
+  const totalFiltrado = enFiltro ?? 0
 
   const vigentes = { q: sp.q, estado }
   const hayFiltros = Boolean(sp.q || estado)
@@ -103,7 +136,7 @@ export default async function ObjetosPerdidosPage({
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="En depósito" valor={String(guardados)} detalle="sin reclamar" icono="objetos" tono="alerta" />
         <Kpi titulo="Devueltos" valor={String(devueltos)} detalle="entregados" icono="ok" tono="exito" />
-        <Kpi titulo="Total" valor={String(todos.length)} detalle="registros" icono="reportes" />
+        <Kpi titulo="Total" valor={String(total)} detalle="registros" icono="reportes" />
       </div>
 
       <BarraHerramientas>
@@ -160,14 +193,14 @@ export default async function ObjetosPerdidosPage({
               hayFiltros ? (
                 <Link
                   href="/panel/objetos-perdidos"
-                  className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+                  className={botonClases('secundario')}
                 >
                   Quitar filtros
                 </Link>
               ) : (
                 <Link
                   href="/panel/objetos-perdidos/nuevo"
-                  className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
+                  className={botonClases('primario')}
                 >
                   Registrar el primero
                 </Link>
@@ -217,6 +250,14 @@ export default async function ObjetosPerdidosPage({
               ))}
             </tbody>
           </Tabla>
+        )}
+        {totalFiltrado > 0 && (
+          <Paginacion
+            base="/panel/objetos-perdidos"
+            params={{ q: sp.q, estado }}
+            pagina={pagina}
+            total={totalFiltrado}
+          />
         )}
       </Tarjeta>
     </Pagina>

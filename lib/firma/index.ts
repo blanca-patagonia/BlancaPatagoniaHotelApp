@@ -112,13 +112,20 @@ export function obtenerProveedorFirma(
   })
 }
 
-/**
- * Extrae la IP del cliente de las cabeceras de proxy.
- *
- * En Vercel llega en `x-forwarded-for` (el primer valor es el cliente original).
- */
-export function ipDePeticion(cabeceras: Headers): string | null {
-  const reenviada = cabeceras.get('x-forwarded-for')
-  if (reenviada) return reenviada.split(',')[0].trim()
-  return cabeceras.get('x-real-ip')
-}
+/*
+  `ipDePeticion` vivía acá y se borró.
+
+  Tomaba el PRIMER valor de `x-forwarded-for`, que es el que **manda el cliente**:
+  ese encabezado se acumula de izquierda a derecha y solo el último lo agregó un
+  salto de confianza. `lib/limites.ts` ya había arreglado exactamente ese bug para
+  el limitador de intentos, y esta copia se quedó con la versión vulnerable.
+
+  No era cosmético. Alimentaba dos cosas:
+
+    · el límite del asistente público, evadible rotando la cabecera;
+    · la IP que se guarda en `firmas.ip` como constancia de quién firmó un
+      contrato — o sea, un dato probatorio que elegía el propio firmante.
+
+  Ahora hay **una sola** implementación: `ipDeCabeceras` de `lib/limites.ts`.
+  Si hace falta la IP acá, se importa de ahí. No volver a duplicarla.
+*/

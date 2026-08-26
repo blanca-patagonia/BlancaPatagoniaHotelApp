@@ -35,16 +35,16 @@ function aHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Calcula la firma esperada para un cuerpo y un momento dados.
+ * HMAC-SHA256 de un mensaje cualquiera, en hexadecimal.
  *
- * Se exporta para poder generarla en los tests y en el simulador de pago sin
- * duplicar el algoritmo, que es justo donde se cuelan las diferencias.
+ * Se exporta porque **cada pasarela firma un mensaje distinto**, aunque todas
+ * usen el mismo algoritmo. Stripe firma `"<timestamp>.<cuerpo>"`; MercadoPago
+ * firma un manifiesto con otra forma (`"id:…;request-id:…;ts:…;"`). Lo que no
+ * cambia es el HMAC, y es justo la parte donde una reimplementación se
+ * equivoca en silencio: una firma mal calculada no falla, simplemente **rechaza
+ * todos los eventos** y el hotel deja de enterarse de los pagos.
  */
-export async function firmar(
-  secreto: string,
-  timestamp: string,
-  cuerpo: string,
-): Promise<string> {
+export async function hmacHex(secreto: string, mensaje: string): Promise<string> {
   const clave = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secreto),
@@ -52,8 +52,21 @@ export async function firmar(
     false,
     ['sign'],
   )
-  const firma = await crypto.subtle.sign('HMAC', clave, new TextEncoder().encode(`${timestamp}.${cuerpo}`))
-  return aHex(firma)
+  return aHex(await crypto.subtle.sign('HMAC', clave, new TextEncoder().encode(mensaje)))
+}
+
+/**
+ * Calcula la firma esperada para un cuerpo y un momento dados.
+ *
+ * Es el esquema propio (`<timestamp>.<cuerpo>`), que usan el simulador y los
+ * tests. Coincide con el de Stripe, que firma exactamente lo mismo.
+ */
+export async function firmar(
+  secreto: string,
+  timestamp: string,
+  cuerpo: string,
+): Promise<string> {
+  return hmacHex(secreto, `${timestamp}.${cuerpo}`)
 }
 
 /**

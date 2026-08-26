@@ -13,13 +13,13 @@ import {
   type PoliticaTarifa,
 } from '@/lib/domain/mudanzas'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
+import { motivoNoCargable } from '@/lib/domain/servicio'
 import { saldarSiCorresponde } from '@/lib/reservas/saldar'
 import { puntosPorEstadia, nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 import { requerirAcceso } from '@/lib/auth/session'
 import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import {
   tipoComprobante,
-  desglosarIva,
   numeroComprobante,
   cuitValido,
   normalizarCuit,
@@ -27,7 +27,14 @@ import {
   motivoNoFacturable,
   type CondicionIva,
 } from '@/lib/domain/facturacion'
+import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
+import { obtenerProveedor } from '@/lib/payments'
+import { iniciarCobro, falloElCobro } from '@/lib/payments/servicio'
+import { estadoDeCobro } from '@/lib/reservas/cobro'
+import { imputarEnUSD, motivoNoSeCobra, MONEDA_BASE } from '@/lib/domain/cobro'
+import { esMonedaExtranjera } from '@/lib/domain/divisas'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { enviarPlantilla } from '@/lib/email'
 import { urlDelSitio } from '@/lib/env'
 
@@ -386,14 +393,73 @@ export async function registrarPago(formData: FormData): Promise<void> {
   const reservaId = String(formData.get('reserva_id') ?? '')
   const medio = String(formData.get('medio') ?? 'efectivo')
   const tipo = String(formData.get('tipo') ?? 'saldo')
-  const monto = Number(formData.get('monto') ?? 0)
+  const montoIngresado = Number(formData.get('monto') ?? 0)
+  const moneda = String(formData.get('moneda') ?? MONEDA_BASE)
   if (!reservaId) redirect('/panel/reservas')
-  if (!(monto > 0)) redirect(`/panel/reservas/${reservaId}?error=monto`)
+  if (!(montoIngresado > 0)) redirect(`/panel/reservas/${reservaId}?error=monto`)
+
+  /*
+    El importe se ingresa en la moneda en la que se cobró, y se guarda en las
+    dos: `monto` en USD —que es lo único que salda la reserva— y `monto_cobrado`
+    con lo que de verdad entró a la caja.
+
+    Es la parte que faltaba para el mostrador. Un huésped que paga en efectivo en
+    pesos es el caso más común del hotel, y antes había que hacer la cuenta a
+    mano y anotar el resultado en dólares: sin registro de cuántos pesos entraron
+    ni a qué cambio, la caja no cierra contra el sistema.
+  */
+  let montoUSD = montoIngresado
+  let montoCobrado: number | null = null
+  let cotizacion: number | null = null
+
+  if (moneda !== MONEDA_BASE) {
+    if (!esMonedaExtranjera(moneda)) {
+      redirect(`/panel/reservas/${reservaId}?error=moneda`)
+    }
+    const vigente = await cotizacionVigente(moneda)
+    // `venta` es la que se cobra: cuántas unidades cuesta comprar un dólar.
+    const valor = vigente?.venta ?? null
+    if (!valor) redirect(`/panel/reservas/${reservaId}?error=sin_cotizacion`)
+
+    const enUSD = imputarEnUSD(montoIngresado, valor)
+    if (enUSD === null) redirect(`/panel/reservas/${reservaId}?error=monto`)
+
+    montoUSD = enUSD
+    montoCobrado = montoIngresado
+    cotizacion = valor
+  }
+
+  /*
+    Rastro del cobro con tarjeta.
+
+    Sin el cupón, un cobro con posnet se registra igual que uno en efectivo, y
+    cuando la liquidación de la terminal no cierra contra el sistema no hay por
+    dónde empezar a buscar. Los últimos cuatro dígitos PCI-DSS los permite; el
+    número entero no se pide, no se guarda y la migración 0067 lo rechaza.
+  */
+  const esTarjeta = medio === 'tarjeta'
+  const cupon = esTarjeta ? String(formData.get('cupon') ?? '').trim() : ''
+  const ultimos4 = esTarjeta ? String(formData.get('ultimos4') ?? '').trim() : ''
+  const marca = esTarjeta ? String(formData.get('tarjeta_marca') ?? '').trim() : ''
+
+  if (ultimos4 && !/^[0-9]{4}$/.test(ultimos4)) {
+    redirect(`/panel/reservas/${reservaId}?error=ultimos4`)
+  }
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase
-    .from('pagos')
-    .insert({ reserva_id: reservaId, medio, tipo, monto, estado: 'aprobado' })
+  const { error } = await supabase.from('pagos').insert({
+    reserva_id: reservaId,
+    medio,
+    tipo,
+    monto: montoUSD,
+    moneda,
+    monto_cobrado: montoCobrado,
+    cotizacion,
+    estado: 'aprobado',
+    cupon: cupon || null,
+    ultimos4: ultimos4 || null,
+    tarjeta_marca: marca || null,
+  })
   if (error) redirect(`/panel/reservas/${reservaId}?error=pago`)
 
   // ¿Quedó saldada? → intentar pasar a 'pagada'.
@@ -411,6 +477,80 @@ export async function registrarPago(formData: FormData): Promise<void> {
   redirect(`/panel/reservas/${reservaId}`)
 }
 
+/**
+ * Genera un link de pago y se lo deja a recepción para mandárselo al huésped.
+ *
+ * Para qué sirve en el mostrador. Es el caso del huésped que reserva por
+ * teléfono o por WhatsApp: no está para dar la tarjeta, no quiere dictarla por
+ * teléfono —y el hotel no debería anotarla— y todavía hay que asegurarle la
+ * reserva. Se le manda el link, paga desde su celular y el webhook salda solo.
+ *
+ * Toda la parte delicada —congelar la cotización, escribir el pago pendiente, no
+ * dejar dos links vivos— vive en `iniciarCobro`, que es el mismo camino que usa
+ * el portal público. Acá sólo se decide qué se cobra y a dónde vuelve.
+ */
+export async function generarLinkDePago(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  const medio = String(formData.get('medio') ?? '')
+  const tipoPedido = String(formData.get('tipo') ?? 'saldo')
+  if (!reservaId) redirect('/panel/reservas')
+
+  const supabase = await crearClienteServidor()
+
+  const { data: reserva, error: eReserva } = await supabase
+    .from('reservas')
+    .select('id, codigo, estado, token, huesped:huespedes!reservas_huesped_id_fkey(email)')
+    .eq('id', reservaId)
+    .maybeSingle()
+
+  cortarSiFalla(eReserva, `/panel/reservas/${reservaId}`, 'link_pago')
+  if (!reserva) redirect('/panel/reservas')
+
+  const cobro = await estadoDeCobro(supabase, reservaId)
+  if (!cobro) redirect(`/panel/reservas/${reservaId}?error=link_sin_datos`)
+
+  // Mismo criterio que en el portal: la seña sólo mientras no se haya pagado.
+  const tipo = tipoPedido === 'senia' && !cobro.tieneSenia ? 'senia' : 'saldo'
+  const monto = tipo === 'senia' ? Math.min(cobro.senia, cobro.saldo) : cobro.saldo
+
+  const impedimento = motivoNoSeCobra(reserva.estado as EstadoReserva, cobro.saldo)
+  if (impedimento) redirect(`/panel/reservas/${reservaId}?error=link_no_cobrable`)
+
+  const base = urlDelSitio().replace(/\/$/, '')
+  // El huésped vuelve a SU pantalla, no al panel: el link se abre desde su
+  // teléfono y ahí no tiene —ni debe tener— sesión de staff.
+  const volver = `${base}/reservar/confirmacion/${reserva.token}`
+
+  const resultado = await iniciarCobro(supabase, {
+    reservaId,
+    tipo,
+    montoUSD: monto,
+    proveedor: medio,
+    descripcion: `Hotel Blanca Patagonia · reserva ${reserva.codigo} · ${tipo === 'senia' ? 'seña' : 'saldo'}`,
+    emailComprador: emailDelHuesped(reserva.huesped),
+    urls: { exito: volver, error: volver, pendiente: volver },
+  })
+
+  if (falloElCobro(resultado)) {
+    console.error(`[link de pago] ${reserva.codigo}: ${resultado.error}`)
+    redirect(`/panel/reservas/${reservaId}?error=link_pasarela`)
+  }
+
+  redirect(`/panel/reservas/${reservaId}`)
+}
+
+/**
+ * El email del huésped, venga como objeto o como array.
+ *
+ * PostgREST devuelve un embed to-one como objeto, pero el tipo generado lo
+ * declara como array cuando no puede probar la cardinalidad.
+ */
+function emailDelHuesped(huesped: unknown): string | undefined {
+  const h = Array.isArray(huesped) ? huesped[0] : huesped
+  return (h as { email?: string } | null)?.email ?? undefined
+}
+
 /** Carga un consumo (producto × cantidad) a la cuenta de la reserva. */
 export async function agregarConsumo(formData: FormData): Promise<void> {
   await requerirAcceso('reservas')
@@ -420,6 +560,29 @@ export async function agregarConsumo(formData: FormData): Promise<void> {
   if (!reservaId || !productoId) redirect(`/panel/reservas/${reservaId}`)
 
   const supabase = await crearClienteServidor()
+
+  /*
+    ¿Se le puede cargar algo a esta reserva? (P3 del relevamiento del 15/08/2026)
+
+    La cuenta NO se cierra en el check-out sino en la **factura**. Es lo que
+    permite los dos casos reales de todos los días: el huésped que llega a las 9
+    y desayuna antes del check-in de las 15, y el que hace el check-out a las 10
+    habiendo desayunado esa mañana. En los dos consumió de verdad.
+
+    Lo que sí corta es el comprobante emitido: un cargo posterior no entraría en
+    él, y `facturas` es inmutable (migración 0034).
+  */
+  const [{ data: reservaEstado }, { data: facturaExistente }] = await Promise.all([
+    supabase.from('reservas').select('estado').eq('id', reservaId).maybeSingle(),
+    supabase.from('facturas').select('id').eq('reserva_id', reservaId).maybeSingle(),
+  ])
+
+  const motivo = motivoNoCargable(
+    String(reservaEstado?.estado ?? ''),
+    Boolean(facturaExistente),
+  )
+  if (motivo) redirect(`/panel/reservas/${reservaId}?error=${motivo}`)
+
   const { data: producto } = await supabase
     .from('productos_servicios')
     .select('precio')
@@ -451,6 +614,130 @@ export async function quitarConsumo(formData: FormData): Promise<void> {
   }
   redirect(`/panel/reservas/${reservaId}`)
 }
+
+/**
+ * Registra de dónde sale el pago de la reserva (RG 3971, ADR 0024).
+ *
+ * Es la segunda de las dos condiciones de la exención de IVA al turista del
+ * exterior; la primera —la residencia— vive en la ficha del huésped.
+ *
+ * ── Por qué son tres estados y no una casilla ───────────────────────────────
+ *
+ * Una casilla «exento» daría dos valores y obligaría a elegir uno al crear la
+ * reserva, cuando todavía no se sabe cómo va a pagar. Acá:
+ *
+ *   sin_definir → todavía no se sabe. **No exime.**
+ *   exterior    → tarjeta emitida afuera o transferencia del exterior. Exime.
+ *   local       → efectivo, tarjeta o transferencia del país. No exime.
+ *
+ * El estado inicial es «no se sabe» y no «local», porque son cosas distintas:
+ * una es falta de dato y la otra es un hecho comprobado. Las dos terminan
+ * cobrando IVA, pero solo la segunda es una respuesta.
+ */
+export async function fijarOrigenDelPago(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  if (!reservaId) redirect('/panel/reservas')
+
+  const elegido = String(formData.get('origen_pago') ?? '')
+  // Se traduce a los tres estados posibles de la columna. Cualquier otro valor
+  // —incluido uno inventado en un POST directo— cae en «no se sabe», que es el
+  // que NO exime: ante una entrada inesperada, se cobra el impuesto.
+  const valor = elegido === 'exterior' ? true : elegido === 'local' ? false : null
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('reservas')
+    .update({ pago_desde_exterior: valor })
+    .eq('id', reservaId)
+
+  cortarSiFalla(error, `/panel/reservas/${reservaId}`, 'origen_pago')
+
+  // Sin `revalidatePath`: el resto del archivo resuelve con el `redirect` a la
+  // misma ficha, que vuelve a renderizar el Server Component. Mezclar las dos
+  // convenciones en un mismo archivo confunde más de lo que aporta.
+  redirect(`/panel/reservas/${reservaId}`)
+}
+
+/**
+ * Registra y verifica la tarjeta de garantía (ADR 0025).
+ *
+ * ⚠️ LO MÁS IMPORTANTE DE ESTA FUNCIÓN ES LO QUE **NO** HACE.
+ *
+ * Recibe el número de tarjeta y el CVV porque hay que pasárselos a la pasarela,
+ * y los **descarta**. No se guardan, no se loguean, no se devuelven y no se
+ * escriben en la URL. Lo único que persiste es lo que la pasarela devuelve:
+ * token, últimos cuatro dígitos, marca, vencimiento y resultado.
+ *
+ * WinPAX guardaba número, vencimiento, autorización y PIN. Guardar un PAN
+ * sacaría al hotel del alcance SAQ-A de PCI-DSS. La migración 0059 tiene
+ * restricciones que rechazan un PAN en estas columnas, y `tests/garantia-
+ * tarjeta.test.ts` falla si alguien agrega una columna que pueda contener uno.
+ *
+ * Si no hay pasarela contratada, el resultado es `no_soportado` y **así queda
+ * registrado**: no se simula una verificación exitosa. Recepción tiene que poder
+ * distinguir «el emisor la rechazó» de «no hay con qué probarla».
+ */
+export async function verificarTarjetaGarantia(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  if (!reservaId) redirect('/panel/reservas')
+
+  const numero = String(formData.get('tarjeta_numero') ?? '').trim()
+  const vencimiento = String(formData.get('tarjeta_vencimiento') ?? '').trim()
+  const titular = String(formData.get('tarjeta_titular') ?? '').trim()
+  const cvv = String(formData.get('tarjeta_cvv') ?? '').trim()
+
+  if (!numero || !vencimiento) {
+    redirect(`/panel/reservas/${reservaId}?error=tarjeta_incompleta`)
+  }
+
+  const resultado = await obtenerProveedor(PROVEEDOR_GARANTIA)?.verificarTarjeta({
+    numero,
+    vencimiento,
+    titular,
+    cvv,
+  })
+
+  if (!resultado) redirect(`/panel/reservas/${reservaId}?error=tarjeta_sin_proveedor`)
+
+  // El estado sale del resultado y NUNCA de lo que eligió quien carga: no hay
+  // forma de marcar una tarjeta como verificada a mano.
+  const estado = resultado.ok
+    ? 'verificada'
+    : resultado.noSoportado
+      ? 'no_soportado'
+      : 'rechazada'
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('reservas')
+    .update({
+      // `token` solo existe si la pasarela lo emitió. Con el simulador es nulo,
+      // y eso es correcto: no hay nada con qué cobrar.
+      tarjeta_token: resultado.token ?? null,
+      tarjeta_ultimos4: resultado.ultimos4 ?? null,
+      tarjeta_marca: resultado.marca ?? null,
+      tarjeta_vencimiento: resultado.vencimiento ?? null,
+      tarjeta_verificacion: estado,
+      tarjeta_verificada_en: new Date().toISOString(),
+      tarjeta_detalle: resultado.detalle ?? null,
+    })
+    .eq('id', reservaId)
+
+  cortarSiFalla(error, `/panel/reservas/${reservaId}`, 'tarjeta')
+
+  redirect(`/panel/reservas/${reservaId}`)
+}
+
+/**
+ * Proveedor con el que se verifican las tarjetas de garantía.
+ *
+ * Hoy los dos son el mismo simulador y ninguno verifica. Se declara como
+ * constante y no se elige en la pantalla porque la tarjeta se verifica contra la
+ * pasarela que el hotel tenga contratada, que es una sola.
+ */
+const PROVEEDOR_GARANTIA = 'mercadopago'
 
 /**
  * Condición del hotel frente al IVA y punto de venta habilitado.
@@ -498,7 +785,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const { data: reserva } = await supabase
     .from('reservas')
     .select(
-      'estado, total, agencia_id, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero)',
+      'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior)',
     )
     .eq('id', reservaId)
     .single()
@@ -557,7 +844,38 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     redirect(`/panel/reservas/${reservaId}?error=cuit`)
   }
 
-  const desglose = desglosarIva(cuenta.total, ALICUOTA)
+  /*
+    Exención de IVA al turista del exterior (RG 3971, ADR 0024).
+
+    Se decide ACÁ y no al cotizar, y es deliberado: la forma de pago recién se
+    conoce al cobrar. Cotizar exento y después recibir efectivo dejaría un total
+    que no cierra, y el error caro es el inverso —facturar exento sin que
+    corresponda es IVA que el hotel no ingresó—.
+
+    La exención se DERIVA de dos hechos (residencia del huésped + origen del
+    pago). No hay ninguna casilla «exento» que alguien pueda tildar de más:
+    `exentoDeIva` es la única puerta.
+
+    Si la reserva entró por una agencia, el receptor del comprobante es la
+    agencia y no el huésped, así que la exención del turista no aplica.
+  */
+  const huespedFiscal = reserva.huesped as unknown as {
+    residente_exterior?: boolean | null
+  } | null
+
+  const exento =
+    !reserva.agencia_id &&
+    exentoDeIva({
+      residenteExterior: Boolean(huespedFiscal?.residente_exterior),
+      pagoDesdeExterior: (reserva.pago_desde_exterior as boolean | null) ?? null,
+    })
+
+  const desglose = desglosarConExencion({
+    alojamientoConIva: cuenta.alojamiento,
+    consumosConIva: cuenta.consumos,
+    alicuota: ALICUOTA,
+    exento,
+  })
 
   // Numeración correlativa: la reserva el contador de la base con bloqueo de
   // fila (migración 0025). Antes se hacía con `count(*) + 1`, que ante dos
@@ -589,7 +907,12 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     total: desglose.total,
     neto: desglose.neto,
     iva: desglose.iva,
-    alicuota_iva: ALICUOTA,
+    // La alícuota efectiva sale del desglose, no de la constante: con todo el
+    // comprobante exento es 0, y declarar 21 % sobre una base de cero confunde
+    // a quien lee la factura y a quien la audita.
+    alicuota_iva: desglose.alicuota,
+    exento: desglose.exento,
+    motivo_exencion: desglose.motivoExencion,
     tipo_comprobante: tipo,
     condicion_iva_receptor: receptor.condicion,
     cuit_receptor: cuitLimpio,

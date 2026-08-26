@@ -79,6 +79,51 @@ export async function guardarEntrantes(
     motivos: [],
   }
 
+  /*
+    Los existentes se traen de UNA sola consulta, no una por entrante.
+
+    Antes el bucle hacía un `select` por fila —más el insert/update y el devengo—,
+    o sea 3·N viajes: un informe de 40 reservas eran ~125 round-trips en serie.
+    Con el cron (`maxDuration = 60`) eso no era solo lento: un informe grande podía
+    no llegar a terminar.
+
+    Es el mismo patrón que ya usa `marcarConflictosDeCupo` unas líneas más abajo,
+    que resuelve todo el informe en tres consultas. Acá baja de 3·N a 2·N + 1.
+
+    Se agrupa por `canal` porque la clave de identidad es (canal, external_id): dos
+    canales podrían usar el mismo id y no son la misma reserva.
+  */
+  const existentesPorClave = new Map<string, FilaGuardada>()
+  const clave = (canal: string, externalId: string) => `${canal}\u0000${externalId}`
+
+  const idsPorCanal = new Map<string, string[]>()
+  for (const e of entrantes) {
+    if (!e.externalId || !e.canal) continue
+    const lista = idsPorCanal.get(e.canal) ?? []
+    lista.push(e.externalId)
+    idsPorCanal.set(e.canal, lista)
+  }
+
+  for (const [canalEntrante, ids] of idsPorCanal) {
+    const { data, error } = await client
+      .from('canal_reservas')
+      .select('id, canal, external_id, emitida_en, estado')
+      .eq('canal', canalEntrante)
+      .in('external_id', ids)
+
+    if (error) {
+      // No corta: si la lectura previa falla, cada fila cae al camino de insert y
+      // el `unique (canal, external_id)` la rechaza. Se pierde la actualización,
+      // no la integridad.
+      registrarFalla(error, `leer entrantes existentes de ${canalEntrante}`)
+      continue
+    }
+
+    for (const f of (data ?? []) as (FilaGuardada & { canal: string; external_id: string })[]) {
+      existentesPorClave.set(clave(f.canal, f.external_id), f)
+    }
+  }
+
   for (const e of entrantes) {
     // El dominio decide si la reserva es procesable. Se valida antes de tocar la
     // base: es el único momento en que todavía se puede rechazar sin ensuciar datos.
@@ -126,12 +171,7 @@ export async function guardarEntrantes(
       notas: e.notas ?? '',
     }
 
-    const { data: existente } = await client
-      .from('canal_reservas')
-      .select('id, emitida_en, estado')
-      .eq('canal', e.canal)
-      .eq('external_id', e.externalId)
-      .maybeSingle<FilaGuardada>()
+    const existente = existentesPorClave.get(clave(e.canal, e.externalId)) ?? null
 
     if (!existente) {
       const { data: creada, error } = await client

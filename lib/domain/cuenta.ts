@@ -44,3 +44,32 @@ export function validarCambioPassword({ actual, nueva, repetida }: CambioPasswor
 
   return null
 }
+
+/* ─────────────────────────── datos propios del staff ─────────────────────── */
+
+export const LARGO_MAXIMO_NOMBRE = 80
+export const LARGO_MAXIMO_TELEFONO = 40
+
+/**
+ * Valida los datos que cada uno puede cambiar de su propio perfil.
+ *
+ * Devuelve el motivo del rechazo, o `null` si están bien.
+ *
+ * El nombre es obligatorio porque se usa en todos lados —quién firmó un cambio,
+ * quién dejó un aviso, quién hizo el check-in—: un perfil sin nombre convierte
+ * el rastro de auditoría en una lista de identificadores. El teléfono es
+ * opcional y no se valida el formato: los internos, los celulares con
+ * característica y los números del exterior se escriben distinto, y un patrón
+ * estricto solo logra que la gente no lo cargue.
+ */
+export function validarMisDatos(nombre: string, telefono: string): string | null {
+  const n = nombre.trim()
+  if (!n) return 'Escribí tu nombre.'
+  if (n.length > LARGO_MAXIMO_NOMBRE) {
+    return `El nombre no puede tener más de ${LARGO_MAXIMO_NOMBRE} caracteres.`
+  }
+  if (telefono.trim().length > LARGO_MAXIMO_TELEFONO) {
+    return `El teléfono no puede tener más de ${LARGO_MAXIMO_TELEFONO} caracteres.`
+  }
+  return null
+}

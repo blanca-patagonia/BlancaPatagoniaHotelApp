@@ -35,6 +35,7 @@ import {
   Chip,
   Encabezado,
   EstadoUnidad,
+  EstadoVacio,
   Kpi,
   Pagina,
   Tarjeta,
@@ -221,6 +222,10 @@ export default async function OcupacionPage({
   const diaReferencia = resumen.find((r) => r.dia === hoy) ?? resumen[0]
   const esHoyReferencia = diaReferencia?.dia === hoy
 
+  // Los filtros que pueden dejar la grilla sin ninguna unidad. La fecha y la
+  // ventana no cuentan: mueven los días, no achican el listado.
+  const hayFiltrosDeUnidad = Boolean(categoria || bloque || piso || estadoHk)
+
   const vigentes = {
     desde: sp.desde,
     dias: sp.dias,
@@ -294,20 +299,22 @@ export default async function OcupacionPage({
       </div>
 
       <BarraHerramientas>
-        <form method="get" action="/panel/ocupacion" className="flex items-center gap-2">
+        <form method="get" action="/panel/ocupacion" className="flex flex-wrap items-center gap-2">
           {sp.dias && <input type="hidden" name="dias" value={sp.dias} />}
           {categoria && <input type="hidden" name="cat" value={categoria} />}
-          <label className="flex items-center gap-1.5 text-xs text-stone-500">
+          <label className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-stone-500 sm:flex-none">
             Ir a la fecha
             <input
               type="date"
               name="desde"
               defaultValue={desde}
               aria-label="Ir a la fecha"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="w-full min-w-0 max-w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto"
             />
           </label>
-          <button className={botonClases('secundario')}>Ver</button>
+          <button className={botonClases('secundario', 'w-full justify-center sm:w-auto')}>
+              Ver
+            </button>
         </form>
 
         <div className="flex gap-1.5">
@@ -363,18 +370,18 @@ export default async function OcupacionPage({
         )}
 
         {pisos.length > 0 && (
-          <form method="get" action="/panel/ocupacion" className="flex items-center gap-2">
+          <form method="get" action="/panel/ocupacion" className="flex flex-wrap items-center gap-2">
             {sp.desde && <input type="hidden" name="desde" value={sp.desde} />}
             {sp.dias && <input type="hidden" name="dias" value={sp.dias} />}
             {categoria && <input type="hidden" name="cat" value={categoria} />}
             {bloque && <input type="hidden" name="bloque" value={bloque} />}
-            <label className="flex items-center gap-1.5 text-xs text-stone-500">
+            <label className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-stone-500 sm:flex-none">
               Piso
               <select
                 name="piso"
                 defaultValue={piso ?? ''}
                 aria-label="Filtrar por piso"
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+                className="w-full min-w-0 max-w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto"
               >
                 <option value="">Todos</option>
                 {pisos.map((p) => (
@@ -388,7 +395,7 @@ export default async function OcupacionPage({
               name="hk"
               defaultValue={estadoHk ?? ''}
               aria-label="Filtrar por estado de limpieza"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="w-full min-w-0 max-w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto"
             >
               <option value="">Toda limpieza</option>
               {ESTADOS_HK.map((e) => (
@@ -397,7 +404,9 @@ export default async function OcupacionPage({
                 </option>
               ))}
             </select>
-            <button className={botonClases('secundario')}>Filtrar</button>
+            <button className={botonClases('secundario', 'w-full justify-center sm:w-auto')}>
+              Filtrar
+            </button>
           </form>
         )}
 
@@ -412,14 +421,90 @@ export default async function OcupacionPage({
       </BarraHerramientas>
 
       <Tarjeta className="overflow-hidden">
-        <div className="overflow-x-auto">
+        {/*
+          Sin unidades a la vista, la grilla quedaba con el encabezado de días, un
+          cuerpo vacío y un pie con seis filas de ceros: se leía como «el hotel está
+          vacío» cuando lo que pasa es que el filtro no dejó pasar nada. Era el único
+          listado del módulo sin estado vacío.
+        */}
+        {unidades.length === 0 ? (
+          hayFiltrosDeUnidad ? (
+            <EstadoVacio
+              titulo="Ninguna unidad coincide con los filtros"
+              descripcion="No es que no haya disponibilidad: no hay unidades que cumplan con lo que está filtrado."
+              accion={
+                <Link
+                  href={`/panel/ocupacion${construirQuery(vigentes, {
+                    cat: undefined,
+                    bloque: undefined,
+                    piso: undefined,
+                    hk: undefined,
+                  })}`}
+                  className={botonClases('secundario')}
+                >
+                  Limpiar filtros
+                </Link>
+              }
+            />
+          ) : (
+            <EstadoVacio
+              titulo="Todavía no hay unidades cargadas"
+              descripcion="La grilla se arma con las habitaciones y cabañas activas."
+              icono="ocupacion"
+              accion={
+                <Link href="/panel/unidades" className={botonClases('primario')}>
+                  Cargar unidades
+                </Link>
+              }
+            />
+          )
+        ) : (
+          <>
+        {/*
+          La grilla scrollea adentro suyo, con techo. No es un capricho: es lo que
+          hace que las filas pegajosas funcionen.
+
+          Antes era solo `overflow-x-auto`. Cuando `overflow-x` es `auto`, el
+          `overflow-y` computa a `auto` también, así que este div ya era el
+          scrollport vertical del `tfoot` — pero sin altura acotada nunca tenía nada
+          que scrollear, su `scrollTop` era siempre 0 y el `sticky bottom-0` de la
+          fila resumen no se pegaba a nada. El comentario del `tfoot` afirmaba que sí.
+
+          Con techo, la grilla se lee como una planilla: los días arriba y el resumen
+          abajo quedan a la vista mientras se recorren cuarenta unidades. Que es justo
+          lo que recepción necesita, porque un número de ocupación sin saber de qué
+          día es no sirve.
+        */}
+        {/*
+          `contain-paint` está para un desborde muy concreto, y no es reemplazable
+          por `overflow-hidden`.
+
+          A 320 px la página se arrastraba 276 px de lado hacia espacio VACÍO: nada
+          cortado, pero la pantalla se iba al costado sola. La causa son las celdas
+          `sticky` de la columna congelada, que extienden la región de desbordamiento
+          scrolleable de sus ancestros y se escapan del recorte normal del scrollport.
+          Probado: `overflow-x: hidden` en el `main` NO lo frena, ni sacar el
+          `whitespace-nowrap`, ni el `max-width`, ni pasar la tabla a `table-layout:
+          fixed`. `contain: paint` sí, porque impone un recorte de pintado duro.
+
+          No cambia nada visible: recorta en la caja de relleno, que es donde el
+          contenedor de scroll ya recortaba.
+        */}
+        <div className="max-h-[70vh] contain-paint overflow-auto overscroll-contain">
           <table className="min-w-full border-collapse text-sm">
             <caption className="sr-only">
               Grilla de ocupación por unidad y día. Las celdas libres abren una reserva nueva.
             </caption>
+            {/*
+              Capas de lo pegajoso, de atrás para adelante: la columna de unidades
+              va en z-10, las dos barras (días arriba, resumen abajo) en z-20, y las
+              dos esquinas donde una barra cruza la columna, en z-30. Sin esto la
+              columna de unidades se dibuja ENCIMA de la fila resumen y le tapa el
+              título justo cuando se la quiere leer.
+            */}
             <thead>
               <tr className="border-b border-stone-200">
-                <th className="sticky left-0 z-10 bg-stone-50 px-3 py-2 text-left font-medium text-stone-600">
+                <th className="sticky top-0 left-0 z-30 bg-stone-50 px-3 py-2 text-left font-medium text-stone-600">
                   Unidad
                 </th>
                 {dias.map((dia) => {
@@ -428,12 +513,17 @@ export default async function OcupacionPage({
                     <th
                       key={dia}
                       aria-current={esHoy ? 'date' : undefined}
-                      className={`min-w-10 px-1 py-2 text-center text-xs font-medium ${
+                      /*
+                        El fondo del día común es explícito (`bg-white`) y no
+                        heredado: una celda pegajosa sin fondo propio deja ver las
+                        filas pasando por atrás.
+                      */
+                      className={`sticky top-0 z-20 min-w-10 px-1 py-2 text-center text-xs font-medium ${
                         esHoy
                           ? 'bg-lago-100 text-lago-900'
                           : esFinDeSemana(dia)
                             ? 'bg-stone-100 text-stone-500'
-                            : 'text-stone-500'
+                            : 'bg-white text-stone-500'
                       }`}
                     >
                       <div>{LETRA_DIA[new Date(dia + 'T00:00:00Z').getUTCDay()]}</div>
@@ -450,11 +540,21 @@ export default async function OcupacionPage({
                 const mapa = porUnidad.get(u.id)
                 return (
                   <tr key={u.id} className="border-b border-stone-100 last:border-0">
-                    <td className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap">
+                    {/*
+                      La columna congelada tiene techo en pantalla chica.
+
+                      Con `whitespace-nowrap` y sin `max-w`, un tipo de unidad de
+                      nombre largo («Cabaña Familiar Premium Vista al Lago») estiraba
+                      la columna fija sin límite: en un teléfono se comía casi todo el
+                      ancho y no quedaba lugar visible para las celdas de días, que
+                      son el contenido de la pantalla. Se acota al ancho del pulgar y
+                      se libera desde `sm`.
+                    */}
+                    <td className="sticky left-0 z-10 max-w-[13rem] bg-white px-3 py-1.5 whitespace-nowrap sm:max-w-none">
                       <div className="flex items-center gap-2">
                         <EstadoUnidad estado={u.estado} />
                         <span className="font-medium text-stone-800">{u.nombre}</span>
-                        <span className="text-xs text-stone-600">
+                        <span className="min-w-0 truncate text-xs text-stone-600" title={u.tipo?.nombre ?? undefined}>
                           {u.tipo?.nombre}
                           {/* Ubicación al lado del nombre: es lo que permite
                               reconocer dónde queda sin abrir otra pantalla. */}
@@ -570,13 +670,13 @@ export default async function OcupacionPage({
 
                 Va en `tfoot` y no en `tbody` porque semánticamente es el
                 resumen de la tabla, y así un lector de pantalla lo anuncia como
-                tal. Queda pegada abajo al hacer scroll vertical. */}
-            <tfoot className="sticky bottom-0 border-t-2 border-stone-300 bg-stone-50 text-xs">
+                tal, y queda pegada abajo del scrollport de la grilla. */}
+            <tfoot className="sticky bottom-0 z-20 border-t-2 border-stone-300 bg-stone-50 text-xs">
               {FILAS_RESUMEN.map((fila) => (
                 <tr key={fila.clave} className="border-t border-stone-200 first:border-t-0">
                   <th
                     scope="row"
-                    className="sticky left-0 z-10 bg-stone-50 px-3 py-1 text-left font-medium whitespace-nowrap text-stone-600"
+                    className="sticky left-0 z-30 bg-stone-50 px-3 py-1 text-left font-medium whitespace-nowrap text-stone-600"
                   >
                     {fila.titulo}
                   </th>
@@ -617,6 +717,8 @@ export default async function OcupacionPage({
             </tfoot>
           </table>
         </div>
+          </>
+        )}
       </Tarjeta>
 
       {/* Referencia: cada estado con su LETRA además del color, para que la

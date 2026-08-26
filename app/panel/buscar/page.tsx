@@ -2,7 +2,13 @@ import Link from 'next/link'
 import { requerirSesion } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
-import { ETIQUETAS_AMBITO, ambitosPara, terminoBuscado } from '@/lib/domain/busqueda'
+import {
+  ETIQUETAS_AMBITO,
+  ambitosPara,
+  seccionesQueCoinciden,
+  terminoBuscado,
+  terminosQueCoinciden,
+} from '@/lib/domain/busqueda'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { patronOr } from '@/lib/listados'
 import { TONO_ESTADO } from '../_components/estilos'
@@ -91,7 +97,25 @@ export default async function BuscarPage({
       ])
     : [[], [], [], []]
 
-  const total = reservas.length + huespedes.length + agencias.length + proveedores.length
+  /*
+    Secciones del sistema y palabras del glosario.
+
+    Se calculan en memoria sobre las constantes del dominio: no hay consulta, así
+    que no suman latencia ni pueden fallar. Y se usan el rol y el término CRUDO —no
+    el que devuelve `terminoBuscado`—, porque ése viene con los comodines de
+    PostgREST escapados y acá no hay ningún LIKE que interpretar.
+  */
+  const textoCrudo = (q ?? '').trim()
+  const secciones = termino ? seccionesQueCoinciden(sesion.rol, textoCrudo) : []
+  const glosario = termino ? terminosQueCoinciden(textoCrudo) : []
+
+  const total =
+    reservas.length +
+    huespedes.length +
+    agencias.length +
+    proveedores.length +
+    secciones.length +
+    glosario.length
 
   return (
     <Pagina>
@@ -99,8 +123,8 @@ export default async function BuscarPage({
         titulo={termino ? `Resultados de «${(q ?? '').trim()}»` : 'Buscar'}
         descripcion={
           termino
-            ? `${total} ${total === 1 ? 'coincidencia' : 'coincidencias'} en ${ambitos.map((a) => ETIQUETAS_AMBITO[a].toLowerCase()).join(', ')}.`
-            : 'Escribí un apellido, un código de reserva, un email o un documento.'
+            ? `${total} ${total === 1 ? 'coincidencia' : 'coincidencias'} entre las secciones del sistema y ${ambitos.map((a) => ETIQUETAS_AMBITO[a].toLowerCase()).join(', ')}.`
+            : 'Escribí un apellido, un código de reserva, un email, un documento — o qué querés hacer, para que te lleve a la sección.'
         }
         icono="buscar"
       />
@@ -109,7 +133,7 @@ export default async function BuscarPage({
         <Tarjeta>
           <EstadoVacio
             titulo="Escribí al menos dos letras"
-            descripcion="Se busca a la vez por apellido, nombre, email, documento y código de reserva."
+            descripcion="Busca a la vez entre los datos —apellido, nombre, email, documento, código de reserva— y entre las secciones del sistema. Si no sabés dónde se hace algo, escribilo: «factura», «limpieza», «cotización»."
             icono="buscar"
           />
         </Tarjeta>
@@ -119,13 +143,80 @@ export default async function BuscarPage({
         <Tarjeta>
           <EstadoVacio
             titulo="No encontramos nada con ese texto"
-            descripcion="Probá con menos letras, o con el apellido en lugar del nombre. La búsqueda no distingue mayúsculas."
+            descripcion="Probá con menos letras, o con el apellido en lugar del nombre. No distingue mayúsculas ni acentos."
             icono="buscar"
           />
         </Tarjeta>
       )}
 
       <div className="flex flex-col gap-4">
+        {/*
+          Las secciones van PRIMERO, arriba de los datos.
+
+          Quien escribe «ocupación» o «factura» casi siempre quiere ir a un lugar
+          del sistema, no ver una lista de coincidencias. Poner los datos primero
+          obligaría a scrollear para encontrar el atajo, que es lo contrario de lo
+          que el buscador tiene que resolver.
+        */}
+        {secciones.length > 0 && (
+          <Tarjeta
+            titulo="Secciones del sistema"
+            descripcion={`${secciones.length} ${secciones.length === 1 ? 'sección' : 'secciones'} donde se hace esto`}
+          >
+            <ul>
+              {secciones.map((s) => (
+                <li key={s.area} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href={s.href}
+                    className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-lago-50 text-lago-700 ring-1 ring-lago-100">
+                      <Icono nombre="siguiente" tam={15} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-stone-800">{s.titulo}</span>
+                      {s.descripcion && (
+                        <span className="block text-xs text-stone-600">{s.descripcion}</span>
+                      )}
+                      {/*
+                        Por qué apareció. Sin esta línea, buscar «factura» y recibir
+                        «Reservas» se lee como un resultado equivocado; con ella se
+                        entiende que facturar se hace desde ahí.
+                      */}
+                      {s.motivo && (
+                        <span className="mt-0.5 block text-xs text-lago-700">
+                          Coincide con «{s.motivo}»
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs text-stone-500">Ir a la sección</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {/* Palabras del oficio: «tarifa rack», «ADR», «folio». Quien las lee en una
+            pantalla y no las entiende, las escribe acá antes que ir a la Ayuda. */}
+        {glosario.length > 0 && (
+          <Tarjeta titulo="Qué significa" descripcion="Términos del sistema">
+            <dl className="grid gap-x-6 gap-y-3 px-5 py-4 sm:grid-cols-2">
+              {glosario.map((t) => (
+                <div key={t.termino} className="min-w-0">
+                  <dt className="text-sm font-medium text-stone-800">{t.termino}</dt>
+                  <dd className="mt-0.5 text-sm leading-snug text-stone-600">{t.definicion}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="border-t border-stone-100 px-5 py-3">
+              <Link href="/panel/ayuda#glosario" className={botonClases('secundario')}>
+                Ver el glosario completo
+              </Link>
+            </div>
+          </Tarjeta>
+        )}
+
         {reservas.length > 0 && (
           <Tarjeta titulo={ETIQUETAS_AMBITO.reservas} descripcion={`${reservas.length} encontradas`}>
             <ul>

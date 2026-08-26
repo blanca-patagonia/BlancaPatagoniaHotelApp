@@ -87,9 +87,11 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   consumos: { todos: 'si' },
 
   // ── Comercial ──
-  agencias: { todos: 'si' },
+  // La 0060 los alineó con `lib/domain/permisos.ts`: housekeeping no tiene
+  // estas áreas, y recepción tiene `agencias` pero no `proveedores`.
+  agencias: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
   movimientos_cuenta: { todos: 'si' },
-  proveedores: { todos: 'si' },
+  proveedores: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
   movimientos_proveedor: { todos: 'si' },
   contratos: { todos: 'si' },
 
@@ -310,6 +312,33 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       sembradas.push({ tabla: 'pagos', columna: 'id', valor: data.id })
     }
 
+    /*
+      ── agencias y proveedores ────────────────────────────────────────────────
+
+      Desde la 0060 tienen casos negativos: housekeeping no lee ninguna de las dos
+      y recepción no lee `proveedores` (`lib/domain/permisos.ts`). Sobre una tabla
+      vacía esos casos pasan solos —cero filas es la respuesta tanto de una
+      política que niega como de una tabla sin datos—, así que el guardián de esta
+      auditoría los reportaba como no verificados. Con razón: era un verde falso.
+    */
+    if ((await contar('agencias')) === 0) {
+      const { error } = await admin
+        .from('agencias')
+        .insert({ nombre: `AUDIT-${sufijo}`, tipo: 'agencia' })
+      if (error) throw new Error(`No se pudo sembrar la agencia: ${error.message}`)
+
+      sembradas.push({ tabla: 'agencias', columna: 'nombre', valor: `AUDIT-${sufijo}` })
+    }
+
+    if ((await contar('proveedores')) === 0) {
+      const { error } = await admin
+        .from('proveedores')
+        .insert({ nombre: `AUDIT-${sufijo}`, rubro: 'auditoría' })
+      if (error) throw new Error(`No se pudo sembrar el proveedor: ${error.message}`)
+
+      sembradas.push({ tabla: 'proveedores', columna: 'nombre', valor: `AUDIT-${sufijo}` })
+    }
+
     // ── canal_config ──────────────────────────────────────────────────────────
     // Nace vacía (la migración 0049 no siembra: qué proveedor contabiliza el canal
     // es una decisión del hotel). Sin una fila, «recepción no puede leer» pasaría
@@ -404,6 +433,28 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
   })
 
   /**
+   * Columna con la que sondear cada tabla, cuando `*` no sirve.
+   *
+   * Esta matriz mide **la política de la tabla**: quién puede leerla. Por eso el
+   * sondeo normal es `select('*')`, que además detecta si alguna columna quedó
+   * expuesta de más.
+   *
+   * Pero desde la migración 0060 hay tres tablas con el `token` revocado por
+   * columna, y ahí `*` devuelve 42501 **para todos los roles**, incluido admin.
+   * El test diría «admin no puede leer agencias», que es falso, y de paso taparía
+   * lo que la matriz quiere auditar. En esas tres se sondea con una columna que
+   * sí es legible.
+   *
+   * La protección del token tiene su propio bloque de tests al final del archivo,
+   * que es donde corresponde comprobarla.
+   */
+  const COLUMNA_SONDA: Record<string, string> = {
+    agencias: 'id',
+    proveedores: 'id',
+    firmas: 'id',
+  }
+
+  /**
    * El corazón de la auditoría. Una comprobación por tabla y por rol.
    *
    * Se usa `head: true` con `count`: no trae datos —no hace falta— y así el test no
@@ -417,7 +468,7 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       it(`${tabla} · ${rol} ${debe === 'si' ? 'PUEDE' : 'NO puede'} leer`, async () => {
         const { error, count } = await usuarios[rol].cliente
           .from(tabla)
-          .select('*', { count: 'exact', head: true })
+          .select(COLUMNA_SONDA[tabla] ?? '*', { count: 'exact', head: true })
 
         if (debe === 'si') {
           // Sin error y con un conteo (aunque sea 0): la política dejó pasar.
@@ -494,5 +545,101 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
     // fallado, y estaríamos verificando nada.
     const { data } = await sinRol.cliente.auth.getUser()
     expect(data.user?.id).toBe(sinRol.id)
+  })
+})
+
+/**
+ * Los tokens de socio, fuera del alcance de TODO cliente de usuario.
+ *
+ * ── Por qué esto es un test aparte y no una fila de la matriz ───────────────
+ *
+ * La matriz de arriba audita **tablas**: quién puede leer `agencias`. Esto audita
+ * **columnas**: que dentro de una tabla legible, la credencial no lo sea. Son dos
+ * preguntas distintas y confundirlas fue justamente el agujero: `agencias` era
+ * legible por los cuatro roles «porque es catálogo comercial», y con la fila
+ * venía el token que abre `/portal/<token>`.
+ *
+ * Desde ahí el portal enlaza a `/firmar/<token>` y `firmarContrato` no exige
+ * sesión: una mucama podía firmar un contrato en nombre de una agencia.
+ *
+ * ⚠️ La migración 0034 ya había intentado esto sobre `firmas.token` con un
+ * `revoke select (token)`, y **no tuvo efecto**: en Postgres un revoke de columna
+ * no recorta un grant de tabla previo. La 0060 lo hace de la forma que sí
+ * funciona. Este test existe para que eso no se pierda de nuevo en silencio.
+ */
+describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · credenciales por columna', () => {
+  let usuarios: Record<Rol, UsuarioDePrueba>
+  let agenciaId = ''
+  let proveedorId = ''
+
+  beforeAll(async () => {
+    usuarios = await crearLosCuatroRoles(sufijoUnico())
+    const admin = clienteDePrueba()
+    const { data: a } = await admin
+      .from('agencias')
+      .insert({ nombre: `Sonda columnas ${Date.now()}`, tipo: 'agencia' })
+      .select('id')
+      .single()
+    agenciaId = (a as { id: string }).id
+    const { data: p } = await admin
+      .from('proveedores')
+      .insert({ nombre: `Sonda columnas ${Date.now()}`, rubro: 'test' })
+      .select('id')
+      .single()
+    proveedorId = (p as { id: string }).id
+  }, 60_000)
+
+  afterAll(async () => {
+    const admin = clienteDePrueba()
+    if (agenciaId) await admin.from('agencias').delete().eq('id', agenciaId)
+    if (proveedorId) await admin.from('proveedores').delete().eq('id', proveedorId)
+    await limpiarUsuarios()
+  })
+
+  // `firmas` incluida: cierra lo que la 0034 quiso hacer y no pudo.
+  for (const tabla of ['agencias', 'proveedores', 'firmas'] as const) {
+    for (const rol of ['admin', 'gerencia', 'recepcion', 'housekeeping'] as Rol[]) {
+      it(`${tabla}.token NO es legible por ${rol}`, async () => {
+        const { error } = await usuarios[rol].cliente.from(tabla).select('token').limit(1)
+
+        // 42501 = insufficient_privilege. Es la respuesta correcta: el privilegio
+        // de columna no existe, así que PostgREST ni llega a evaluar la política.
+        expect(
+          error?.code,
+          `${rol} pudo pedir ${tabla}.token — es la credencial del portal, no un dato`,
+        ).toBe('42501')
+      })
+    }
+  }
+
+  it('un `select(*)` tampoco devuelve el token por la puerta de atrás', async () => {
+    // Sin esta comprobación, alcanzaría con no nombrar la columna para obtenerla.
+    for (const tabla of ['agencias', 'proveedores', 'firmas'] as const) {
+      const { data, error } = await usuarios.admin.cliente.from(tabla).select('*').limit(1)
+      // Con una columna revocada, `*` falla entero: es el comportamiento deseado.
+      if (!error) {
+        for (const fila of (data ?? []) as Record<string, unknown>[]) {
+          expect(Object.keys(fila), `${tabla} devolvió el token con select(*)`).not.toContain(
+            'token',
+          )
+        }
+      }
+    }
+  })
+
+  it('el resto de la fila SÍ se sigue leyendo: cerrar el agujero no rompió la pantalla', async () => {
+    // `app/panel/reservas/nueva/page.tsx` necesita esto para vincular una reserva
+    // a un convenio. Si el arreglo lo hubiera roto, sería peor que el agujero.
+    const { error } = await usuarios.recepcion.cliente.from('agencias')
+      .select('id, nombre, descuento_pct')
+      .limit(1)
+    expect(error, 'recepción ya no puede listar agencias para una reserva').toBeNull()
+  })
+
+  it('el service_role sigue resolviendo el portal por token', async () => {
+    // El portal público (`/portal/<token>`) se sirve con el cliente privilegiado.
+    // Si esto fallara, el arreglo habría dejado a los socios sin acceso.
+    const { error } = await clienteDePrueba().from('agencias').select('token').limit(1)
+    expect(error).toBeNull()
   })
 })

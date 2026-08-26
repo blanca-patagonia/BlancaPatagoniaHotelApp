@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { obtenerSesion } from '@/lib/auth/session'
+import { requerirAcceso, obtenerSesion } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
 import { puedeAcceder } from '@/lib/domain/permisos'
 import { esMonedaExtranjera, validarCotizacionManual } from '@/lib/domain/divisas'
@@ -17,8 +17,7 @@ import { registrarCotizacionManual } from '@/lib/divisas/servicio'
  * un neto por encima del rack (el neto es siempre el precio de agencia).
  */
 export async function actualizarTarifa(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirAcceso('config')
 
   const id = String(formData.get('tarifa_id') ?? '')
   const neto = Number(formData.get('precio_neto'))
@@ -40,8 +39,7 @@ export async function actualizarTarifa(formData: FormData): Promise<void> {
 
 /** Repone stock de un producto (suma unidades). Solo admin/gerencia. */
 export async function reponerStock(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirAcceso('config')
 
   const id = String(formData.get('producto_id') ?? '')
   const cantidad = Number(formData.get('cantidad') ?? 0)
@@ -72,8 +70,7 @@ export async function reponerStock(formData: FormData): Promise<void> {
  * podía sumar una bebida nueva al frigobar.
  */
 export async function crearProducto(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirAcceso('config')
 
   const nombre = String(formData.get('nombre') ?? '').trim()
   const categoria = String(formData.get('categoria') ?? 'otro')
@@ -118,8 +115,7 @@ export async function crearProducto(formData: FormData): Promise<void> {
 
 /** Activa o desactiva un producto sin borrarlo (conserva el historial de consumos). */
 export async function alternarProducto(formData: FormData): Promise<void> {
-  const sesion = await obtenerSesion()
-  if (!sesion || !['admin', 'gerencia'].includes(sesion.rol)) redirect('/panel')
+  await requerirAcceso('config')
 
   const id = String(formData.get('producto_id') ?? '')
   const activo = String(formData.get('activo') ?? '') === 'true'

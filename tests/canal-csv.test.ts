@@ -458,11 +458,34 @@ describe('interpretarCsvBooking', () => {
     })
 
     it('ni el PAN ni el CVC ni el vencimiento quedan en la reserva interpretada', () => {
-      const r = interpretarCsvBooking(CON_TARJETA)
+      /*
+        El momento va fijo, y no es un detalle.
+
+        Este informe no trae fecha de reserva, así que `emitidaEn` cae en el momento
+        de la importación. Cuando eso salía del reloj, el mismo CSV producía una
+        salida distinta en cada corrida y este test —que serializa TODO y busca
+        subcadenas— fallaba una de cada mil veces: los milisegundos formaban «737»,
+        que es el CVC del caso. Un test de seguridad que falla al azar termina
+        desactivado por molesto, así que el reloj entra por parámetro.
+      */
+      const r = interpretarCsvBooking(CON_TARJETA, 'booking', null, new Date('2026-09-01T10:00:00Z'))
       const serializado = JSON.stringify(r.reservas)
       expect(serializado).not.toContain('4111111111111111')
       expect(serializado).not.toContain('737')
       expect(serializado).not.toContain('12/28')
+    })
+
+    it('el lector es determinista: mismo texto y mismo momento, misma salida', () => {
+      // La garantía que hacía falta para que el test de arriba no sea flaky. Y de
+      // paso confirma el mecanismo: con los milisegundos en 737, el resultado los
+      // lleva —así que el reloj adentro de una función «pura» era el problema real,
+      // no una casualidad del CSV.
+      const momento = new Date('2026-09-01T10:00:00.737Z')
+      const a = interpretarCsvBooking(CON_TARJETA, 'booking', null, momento)
+      const b = interpretarCsvBooking(CON_TARJETA, 'booking', null, momento)
+
+      expect(JSON.stringify(a.reservas)).toBe(JSON.stringify(b.reservas))
+      expect(a.reservas[0].emitidaEn).toBe('2026-09-01T10:00:00.737Z')
     })
   })
 })

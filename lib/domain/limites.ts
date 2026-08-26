@@ -10,7 +10,13 @@
  * nadie real y sí frena a un script.
  */
 
-export type AccionLimitada = 'reserva_publica' | 'login' | 'encuesta'
+export type AccionLimitada =
+  | 'reserva_publica'
+  | 'login'
+  | 'encuesta'
+  | 'recuperar_password'
+  | 'ical'
+  | 'webhook_pago'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -50,6 +56,27 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
   },
 
   /*
+    Recuperación de contraseña. Tres por hora y por IP.
+
+    Dos cosas que protege, y la segunda es la que importa:
+
+    · Que nadie use el formulario como ametralladora de correos contra la casilla
+      de un empleado.
+    · Que no se pueda **enumerar cuentas**. La pantalla responde siempre lo mismo
+      exista o no el email —eso ya cierra la vía obvia—, pero sin límite un script
+      podría medir tiempos de respuesta sobre miles de direcciones. Tres por hora
+      hace que eso no escale.
+
+    Es más bajo que el del login a propósito: olvidarse la contraseña y pedir el
+    enlace tres veces en una hora ya es raro; teclearla mal diez veces, no.
+  */
+  recuperar_password: {
+    maximo: 3,
+    minutos: 60,
+    motivo: 'Enumeración de cuentas del staff y correo no solicitado.',
+  },
+
+  /*
     Una encuesta se responde una vez. Tres por hora cubre a quien recarga o se
     equivoca, y evita que se inflen los promedios de NPS, que alimentan los
     reportes de gestión.
@@ -58,6 +85,48 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 3,
     minutos: 60,
     motivo: 'El NPS alimenta los reportes de gestión.',
+  },
+
+  /*
+    El feed iCal de salida. No filtra datos personales —el archivo dice «ocupado» y
+    nada más— pero cada lectura recorre un año de estadías, así que sin techo la URL
+    es un amplificador gratis para cualquiera que la tenga.
+
+    El techo es alto a propósito. El hotel tiene 11 tipos de unidad, y si Booking,
+    Airbnb y Expedia sondean cada uno todos los feeds una vez por hora son 33
+    lecturas legítimas: un límite ajustado cortaría la sincronización, que es
+    justamente el daño que este feed viene a evitar. Ciento veinte deja margen de
+    sobra y sigue cortando un bucle, que haría miles.
+  */
+  ical: {
+    maximo: 120,
+    minutos: 60,
+    motivo: 'Cada lectura recorre un año de estadías.',
+  },
+
+  /*
+    El webhook de pagos, y **solo cuando la firma no valida**.
+
+    Esta distinción es la decisión importante del límite, no el número. Un
+    webhook de pagos es lo último que se debe limitar por volumen: cada evento
+    que se descarta es un cobro del que el hotel no se entera. Si un fin de
+    semana largo entran más avisos de los previstos y el limitador empieza a
+    responder 429, la pasarela reintenta un rato y después se rinde: la plata
+    quedó cobrada y la reserva figura impaga.
+
+    Por eso el contador se incrementa **después** de rechazar la firma, nunca
+    antes. Un evento legítimo —firmado con el secreto que solo tiene la
+    pasarela— no pasa por acá jamás, por muchos que lleguen.
+
+    Lo que sí protege: que alguien sin el secreto martille el endpoint. Cada
+    intento cuesta un HMAC y, en MercadoPago, una consulta a su API. Veinte por
+    hora y por IP es muchísimo para un error de configuración real —que se nota
+    en el primer intento— y corta un bucle en seco.
+  */
+  webhook_pago: {
+    maximo: 20,
+    minutos: 60,
+    motivo: 'Martilleo del webhook de pagos por parte de quien no tiene el secreto.',
   },
 }
 

@@ -66,9 +66,29 @@ export const CAPITULOS: Capitulo[] = [
           'Entrá a Reservas y apretá "Nueva reserva". Elegí las fechas y el tipo de habitación: el sistema muestra solo lo que está libre, así que no se puede vender dos veces la misma noche.',
       },
       {
-        titulo: 'Cobrar la seña',
+        titulo: 'Cobrar la seña en el mostrador',
         detalle:
-          'En la reserva, el bloque Pagos propone una seña sugerida. Se puede cargar efectivo, transferencia o tarjeta. El saldo queda a la vista.',
+          'En la reserva, el bloque Pagos propone una seña sugerida. Se puede cargar efectivo, transferencia o tarjeta, y elegir en qué moneda entró la plata: si el huésped paga en pesos, poné el importe en pesos y el sistema lo pasa a dólares con la cotización del día. Así la caja cierra contra el sistema.',
+      },
+      {
+        titulo: 'Si cobrás con el posnet',
+        detalle:
+          'Cargá el número de cupón y los últimos cuatro dígitos. Es lo que sirve para conciliar cuando la liquidación de la terminal no coincide con el sistema. El número completo de la tarjeta no se pide nunca y no se puede guardar.',
+      },
+      {
+        titulo: 'Mandarle un link de pago al huésped',
+        detalle:
+          'Es para el que reservó por teléfono o WhatsApp y no está para dar la tarjeta. En el bloque "Link de pago" elegís el medio y si cobrás la seña o el saldo, y el sistema arma un enlace para mandarle. Paga desde su celular y la reserva se marca sola, sin que nadie toque nada.',
+      },
+      {
+        titulo: 'Por qué a veces no deja generar otro link',
+        detalle:
+          'Si ya hay un enlace activo por ese saldo, el sistema muestra ése en vez de crear uno nuevo. Es a propósito: con dos enlaces vivos el huésped puede pagar dos veces, y devolver esa plata es un trámite con la pasarela. Los enlaces vencen a las 48 horas.',
+      },
+      {
+        titulo: 'El huésped también puede pagar desde la web',
+        detalle:
+          'En el correo de confirmación tiene un botón para pagar. Puede elegir tarjeta internacional en dólares o pagar en pesos con MercadoPago, débito, cuotas o efectivo en Rapipago. Cuando la plata entra, la reserva pasa a confirmada sola.',
       },
       {
         titulo: 'Check-in',
@@ -84,6 +104,11 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Check-out y factura',
         detalle:
           'Al irse, apretá "Check-out": se suman los puntos de fidelidad y se le manda la encuesta. Recién ahí aparece el botón para facturar.',
+      },
+      {
+        titulo: 'Turistas del exterior: cuándo NO se cobra IVA',
+        detalle:
+          'La exención pide DOS cosas juntas: que el huésped resida en el exterior (se marca en su ficha) y que pague desde el exterior, con tarjeta emitida afuera o transferencia. Un extranjero que paga en efectivo en pesos SÍ paga IVA. Cargá de dónde sale el pago en el bloque "Exención de IVA" de la reserva: el sistema decide solo y te muestra cuánto sale con y sin impuesto. El frigobar y las excursiones siguen con IVA siempre.',
       },
     ],
   },
@@ -362,12 +387,32 @@ export const CAPITULOS: Capitulo[] = [
   },
   {
     area: 'config',
-    resumen: 'Tarifas, temporadas y productos.',
+    resumen: 'Tarifas, temporadas, productos, cotización del dólar y ubicación de las unidades.',
     pasos: [
       {
         titulo: 'Antes de tocar una tarifa',
         detalle:
           'Cambiar un precio afecta todas las cotizaciones nuevas, no las reservas ya cargadas. Queda registrado quién lo cambió.',
+      },
+      {
+        titulo: 'Cargar la cotización del dólar',
+        detalle:
+          'El sistema trabaja en dólares y muestra el equivalente en pesos con la cotización que haya cargada. Si no hay ninguna, los importes se muestran solo en USD: no inventa un tipo de cambio. En pantalla se aclara de dónde salió el valor y de cuándo es.',
+      },
+      {
+        titulo: 'Temporadas',
+        detalle:
+          'Cada rango de fechas tiene su precio. Si una fecha no cae en ninguna temporada cargada, la reserva sale en cero: es el error más común y se arregla completando el calendario.',
+      },
+      {
+        titulo: 'Productos e inventario',
+        detalle:
+          'Lo que se le puede cargar a la cuenta de un huésped: frigobar, excursiones, lavandería. Los que llevan control de stock avisan cuando quedan pocos.',
+      },
+      {
+        titulo: 'Piso y bloque de cada unidad',
+        detalle:
+          'Sirve para que housekeeping recorra en orden y para filtrar la grilla de ocupación por sector.',
       },
     ],
   },

@@ -21,6 +21,7 @@ import {
   VISTAS,
   definicionDe,
   esVista,
+  estadosSinVistaPropia,
   type VistaReservas,
 } from '@/lib/domain/vistas-reservas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
@@ -226,10 +227,22 @@ export default async function ReservasPage({
         titulo="Reservas"
         descripcion="Altas, seguimiento y ciclo de vida de cada reserva."
         icono="reservas"
+        /*
+          Tres niveles, y el orden va de menos a más importante para que el ojo
+          termine en la acción principal.
+
+          Antes los cuatro botones tenían casi el mismo peso —tres secundarios y un
+          primario, todos del mismo tamaño y juntos— y la fila se leía como un
+          menú, no como «esto es lo que vas a hacer». «Recordar llegadas de mañana»
+          y «Exportar CSV» son tareas ocasionales: pasan a `fantasma`, que no tiene
+          borde ni fondo y deja de competir. «+ Grupo» queda secundario porque es un
+          alta de verdad, aunque menos frecuente. «+ Nueva reserva» es el único
+          primario, que es lo que la gente viene a hacer diez veces por día.
+        */
         acciones={
           <>
             <form action={enviarRecordatoriosLlegada}>
-              <button className={botonClases('secundario')}>Recordar llegadas de mañana</button>
+              <button className={botonClases('fantasma')}>Recordar llegadas de mañana</button>
             </form>
             <BotonExportar href={`/panel/exportar/reservas${construirQuery(vigentes)}`} />
             <Link href="/panel/reservas/nueva-grupo" className={botonClases('secundario')}>
@@ -268,18 +281,44 @@ export default async function ReservasPage({
           ocultos={{ estado, canal, desde: sp.desde, hasta: sp.hasta, grupo: sp.grupo }}
         />
 
-        {/* Rango de fechas y canal: un solo formulario GET, sin JavaScript. */}
-        <form method="get" action="/panel/reservas" className="flex flex-wrap items-center gap-2">
+        {/*
+          Filtros finos, en su propio renglón y con encabezado.
+
+          Son nueve controles y estaban al mismo nivel visual que el buscador, sin
+          nada que dijera dónde empieza una cosa y termina la otra: la barra medía
+          200 px de alto y se leía como un muro. El `basis-full` los baja a un
+          renglón propio —el buscador se queda solo arriba, que es lo que se usa el
+          90 % de las veces— y el rótulo dice qué son.
+
+          Sigue siendo un solo formulario GET, sin JavaScript.
+        */}
+        <div className="flex basis-full items-center gap-2 border-t border-stone-100 pt-3">
+          <span className="shrink-0 text-xs font-medium tracking-wide text-stone-500 uppercase">
+            Afinar
+          </span>
+        </div>
+        <form
+          method="get"
+          action="/panel/reservas"
+          className="flex basis-full flex-wrap items-center gap-2"
+        >
           {sp.q && <input type="hidden" name="q" value={sp.q} />}
           {estado && <input type="hidden" name="estado" value={estado} />}
-          <label className="flex items-center gap-1.5 text-sm text-stone-600">
+          {/*
+            El par de fechas se envuelve solo en pantalla chica.
+
+            La etiqueta agrupa «Estadías entre» + fecha + «y» + fecha: unos 400 px
+            que, como ítem flex con `min-width: auto`, no bajaban de ahí y se
+            llevaban toda la barra fuera de la pantalla en un teléfono.
+          */}
+          <label className="flex w-full min-w-0 flex-wrap items-center gap-1.5 text-sm text-stone-600 sm:w-auto">
             <span className="text-xs text-stone-500">Estadías entre</span>
             <input
               type="date"
               name="desde"
               defaultValue={sp.desde ?? ''}
               aria-label="Fecha desde"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="min-w-0 flex-1 basis-32 rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:flex-none sm:basis-auto"
             />
             <span className="text-stone-600">y</span>
             <input
@@ -287,14 +326,14 @@ export default async function ReservasPage({
               name="hasta"
               defaultValue={sp.hasta ?? ''}
               aria-label="Fecha hasta"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="min-w-0 flex-1 basis-32 rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:flex-none sm:basis-auto"
             />
           </label>
           <select
             name="canal"
             defaultValue={canal ?? ''}
             aria-label="Canal de venta"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todos los canales</option>
             {CANALES.map((c) => (
@@ -310,7 +349,7 @@ export default async function ReservasPage({
             name="plan"
             defaultValue={plan ?? ''}
             aria-label="Plan o pensión"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todos los planes</option>
             {PLANES.map((p) => (
@@ -323,7 +362,7 @@ export default async function ReservasPage({
             name="garantia"
             defaultValue={garantia ?? ''}
             aria-label="Garantía"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Toda garantía</option>
             {GARANTIAS.map((g) => (
@@ -336,7 +375,7 @@ export default async function ReservasPage({
             name="segmento"
             defaultValue={segmento ?? ''}
             aria-label="Segmento"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todo segmento</option>
             {SEGMENTOS.map((s) => (
@@ -353,7 +392,7 @@ export default async function ReservasPage({
             name="unidad"
             defaultValue={unidad ?? ''}
             aria-label="Habitación"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Toda habitación</option>
             {unidades.map((u) => (
@@ -366,7 +405,7 @@ export default async function ReservasPage({
             name="tipo"
             defaultValue={tipoUnidad ?? ''}
             aria-label="Tipo de habitación"
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+            className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
           >
             <option value="">Todo tipo</option>
             {tipos.map((t) => (
@@ -380,7 +419,7 @@ export default async function ReservasPage({
               name="contrato"
               defaultValue={contrato ?? ''}
               aria-label="Contrato"
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+              className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
             >
               <option value="">Todo contrato</option>
               {contratos.map((c) => (
@@ -390,15 +429,27 @@ export default async function ReservasPage({
               ))}
             </select>
           )}
-          <button type="submit" className={botonClases('secundario')}>
+          <button
+            type="submit"
+            className={botonClases('secundario', 'w-full justify-center sm:w-auto')}
+          >
             Aplicar
           </button>
         </form>
 
-        {/* Interruptor de impuestos. Es un enlace y no un `select` porque cambia
-            cómo se lee toda la tabla, y así el estado queda en la URL: quien
-            comparta el enlace comparte la misma vista. Dice qué está mostrando,
-            no qué haría al apretarlo. */}
+        {/*
+          Interruptor de impuestos, separado de los filtros.
+
+          No filtra nada: cambia cómo se LEEN todos los importes de la tabla, y
+          mezclado entre los nueve selects parecía un filtro más. Va en su propio
+          renglón, junto a «Limpiar», que también es una acción sobre la vista y no
+          un criterio de búsqueda.
+
+          Es un enlace y no un `select` para que el estado quede en la URL: quien
+          comparte el enlace comparte la misma vista. Dice qué está mostrando, no
+          qué haría al apretarlo.
+        */}
+        <div className="flex basis-full flex-wrap items-center gap-2 border-t border-stone-100 pt-3">
         <Chip
           href={`/panel/reservas${construirQuery(vigentes, { impuestos: sinImpuestos ? undefined : 'sin', pagina: undefined })}`}
           activo={sinImpuestos}
@@ -411,6 +462,7 @@ export default async function ReservasPage({
             Limpiar
           </Link>
         )}
+        </div>
       </BarraHerramientas>
 
       {/* ── Vistas operativas ───────────────────────────────────────────────
@@ -439,12 +491,27 @@ export default async function ReservasPage({
         ))}
       </div>
 
-      {/* Los chips de estado quedan como corte secundario, con su etiqueta a la
-          vista: sirven para aislar un estado puntual. No se esconden detrás de un
-          desplegable — el proyecto lo prohíbe (Fase 15: nada oculto). */}
+      {/*
+        Corte secundario por estado, con SOLO los estados que no tienen ya su
+        propia vista arriba.
+
+        Antes se listaban los siete, y cinco hacían exactamente lo mismo que un
+        chip de la fila de arriba: «Pendiente» = la vista Pendientes, «In house» =
+        En el hotel, y lo mismo con Check-out, Cancelada y No-show. Dos caminos
+        idénticos al mismo resultado obligan a pararse a decidir cuál usar y hacen
+        sospechar que dan cosas distintas; encima son excluyentes entre sí. Eran
+        diecisiete chips para once cortes reales.
+
+        Quedan «Confirmada» y «Pagada», que sí agregan: la vista «Confirmadas» las
+        junta, y saber quién todavía debe la seña no es lo mismo que saber quién ya
+        pagó. La lista se calcula (`estadosSinVistaPropia`), así que si mañana se
+        agrega una vista para un estado, su chip duplicado desaparece solo.
+
+        No se esconden detrás de un desplegable: el proyecto lo prohíbe (Fase 15).
+      */}
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-xs text-stone-500">Por estado:</span>
-        {ESTADOS_RESERVA.map((e) => (
+        <span className="mr-1 text-xs text-stone-500">Además, por cobro:</span>
+        {estadosSinVistaPropia().map((e) => (
           <Chip
             key={e}
             href={`/panel/reservas${construirQuery(vigentes, { estado: e, vista: undefined, pagina: undefined })}`}
@@ -553,14 +620,14 @@ export default async function ReservasPage({
                         {ETIQUETAS_CANAL[r.canal as Canal] ?? r.canal}
                       </td>
                       <td
-                        className={`${TD} ${COL_SECUNDARIA} tabular text-right font-medium text-stone-800`}
+                        className={`${TD} ${COL_SECUNDARIA} tabular text-right font-medium whitespace-nowrap text-stone-800`}
                       >
                         {formatearUSD(importeDe(r))}
                       </td>
                       {/* Saldo: la columna que decide si hay que llamar al
                           huésped. «Saldada» va con texto y no sólo en verde, para
                           que se lea sin distinguir colores. */}
-                      <td className={`${TD} tabular text-right`}>
+                      <td className={`${TD} tabular text-right whitespace-nowrap`}>
                         {pago.saldada ? (
                           <span className="text-xs font-medium text-emerald-700">Saldada</span>
                         ) : (
@@ -593,10 +660,10 @@ export default async function ReservasPage({
                   </th>
                   <td className={COL_SECUNDARIA} />
                   <td className={COL_SECUNDARIA} />
-                  <td className={`${COL_SECUNDARIA} tabular px-4 py-2.5 text-right font-semibold text-stone-900`}>
+                  <td className={`${COL_SECUNDARIA} tabular px-4 py-2.5 text-right font-semibold whitespace-nowrap text-stone-900`}>
                     {formatearUSD(totalPagina)}
                   </td>
-                  <td className="tabular px-4 py-2.5 text-right font-semibold text-stone-900">
+                  <td className="tabular px-4 py-2.5 text-right font-semibold whitespace-nowrap text-stone-900">
                     {formatearUSD(saldoPagina)}
                   </td>
                   <td />

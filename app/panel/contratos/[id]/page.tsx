@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
 import {
   ETIQUETAS_ESTADO_CONTRATO,
@@ -106,7 +107,10 @@ export default async function DetalleContratoPage({
   const contrato = data as Contrato
 
   const [{ data: firmaData }, entidad, cabeceras] = await Promise.all([
-    supabase
+    // `token` va por el cliente privilegiado: desde la 0060 no es legible con
+    // una sesión de staff (es la credencial de /firmar/<token>). El resto de la
+    // constancia de firma sí, y sigue pasando por RLS.
+    crearClienteAdmin()
       .from('firmas')
       .select('token, firmante_nombre, firmante_email, hash_documento, ip, fecha_firma')
       .eq('contrato_id', id)

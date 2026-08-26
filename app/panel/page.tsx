@@ -38,11 +38,29 @@ function FilaMovimiento({ e }: { e: EstadiaDia }) {
   const r = e.reserva
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-stone-100 px-5 py-2.5 first:border-0">
+      {/*
+        El nombre va en su propia línea y ACOTADO, no fluyendo junto a la unidad.
+
+        Antes los dos eran `span` en línea dentro del mismo `flex-1`: un apellido
+        compuesto —«Fernández de la Vega Etchegoyen, María de los Ángeles
+        Guadalupe», que es un nombre perfectamente normal— envolvía en cuatro
+        renglones, empujaba la unidad al final del párrafo y descolocaba la
+        etiqueta de estado y el código de reserva.
+
+        Con `truncate` la fila mide siempre lo mismo y el listado se lee de un
+        vistazo, que es para lo que existe. El nombre completo queda en el
+        `title`, y de todos modos está a un clic en la ficha.
+      */}
       <span className="min-w-0 flex-1">
-        <span className="font-medium text-stone-800">
+        <span
+          className="block truncate font-medium text-stone-800"
+          title={r?.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : undefined}
+        >
           {r?.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : 'Sin huésped'}
         </span>
-        <span className="ml-2 text-xs text-stone-600">{e.unidad?.nombre}</span>
+        {e.unidad?.nombre && (
+          <span className="block truncate text-xs text-stone-600">{e.unidad.nombre}</span>
+        )}
       </span>
       {r && <Etiqueta tono={TONO_ESTADO[r.estado]}>{ETIQUETAS_ESTADO_RESERVA[r.estado]}</Etiqueta>}
       {r && (

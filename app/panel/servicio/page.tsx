@@ -8,6 +8,7 @@ import {
   ETIQUETAS_CATEGORIA_PRODUCTO,
   type EstadiaServicio,
   type ConsumoVendido,
+  type DesayunoExtra,
 } from '@/lib/domain/servicio'
 import {
   Encabezado,
@@ -80,7 +81,7 @@ export default async function ServicioPage({
 
   // Se traen las estadías que se solapan con la ventana del desayuno. El filtro
   // fino —quién durmió anoche— lo hace el dominio, que es donde vive la regla.
-  const [estadiasRes, consumosRes] = await Promise.all([
+  const [estadiasRes, consumosRes, extrasRes] = await Promise.all([
     traerTodo<FilaEstadia>((d, h) =>
       supabase
         .from('estadias')
@@ -101,6 +102,29 @@ export default async function ServicioPage({
         .order('id')
         .range(d, h) as never,
     ),
+    /*
+      Desayunos vendidos SUELTOS para la fecha de la lista.
+
+      Van en una consulta aparte y no dentro de la de arriba porque el rango es
+      otro: aquélla cubre el período del resumen de ventas (que puede ser un mes)
+      y ésta solo el día que se está por servir.
+
+      Sin esto, el que llegó a las 9 y pagó su desayuno no aparecía en la lista
+      de cocina —la lista se arma con quién durmió anoche— y la cocina preparaba
+      un cubierto de menos. Es justamente lo que la pantalla existe para evitar.
+    */
+    supabase
+      .from('consumos')
+      .select(
+        // ⚠️ `!inner` en el producto NO es decorativo: con un embed normal,
+        // PostgREST devuelve TODAS las filas madre con el array vacío, así que
+        // el filtro por categoría no filtraría nada y la lista contaría cada
+        // frigobar como un desayuno. Es la trampa más silenciosa de este stack
+        // (ver AGENTS.md y el test de `SELECT_RESERVAS`).
+        'cantidad, producto:productos_servicios!inner(categoria), reserva:reservas(codigo, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre), estadias(unidad:unidades(nombre)))',
+      )
+      .eq('fecha', fecha)
+      .eq('producto.categoria', 'desayuno'),
   ])
 
   /*
@@ -137,7 +161,39 @@ export default async function ServicioPage({
       }
     })
 
-  const lista = listaDeDesayuno(estadias, fecha)
+  /*
+    Desayunos vendidos sueltos del día. Si la consulta falla no se corta la
+    pantalla: la lista de los incluidos sigue sirviendo, y una lista incompleta
+    con aviso es mejor que ninguna a las 7 de la mañana. El error va al log.
+  */
+  if (extrasRes.error) {
+    console.error('Servicio de cocina: no se pudieron leer los desayunos extra —', extrasRes.error)
+  }
+
+  type FilaExtra = {
+    cantidad: number
+    reserva: {
+      codigo: string
+      huesped: { apellido: string; nombre: string } | null
+      estadias: { unidad: { nombre: string } | null }[] | null
+    } | null
+  }
+
+  const extras: DesayunoExtra[] = ((extrasRes.data ?? []) as unknown as FilaExtra[])
+    .filter((c) => c.reserva)
+    .map((c) => {
+      const h = c.reserva!.huesped
+      return {
+        reservaCodigo: c.reserva!.codigo,
+        huesped: h ? `${h.apellido}, ${h.nombre}` : 'Sin huésped',
+        // Puede no tener unidad todavía: llegó antes del check-in.
+        unidad: c.reserva!.estadias?.[0]?.unidad?.nombre ?? null,
+        cubiertos: c.cantidad,
+        fecha,
+      }
+    })
+
+  const lista = listaDeDesayuno(estadias, fecha, extras)
 
   const consumos: ConsumoVendido[] = consumosRes.filas
     .filter((c) => c.producto)
@@ -230,7 +286,11 @@ export default async function ServicioPage({
 
       <Tarjeta
         titulo={`Desayuno del ${formatoFechaCorta(fecha)}`}
-        descripcion={`${lista.totalCubiertos} cubiertos · ${lista.lineas.length} habitaciones · ${lista.totalSeRetiran} se retiran hoy`}
+        descripcion={
+          `${lista.totalCubiertos} cubiertos · ${lista.lineas.length} habitaciones · ` +
+          `${lista.totalSeRetiran} se retiran hoy` +
+          (lista.totalExtras > 0 ? ` · ${lista.totalExtras} extra vendidos` : '')
+        }
       >
         {lista.lineas.length === 0 ? (
           <EstadoVacio titulo="No hay nadie alojado esa noche" />
@@ -246,11 +306,18 @@ export default async function ServicioPage({
             </thead>
             <tbody>
               {lista.lineas.map((l) => (
-                <tr key={l.reservaCodigo + l.unidad} className={FILA}>
+                <tr key={`${l.reservaCodigo}-${l.unidad}-${l.esExtra ? 'x' : 'i'}`} className={FILA}>
                   <td className={`${TD} font-medium`}>{l.unidad}</td>
                   <td className={TD}>{l.huesped}</td>
                   <td className={`${TD} tabular-nums`}>{l.cubiertos}</td>
                   <td className={`${TD} text-sm text-stone-600`}>
+                    {/* El extra se marca con TEXTO y no con color: esta hoja se
+                        imprime, y muchas veces en blanco y negro. */}
+                    {l.esExtra && (
+                      <span className="font-medium text-lenga-800">
+                        Desayuno extra vendido{l.unidad === '—' ? ' (todavía sin habitación)' : ''}.{' '}
+                      </span>
+                    )}
                     {l.seRetiraHoy && <span className="font-medium">Se retira hoy. </span>}
                     {l.notas}
                   </td>
