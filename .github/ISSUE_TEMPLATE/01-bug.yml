@@ -1,0 +1,98 @@
+name: Reporte de error
+description: Algo del sistema no hace lo que debería.
+title: 'bug: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportarlo. Cuanto más concreto sea, más rápido se arregla.
+
+        > ⚠️ **Si es una vulnerabilidad de seguridad, no la reportes acá.**
+        > Un issue es público y deja el problema a la vista de cualquiera antes
+        > de que esté arreglado. El camino privado está en la
+        > [política de seguridad](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/security/policy).
+
+  - type: textarea
+    id: que-paso
+    attributes:
+      label: Qué pasó
+      description: Contá el síntoma tal como lo viste, sin interpretarlo todavía.
+      placeholder: Al confirmar una reserva del portal la pantalla recarga y el estado sigue en pendiente.
+    validations:
+      required: true
+
+  - type: textarea
+    id: como-reproducirlo
+    attributes:
+      label: Cómo reproducirlo
+      description: Los pasos exactos. Si depende de datos concretos (una fecha, un tipo de unidad, un rol), decilo.
+      placeholder: |
+        1. Entrar a /reservar con el hotel sin temporadas cargadas
+        2. Elegir del 10 al 12 de septiembre
+        3. Ver el total
+    validations:
+      required: true
+
+  - type: textarea
+    id: que-esperabas
+    attributes:
+      label: Qué esperabas que pasara
+      description: Alcanza con una línea. Sirve para distinguir un bug de una función que todavía no existe.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: rol
+    attributes:
+      label: Con qué rol
+      description: La mayoría de los bugs de este sistema dependen del rol, porque los permisos los impone la base (RLS).
+      options:
+        - Sin sesión (huésped, portal público)
+        - recepcion
+        - housekeeping
+        - gerencia
+        - admin
+        - No aplica / no sé
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Dónde
+      options:
+        - Panel interno (app/panel)
+        - Portal público (app/reservar, app/alojamientos)
+        - Base de datos o migración
+        - CI, tests o herramientas
+        - Documentación
+        - No sé
+    validations:
+      required: true
+
+  - type: input
+    id: ruta
+    attributes:
+      label: Pantalla o ruta
+      description: La URL donde pasa, si la tenés.
+      placeholder: /panel/reservas/nueva
+
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Error, log o salida de `npm run check`
+      description: Se formatea solo como consola, no hace falta que uses acentos graves.
+      render: shell
+
+  - type: checkboxes
+    id: confirmaciones
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Busqué en los issues abiertos y no está repetido.
+          required: true
+        - label: Lo que pego acá no tiene datos personales de huéspedes ni credenciales reales.
+          required: true
+        - label: Esto **no** es una vulnerabilidad de seguridad.
+          required: true

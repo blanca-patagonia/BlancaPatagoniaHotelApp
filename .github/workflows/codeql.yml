@@ -1,0 +1,71 @@
+name: CodeQL
+
+# Análisis estático de seguridad (SAST) sobre el código propio.
+#
+# Por qué existe: el panel «Security and quality» del repositorio decía
+# «Code scanning alerts · Needs setup». El CI ya mira las dependencias
+# (`npm audit`), los tipos (`tsc`) y el estilo (ESLint), pero **nada miraba el
+# código nuestro buscando patrones de vulnerabilidad**: un dato del usuario que
+# llega hasta una consulta, una redirección abierta, un `dangerouslySetInnerHTML`
+# alimentado desde el request, una expresión regular que se puede colgar.
+# Son justo los bugs que el typecheck no ve, porque el tipo es correcto y el
+# flujo es el problema.
+#
+# Se versiona el workflow en vez de usar el «default setup» del panel (ADR 0028):
+# así las consultas elegidas quedan a la vista, se revisan en un PR y viajan con
+# el repositorio.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # El análisis semanal no es redundante: CodeQL actualiza sus consultas, así que
+  # una corrida nueva sobre el mismo código encuentra cosas que la anterior no
+  # buscaba. Lunes temprano, para que el hallazgo llegue con la semana por delante.
+  schedule:
+    - cron: '30 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analizar:
+    name: Analizar JavaScript/TypeScript
+    runs-on: ubuntu-latest
+    # Sin límite propio heredaría el de 6 horas: una corrida colgada bloquearía
+    # el runner el fin de semana entero.
+    timeout-minutes: 20
+
+    permissions:
+      # Publicar los hallazgos en la pestaña Security del repositorio.
+      security-events: write
+      # Lo pide la acción para correlacionar la corrida con el commit.
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # `none`: JavaScript y TypeScript se analizan desde el fuente, sin
+          # compilar. Es lo que permite que este workflow NO necesite Docker ni
+          # Supabase ni las variables de entorno del CI — corre en dos minutos.
+          build-mode: none
+          # `security-extended` y no el conjunto por defecto: suma consultas de
+          # menor certeza que igual conviene mirar en un sistema que maneja datos
+          # de huéspedes y dinero.
+          # Tampoco `security-and-quality`: ése agrega reglas de estilo y de
+          # mantenibilidad que acá ya cubre ESLint, y un panel con ruido se deja
+          # de leer (es la misma razón por la que `npm audit` va en `high`).
+          queries: security-extended
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

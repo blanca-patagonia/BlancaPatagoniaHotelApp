@@ -1,0 +1,65 @@
+name: Propuesta de mejora
+description: Algo que el sistema todavía no hace y debería hacer.
+title: 'feat: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de escribir, conviene mirar si ya está anotado:
+        [`docs/roadmap.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/roadmap.md),
+        [`docs/PENDIENTES.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/PENDIENTES.md)
+        y [`docs/decisiones/`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/tree/main/docs/decisiones)
+        — varias cosas que parecen faltar están **decididas a propósito** y el ADR
+        explica por qué.
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: Empezá por lo que hoy no se puede hacer, o por el trabajo manual que alguien está haciendo para suplirlo. La solución viene después.
+      placeholder: Recepción anota en papel qué habitaciones pidieron cuna, porque el sistema no lo muestra en la grilla.
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Qué proponés
+    validations:
+      required: true
+
+  - type: dropdown
+    id: quien
+    attributes:
+      label: A quién le sirve
+      multiple: true
+      options:
+        - Huésped (portal público)
+        - recepcion
+        - housekeeping
+        - gerencia
+        - admin
+    validations:
+      required: true
+
+  - type: dropdown
+    id: alcance
+    attributes:
+      label: Qué tocaría
+      description: 'Si no estás seguro, dejalo en «no sé»: es parte de lo que hay que averiguar.'
+      options:
+        - Solo una pantalla
+        - Una pantalla y sus acciones
+        - Un módulo nuevo del panel (son cinco lugares, ver AGENTS.md)
+        - Necesita migración de base de datos
+        - Integración con un servicio externo
+        - No sé
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas que descartaste
+      description: Opcional, pero es lo que después termina en un ADR si la propuesta avanza.

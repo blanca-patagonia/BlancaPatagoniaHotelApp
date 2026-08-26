@@ -1,0 +1,43 @@
+name: Revisión de dependencias
+
+# Bloquea el PR que INTRODUCE una dependencia vulnerable, antes de mergearla.
+#
+# No se pisa con el `npm audit` del CI, que mira otra cosa: `audit` audita el
+# árbol completo y por eso está en `--audit-level=high` — con el umbral más bajo
+# se pone rojo por deuda vieja que no se puede arreglar hoy, y un CI que falla
+# siempre se deja de leer. Esta acción compara el `package-lock.json` de la rama
+# contra el de `main` y sólo mira **lo que agrega este PR**, que es deuda que
+# todavía no existe y por lo tanto siempre se puede no contraer.
+#
+# Es gratis en repositorios públicos: usa el grafo de dependencias, que en un
+# repositorio público está activado y no se puede desactivar.
+
+on:
+  pull_request:
+
+# El token alcanza para leer el diff de dependencias; nada de este workflow
+# escribe en el repositorio.
+permissions:
+  contents: read
+
+jobs:
+  revisar:
+    name: Dependencias nuevas del PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Revisar dependencias agregadas
+        uses: actions/dependency-review-action@v4
+        with:
+          # `high` sostiene el mismo criterio que el resto del proyecto: se corta
+          # por alta y crítica, las moderadas quedan visibles en el resumen de la
+          # corrida sin trabar el merge.
+          fail-on-severity: high
+          # Sin comentario automático en el PR, a propósito: en un PR que viene de
+          # un fork el token es de sólo lectura y el intento de comentar hace
+          # fallar el paso por un motivo que no tiene nada que ver con las
+          # dependencias. El check en rojo y el resumen de la corrida alcanzan.
+          comment-summary-in-pr: never

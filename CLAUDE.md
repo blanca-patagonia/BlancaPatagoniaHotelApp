@@ -201,7 +201,16 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 27 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **El repositorio en GitHub (ADR 0028).** Además del CI hay dos workflows:
+  `codeql.yml` (análisis estático de seguridad, `build-mode: none`, sin Docker) y
+  `dependency-review.yml` (falla si el PR agrega una dependencia vulnerable). Y hay
+  una parte que **no vive en el código**: alertas de Dependabot, escaneo de
+  secretos y reporte privado de vulnerabilidades son casillas de la web, hoy
+  apagadas. Están en `docs/github.md` con el estado de cada una. ⚠️ `SECURITY.md`
+  manda a reportar por «Security → Report a vulnerability», un botón que **no
+  existe** hasta que se active el reporte privado: si se toca ese documento, no
+  prometer canales que estén cerrados.
+- **Hay 28 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:

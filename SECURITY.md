@@ -23,6 +23,12 @@ un comprobante simulado con uno fiscal (ADR 0018).
 de este repositorio (GitHub Security Advisories), que crea un canal privado con
 quienes mantenemos el proyecto.
 
+> **Si no encontrás ese botón**, es que el reporte privado todavía no está
+> activado en la configuración del repositorio (ver `docs/github.md`, §2.1).
+> Mientras tanto, abrí un issue **sin el detalle técnico** —alcanza con «encontré
+> algo en tal módulo, pido un canal privado»— y seguimos por ahí. Lo que no hay
+> que hacer es publicar el detalle en un issue.
+
 Ayuda mucho que incluyas:
 
 - Qué rol de usuario hace falta para explotarlo (`anon`, `recepcion`,
@@ -70,6 +76,10 @@ números salen de la migración `0065`, la última aplicada.
 - **Encabezados de seguridad** en `next.config.ts`, incluido HSTS.
 - **CI** que levanta Postgres con Docker y corre `npm audit`, typecheck, lint, los
   1446 tests y el build en cada push.
+- **Análisis estático de seguridad (CodeQL)** sobre el código propio, en cada PR y
+  una vez por semana ([ADR 0028](docs/decisiones/0028-analisis-estatico-y-configuracion-de-github.md)).
+  Cubre lo que ni `npm audit` ni el typecheck ven: el dato del request que llega
+  hasta una consulta, la redirección abierta, la expresión regular que se cuelga.
 
 ## Límites conocidos
 
@@ -114,11 +124,25 @@ Dependabot está configurado (`.github/dependabot.yml`) con actualizaciones
 semanales, y el CI corre `npm audit --audit-level=high` en cada push. Al momento de
 escribir esto queda **una vulnerabilidad de severidad baja**.
 
+Además, el workflow `dependency-review.yml` **bloquea el pull request que
+introduce** una dependencia con vulnerabilidad alta o crítica: `npm audit` audita
+el árbol entero y por eso corta en `high`, mientras que la revisión de
+dependencias mira sólo lo que agrega ese PR, que es deuda que todavía se puede no
+contraer.
+
+⚠️ Falta un paso, y no depende del código: las **alertas de Dependabot** están
+apagadas en la configuración del repositorio. Sin ellas no hay *security updates*
+—los PRs que se abren porque se publicó una vulnerabilidad, sin esperar al lunes—
+y el `npm audit` del CI sólo se entera cuando alguien hace push. Cómo activarlas:
+`docs/github.md`, §2.2.
+
 ## Más detalle
 
 - `docs/SEGURIDAD.md` — cada hallazgo con el formato «qué encontré → por qué es
   riesgo → qué hice → cómo verificarlo».
 - `docs/AUDITORIA_INICIAL.md` — el reconocimiento inicial.
 - `docs/audit/00-pendientes.md` — lo que falta.
-- `docs/decisiones/` — los 26 ADRs. Los de seguridad son el 0002, 0016, 0017, 0018
-  y 0025.
+- `docs/decisiones/` — los 28 ADRs. Los de seguridad son el 0002, 0016, 0017, 0018,
+  0025 y 0028.
+- `docs/github.md` — la configuración del repositorio en GitHub: lo que hay que
+  activar desde la web y ningún archivo puede encender por su cuenta.

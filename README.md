@@ -1,6 +1,7 @@
 # Sistema de Gestión Hotelera — Hotel Blanca Patagonia
 
 [![CI](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/actions/workflows/ci.yml/badge.svg)](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/actions/workflows/codeql.yml/badge.svg)](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/actions/workflows/codeql.yml)
 
 Sistema integral de gestión hotelera (PMS) para el **Hotel Blanca Patagonia**
 (El Calafate, Santa Cruz): reservas, estadías, consumos, facturación y reportes.
@@ -147,11 +148,22 @@ Toda la documentación vive en [`docs/`](docs/), en español:
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
 - [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
 - [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
-- [Decisiones (ADR)](docs/decisiones/) — 22 decisiones de arquitectura numeradas.
+- [Decisiones (ADR)](docs/decisiones/) — 28 decisiones de arquitectura numeradas.
 - [Auditoría de seguridad](docs/audit/) — qué se corrigió y qué queda abierto.
+- [Configuración del repositorio en GitHub](docs/github.md) — lo que hay que
+  activar desde la web y no puede vivir en un archivo.
 - [Manual de usuario](docs/manual-usuario.md) · [Manual técnico](docs/manual-tecnico.md)
 - [Seguridad](docs/SEGURIDAD.md) · [Auditoría inicial](docs/AUDITORIA_INICIAL.md) ·
   [Revisión de RLS y endpoints](docs/revision-seguridad.md)
+
+## Cómo contribuir
+
+Si encontraste algo roto o querés proponer una mejora, está todo en
+[`CONTRIBUTING.md`](CONTRIBUTING.md):
+
+- 🐛 [Reportar un error](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/issues/new?template=01-bug.yml)
+- 💡 [Proponer una mejora](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/issues/new?template=02-mejora.yml)
+- 🔒 Vulnerabilidades: **no** van en un issue público — ver [`SECURITY.md`](SECURITY.md).
 
 ## Estructura
 

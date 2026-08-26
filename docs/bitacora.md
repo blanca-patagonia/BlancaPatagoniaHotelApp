@@ -3126,3 +3126,94 @@ la reserva por pagada al instante y el huésped se iba sin pagar.
 **Pendiente:** contratar las pasarelas. Enchufarlas es cargar variables de
 entorno; no hay que tocar código. Ninguna de las dos verifica la tarjeta de
 garantía, y las tres implementaciones lo declaran (ADR 0025).
+
+
+---
+
+## 2026-08-26 — El repositorio en GitHub: análisis estático, plantillas y lo que no vive en el código
+
+**Resumen:** el panel **Security and quality** del repositorio tenía cinco
+funciones apagadas y el código no tenía forma de encender ninguna. Se resolvió lo
+que sí se puede versionar —análisis estático, revisión de dependencias,
+plantillas de issue y de PR, `CODEOWNERS`, `CONTRIBUTING.md`— y se documentó el
+resto en `docs/github.md`, con el estado de cada casilla y cómo se activa.
+
+**El hallazgo que lo motivó, y que ningún test podía detectar:** `SECURITY.md`
+dice, textual, que se reporte por *«Security → Report a vulnerability»*. **Ese
+botón no existe** mientras el reporte privado esté apagado. O sea que el documento
+mandaba a un canal cerrado, y las dos salidas que le quedaban a quien encontrara
+algo eran publicarlo en un issue —lo que el propio documento pide no hacer— o
+callárselo.
+
+**Detalle de lo realizado:**
+
+- **`codeql.yml`** — análisis estático de seguridad sobre el código propio. Es lo
+  que faltaba: el CI mira las dependencias (`npm audit`), los tipos (`tsc`) y el
+  estilo (ESLint), y **ninguna de las tres ve** el dato del request que llega a una
+  consulta, la redirección abierta o la expresión regular que se cuelga — bugs con
+  el tipo perfectamente válido. Corre con `build-mode: none`, así que **no necesita
+  Docker ni Supabase ni las variables del CI**: son dos minutos y no puede romperse
+  por los motivos por los que se rompe el CI.
+- **`dependency-review.yml`** — bloquea el PR que **agrega** una dependencia con
+  vulnerabilidad alta o crítica. No se pisa con `npm audit`: ése audita el árbol
+  entero y por eso corta en `high` (con el umbral más bajo se pone rojo por deuda
+  vieja, y un CI que falla siempre se deja de leer); la revisión de dependencias
+  mira sólo lo que trae ese PR, que es deuda que todavía se puede no contraer.
+- **Plantillas de issue** (error y mejora) que piden **el rol** y la pantalla. No es
+  burocracia: en este sistema los permisos los impone la base con RLS, así que un
+  bug de permisos sin el rol no se puede reproducir. Sin issue en blanco, y con
+  enlaces a la política de seguridad, a `docs/` y a `COMO-LEVANTARLO.md`.
+- **Plantilla de PR** con la Definition of Done de `AGENTS.md` y un bloque propio
+  para migraciones (número correlativo, `db reset` de cero, RLS y `GRANT`, y la
+  regla del enum en dos archivos por el SQLSTATE 55P04).
+- **`CODEOWNERS`** con los dos autores, para que la revisión se pida sola.
+- **`CONTRIBUTING.md`** — cómo levantarlo, qué se verifica y las convenciones que
+  sorprenden a alguien de afuera (todo en español, `lib/domain/` puro, las
+  migraciones no se editan, la integridad vive en la base).
+- **`docs/github.md`** — las cinco casillas de la web, una por una: qué hace, qué
+  pasa si sigue apagada y dónde está el botón. Más las reglas de rama que
+  convertirían en obligatorio lo que hoy es una regla escrita en `AGENTS.md`
+  («no `push --force`, no trabajar sobre `main`»).
+
+**Un bug de configuración encontrado de paso:** el CI corría **dos veces** por cada
+PR. `push: branches: ['**']` disparaba en la rama y `pull_request` disparaba en el
+PR, con grupos de `concurrency` distintos, así que ninguna cancelaba a la otra:
+veinticinco minutos con Docker, dos veces, por cada uno de los siete PRs de
+dependencias abiertos. Se cambió a `branches-ignore: ['dependabot/**']`, que
+mantiene intacto el motivo original —las ramas humanas se validan desde el primer
+push— y saca la corrida duplicada de las ramas que nacen con su PR abierto.
+
+**La confusión que quedó escrita, porque el repositorio se ve más cubierto de lo
+que está:** Dependabot hace dos cosas distintas. Las *version updates* son las que
+configura `.github/dependabot.yml` y ya funcionan (son los siete PRs abiertos); las
+*security updates* —las que abren un PR **porque se publicó una vulnerabilidad**,
+sin esperar al lunes— **necesitan que las alertas estén encendidas**, y están
+apagadas. El `npm audit` del CI tapa parte del hueco, pero sólo corre cuando
+alguien hace push: una vulnerabilidad publicada en una semana sin commits no la ve
+nadie.
+
+**Verificación:**
+- Los cinco archivos YAML nuevos parsean (`yaml.safe_load`), incluidas las tres
+  plantillas de issue. Una fallaba por un `: ` dentro de un texto sin comillas.
+- Las etiquetas `bug` y `enhancement` que declaran las plantillas **existen** en el
+  repositorio: una etiqueta inexistente no se aplica y la plantilla queda muda.
+- Los dos usuarios de `CODEOWNERS` (`@octi35`, `@santimoran19`) se verificaron
+  contra los colaboradores del repositorio, no contra el nombre del autor de los
+  commits — que en Git es texto libre y no un usuario de GitHub.
+- No se tocó código de la aplicación: el cambio es de configuración y
+  documentación, así que no hay tests nuevos que correr.
+
+**Decisiones:** [ADR 0028](decisiones/0028-analisis-estatico-y-configuracion-de-github.md)
+— CodeQL versionado en el repositorio y no la casilla de la web (una casilla no se
+revisa en un PR ni explica qué corre); `security-extended` y no
+`security-and-quality`, que duplicaría ESLint y llenaría el panel de ruido; y para
+los secretos, el *push protection* de la plataforma en vez de un escáner de
+terceros en el CI, porque el CI corre **después** del push y un secreto que llegó
+al historial ya está comprometido.
+
+**Pendiente:** las cinco casillas son de la web y las tiene que apretar alguien con
+acceso al repositorio. Orden sugerido en `docs/github.md`: primero el reporte
+privado (hay una promesa rota), después las alertas de Dependabot, después el
+escaneo de secretos con *push protection* —que rinde el día del deploy, cuando
+aparezcan las claves reales de Supabase, Stripe y MercadoPago— y último *code
+quality*, cuando CodeQL esté en cero pendientes.

@@ -113,5 +113,5 @@ archivos de test fallan por falta de variables y el comando **igual devuelve 0**
 | `CLAUDE.md` | El estado del proyecto, las fases y las reglas de trabajo |
 | `AGENTS.md` | Comandos, arquitectura, convenciones y las trampas conocidas |
 | `docs/bitacora.md` | Qué se hizo, cuándo y por qué. Es el insumo de la tesis |
-| `docs/decisiones/` | Los 27 ADRs, uno por decisión de arquitectura |
+| `docs/decisiones/` | Los 28 ADRs, uno por decisión de arquitectura |
 | `docs/roadmap.md` | Las fases del proyecto |

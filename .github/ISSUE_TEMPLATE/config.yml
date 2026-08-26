@@ -1,0 +1,15 @@
+# Sin issue en blanco: las dos plantillas piden justo lo que hace falta para
+# reproducir un bug de este sistema (el rol, sobre todo), y un issue vacío suele
+# terminar en tres idas y vueltas antes de poder mirarlo.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Reportar una vulnerabilidad de seguridad
+    url: https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/security/policy
+    about: No abras un issue público. Acá está la política y el canal privado.
+  - name: Documentación del proyecto
+    url: https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/tree/main/docs
+    about: Arquitectura, modelo de datos, manuales, bitácora y los 28 ADRs.
+  - name: Cómo levantarlo en tu máquina
+    url: https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/COMO-LEVANTARLO.md
+    about: Si no arranca, empezá por acá antes de abrir un issue.

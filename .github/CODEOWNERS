@@ -1,0 +1,10 @@
+# Dueños del código. GitHub pide su revisión automáticamente en cada pull request.
+#
+# Es un proyecto de tesis de dos autores: todo lo que entra a `main` lo mira el
+# otro. No hace falta granularidad por carpeta —somos dos—, pero el archivo tiene
+# que existir para que la revisión se pida sola y no dependa de acordarse.
+#
+# Para que esto además *bloquee* el merge sin revisión hay que activar la regla
+# en Settings → Rules → Rulesets. Está explicado en `docs/github.md`.
+
+* @octi35 @santimoran19

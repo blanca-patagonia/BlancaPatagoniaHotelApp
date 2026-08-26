@@ -9,8 +9,15 @@ on:
   # Llegó a haber cinco ramas divergidas, la mayor con 50 commits sin una sola
   # corrida. El `concurrency` de abajo evita que esto multiplique las corridas:
   # cancela la anterior de la misma rama.
+  #
+  # Excepción: las ramas de Dependabot. Nacen con el PR ya abierto, así que el
+  # `pull_request` de abajo las cubre y el push sólo duplicaba la corrida —
+  # veinticinco minutos con Docker, dos veces, por cada uno de los siete PRs de
+  # dependencias que hay abiertos hoy. `branches-ignore` es «todas menos éstas»,
+  # así que las ramas de trabajo humanas siguen validándose desde el primer push,
+  # que es el motivo de todo lo anterior.
   push:
-    branches: ['**']
+    branches-ignore: ['dependabot/**']
   pull_request:
 
 # Varios push seguidos generaban corridas apiladas que competían por el runner.

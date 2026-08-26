@@ -295,3 +295,18 @@ Configurados en `.claude/settings.json`, documentados en `.claude/hooks/README.m
 | `PostToolUse` Write/Edit | Corre `eslint --fix` sobre el archivo tocado |
 | `Stop` | Corre los tests y avisa cuántos se saltearon |
 | `SessionStart` | Muestra rama, estado de git y migración más reciente |
+
+## Qué corre en GitHub
+
+Workflows en `.github/workflows/`. Los tres son verificables desde la pestaña Actions:
+
+| Workflow | Cuándo | Qué verifica |
+|---|---|---|
+| `ci.yml` | Push a cualquier rama (menos las de Dependabot, que ya corren por su PR) y en cada PR | `npm audit`, typecheck, lint, la suite completa con `EXIGIR_DB=1` y el build, contra Postgres en Docker |
+| `codeql.yml` | Push a `main`, PRs y los lunes | Análisis estático de seguridad del código propio. Corre con `build-mode: none`: **no necesita Docker ni Supabase** (ADR 0028) |
+| `dependency-review.yml` | En cada PR | Falla si el PR **agrega** una dependencia con vulnerabilidad alta o crítica |
+
+Parte de la seguridad del repositorio **no vive en el código**: las alertas de
+Dependabot, el escaneo de secretos y el reporte privado de vulnerabilidades son
+casillas de la web de GitHub. Estado y cómo se activan: `docs/github.md`. No las
+des por hechas al escribir documentación.
