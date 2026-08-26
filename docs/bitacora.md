@@ -3279,3 +3279,23 @@ wiki resuelven a páginas que existen; `bash -n` sobre el script de publicación
 **Pendiente:** el wiki **todavía no está publicado**. GitHub no crea el repositorio
 `.wiki.git` hasta que exista la primera página, y eso hay que hacerlo una vez desde
 la web. El procedimiento completo está en `docs/wiki-publicacion.md`.
+
+**Pasada de registro formal (mismo día).** Revisada la redacción para el lector que
+importa —un tribunal de tesis— sin tocar un solo dato. La portada pasa a abrir con
+un bloque de identificación (institución, carrera, autores, establecimiento,
+naturaleza, estado y fecha de revisión), y se reemplazaron las once marcas de
+registro coloquial que quedaban: «plata» por «dinero» o «importe» según el caso,
+el voseo de las instrucciones («leé», «corré», «venís») por formas impersonales, y
+«apretar el botón» por «confirmar la operación». La sección final de la portada
+pasó a llamarse «Alcance y vigencia del documento» y deja explícito que ante una
+discrepancia **prevalece el código**.
+
+Verificado con un barrido de expresiones regulares que no queda ninguna marca, y
+revalidado que los enlaces entre páginas siguen resolviendo.
+
+**Por qué la publicación sigue siendo un paso manual, confirmado ejecutándolo:**
+`git ls-remote` contra el repositorio principal responde; contra
+`…HotelApp.wiki.git` pide usuario y falla. El wiki es un repositorio git aparte,
+todavía no inicializado, fuera del alcance de las credenciales del entorno, y
+**GitHub no expone API para wikis**. La primera página tiene que crearse desde la
+web una única vez; a partir de ahí el script se encarga.

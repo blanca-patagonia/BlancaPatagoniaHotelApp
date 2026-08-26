@@ -35,7 +35,7 @@ anti-overbooking: `pendiente`, `confirmada`, `pagada` e `in_house`. Los otros tr
 Hay que pasar por `confirmada`. Una reserva de la web nace `pendiente`, así que
 cuando se conectó el cobro en línea el salto directo **se descartaba en silencio**:
 la reserva quedaba pendiente, la expiración liberaba la unidad a los cinco días y
-el hotel la revendía **con la plata del huésped ya cobrada**.
+el hotel la revendía **con el importe del huésped ya cobrado**.
 
 Se resuelve con `caminoDeEstados` + `estadoSegunPagos`, nunca con un `update` de
 estado a mano.
@@ -124,7 +124,7 @@ menor o igual a los días de anticipación.
 
 La pantalla muestra **la vista previa del cargo antes de confirmar la
 cancelación**: quien atiende tiene que poder decirle al huésped cuánto se le cobra
-antes de apretar el botón.
+antes de confirmar la operación.
 
 ⚠️ Un detalle de unidades que fue un bug real: el precio por noche que se guarda
 está **sin IVA y promediado**, mientras que el total de la reserva **sí** lleva

@@ -42,7 +42,8 @@ y por debajo está RLS decidiendo qué filas puede tocar.
 
 **Tres áreas están apagadas hoy por decisión del hotel** —Auditoría,
 Conversaciones y Objetos perdidos—: el código, las tablas, las políticas y los
-tests siguen enteros, y volver a encenderlas es sacar el nombre de una lista.
+tests permanecen intactos, y su reactivación consiste en retirar el nombre de una
+lista.
 ⚠️ Lo que **no** se apagó es el registro: la tabla `auditoria` sigue escribiendo.
 Un rastro que se deja de escribir porque nadie lo mira pierde justamente el valor
 que tiene, y volver a encenderlo no recupera lo que no se guardó.
@@ -64,8 +65,8 @@ reservas grupales, reprogramación de fechas y **cambio de unidad** (mudanza de
 habitación).
 
 Diez **vistas operativas** del listado, que son las que se usan de verdad en un
-mostrador: las que llegan hoy, las que se van, las que deben plata, las que no se
-pueden mover.
+mostrador: las que llegan hoy, las que se van, las que registran saldo pendiente,
+las que no pueden reubicarse.
 
 La ficha incluye lo que pedía el sistema anterior: VIP, adultos / menores / bebés
 por separado, cunas, plan de comidas, tipo de garantía, segmento, voucher, «no

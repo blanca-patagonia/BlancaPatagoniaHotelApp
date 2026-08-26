@@ -15,7 +15,7 @@ Esta página explica **el enfoque**. La política formal de reporte está en
 
 Una comprobación en la interfaz protege contra el error; una comprobación en la
 base protege también contra el bug, contra la consulta escrita a mano y contra el
-endpoint que alguien agregue mañana sin acordarse de la regla.
+endpoint que se agregue en el futuro sin tener presente la regla.
 
 Por eso el sistema tiene **RLS activo en las 43 tablas**, con más de 90 políticas,
 y el rol se resuelve con un helper de SQL (`rol_actual()`) que no depende de que la
@@ -93,7 +93,7 @@ enlaces del portal revocables, recuperación de contraseña, y las dependencias 
 
 ## Lo que está pendiente
 
-Se declara para que nadie gaste tiempo reportando algo que ya sabemos.
+Se declara para evitar que se invierta tiempo en reportar cuestiones ya conocidas.
 
 | Pendiente | Por qué sigue abierto |
 |---|---|
@@ -120,12 +120,13 @@ Se declara para que nadie gaste tiempo reportando algo que ya sabemos.
 
 ## Cómo reportar algo
 
-**No abras un issue público.** El camino es la pestaña **Security** del
+**No debe abrirse un issue público.** El canal es la pestaña **Security** del
 repositorio.
 
-Ayuda mucho incluir: **con qué rol** se explota (es lo que más falta), los pasos
-para reproducirlo, y qué dato se expone o qué escritura se logra que no debería.
+Resulta de gran ayuda incluir: **con qué rol** se explota —es el dato que más se
+omite—, los pasos para reproducirlo, y qué información se expone o qué escritura
+se consigue que no debería permitirse.
 
 Al ser un proyecto de tesis y no un producto con guardia, no hay tiempo de
-respuesta comprometido ni programa de recompensas. Lo que sí: se lee todo lo que
-entre por ahí.
+respuesta comprometido ni programa de recompensas. Lo que sí se garantiza es que
+todo reporte ingresado por ese canal es leído.

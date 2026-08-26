@@ -26,7 +26,8 @@ npm run seed:usuarios
 npm run dev
 ```
 
-Y a http://localhost:3000. El admin de desarrollo es
+La aplicación queda disponible en http://localhost:3000. El administrador de
+desarrollo es
 `admin@blancapatagonia.local` / `blancadev1234` — es del stack local y la
 contraseña es pública a propósito.
 
@@ -54,21 +55,21 @@ El paso a paso completo, con los errores más comunes, está en
 | Sembrar usuarios | `npm run seed:usuarios` |
 | Salud del sistema | `GET /api/salud` — 200 si la base responde, 503 si no |
 
-> **Antes de decir que terminaste, corré `npm run check`.**
+> **Antes de dar por terminado un cambio, debe ejecutarse `npm run check`.**
 
 ---
 
 ## ⚠️ Las dos trampas de los tests
 
-Las dos hacen que el sistema parezca verificado cuando no lo está. Vale la pena
-leerlas antes de la primera corrida.
+Ambas hacen que el sistema parezca verificado cuando no lo está. Conviene leerlas
+antes de la primera ejecución.
 
 ### 1. `npm run check` devuelve 0 con tests en rojo
 
 Sin `.env.local`, tres archivos fallan por falta de `SUPABASE_URL` y
 `SUPABASE_SERVICE_ROLE_KEY`, y el código de salida **igual da 0**.
 
-**Leé la salida, no el exit code.**
+**Debe leerse la salida, no el código de salida.**
 
 ### 2. Faltan **tres** variables, y la tercera se olvida
 
@@ -152,10 +153,10 @@ Hay que revisarlas **antes** del deploy, no después.
 
 ---
 
-## Si vas a escribir código
+## Para quien vaya a escribir código
 
-Leé [`AGENTS.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/AGENTS.md)
-(arquitectura, convenciones, trampas) y
+Corresponde leer [`AGENTS.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/AGENTS.md)
+—arquitectura, convenciones y trampas— y
 [`CONTRIBUTING.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/CONTRIBUTING.md).
 
 Las tres reglas que más se pasan por alto:

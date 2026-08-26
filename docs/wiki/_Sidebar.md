@@ -1,6 +1,6 @@
 ### Blanca Patagonia — PMS
 
-**[🏠 Inicio](Home)**
+**[Inicio](Home)**
 
 **El sistema**
 - [El problema que resuelve](El-problema-que-resuelve)

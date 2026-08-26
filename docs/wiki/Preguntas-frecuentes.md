@@ -1,7 +1,7 @@
 # Preguntas frecuentes y trampas conocidas
 
 Dos partes: **por qué está hecho así** —las preguntas que se repiten al mirar el
-proyecto— y **las trampas**, que son errores reales que costaron tiempo o plata y
+proyecto— y **las trampas**, que son errores reales que costaron tiempo o dinero y
 quedaron escritos para no repetirlos.
 
 ---
@@ -12,7 +12,8 @@ quedaron escritos para no repetirlos.
 
 Porque una comprobación en la aplicación protege del error, y una en la base
 protege además del **bug**, de la consulta escrita a mano, del script de
-importación y del endpoint que alguien agregue mañana sin acordarse de la regla.
+importación y del endpoint que se agregue en el futuro sin tener presente la
+regla.
 
 Vender dos veces la misma cabaña en El Calafate en enero es un huésped que llegó
 desde el otro lado del mundo y no tiene dónde dormir, en un pueblo con todo lleno.
@@ -52,8 +53,8 @@ y sería la peor función del sistema. La pantalla explica exactamente qué expo
 Tres áreas —Auditoría, Conversaciones y Objetos perdidos— están apagadas por
 decisión del hotel. El código, las tablas, las políticas y los tests siguen
 enteros: borrar tres módulos que funcionan para reescribirlos si el hotel cambia
-de idea sería tirar trabajo verificado. Se reactivan sacando el nombre de una
-lista.
+de idea supondría descartar trabajo ya verificado. Se reactivan retirando el
+nombre de una lista.
 
 ### ¿Por qué el sistema no cotiza en invierno?
 
@@ -72,7 +73,7 @@ el array vacío: un filtro que no filtra y no falla. Es la trampa más silencios
 este stack.
 
 **PostgREST corta en 1000 filas**, sin error y sin aviso. Toda lectura sobre una
-tabla entera tiene que ir por el helper de paginado, y **contar es
+tabla entera debe realizarse a través del helper de paginado, y **contar es
 `count: 'exact', head: true`** — contar en JavaScript da un número equivocado a
 partir de la fila 1001 y nada falla.
 
@@ -97,7 +98,7 @@ en cero por esto y decía «no hay nadie alojado hoy».
 
 ### De Next.js 16
 
-**No es el Next.js que conocés.** `cookies()` y `headers()` son **async**; `params`
+**No es el Next.js habitual.** `cookies()` y `headers()` son **async**; `params`
 y `searchParams` son **Promise**; `middleware` se llama `proxy.ts`. Antes de tocar
 APIs de Next hay que leer `node_modules/next/dist/docs/`.
 
@@ -141,7 +142,7 @@ la configuración con la que arrancó: el síntoma aparece recién en un entorno
 Lo destapó el CI.
 
 **`npm run check` devuelve 0 con tests en rojo** si faltan las variables de la base.
-Leé la salida, no el exit code.
+Debe leerse la salida, no el código de salida.
 
 ### De las pasarelas de pago
 
@@ -163,7 +164,8 @@ base.
 
 **`rechazado` no es un estado final de un pago.** La tarjeta se rechaza por fondos,
 el huésped pone otra y aprueba, todo bajo la misma referencia externa. Si el
-rechazo trabara la fila, la reserva no se saldaría nunca con la plata ya cobrada.
+rechazo bloqueara la fila, la reserva no se saldaría nunca con el importe ya
+cobrado.
 
 ---
 

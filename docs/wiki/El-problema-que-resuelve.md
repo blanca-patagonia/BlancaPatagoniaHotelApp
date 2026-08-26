@@ -92,7 +92,7 @@ de copiarse a mano.
 Cada reserva directa es la comisión completa que no se paga, y el dato del huésped
 que queda del lado del hotel.
 
-**Lo que hay que decir de frente:** la integración con Booking es de **sólo
+**Corresponde declararlo explícitamente:** la integración con Booking es de **sólo
 lectura**, y no evita el overbooking. Ver [abajo](#lo-que-el-sistema-no-resuelve).
 
 ### 3. El precio nunca era un solo número
@@ -144,7 +144,8 @@ todavía no:
   permite que en una habitación de tres, uno pague lo suyo y los otros lo suyo.
 - El **punto de venta** con grilla por departamento y número de comanda.
 - Las **vistas operativas** del listado de reservas —las diez que se usan de verdad
-  en un mostrador: las que llegan hoy, las que se van, las que deben plata.
+  en un mostrador: las que llegan hoy, las que se van, las que registran saldo
+pendiente.
 - **Piso y bloque** en las unidades, que es como el personal se refiere a ellas.
 
 El plan completo, con el porqué de cada paso, está en
