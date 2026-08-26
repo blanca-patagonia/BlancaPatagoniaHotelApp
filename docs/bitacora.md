@@ -3217,3 +3217,65 @@ privado (hay una promesa rota), después las alertas de Dependabot, después el
 escaneo de secretos con *push protection* —que rinde el día del deploy, cuando
 aparezcan las claves reales de Supabase, Stripe y MercadoPago— y último *code
 quality*, cuando CodeQL esté en cero pendientes.
+
+
+---
+
+## 2026-08-26 — Wiki del proyecto: 12 páginas, versionadas en el repositorio
+
+**Resumen:** el repositorio tenía la pestaña Wiki habilitada y vacía. Se escribió
+completa —12 páginas, unas 73 KB— y se resolvió el problema de fondo que tiene
+todo wiki: **dónde vive**.
+
+**La decisión de forma, que es la que más importa:** las páginas se escriben y se
+versionan en `docs/wiki/`, y publicarlas es un paso aparte (`scripts/publicar-wiki.sh`).
+El wiki de GitHub es un repositorio git distinto —el mismo nombre con sufijo
+`.wiki.git`—, así que editarlo desde la web tiene dos costos: no pasa por un pull
+request, y se desincroniza del código sin que nada avise. Un wiki que describe una
+arquitectura que ya cambió es peor que no tener wiki, porque se le cree. Teniéndolo
+en `docs/wiki/`, un cambio que rompa lo que el wiki afirma aparece en el mismo diff
+que el cambio de código.
+
+**Las páginas:**
+
+- **Home** — qué es, qué reemplaza punto por punto, los números del sistema y el
+  mapa del wiki con tres recorridos según a qué vino el lector.
+- **El problema que resuelve** — la más larga y la que faltaba en toda la
+  documentación: el hotel real (15 unidades en 10 tipos, estacionalidad de El
+  Calafate), qué era WinPAX y qué costaba cada una de sus limitaciones, el Excel
+  para todo lo demás, el 79 % de reservas por OTA, y los cinco problemas de fondo
+  con el mecanismo concreto que resuelve cada uno. **Cierra con lo que el sistema
+  NO resuelve**, en una tabla de siete filas.
+- **Arquitectura** — diagrama, las tres reglas de dependencia verificables, los dos
+  frentes, los siete puertos y los cinco lugares que hay que tocar para agregar un
+  área.
+- **Modelo de datos** — las 43 tablas agrupadas por dominio y las cinco garantías
+  que impone la base.
+- **Módulos del panel** — la matriz de las 21 áreas por rol, con las tres
+  decisiones que la explican, y qué hace cada módulo.
+- **Reglas de negocio** — la máquina de estados en diagrama, tarifas, IVA, monedas,
+  cancelación, garantías y ocupantes.
+- **Seguridad** — el enfoque en capas, los cuatro roles, la auditoría por fases y lo
+  que sigue pendiente.
+- **Decisiones (ADR)** — los 28, agrupados por tema y con una línea cada uno.
+- **Puesta en marcha** — instalación, comandos, las dos trampas de los tests y las
+  variables del deploy.
+- **Preguntas frecuentes** — «por qué está hecho así» más el inventario de trampas.
+- **_Sidebar** y **_Footer** — navegación en todas las páginas.
+
+**Los números se verificaron contra el repositorio, no se recordaron:** 43 tablas
+(contadas de las migraciones), 67 migraciones, 94 archivos de test, 21 áreas, 50
+módulos de dominio, 28 ADRs, 15 unidades y 10 tipos en el seed, 24 archivos de
+Server Actions y 6 route handlers. La matriz de permisos por rol y la máquina de
+estados salieron de leer `lib/domain/permisos.ts` y `lib/domain/reservas.ts`, no de
+la documentación previa —que en un punto estaba vieja: `docs/arquitectura.md`
+todavía describe `app/(public)` y `app/(admin)`, que hoy son `app/reservar` y
+`app/panel`—.
+
+**Verificación:** los 28 enlaces a ADRs apuntan a archivos que existen y no queda
+ningún ADR sin enlazar (comprobado con un script); los enlaces entre páginas del
+wiki resuelven a páginas que existen; `bash -n` sobre el script de publicación.
+
+**Pendiente:** el wiki **todavía no está publicado**. GitHub no crea el repositorio
+`.wiki.git` hasta que exista la primera página, y eso hay que hacerlo una vez desde
+la web. El procedimiento completo está en `docs/wiki-publicacion.md`.

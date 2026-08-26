@@ -144,6 +144,9 @@ propios capítulos de Ayuda ([ADR 0005](docs/decisiones/0005-autenticacion-y-rol
 
 Toda la documentación vive en [`docs/`](docs/), en español:
 
+- **[Wiki del proyecto](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/wiki)** — el
+  recorrido completo: qué problema resuelve, arquitectura, modelo de datos, módulos,
+  reglas de negocio y decisiones. Las páginas se versionan en [`docs/wiki/`](docs/wiki/).
 - [Bitácora de avances](docs/bitacora.md) — registro cronológico del desarrollo.
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
 - [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
