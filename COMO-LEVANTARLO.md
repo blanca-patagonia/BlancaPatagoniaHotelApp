@@ -58,21 +58,15 @@ no sale nunca del servidor.
 
 ## Entrar al panel
 
-El staff **no se auto-registra**: los usuarios los crea un administrador desde
-`/panel/usuarios`. Para crear el primero:
+Andá a <http://localhost:3000/panel> y entrá con tu usuario y contraseña.
 
-```bash
-ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
-```
+**Los usuarios ya están en la base.** Viven en el proyecto de Supabase, así que
+son los mismos desde cualquier computadora: no hay nada que crear ni que sembrar
+para empezar a trabajar.
 
-El script se niega a correr contra una base que no sea local si no le pasás
-`ADMIN_PASSWORD`, y hace bien: la contraseña de desarrollo está publicada en este
-repositorio.
-
-⚠️ **Crear el usuario desde el panel de Supabase no alcanza.** El perfil nace
-`sin_rol` y `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así
-que el usuario puede autenticarse pero el panel lo rechaza. Hay que correr el
-script igual: es el que lo promueve a `admin`.
+Si necesitás una cuenta, pedísela a un administrador —se dan de alta desde
+**`/panel/usuarios`**—. Y si perdiste la contraseña, hay recuperación por email
+en **`/login/recuperar`**.
 
 ## Correr los tests — acá sí hace falta Docker
 
@@ -164,6 +158,59 @@ COTIZACION_PROVIDER, CANAL_PROVIDER, PAGO_PROVIDER
 
 La plantilla completa, con el nombre del simulador de cada una, está en
 `.env.example`.
+
+## Apéndice: crear el primer administrador de una base nueva
+
+**Esto no hace falta para el uso normal.** El proyecto de Supabase que se usa hoy
+ya tiene sus usuarios: si estás levantando el sistema en otra computadora, saltealo.
+
+Sirve para un solo caso: una base **recién creada, sin ningún usuario todavía**.
+Como el staff no se auto-registra y las cuentas se dan de alta desde
+`/panel/usuarios`, hay un problema del huevo y la gallina — no hay nadie que pueda
+entrar a crear al primero. Este script lo resuelve.
+
+En **Windows**, que es donde se trabaja este proyecto, las variables se setean
+aparte: la sintaxis `VAR=valor comando` es de bash y no funciona.
+
+```cmd
+:: cmd — SIN comillas: en CMD quedan DENTRO del valor y la contraseña saldría mal
+set ADMIN_EMAIL=tu-mail@dominio.com
+set ADMIN_PASSWORD=una-larga-y-propia
+npm run seed:usuarios
+```
+
+```powershell
+# PowerShell — acá las comillas sí van
+$env:ADMIN_EMAIL = "tu-mail@dominio.com"
+$env:ADMIN_PASSWORD = "una-larga-y-propia"
+npm run seed:usuarios
+```
+
+```bash
+# macOS / Linux
+ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
+```
+
+Contra una base que no sea local el script **exige** `ADMIN_PASSWORD` y se niega a
+correr sin ella. Hace bien: la contraseña de desarrollo está publicada en este
+repositorio, que es público.
+
+Se corre **una sola vez**. El usuario queda en la base —contraseña hasheada en
+`auth.users`, rol en `perfiles`— y de ahí en adelante se entra normal. El único
+lugar donde se repite seguido es la base local de tests, porque `db reset` borra
+los usuarios de auth.
+
+⚠️ **Crear el usuario desde el panel de Supabase no alcanza, y el síntoma
+confunde:** el login te acepta las credenciales y te devuelve al login, una y otra
+vez, como si la contraseña estuviera mal. No lo está. El perfil nace `sin_rol` y
+`activo = false` a propósito (ADR 0017, migraciones 0032 y 0035): la autenticación
+pasa, pero `obtenerSesion()` descarta la sesión y el panel te rebota. El script es
+el que promueve el perfil a `admin`. Para confirmarlo, en el SQL Editor:
+
+```sql
+select u.email, p.rol, p.activo
+from perfiles p join auth.users u on u.id = p.id;
+```
 
 ## Qué NO viene en el zip
 

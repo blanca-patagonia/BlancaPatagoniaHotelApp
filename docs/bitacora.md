@@ -3262,3 +3262,94 @@ que clonara el repo instalaba Docker Desktop para nada.
 `node scripts/setup.mjs` ejecutado para confirmar que los mensajes nuevos salen
 bien. Los tests no se corrieron en esta máquina: no tiene Docker ni `.env.local`,
 que es exactamente el escenario que estos cambios documentan.
+
+---
+
+## 2026-08-27 — El admin se siembra una vez, y el síntoma queda documentado
+
+**Resumen:** primer uso real del proyecto hosted. Aparecieron dos cosas: una
+confusión sobre dónde viven las credenciales del admin, y un síntoma de login que
+parece un bug y no lo es. Las dos se resolvieron documentando, sin tocar código de
+producción.
+
+**El síntoma:** cargar las credenciales en el login y volver al login, una y otra
+vez, como si la contraseña estuviera mal.
+
+**La causa, que no es un bug:** `signInWithPassword` **funciona**. Si fallara, el
+formulario mostraría «Email o contraseña incorrectos» sin moverse de la pantalla,
+porque `app/login/actions.ts:43` devuelve `{ error }` en vez de redirigir. Quien
+rechaza es `obtenerSesion()` (`lib/auth/session.ts:53`): el perfil del usuario
+nació `sin_rol` y `activo = false` —el default que fijaron las migraciones 0032 y
+0035 (ADR 0017)—, `esRolValido('sin_rol')` devuelve `false`, la sesión se descarta
+y `requerirSesion` redirige a `/login`. Es la defensa funcionando: un usuario
+creado fuera de `app/panel/usuarios` no tiene alcance.
+
+Se descartó RLS antes de concluir: la política «perfiles: cada uno ve el suyo»
+(migración 0001) permite siempre leer el perfil propio, así que la lectura no era
+el problema. Y la garantía ya está fijada por `tests/alta-sin-privilegios.test.ts`,
+que verifica que `sin_rol` no figure en `ROLES` — una defensa que funciona por
+ausencia y que un cambio bienintencionado podría borrar sin que nada se queje.
+
+**Lo que se documentó:**
+- `README.md` — el aviso pasa de «crear el usuario desde Supabase no alcanza» a
+  describir **el síntoma primero** («te acepta y te devuelve al login»), que es
+  como se busca un problema cuando se lo está sufriendo. Incluye el query de
+  diagnóstico.
+- `AGENTS.md` — la misma trampa en «Trampas conocidas», con el detalle de por qué
+  un fallo de credenciales se vería distinto, y la advertencia de no «arreglarlo»
+  agregando `sin_rol` a `ROLES`.
+
+**La otra confusión: dónde viven las credenciales del admin.**
+
+Se evaluó poner `ADMIN_EMAIL` / `ADMIN_PASSWORD` en `.env.local` para no tipear la
+línea del seed cada vez. Se descartó: es **redundante y peor**. La contraseña ya
+vive hasheada en `auth.users`, que es donde corresponde; una copia en `.env.local`
+la deja en texto plano en disco sin aportar nada, porque la que decide el acceso es
+la de la base.
+
+**Decisión: en hosted el seed se corre UNA sola vez.** El usuario queda en la base
+y no hace falta repetirlo. Los dos casos que parecen exigir repetirlo, no lo hacen:
+el alta del resto del staff va por `/panel/usuarios`, y una contraseña perdida se
+recupera por `/login/recuperar`. El default público `blancadev1234` se mantiene solo
+para la base local de tests, donde `supabase db reset` sí borra los usuarios de auth
+y donde una contraseña publicada es inofensiva porque `127.0.0.1` no es alcanzable
+desde afuera.
+
+**Segunda pasada: el seed sale del camino de arranque.**
+
+Documentar «se corre una sola vez» todavía lo dejaba en la puesta en marcha, y ahí
+no va. `COMO-LEVANTARLO.md` se titula «cómo levantarlo en otra computadora», y en
+otra computadora apuntando al mismo proyecto **el admin ya existe**: el paso sobra.
+Lo mismo en el README.
+
+Se movió a un **apéndice**, con el único caso en que hace falta de verdad: una base
+recién creada, sin ningún usuario, donde hay un problema del huevo y la gallina
+—el staff no se auto-registra y las altas van por `/panel/usuarios`, así que no hay
+nadie que pueda entrar a crear al primero—. El otro caso, la base local de tests
+después de un `db reset`, ya estaba donde corresponde y no se tocó.
+
+En su lugar, «Entrar al panel» ahora dice lo que un usuario necesita: los usuarios
+viven en la base, son los mismos desde cualquier computadora, las cuentas se piden
+a un administrador y la contraseña perdida se recupera en `/login/recuperar`.
+
+También se corrigieron dos referencias que habían quedado desactualizadas: la tabla
+de scripts del README (decía «crea/actualiza el admin de desarrollo», sin distinguir
+los dos entornos) y la línea de `CLAUDE.md` que presentaba `blancadev1234` como «el
+admin de dev» a secas, cuando ahora es específicamente el de la base local.
+
+**Windows.** De paso, la línea del seed estaba escrita en sintaxis de bash
+(`VAR=valor comando`), que en `cmd` falla con «no se reconoce como un comando
+interno o externo». El proyecto se desarrolla en Windows, así que el instructivo
+daba un comando que no corre en la máquina de quien lo lee. Ahora están las tres
+variantes, con una advertencia que importa: en `cmd`, `set VAR="valor"` mete las
+**comillas dentro del valor**, y el admin quedaría con una contraseña entrecomillada
+que después el login rechaza — el mismo síntoma «entro y me devuelve al login», por
+un motivo distinto.
+
+**Pendiente:** el repositorio es público y `blancadev1234` figura en el README, en
+`CLAUDE.md` y en `scripts/seed-usuarios.mjs`. Mientras la base fue local eso era
+deliberado y no tenía consecuencia. Con el proyecto en la nube, usar esa contraseña
+para el admin de hosted publicaría el acceso al panel; la guarda del script
+(`scripts/seed-usuarios.mjs:43`) obliga a definir `ADMIN_PASSWORD` a mano contra
+cualquier base no local, pero **no impide** elegir la publicada. Queda a criterio de
+quien siembre.

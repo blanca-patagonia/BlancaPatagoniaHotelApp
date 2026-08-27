@@ -195,6 +195,17 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   local: un contenedor que ya está corriendo conserva la configuración con la que arrancó, así que
   el síntoma aparece recién en un entorno nuevo — lo destapó el CI. `tests/auth-config.test.ts`
   fija las dos garantías juntas.
+- **«El login me acepta y me devuelve al login» NO es una contraseña mal puesta: es un perfil
+  `sin_rol`.** `signInWithPassword` **funciona** —si fallara verías «Email o contraseña
+  incorrectos» sin salir de la pantalla, porque `app/login/actions.ts:43` devuelve `{ error }` en
+  vez de redirigir—. Lo que rechaza es `obtenerSesion()` (`lib/auth/session.ts:53`):
+  `!perfil.activo || !esRolValido(perfil.rol)` devuelve `null`, y `requerirSesion` redirige a
+  `/login`. Un usuario creado fuera de `app/panel/usuarios` —desde el dashboard de Supabase, por
+  ejemplo— nace `sin_rol` y `activo = false` (ADR 0017, migraciones 0032 y 0035), y `sin_rol` está
+  deliberadamente **fuera** de `ROLES` en `lib/domain/roles.ts`. Lo promueve
+  `node scripts/seed-usuarios.mjs`. Se diagnostica en un query:
+  `select u.email, p.rol, p.activo from perfiles p join auth.users u on u.id = p.id;`
+  ⚠️ No «arreglar» esto agregando `sin_rol` a `ROLES`: reabre el agujero que cerró la 0032.
 - **El feed iCal de salida marca ocupado sólo cuando NO queda ninguna unidad del tipo libre.** Un
   calendario dice «ocupado», no «me queda una»: cerrar el tipo al vender la primera unidad le
   costaría ventas reales al hotel. Y si la consulta de estadías se trunca, el handler responde

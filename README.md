@@ -126,21 +126,15 @@ Para confirmar que enganchó con la base, entrá a
 > se le parece y **no sirve**: con ésa falla todo lo que use `service_role`
 > —incluida el alta de usuarios— y el error no dice que la clave esté mal.
 
-**Panel interno:** `http://localhost:3000/panel`. El staff no se auto-registra: el
-primer administrador lo crea el script de siembra y desde **Usuarios** se dan de
-alta el resto de los roles.
+**Panel interno:** `http://localhost:3000/panel`, con tu usuario y contraseña.
 
-```bash
-ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
-```
+**Los usuarios ya viven en la base**, así que son los mismos desde cualquier
+computadora: no hay nada que sembrar para empezar a trabajar. El staff no se
+auto-registra — las cuentas se dan de alta desde **`/panel/usuarios`**, y una
+contraseña perdida se recupera en **`/login/recuperar`**.
 
-Contra una base que no sea local el seed **exige** `ADMIN_PASSWORD`: la contraseña
-de desarrollo (`admin@blancapatagonia.local` / `blancadev1234`) es pública, está en
-este repositorio.
-
-> ⚠️ Crear el usuario desde el panel de Supabase **no alcanza**: el perfil nace
-> `sin_rol` y `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así
-> que puede autenticarse pero el panel lo rechaza. El script es el que lo promueve.
+*(Para el caso de una base recién creada, sin ningún usuario todavía, ver
+[cómo crear el primer administrador](COMO-LEVANTARLO.md#apéndice-crear-el-primer-administrador-de-una-base-nueva).)*
 
 ## Correr los tests — esto sí necesita Docker
 
@@ -210,7 +204,7 @@ tests/          # 1446 tests (Vitest)
 | `npm test` | Tests (Vitest) |
 | `npm run test:watch` | Tests en modo watch |
 | `npm run typecheck` | Chequeo de tipos |
-| `npm run seed:usuarios` | Crea/actualiza el admin de desarrollo |
+| `npm run seed:usuarios` | Crea el primer admin de una base **nueva**. Contra la nube va una sola vez; en la base local de tests, después de cada `db reset` |
 
 El test de integración anti-overbooking necesita la base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.
