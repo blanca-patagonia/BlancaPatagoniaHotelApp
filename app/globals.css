@@ -126,6 +126,46 @@ body {
 }
 
 /*
+  Barra de desplazamiento discreta, para el menú lateral
+  -------------------------------------------------------
+  La barra que dibuja el sistema operativo es gris claro y ancha, y sobre el azul
+  del menú aparecía como una franja blanca de arriba abajo: lo primero que se ve
+  al entrar al panel, compitiendo con la navegación.
+
+  **No se oculta, se atenúa.** Una barra invisible saca la única pista de que hay
+  más secciones abajo, y este panel está pensado para gente que no usa mucho la
+  computadora: si no se ve que la lista sigue, no se busca. Queda finita y
+  translúcida, del mismo color que el contenido, y se refuerza al pasar el mouse.
+
+  Van las dos sintaxis porque cubren navegadores distintos: la estándar
+  (`scrollbar-width`/`scrollbar-color`) la entienden Firefox y Chrome 121+; la de
+  `::-webkit-` cubre Safari y los Chromium anteriores. Ninguna es redundante
+  todavía.
+*/
+.barra-discreta {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, white 26%, transparent) transparent;
+}
+
+.barra-discreta::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.barra-discreta::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.barra-discreta::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, white 26%, transparent);
+  border-radius: 9999px;
+}
+
+.barra-discreta::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, white 45%, transparent);
+}
+
+/*
   Movimiento reducido
   --------------------
   La interfaz usa transiciones en 84 lugares. Para quien tiene trastornos

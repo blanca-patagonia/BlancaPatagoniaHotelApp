@@ -3438,3 +3438,60 @@ tabla de suscripciones y decidir qué eventos ameritan interrumpir a alguien. Y
 revisar `experimental.useOffline` de Next 16 cuando deje de ser experimental: da
 reintento automático de Server Actions sin cachear nada, así que es compatible con
 el ADR 0028.
+
+---
+
+## 2026-08-27 — La barra del menú lateral, y el menú con ancho ajustable
+
+**Resumen:** dos arreglos sobre el menú lateral del panel, los dos pedidos
+mirando la pantalla.
+
+**1. La barra de desplazamiento.** Con los 20 enlaces del rol `admin`, la lista no
+entra en una pantalla de portátil y aparece la barra que dibuja el sistema
+operativo: gris clara y ancha, sobre el azul del menú se veía como **una franja
+blanca de arriba abajo**, y era lo primero que se notaba al entrar al panel.
+
+Se atenuó con una clase nueva en `globals.css` (`.barra-discreta`): fina,
+translúcida y del color del contenido, más marcada al pasar el mouse.
+
+**No se ocultó, y es una decisión.** Una barra invisible saca la única pista de
+que la lista sigue hacia abajo, y el principio fijado para este panel es *nada
+oculto, pensado para gente que no usa mucho la computadora*: si no se ve que hay
+más secciones, no se buscan. Van las dos sintaxis —la estándar
+`scrollbar-width`/`scrollbar-color` y la de `::-webkit-`— porque cubren
+navegadores distintos y ninguna es redundante todavía.
+
+**2. El ancho del menú se puede ajustar.** Una manija en el borde derecho, que se
+arrastra. Los límites viven en `lib/domain/lateral.ts` y salen del contenido, no
+de un número redondo: **mínimo 200 px** porque «Servicio de cocina» y «Objetos
+perdidos» son las etiquetas más largas y por debajo empiezan a cortarse; **máximo
+420 px** porque más no mejora nada y le come ancho a las tablas de reservas y a la
+grilla de ocupación; **240 px por defecto**, que es el `w-60` con el que se diseñó.
+
+Detalles que importan:
+
+- **Durante el arrastre se escribe directo en el DOM, no en el estado de React.**
+  Volcar cada `pointermove` al estado re-renderiza los veinte enlaces docenas de
+  veces por segundo y el arrastre se siente pegajoso. Al soltar se hace un único
+  `guardarAncho`, que sincroniza React y persiste la preferencia.
+- **Responde al teclado** (flechas, Home, End) y es un `role="separator"`
+  enfocable con `aria-valuenow`, que es lo que la norma ARIA define para un
+  divisor ajustable. Un control que solo funciona con el mouse deja afuera a quien
+  navega con teclado.
+- **Doble clic devuelve el ancho original**, y está dicho en el `title`. Es la
+  salida para quien lo arrastró sin querer: sin ella, y sin un mínimo, una barra
+  de dos píxeles no tiene de qué agarrarse para recuperarla.
+- La preferencia se recuerda por navegador, con `useSyncExternalStore` y no con
+  `setState` desde un efecto, por lo mismo que en la PWA. `getSnapshot` cachea la
+  lectura porque React exige que devuelva el mismo valor mientras nada cambie.
+
+**Un bug encontrado por el test, antes de que llegara a la pantalla:**
+`leerAnchoGuardado('')` devolvía el mínimo en lugar del ancho de diseño, porque
+**`Number('')` es `0`, no `NaN`** — y `0` se acota a 200. Una clave vacía en
+`localStorage` habría dejado el menú angosto sin que nadie lo hubiera tocado. Se
+descarta la cadena vacía antes de convertir. Lo mismo con espacios: `Number('  ')`
+también da 0.
+
+**Verificación:** `npm run lint` 0 · `npm run typecheck` 0 · `npm run build` 0 ·
+**10 tests nuevos** (`tests/lateral.test.ts`) sobre los límites y la lectura de lo
+guardado. Suite: **1199 pasan, 0 fallan** (386 saltean por falta de base local).
