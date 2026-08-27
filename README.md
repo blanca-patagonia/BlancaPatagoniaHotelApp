@@ -126,55 +126,15 @@ Para confirmar que enganchó con la base, entrá a
 > se le parece y **no sirve**: con ésa falla todo lo que use `service_role`
 > —incluida el alta de usuarios— y el error no dice que la clave esté mal.
 
-**Panel interno:** `http://localhost:3000/panel`. El staff no se auto-registra: el
-primer administrador lo crea el script de siembra y desde **Usuarios** se dan de
-alta el resto de los roles.
+**Panel interno:** `http://localhost:3000/panel`, con tu usuario y contraseña.
 
-**Contra la nube esto se corre UNA SOLA VEZ.** El usuario queda en la base —con la
-contraseña hasheada en `auth.users` y su rol en `perfiles`— y ahí se queda. No hay
-que repetirlo ni guardar la contraseña en `.env.local`.
+**Los usuarios ya viven en la base**, así que son los mismos desde cualquier
+computadora: no hay nada que sembrar para empezar a trabajar. El staff no se
+auto-registra — las cuentas se dan de alta desde **`/panel/usuarios`**, y una
+contraseña perdida se recupera en **`/login/recuperar`**.
 
-```bash
-ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
-```
-
-En **Windows** esa sintaxis no existe: hay que setear las variables aparte.
-
-```cmd
-:: cmd — OJO: sin comillas, quedarían DENTRO del valor y la contraseña saldría mal
-set ADMIN_EMAIL=tu-mail@dominio.com
-set ADMIN_PASSWORD=una-larga-y-propia
-npm run seed:usuarios
-```
-
-```powershell
-# PowerShell — acá las comillas sí van
-$env:ADMIN_EMAIL = "tu-mail@dominio.com"
-$env:ADMIN_PASSWORD = "una-larga-y-propia"
-npm run seed:usuarios
-```
-
-Contra una base que no sea local el seed **exige** `ADMIN_PASSWORD`: la contraseña
-de desarrollo (`admin@blancapatagonia.local` / `blancadev1234`) es pública, está en
-este repositorio. *(En la base local de tests sí hay que repetirlo seguido, porque
-`supabase db reset` borra los usuarios de auth. Ese es el caso para el que existe
-la contraseña por defecto.)*
-
-Para dar de alta al resto del staff después, el camino es **`/panel/usuarios`**, no
-el script. Y si alguien pierde su contraseña, hay recuperación por email en
-`/login/recuperar`.
-
-> ⚠️ **Crear el usuario desde el panel de Supabase no alcanza, y el síntoma
-> confunde:** el login te acepta las credenciales y te devuelve al login, una y otra
-> vez, como si la contraseña estuviera mal. No lo está. El perfil nace `sin_rol` y
-> `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así que la
-> autenticación pasa pero `obtenerSesion()` rechaza la sesión y el panel te rebota.
-> El script de siembra es el que promueve el perfil. Para verlo con tus ojos:
->
-> ```sql
-> select u.email, p.rol, p.activo
-> from perfiles p join auth.users u on u.id = p.id;
-> ```
+*(Para el caso de una base recién creada, sin ningún usuario todavía, ver
+[cómo crear el primer administrador](COMO-LEVANTARLO.md#apéndice-crear-el-primer-administrador-de-una-base-nueva).)*
 
 ## Correr los tests — esto sí necesita Docker
 
@@ -244,7 +204,7 @@ tests/          # 1446 tests (Vitest)
 | `npm test` | Tests (Vitest) |
 | `npm run test:watch` | Tests en modo watch |
 | `npm run typecheck` | Chequeo de tipos |
-| `npm run seed:usuarios` | Crea/actualiza el admin de desarrollo |
+| `npm run seed:usuarios` | Crea el primer admin de una base **nueva**. Contra la nube va una sola vez; en la base local de tests, después de cada `db reset` |
 
 El test de integración anti-overbooking necesita la base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.

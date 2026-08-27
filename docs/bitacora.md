@@ -3315,6 +3315,37 @@ para la base local de tests, donde `supabase db reset` sí borra los usuarios de
 y donde una contraseña publicada es inofensiva porque `127.0.0.1` no es alcanzable
 desde afuera.
 
+**Segunda pasada: el seed sale del camino de arranque.**
+
+Documentar «se corre una sola vez» todavía lo dejaba en la puesta en marcha, y ahí
+no va. `COMO-LEVANTARLO.md` se titula «cómo levantarlo en otra computadora», y en
+otra computadora apuntando al mismo proyecto **el admin ya existe**: el paso sobra.
+Lo mismo en el README.
+
+Se movió a un **apéndice**, con el único caso en que hace falta de verdad: una base
+recién creada, sin ningún usuario, donde hay un problema del huevo y la gallina
+—el staff no se auto-registra y las altas van por `/panel/usuarios`, así que no hay
+nadie que pueda entrar a crear al primero—. El otro caso, la base local de tests
+después de un `db reset`, ya estaba donde corresponde y no se tocó.
+
+En su lugar, «Entrar al panel» ahora dice lo que un usuario necesita: los usuarios
+viven en la base, son los mismos desde cualquier computadora, las cuentas se piden
+a un administrador y la contraseña perdida se recupera en `/login/recuperar`.
+
+También se corrigieron dos referencias que habían quedado desactualizadas: la tabla
+de scripts del README (decía «crea/actualiza el admin de desarrollo», sin distinguir
+los dos entornos) y la línea de `CLAUDE.md` que presentaba `blancadev1234` como «el
+admin de dev» a secas, cuando ahora es específicamente el de la base local.
+
+**Windows.** De paso, la línea del seed estaba escrita en sintaxis de bash
+(`VAR=valor comando`), que en `cmd` falla con «no se reconoce como un comando
+interno o externo». El proyecto se desarrolla en Windows, así que el instructivo
+daba un comando que no corre en la máquina de quien lo lee. Ahora están las tres
+variantes, con una advertencia que importa: en `cmd`, `set VAR="valor"` mete las
+**comillas dentro del valor**, y el admin quedaría con una contraseña entrecomillada
+que después el login rechaza — el mismo síntoma «entro y me devuelve al login», por
+un motivo distinto.
+
 **Pendiente:** el repositorio es público y `blancadev1234` figura en el README, en
 `CLAUDE.md` y en `scripts/seed-usuarios.mjs`. Mientras la base fue local eso era
 deliberado y no tenía consecuencia. Con el proyecto en la nube, usar esa contraseña

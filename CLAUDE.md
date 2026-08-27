@@ -332,7 +332,12 @@ Tarifario 2025/2026 (Anexo A).
   y `STRIPE_WEBHOOK_SECRET`. Opcionales:
   `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL` y
   `ARGENTINADATOS_URL`. Revisarlas **antes** del deploy.
-- Admin de dev: `admin@blancapatagonia.local` / `blancadev1234` (`npm run seed:usuarios`).
+- Admin de la **base local de tests**: `admin@blancapatagonia.local` / `blancadev1234`
+  (`npm run seed:usuarios`, que hay que repetir después de cada `db reset`). En el
+  proyecto hosted los usuarios ya están sembrados y **no hay que correr el seed**:
+  se entra al panel con las credenciales de cada uno. ⚠️ Esa contraseña es pública
+  —está en este repositorio, que es público—, así que sirve para `127.0.0.1` y no
+  para una base alcanzable desde internet.
 - Al embeber `huespedes` desde `reservas` usar `huespedes!reservas_huesped_id_fkey` (hay 2 FKs).
 - Pendiente de confirmar con el hotel: **inventario físico real** de unidades y
   **tarifa rack de cabañas**. El Tarifario cargado es 2025/2026 (anterior a la fecha del sistema).
