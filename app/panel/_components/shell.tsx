@@ -2,9 +2,26 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent as EventoPuntero,
+  type KeyboardEvent as EventoTeclado,
+  type ReactNode,
+} from 'react'
 import { AREAS, areasDe, ETIQUETAS_AREA, type Area } from '@/lib/domain/permisos'
 import { agruparAreas, RUTA_AREA } from '@/lib/domain/navegacion'
+import {
+  acotarAncho,
+  leerAnchoGuardado,
+  ANCHO_MAXIMO,
+  ANCHO_MINIMO,
+  ANCHO_POR_DEFECTO,
+  CLAVE_ANCHO,
+  PASO_TECLADO,
+} from '@/lib/domain/lateral'
 import type { Rol } from '@/lib/domain/roles'
 import { Icono, Logotipo, type NombreIcono } from './iconos'
 
@@ -61,7 +78,14 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
   const grupos = agruparAreas(areasDe(rol))
 
   return (
-    <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3" aria-label="Secciones del panel">
+    /* `barra-discreta` (globals.css): la barra del sistema es gris y ancha, y
+       sobre el azul del menú se veía como una franja blanca de arriba abajo. No
+       se oculta —sería sacar la única pista de que la lista sigue— sino que se
+       atenúa al color del contenido. */
+    <nav
+      className="barra-discreta flex flex-1 flex-col gap-4 overflow-y-auto p-3"
+      aria-label="Secciones del panel"
+    >
       {grupos.map((grupo, i) => {
         const idTitulo = `nav-grupo-${i}`
         return (
@@ -239,6 +263,57 @@ function MenuCuenta({
 
 const FONDO_LATERAL = 'bg-linear-to-b from-lago-800 via-lago-900 to-lago-950'
 
+/* ── Ancho del menú, recordado en el navegador ────────────────────────────── */
+
+/*
+  El ancho vive fuera de React —lo guarda el navegador— así que se lee con
+  `useSyncExternalStore` y no volcándolo con `setState` desde un efecto, que
+  provoca un render en cascada (`react-hooks/set-state-in-effect`).
+
+  `anchoEnMemoria` es la fuente de verdad una vez que alguien arrastró:
+  `localStorage` es solo la persistencia. Sin él, en un navegador con el
+  almacenamiento bloqueado el arrastre no tendría efecto visible, porque la
+  lectura seguiría devolviendo el valor de siempre.
+*/
+let anchoEnMemoria: number | null = null
+const oyentesAncho = new Set<() => void>()
+
+function suscribirAncho(alCambiar: () => void): () => void {
+  oyentesAncho.add(alCambiar)
+  return () => {
+    oyentesAncho.delete(alCambiar)
+  }
+}
+
+/*
+  React llama a esto en cada render y exige que devuelva **el mismo valor**
+  mientras nada haya cambiado; si no, avisa por consola y puede entrar en un
+  bucle de renders. Por eso la primera lectura se cachea en memoria: además de
+  cumplir el contrato, evita ir al almacenamiento del navegador —que es síncrono
+  y bloquea— en cada pintada del panel.
+*/
+function leerAncho(): number {
+  if (anchoEnMemoria !== null) return anchoEnMemoria
+  try {
+    anchoEnMemoria = leerAnchoGuardado(localStorage.getItem(CLAVE_ANCHO))
+  } catch {
+    // Modo privado o almacenamiento bloqueado: se usa el ancho de diseño.
+    anchoEnMemoria = ANCHO_POR_DEFECTO
+  }
+  return anchoEnMemoria
+}
+
+function guardarAncho(ancho: number): void {
+  const acotado = acotarAncho(ancho)
+  anchoEnMemoria = acotado
+  try {
+    localStorage.setItem(CLAVE_ANCHO, String(acotado))
+  } catch {
+    // La preferencia no sobrevive a la recarga, pero el arrastre funciona.
+  }
+  oyentesAncho.forEach((avisar) => avisar())
+}
+
 interface Props {
   rol: Rol
   nombre: string
@@ -256,6 +331,73 @@ interface Props {
 export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props) {
   const pathname = usePathname()
   const [abierto, setAbierto] = useState(false)
+
+  const ancho = useSyncExternalStore(
+    suscribirAncho,
+    leerAncho,
+    () => ANCHO_POR_DEFECTO, // En el servidor no hay navegador que consultar.
+  )
+  const refLateral = useRef<HTMLElement>(null)
+
+  /**
+   * Arrastre de la manija.
+   *
+   * ⚠️ Durante el arrastre se escribe **directo en el DOM** y no en el estado de
+   * React. Volcar cada `pointermove` al estado re-renderiza los veinte enlaces
+   * del menú docenas de veces por segundo y el arrastre se siente pegajoso. Al
+   * soltar se hace un único `guardarAncho`, que es el que sincroniza React y
+   * persiste la preferencia.
+   */
+  function alArrastrar(evento: EventoPuntero<HTMLDivElement>) {
+    // Solo el botón principal: con el secundario se abre el menú contextual y
+    // el arrastre quedaría enganchado sin que nadie lo suelte.
+    if (evento.button !== 0) return
+    const lateral = refLateral.current
+    if (!lateral) return
+
+    evento.preventDefault()
+
+    const inicioX = evento.clientX
+    const inicioAncho = lateral.getBoundingClientRect().width
+    let ultimo = acotarAncho(inicioAncho)
+
+    const alMover = (e: PointerEvent) => {
+      ultimo = acotarAncho(inicioAncho + (e.clientX - inicioX))
+      lateral.style.width = `${ultimo}px`
+    }
+
+    const alSoltar = () => {
+      window.removeEventListener('pointermove', alMover)
+      window.removeEventListener('pointerup', alSoltar)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      guardarAncho(ultimo)
+    }
+
+    /*
+      Sin esto, arrastrar sobre el menú selecciona el texto de los enlaces y el
+      cursor parpadea entre la flecha y la barra de redimensión cada vez que
+      pasa por encima de un elemento distinto.
+    */
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', alMover)
+    window.addEventListener('pointerup', alSoltar)
+  }
+
+  /** El mismo ajuste, con el teclado: un separador enfocable tiene que responder. */
+  function alTeclear(evento: EventoTeclado<HTMLDivElement>) {
+    const acciones: Record<string, number> = {
+      ArrowLeft: ancho - PASO_TECLADO,
+      ArrowRight: ancho + PASO_TECLADO,
+      Home: ANCHO_MINIMO,
+      End: ANCHO_MAXIMO,
+    }
+    const destino = acciones[evento.key]
+    if (destino === undefined) return
+    evento.preventDefault()
+    guardarAncho(destino)
+  }
 
   // El cajón se cierra desde el `onClick` de cada enlace (ver `alNavegar`), no
   // con un efecto sobre `pathname`: así se evita un render en cascada.
@@ -305,13 +447,50 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
         conviene cuando la ventana es baja.
       */}
       <aside
-        className={`hidden w-60 shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:h-screen ${FONDO_LATERAL}`}
+        ref={refLateral}
+        style={{ width: ancho }}
+        className={`relative hidden shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:h-screen ${FONDO_LATERAL}`}
       >
         <Marca />
         <Enlaces rol={rol} pathname={pathname} />
         <p className="border-t border-white/10 px-4 py-3 text-[11px] text-lago-200/70">
           El Calafate · Santa Cruz
         </p>
+
+        {/*
+          Manija para cambiar el ancho del menú.
+
+          Es un `separator` enfocable, que es el rol que la norma ARIA da a un
+          divisor ajustable: con eso un lector de pantalla lo anuncia y dice en
+          qué valor está. Responde a las flechas además del arrastre, porque un
+          control que solo funciona con el mouse deja afuera a quien navega con
+          teclado.
+
+          El doble clic devuelve el ancho original. Es la salida para quien lo
+          arrastró sin querer y no sabe cómo volver — y está dicha en el `title`,
+          no escondida.
+        */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ajustar el ancho del menú"
+          aria-valuenow={ancho}
+          aria-valuemin={ANCHO_MINIMO}
+          aria-valuemax={ANCHO_MAXIMO}
+          tabIndex={0}
+          onPointerDown={alArrastrar}
+          onKeyDown={alTeclear}
+          onDoubleClick={() => guardarAncho(ANCHO_POR_DEFECTO)}
+          title="Arrastrá para cambiar el ancho del menú. Doble clic para volver al original."
+          className="group absolute inset-y-0 -right-1 z-20 flex w-2 cursor-col-resize touch-none items-center justify-center"
+        >
+          {/* La línea es fina y translúcida hasta que se la busca: el borde del
+              menú no tiene que competir con la navegación. */}
+          <span
+            aria-hidden="true"
+            className="h-full w-px bg-white/10 transition group-hover:w-0.5 group-hover:bg-lenga-400 group-focus-visible:w-0.5 group-focus-visible:bg-lenga-400"
+          />
+        </div>
       </aside>
 
       {/* Cajón — móvil */}
