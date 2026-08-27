@@ -209,7 +209,7 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 27 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 28 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -224,7 +224,10 @@ Tarifario 2025/2026 (Anexo A).
   ⚠️ los NOMBRES de los tokens no cambiaron —`lago` es azul, `lenga` es ámbar—
   porque Tailwind resuelve las clases por texto y un renombre masivo rompe sin
   que el typecheck lo vea · **ADR 0025** verificar la tarjeta de garantía **sin
-  guardar el número** (el simulador declara que no puede, no inventa un «válida»).
+  guardar el número** (el simulador declara que no puede, no inventa un «válida») ·
+  **ADR 0028** la app instalable es el panel y **no cachea datos**: sin caché de
+  pantallas autenticadas, sin escrituras diferidas y con el interruptor de apagado
+  escrito antes de encender.
 - **Relevamiento con el cliente (15/08/2026), cerrado el 2026-08-24.** Franco
   mostró WinPAX 9 y el extranet de Booking. La mayoría ya estaba; se hicieron los
   cinco pedidos que faltaban: documentación al día, exención de IVA (migración
@@ -254,7 +257,23 @@ Tarifario 2025/2026 (Anexo A).
   3. **`rechazado` no es final para un pago**: el huésped reintenta con otra tarjeta
      bajo la misma referencia externa.
   Ninguna pasarela verifica la tarjeta de garantía y las tres lo declaran (ADR 0025).
-- **1555 tests verdes** (94 archivos), **cero salteados**, verificados contra la base
+- **Fase 24 ✅ (2026-08-27) — el panel se instala como aplicación (PWA, ADR 0028).**
+  Manifiesto con `scope`/`id` en `/panel` (el portal público queda como sitio web),
+  iconos generados con `ImageResponse` **sin dependencias nuevas**, service worker
+  propio y pantalla de «sin conexión». ⚠️ Cuatro cosas antes de tocarlo:
+  1. **El service worker NO cachea datos.** Es **lista blanca** en
+     `lib/domain/pwa.ts`: solo assets con hash, iconos y la pantalla de sin conexión.
+     Cachear `/panel` deja datos de huéspedes en una tablet compartida y publica una
+     ocupación vencida. `public/sw.js` repite la lista y `tests/pwa.test.ts` **lee el
+     archivo** y falla si se separan.
+  2. **Un service worker roto no se arregla con un deploy**: queda instalado en el
+     dispositivo. Por eso `Cache-Control: no-store` en `next.config.ts` y el
+     procedimiento de apagado escrito en el encabezado de `public/sw.js`.
+  3. **Solo se registra en producción**: en dev los chunks no tienen hash estable y
+     la caché devolvería JavaScript viejo.
+  4. **Cero escrituras diferidas.** Sin background sync: una escritura reproducida
+     más tarde se aplicaría sobre una realidad distinta de la que la originó.
+- **1575 tests verdes** (95 archivos), **cero salteados**, verificados contra la base
   local con las **67** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
   0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos

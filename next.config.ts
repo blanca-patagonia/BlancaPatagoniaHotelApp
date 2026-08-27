@@ -56,9 +56,33 @@ const ENCABEZADOS_SEGURIDAD = [
   primer problema.
 */
 
+/*
+  Encabezados del service worker.
+
+  ⚠️ `Cache-Control: no-store` no es un detalle de rendimiento: es la única vía
+  para arreglar un service worker roto. Si el navegador guardara `/sw.js`,
+  seguiría ejecutando la versión vieja en el dispositivo de cada persona y un
+  deploy no alcanzaría para corregirlo —incluido el service worker vacío que
+  sirve para desactivarlo, documentado en `public/sw.js`—.
+
+  El `Content-Type` explícito está porque un service worker servido con otro
+  tipo MIME **el navegador lo rechaza**, y el error que muestra no dice eso.
+*/
+const ENCABEZADOS_SERVICE_WORKER = [
+  { key: 'Content-Type', value: 'application/javascript; charset=utf-8' },
+  { key: 'Cache-Control', value: 'no-store, must-revalidate' },
+  // Alcanza al propio archivo: acota qué puede ejecutar el service worker, y no
+  // interfiere con el resto del sistema, que sigue sin CSP.
+  { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self'" },
+]
+
 const nextConfig: NextConfig = {
   async headers() {
-    return [{ source: '/:path*', headers: ENCABEZADOS_SEGURIDAD }]
+    return [
+      { source: '/:path*', headers: ENCABEZADOS_SEGURIDAD },
+      // Después del general, para que estos ganen sobre él en `/sw.js`.
+      { source: '/sw.js', headers: ENCABEZADOS_SERVICE_WORKER },
+    ]
   },
 }
 

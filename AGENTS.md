@@ -206,6 +206,26 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   `node scripts/seed-usuarios.mjs`. Se diagnostica en un query:
   `select u.email, p.rol, p.activo from perfiles p join auth.users u on u.id = p.id;`
   ⚠️ No «arreglar» esto agregando `sin_rol` a `ROLES`: reabre el agujero que cerró la 0032.
+- **Un service worker roto NO se arregla con un deploy.** Queda instalado en el dispositivo de
+  cada persona y sigue interceptando pedidos con la versión vieja. Por eso `public/sw.js` hace lo
+  mínimo, `next.config.ts` le pone `Cache-Control: no-store` —sin eso no se podría ni publicar el
+  reemplazo que lo apaga— y el propio archivo documenta en su encabezado el service worker vacío
+  que lo desregistra. Al tocarlo hay que **subir `VERSION`** en los dos lados (ADR 0028).
+- **El service worker NO cachea datos, y es a propósito.** La política es una **lista blanca** en
+  `lib/domain/pwa.ts`: solo assets con hash de `/_next/static/`, los iconos y la pantalla de sin
+  conexión. Cachear `/panel` dejaría nombres de huéspedes y datos de pago en el disco de una tablet
+  compartida, legibles tras cerrar sesión, y publicaría una ocupación vencida —libre una unidad ya
+  vendida—. No convertirla en lista negra: una ruta nueva se cachearía sola. `public/sw.js` repite
+  la lista porque no pasa por el bundler, y `tests/pwa.test.ts` **lee el archivo** y falla si las
+  dos se separan (ADR 0028).
+- **El service worker solo se registra en producción.** En dev, Next recompila los chunks de
+  `/_next/static` sin hash estable: una caché «primero lo guardado» devuelve JavaScript viejo y la
+  pantalla deja de reflejar el código que estás editando. Se prueba con `next build && next start`.
+- **Estado del navegador va con `useSyncExternalStore`, no con `useState` + `useEffect`.** Volcar
+  `navigator.onLine`, `matchMedia` o `localStorage` a estado desde un efecto provoca un render en
+  cascada y el linter lo corta (`react-hooks/set-state-in-effect`). El tercer argumento —el
+  snapshot del servidor— no es opcional: sin él, el render del servidor rompe porque `navigator` no
+  existe. Ejemplo en `app/panel/_components/pwa.tsx`.
 - **El feed iCal de salida marca ocupado sólo cuando NO queda ninguna unidad del tipo libre.** Un
   calendario dice «ocupado», no «me queda una»: cerrar el tipo al vender la primera unidad le
   costaría ventas reales al hotel. Y si la consulta de estadías se trunca, el handler responde
