@@ -52,6 +52,16 @@ export const PRIMEROS_PASOS: Paso[] = [
     detalle:
       'En pantallas chicas algunas columnas de las tablas se ocultan para que se pueda leer sin mover la pantalla de costado. Los datos completos están siempre tocando la fila.',
   },
+  {
+    titulo: 'Se puede instalar en el teléfono',
+    detalle:
+      'El sistema se agrega a la pantalla de inicio y se abre como una aplicación, sin la barra del navegador. En Android aparece un cartel con el botón "Instalar"; en iPhone hay que tocar el botón de compartir de Safari y elegir "Agregar a inicio".',
+  },
+  {
+    titulo: 'Sin internet no se puede trabajar, y el sistema lo avisa',
+    detalle:
+      'Aunque esté instalado como aplicación, el sistema no guarda una copia de los datos en el teléfono: los muestra siempre desde el servidor, para que nadie vea una habitación libre que ya se vendió. Si se corta la conexión aparece un aviso, y lo que ya habías guardado está a salvo.',
+  },
 ]
 
 /** Guía por módulo. El orden es el del menú lateral. */

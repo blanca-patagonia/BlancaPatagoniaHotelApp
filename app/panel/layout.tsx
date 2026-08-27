@@ -4,6 +4,7 @@ import { ETIQUETAS_ROL } from '@/lib/domain/roles'
 import { cerrarSesion } from '@/app/login/actions'
 import { PanelShell } from './_components/shell'
 import { Icono } from './_components/iconos'
+import { SoportePWA } from './_components/pwa'
 
 export default async function PanelLayout({ children }: { children: ReactNode }) {
   const sesion = await requerirSesion()
@@ -25,6 +26,14 @@ export default async function PanelLayout({ children }: { children: ReactNode })
         </form>
       }
     >
+      {/*
+        Van dentro del shell y antes del contenido para que el aviso de «sin
+        conexión» y el cartel de instalación aparezcan arriba de la pantalla,
+        sin taparla y sin desplazar el menú.
+      */}
+      <div className="mb-4 flex flex-col gap-3 empty:mb-0">
+        <SoportePWA />
+      </div>
       {children}
     </PanelShell>
   )

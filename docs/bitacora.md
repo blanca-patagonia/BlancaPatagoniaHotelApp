@@ -3346,10 +3346,95 @@ variantes, con una advertencia que importa: en `cmd`, `set VAR="valor"` mete las
 que después el login rechaza — el mismo síntoma «entro y me devuelve al login», por
 un motivo distinto.
 
-**Pendiente:** el repositorio es público y `blancadev1234` figura en el README, en
-`CLAUDE.md` y en `scripts/seed-usuarios.mjs`. Mientras la base fue local eso era
+**Pendiente sobre las credenciales:** el repositorio es público y `blancadev1234`
+figura en el README, en `CLAUDE.md` y en `scripts/seed-usuarios.mjs`. Mientras la base fue local eso era
 deliberado y no tenía consecuencia. Con el proyecto en la nube, usar esa contraseña
 para el admin de hosted publicaría el acceso al panel; la guarda del script
 (`scripts/seed-usuarios.mjs:43`) obliga a definir `ADMIN_PASSWORD` a mano contra
 cualquier base no local, pero **no impide** elegir la publicada. Queda a criterio de
 quien siembre.
+
+---
+
+## 2026-08-27 — El panel se instala como aplicación (PWA, ADR 0028)
+
+**Resumen:** el panel pasa a ser una aplicación instalable. Se abre desde un ícono
+en la pantalla de inicio, a pantalla completa y sin la barra del navegador. La
+decisión de fondo no fue esa —es la parte fácil— sino **qué NO hace el service
+worker**, que es donde una PWA puede hacer daño en este sistema.
+
+**Por qué hacía falta:** el staff usa el sistema desde el teléfono —housekeeping
+tiene vista móvil propia desde la modernización WinPAX— y hasta hoy había que
+abrir el navegador y buscar la URL en cada turno.
+
+**Lo que se construyó:**
+- `app/manifest.ts` — manifiesto con `scope` e `id` en `/panel`.
+- `app/icono-{192,512,maskable}.png/route.tsx` y `app/apple-icon.tsx` — monograma
+  «BP» sobre el azul de marca, generado con `ImageResponse`, **sin dependencias
+  nuevas**. El día que el hotel pase su logotipo se cambia una función y los
+  cuatro tamaños salen solos.
+- `lib/domain/pwa.ts` — la política de caché, pura y testeable.
+- `public/sw.js` — el service worker, ochenta líneas que se leen enteras.
+- `public/sin-conexion.html` — pantalla autónoma, sin CSS ni fuentes externas:
+  cuando se muestra, no hay red con qué bajarlos.
+- `app/panel/_components/pwa.tsx` — registro, aviso de sin conexión y cartel de
+  instalación (con instrucciones propias para iOS).
+- Dos pasos nuevos en `PRIMEROS_PASOS` de la Ayuda.
+
+**Las cuatro decisiones, con su porqué, están en el ADR 0028.** En corto:
+
+1. **Se instala el panel, no el portal público.** Un huésped reserva una vez, no
+   instala una app para eso. Basta con un manifiesto: quien decide dónde se
+   ofrece instalar es `scope`, no dónde está enlazado el archivo.
+2. **El service worker no cachea datos, ninguno.** Una tablet de recepción es
+   compartida: cachear HTML autenticado dejaría nombres de huéspedes, documentos
+   y datos de pago legibles después de cerrar sesión. Y una grilla de ocupación
+   cacheada muestra libre una unidad ya vendida — la base rechaza el overbooking
+   igual (ADR 0002), pero quien la usa ve un fallo incomprensible en vez de la
+   realidad. Solo se guardan los assets con hash y la pantalla de sin conexión.
+3. **Cero escrituras diferidas.** Sin background sync ni cola de pedidos. Una
+   escritura reproducida diez minutos más tarde se aplicaría sobre una realidad
+   distinta de la que la originó.
+4. **El interruptor de apagado se escribió antes de encender.** Un service worker
+   roto no se arregla con un deploy: queda instalado en el dispositivo de cada
+   persona. `public/sw.js` documenta en su encabezado el service worker vacío que
+   lo desregistra, y `next.config.ts` le pone `Cache-Control: no-store`, que es
+   lo que mantiene abierta esa única puerta de salida.
+
+**Detalles que costaron y conviene no volver a descubrir:**
+- La política es **lista blanca**, no lista negra. Con lista negra, una ruta
+  agregada mañana se cachearía sola y el error aparecería como un dato viejo en
+  pantalla.
+- El service worker **solo se registra en producción**. En desarrollo Next
+  recompila los chunks sin hash estable, y «primero lo guardado» devolvería
+  JavaScript viejo: la pantalla dejaría de reflejar el código que se edita.
+- El componente usa **`useSyncExternalStore`** y no `useState` + `useEffect`. Los
+  cuatro datos que necesita —hay red, es iOS, ya está instalada, el cartel fue
+  descartado— viven fuera de React, y volcarlos con `setState` desde un efecto
+  provoca un render en cascada. El linter lo marcó (`react-hooks/set-state-in-effect`)
+  y se arregló el código, no la regla.
+- El ícono `maskable` es una imagen aparte: Android recorta con la forma del
+  lanzador y garantiza solo el 80% central, que se come un monograma dibujado al
+  tamaño normal.
+- Safari **ignora los `icons` del manifiesto**; usa `apple-touch-icon`. Sin
+  `app/apple-icon.tsx`, un iPhone muestra en el escritorio una miniatura de la
+  captura de pantalla.
+
+**Verificación, ejecutada y no supuesta:**
+- `npm run lint` exit 0 · `npm run typecheck` exit 0 · `npm run build` exit 0.
+- **20 tests nuevos** (`tests/pwa.test.ts`): la política pura, el **contrato** que
+  lee `public/sw.js` y falla si su lista deja de coincidir con el dominio, y el
+  manifiesto. Suite completa: **1189 pasan, 0 fallan** (386 saltean por falta de
+  base local en esta máquina).
+- Levantado con `npm run build && npm run start`, se pidieron los siete recursos:
+  `/manifest.webmanifest` (200, `application/manifest+json`), los tres iconos y
+  `/apple-icon` (200, `image/png`, magic bytes `89 50 4E 47` verificados),
+  `/sw.js` (200, con `Cache-Control: no-store, must-revalidate`) y
+  `/sin-conexion.html` (200). El ícono de 512 se descargó y se miró: el monograma
+  blanco sobre `#003580` renderiza correcto.
+
+**Pendiente / próximo paso:** notificaciones push, que piden claves VAPID, una
+tabla de suscripciones y decidir qué eventos ameritan interrumpir a alguien. Y
+revisar `experimental.useOffline` de Next 16 cuando deje de ser experimental: da
+reintento automático de Server Actions sin cachear nada, así que es compatible con
+el ADR 0028.
