@@ -94,44 +94,74 @@ para el trabajo futuro documentado.
 - **zod** para validación · **Vitest** para tests
 - Despliegue previsto en **Vercel**
 
-## Puesta en marcha (desarrollo local)
+## Puesta en marcha (desarrollo)
 
-Requiere **Node.js ≥ 20.12** y **Docker** en ejecución (Supabase local).
+Requiere **Node.js ≥ 20.12**. La base es un proyecto **Supabase en la nube**, con
+las migraciones aplicadas y el catálogo cargado: no hay que levantar nada.
 
 ```bash
 npm install
-npx supabase start           # levanta Postgres + Auth en Docker
 cp .env.example .env.local   # en Windows (cmd): copy .env.example .env.local
-```
-
-Completar `.env.local` con lo que imprime `npx supabase status`:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:54321"   # la API URL, no la de Storage/S3
-NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_…"
-SUPABASE_SERVICE_ROLE_KEY="sb_secret_…"             # en una sola línea
-NEXT_PUBLIC_SITE_URL="http://localhost:3000"
-```
-
-Las claves de pagos y email pueden quedar vacías: los adapters usan stubs.
-
-```bash
-npx supabase db reset        # aplica migraciones + seed (Tarifario real)
-npm run seed:usuarios        # crea el admin de desarrollo
+#  ↑ completalo con las claves (ver abajo) ANTES de seguir
 npm run dev                  # http://localhost:3000
 ```
 
-> ⚠️ `db reset` **borra los usuarios de auth**: hay que volver a correr
-> `npm run seed:usuarios` después, o los tests de facturación fallan por la FK
-> contra `perfiles`.
+Completar `.env.local` con las claves del panel de Supabase, en
+**Project Settings → API keys**:
 
-**Panel interno:** `http://localhost:3000/panel` con el admin de desarrollo
-(`admin@blancapatagonia.local` / `blancadev1234`, configurables con
-`ADMIN_EMAIL` / `ADMIN_PASSWORD`). Desde **Usuarios** se dan de alta el resto de
-los roles. Contra una base que no sea local, el seed **exige** definir
-`ADMIN_PASSWORD`: la contraseña por defecto es pública.
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://<tu-proyecto>.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_…"   # la publishable key
+SUPABASE_SERVICE_ROLE_KEY="sb_secret_…"            # la secret key, en una sola línea
+NEXT_PUBLIC_SITE_URL="http://localhost:3000"
+```
 
-Detalle completo en el [manual técnico](docs/manual-tecnico.md).
+Las claves de pagos y email pueden quedar vacías: los adapters usan simuladores.
+
+Para confirmar que enganchó con la base, entrá a
+<http://localhost:3000/api/salud>: tiene que responder `{"estado":"ok","base":"ok"}`.
+
+> ⚠️ **Cuidado con cuál clave copiás.** La *secret key* es la que empieza con
+> `sb_secret_`. En el panel hay además una clave del protocolo S3 del Storage que
+> se le parece y **no sirve**: con ésa falla todo lo que use `service_role`
+> —incluida el alta de usuarios— y el error no dice que la clave esté mal.
+
+**Panel interno:** `http://localhost:3000/panel`. El staff no se auto-registra: el
+primer administrador lo crea el script de siembra y desde **Usuarios** se dan de
+alta el resto de los roles.
+
+```bash
+ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
+```
+
+Contra una base que no sea local el seed **exige** `ADMIN_PASSWORD`: la contraseña
+de desarrollo (`admin@blancapatagonia.local` / `blancadev1234`) es pública, está en
+este repositorio.
+
+> ⚠️ Crear el usuario desde el panel de Supabase **no alcanza**: el perfil nace
+> `sin_rol` y `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así
+> que puede autenticarse pero el panel lo rechaza. El script es el que lo promueve.
+
+## Correr los tests — esto sí necesita Docker
+
+Los tests **no** se corren contra el proyecto de la nube: 24 archivos escriben con
+`service_role` —que saltea RLS— y borran filas de `reservas`, `huespedes`,
+`tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso destruye datos del
+hotel, así que `tests/db.ts` corta si las variables no apuntan a una base local.
+
+```bash
+npx supabase start      # Postgres + Auth locales; la primera vez tarda unos minutos
+npx supabase db reset   # aplica las migraciones + el seed (Tarifario real)
+npm run seed:usuarios   # OJO: db reset borra los usuarios de auth
+npm test
+```
+
+Sin base local `npm test` **saltea** los tests de integración en vez de fallar
+—entre ellos el anti-overbooking, que es la garantía central del sistema—. En CI
+eso no puede pasar: `EXIGIR_DB=1` convierte la ausencia de base en error.
+
+Detalle completo en [cómo levantarlo](COMO-LEVANTARLO.md) y en el
+[manual técnico](docs/manual-tecnico.md).
 
 ## Roles
 

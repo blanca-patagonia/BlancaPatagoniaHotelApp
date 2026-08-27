@@ -58,11 +58,12 @@ try {
   /* sin migraciones, no hay nada que informar */
 }
 
-// ── Docker ──────────────────────────────────────────────────────────────────
+// ── Base local de tests ─────────────────────────────────────────────────────
+// El sistema corre contra Supabase hosted; esto solo condiciona a los tests.
 if (correr('docker', ['info'], 3000) !== null) {
-  console.error('Docker: disponible (podés correr npx supabase start)')
+  console.error('Base de tests: Docker disponible (npx supabase start)')
 } else {
-  console.error('Docker: no disponible → 43 tests de integración se van a saltear.')
+  console.error('Base de tests: sin Docker → 43 tests de integración se van a saltear.')
 }
 
 // ── Dependencias ────────────────────────────────────────────────────────────

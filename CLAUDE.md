@@ -67,15 +67,23 @@ Tarifario 2025/2026 (Anexo A).
   impone RLS.
 - `service_role` **solo en servidor** (`lib/supabase/admin.ts`, `server-only`).
 
-## Entorno local (decisión vigente: "por ahora local")
-- Supabase local con **Docker**. CLI vía devDependency: `npx supabase`.
-- Levantar: `npx supabase start` · aplicar migraciones+seed: `npx supabase db reset`
-  · ver claves: `npx supabase status`.
+## Entorno de datos (decisión vigente: Supabase en la nube)
+- La base es un **proyecto Supabase hosted**, con las migraciones y el catálogo ya
+  aplicados. Levantarlo es `npm install` + `.env.local` + `npm run dev`: **no hace
+  falta Docker para usar el sistema.** Instructivo completo en `COMO-LEVANTARLO.md`.
+- Claves en **Project Settings → API keys**, formato `sb_publishable_…` /
+  `sb_secret_…`. `.env.local` (gitignored) apunta a la nube. Salud: `GET /api/salud`.
+  ⚠️ La clave del protocolo S3 del Storage **se parece a la secret y no sirve**: con
+  ésa falla todo lo que use `service_role` y el error no dice que la clave esté mal.
+- **Docker sigue haciendo falta para una sola cosa: correr los tests.** Hay 24
+  archivos que escriben con `service_role` —saltea RLS— y borran filas de `reservas`,
+  `huespedes`, `tarifas`, `unidades` y `tipos_unidad`: contra la base real destruyen
+  datos del hotel. Por eso `tests/db.ts` **corta si la URL no es local**, con salida
+  de escape `PERMITIR_DB_REMOTA=1` para una base remota descartable.
+- Para testear: `npx supabase start` · `npx supabase db reset` · `npm run seed:usuarios`.
+  Studio local http://127.0.0.1:54323 · API local http://127.0.0.1:54321.
 - ⚠️ `db reset` **borra los usuarios de auth**: hay que correr `npm run seed:usuarios`
   después, o los tests de facturación fallan (hay FK contra `perfiles`).
-- Studio http://127.0.0.1:54323 · API http://127.0.0.1:54321 · claves con nuevo
-  formato `sb_publishable_…` / `sb_secret_…`. `.env.local` (gitignored) apunta al
-  stack local.
 
 ## Comandos
 - Dev `npm run dev` · Tests `npm test` · Typecheck `npm run typecheck` · Lint `npm run lint`.

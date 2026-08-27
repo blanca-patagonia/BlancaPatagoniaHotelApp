@@ -35,8 +35,15 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 | Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **1446 pasan / 0 saltean** con base y las 3 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
-| Base local | `npx supabase start` · `npx supabase db reset` | necesita Docker |
+| Base local **(solo para tests)** | `npx supabase start` · `npx supabase db reset` | necesita Docker |
 | Salud del sistema | `GET /api/salud` | 200 si la base responde, 503 si no |
+
+**La base es un proyecto Supabase en la nube.** Levantar el sistema es `npm install`
++ `.env.local` + `npm run dev`; no hay que levantar Docker. Lo único que sigue
+necesitando una base local son **los tests**: 24 archivos escriben con `service_role`
+y borran filas de `reservas`, `huespedes`, `tarifas`, `unidades` y `tipos_unidad`, así
+que contra la base real destruyen datos del hotel. `tests/db.ts` corta si la URL no es
+local. Instructivo completo en `COMO-LEVANTARLO.md`.
 
 **Antes de decir que terminaste, corré `npm run check`. Sin excepciones.**
 
