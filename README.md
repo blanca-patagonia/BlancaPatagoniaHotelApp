@@ -130,17 +130,35 @@ Para confirmar que enganchó con la base, entrá a
 primer administrador lo crea el script de siembra y desde **Usuarios** se dan de
 alta el resto de los roles.
 
+**Contra la nube esto se corre UNA SOLA VEZ.** El usuario queda en la base —con la
+contraseña hasheada en `auth.users` y su rol en `perfiles`— y ahí se queda. No hay
+que repetirlo ni guardar la contraseña en `.env.local`.
+
 ```bash
 ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
 ```
 
 Contra una base que no sea local el seed **exige** `ADMIN_PASSWORD`: la contraseña
 de desarrollo (`admin@blancapatagonia.local` / `blancadev1234`) es pública, está en
-este repositorio.
+este repositorio. *(En la base local de tests sí hay que repetirlo seguido, porque
+`supabase db reset` borra los usuarios de auth. Ese es el caso para el que existe
+la contraseña por defecto.)*
 
-> ⚠️ Crear el usuario desde el panel de Supabase **no alcanza**: el perfil nace
-> `sin_rol` y `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así
-> que puede autenticarse pero el panel lo rechaza. El script es el que lo promueve.
+Para dar de alta al resto del staff después, el camino es **`/panel/usuarios`**, no
+el script. Y si alguien pierde su contraseña, hay recuperación por email en
+`/login/recuperar`.
+
+> ⚠️ **Crear el usuario desde el panel de Supabase no alcanza, y el síntoma
+> confunde:** el login te acepta las credenciales y te devuelve al login, una y otra
+> vez, como si la contraseña estuviera mal. No lo está. El perfil nace `sin_rol` y
+> `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así que la
+> autenticación pasa pero `obtenerSesion()` rechaza la sesión y el panel te rebota.
+> El script de siembra es el que promueve el perfil. Para verlo con tus ojos:
+>
+> ```sql
+> select u.email, p.rol, p.activo
+> from perfiles p join auth.users u on u.id = p.id;
+> ```
 
 ## Correr los tests — esto sí necesita Docker
 
