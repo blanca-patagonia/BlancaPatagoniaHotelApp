@@ -283,6 +283,29 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   que `tests/db.ts` documenta querer evitar, pero el guardián (`EXIGIR_DB=1`) no está en ese script.
   **Leé la salida, no el exit code**, o exportá las tres variables antes.
 
+## Agentes especializados
+
+Once subagentes en `.claude/agents/`, documentados en `.claude/agents/README.md`. Cada uno corre en
+su propio contexto: mira lo suyo a fondo y devuelve un informe, sin llenar el contexto principal.
+
+| Agente | Cuándo delegarle |
+|---|---|
+| `explorer` | Dónde está algo, quién usa qué, cómo fluye un proceso |
+| `reviewer` | Revisar un diff antes de un commit o un PR |
+| `security-auditor` | Permisos, RLS, exposición de datos |
+| `test-writer` | Cubrir código nuevo o el test de un bugfix (escribe sólo en `tests/`) |
+| `sre-observabilidad` | Logs, métricas, SLO y alertas antes de que el sistema esté en producción |
+| `release-manager` | Orden de despliegue, migraciones compatibles hacia atrás, plan de reversión |
+| `continuidad` | Respaldos verificados, restauración probada, RPO/RTO, degradación |
+| `privacidad` | PII, retención, derechos del titular, transferencias a terceros |
+| `accesibilidad` | WCAG 2.2 AA en el panel y el portal |
+| `i18n` | Idiomas y formatos para el huésped extranjero |
+| `docs-sync` | Documentación que ya no es cierta (escribe sólo en documentación) |
+
+**No se pisan con las skills:** una skill es el procedimiento para hacer algo bien (`db-migration`
+dice cómo escribir la migración); un agente es el especialista que revisa (`release-manager` dice si
+esa migración se puede revertir).
+
 ## Automatizaciones (hooks activos)
 
 Configurados en `.claude/settings.json`, documentados en `.claude/hooks/README.md`:

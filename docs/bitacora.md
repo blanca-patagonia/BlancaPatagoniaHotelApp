@@ -3299,3 +3299,67 @@ revalidado que los enlaces entre páginas siguen resolviendo.
 todavía no inicializado, fuera del alcance de las credenciales del entorno, y
 **GitHub no expone API para wikis**. La primera página tiene que crearse desde la
 web una única vez; a partir de ahí el script se encarga.
+
+
+---
+
+## 2026-08-26 — Siete agentes nuevos: los procesos que un sistema en producción necesita y este todavía no tenía
+
+**Resumen:** el repositorio tenía cuatro subagentes, todos sobre el código —buscar, revisar, auditar
+seguridad, escribir tests—. Se sumaron **siete** que cubren los procesos que hoy no mira nadie, y
+que son justamente los que hacen falta cuando el sistema deja de ser un proyecto y pasa a atender
+huéspedes reales. Quedan **once**, documentados en `.claude/agents/README.md` y registrados en
+`AGENTS.md`.
+
+**Los nuevos, y el hueco concreto que cubre cada uno:**
+
+- **`sre-observabilidad`** — hoy la única señal del sistema es `GET /api/salud`, que dice «la base
+  contesta». No hay logs estructurados, ni métricas, ni alertas. El agente arranca por las cuatro
+  métricas que le importan a este negocio y no por las genéricas de CPU: reservas que fallaron al
+  crearse, webhooks rechazados por firma, antigüedad de la última sincronización de canal y
+  expiraciones que liberan inventario sin que nadie mire. Lleva escrita la regla que evita el ruido:
+  si no se puede decir qué tiene que hacer la persona que recibe la alerta, no es una alerta.
+- **`release-manager`** — hay 67 migraciones y **ninguna trae `down`**. El agente exige, por cada
+  cambio de esquema, escribir en una línea cómo se vuelve; y si la respuesta es «no se puede», eso
+  **es** el hallazgo. Incluye la compatibilidad hacia atrás (el código viejo y el nuevo conviven
+  durante el despliegue), el SQLSTATE 55P04 de los enums y la trampa de dos migraciones con el mismo
+  número.
+- **`continuidad`** — respaldos, restauración probada y RPO/RTO en horas y en consecuencias para el
+  hotel. Lleva marcadas en el encabezado las dos confusiones que arruinarían el análisis:
+  `/panel/respaldos` **no es un backup**, y un respaldo que nunca se restauró es una intención.
+- **`privacidad`** — es el hueco más grande de todos y no lo cubría `security-auditor`, que pregunta
+  si alguien puede entrar donde no debe, no si el dato debería existir. El sistema guarda documento,
+  domicilio y teléfono de huéspedes **extranjeros** —conviven la Ley 25.326 y el GDPR— y **nada dice
+  hasta cuándo**. El agente además resuelve de frente la tensión real: `authenticated` no tiene
+  `delete` sobre reservas ni pagos (migración 0061, y está bien), así que un pedido de supresión se
+  atiende **anonimizando**, no borrando.
+- **`accesibilidad`** — WCAG 2.2 AA. Ordena por frecuencia de uso: la pantalla de housekeeping se
+  abre cincuenta veces por día en un teléfono, la de configuración una vez por mes. Continúa el
+  principio que ya fijó el usuario del sistema («nada oculto, etiqueta visible en todo campo») y
+  cubre lo que ese principio no alcanza: foco, anuncios y contraste.
+- **`i18n`** — el portal propio existe **sólo en español**, y es el canal con el que el hotel busca
+  reducir el 79 % de reservas que entran por OTAs. Un huésped que no lo entiende vuelve a Booking,
+  que sí le habla en su idioma. El agente fija primero qué **no** se traduce —el panel, y jamás el
+  código— y pone las fechas por delante de las cadenas: `10/09` es el 10 de septiembre acá y el 9 de
+  octubre para un huésped estadounidense, y en una reserva eso es una noche equivocada.
+- **`docs-sync`** — detecta documentación que dejó de ser cierta, con los comandos para verificar
+  cada cifra en vez de recordarla. Es el único que escribe fuera de `tests/`, y con el límite
+  explícito: si el que está mal es el **código**, lo reporta y no lo toca.
+
+**Decisiones de diseño del conjunto:**
+- **Nueve de los once son de sólo lectura.** Reportar y arreglar son dos trabajos distintos: un
+  agente que puede arreglar tiende a arreglar lo primero que ve en vez de terminar de mirar. Las dos
+  excepciones tienen el alcance acotado en su propio prompt.
+- **Ninguno duplica una skill.** La skill es el procedimiento (`db-migration` dice cómo escribirla);
+  el agente es el especialista que revisa (`release-manager` dice si se puede revertir).
+- **Todos son de este proyecto, no genéricos.** Cada uno lleva los datos concretos que lo hacen útil
+  —que `pagos.monto` está siempre en USD, que PostgREST corta en 1000 filas con HTTP 200, que la
+  cotización de divisas ya degrada bien y sirve de modelo—. Un agente que funcionaría en cualquier
+  repositorio no aporta nada sobre el modelo base.
+
+**No se agregó un agente de costos (FinOps),** que sería lo esperable en un SaaS: con quince
+unidades y un solo establecimiento, el gasto de Vercel y Supabase no justifica un especialista. Si
+alguna vez se implementa la multi-propiedad del ADR 0013, cambia.
+
+**Verificación:** los once archivos parsean como frontmatter YAML válido, el campo `name` coincide
+con el nombre del archivo en todos, y los tres campos obligatorios están presentes.
