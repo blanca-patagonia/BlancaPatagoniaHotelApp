@@ -95,7 +95,7 @@ porque un documento que solo enumera aciertos no sirve para decidir si confiar.
 ## Fuera de alcance
 
 - **Las credenciales de desarrollo del README y de `CLAUDE.md`**
-  (`admin@blancapatagonia.local`). Son para el stack local en Docker, y la
+  (`admin@blancapatagonia.local`). Son para la base local de los tests, y la
   contraseña por defecto es pública a propósito. El script de siembra **aborta si la
   URL no es `localhost` ni `127.0.0.1` y no se definió `ADMIN_PASSWORD`**: contra
   cualquier otra base hay que elegir una contraseña a mano. Falla en vez de generar

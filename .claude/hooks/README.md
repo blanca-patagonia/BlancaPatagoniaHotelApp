@@ -42,7 +42,8 @@ un hook.
 **`al-terminar.sh`** corre la suite y, además de los fallos, informa **cuántos tests se saltearon**.
 Hoy son 43 sin base local, e incluyen el anti-overbooking. Verde con 43 sin ejecutar no es verde.
 
-**`al-iniciar.sh`** muestra rama, estado de git, última migración y si Docker está disponible.
+**`al-iniciar.mjs`** muestra rama, estado de git, última migración y si hay base local para
+los tests (el sistema en sí corre contra Supabase en la nube, sin Docker).
 
 ## Hook que decidí NO escribir
 

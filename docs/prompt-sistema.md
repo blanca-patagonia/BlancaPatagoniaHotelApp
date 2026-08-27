@@ -18,8 +18,8 @@ de Booking y otras OTAs mediante un motor de reservas propio.
   TypeScript). Ojo: en esta versión `cookies()` es asíncrono, `params` y
   `searchParams` son promesas, y `middleware` se reemplaza por `proxy.ts`.
 - **Tailwind CSS 4** (configuración por `@theme` en CSS, sin `tailwind.config.js`).
-- **Supabase**: PostgreSQL 17 + Auth + Row Level Security. Entorno local por
-  Docker vía `npx supabase`.
+- **Supabase**: PostgreSQL 17 + Auth + Row Level Security, en un proyecto hosted.
+  Docker (vía `npx supabase`) solo levanta la base local de los tests.
 - **Zod** para validación y **Vitest** para tests. Deploy previsto en Vercel.
 - Sin librerías de UI ni de iconos: los componentes y los iconos SVG son propios.
 

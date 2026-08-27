@@ -71,33 +71,50 @@ if (existsSync(`${raiz}/.env.local`)) {
   if (ausentes.length) {
     falta(
       `Faltan variables en .env.local: ${ausentes.join(', ')}`,
-      'Copiá los valores de `npx supabase status` (ver .env.example).',
+      'Copiá los valores del panel de Supabase, en Project Settings → API keys.\n' +
+        '       OJO: la secret key empieza con `sb_secret_`. La clave del protocolo S3\n' +
+        '       del Storage se le parece y no sirve: falla todo lo que use service_role.',
     )
   } else {
-    ok('Variables de Supabase completas')
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const esLocal = url.includes('localhost') || url.includes('127.0.0.1')
+    ok(
+      'Variables de Supabase completas',
+      esLocal ? 'apuntan a una base LOCAL' : 'apuntan al proyecto en la nube',
+    )
   }
 } else {
-  falta('No hay .env.local', 'cp .env.example .env.local && npx supabase status')
+  falta(
+    'No hay .env.local',
+    'cp .env.example .env.local y completalo con las claves del panel de Supabase\n' +
+      '       (Project Settings → API keys). Instructivo en COMO-LEVANTARLO.md.',
+  )
 }
 
-// ── Docker y base local ──────────────────────────────────────────────────────
+// ── Base local: solo hace falta para los tests ───────────────────────────────
+// El sistema corre contra Supabase en la nube, así que `npm run dev` no necesita
+// nada de esto. Lo que sí exige una base local son los tests: hay 24 archivos que
+// escriben con service_role —saltea RLS— y borran filas de reservas, huespedes,
+// tarifas, unidades y tipos_unidad. Contra la base real destruyen datos del hotel.
 if (correr('docker', ['info'], 4000) !== null) {
-  ok('Docker disponible')
+  ok('Docker disponible', 'hace falta solo para correr los tests')
 
   const estado = correr('npx', ['supabase', 'status'], 15000)
   if (estado && estado.includes('API URL')) {
-    ok('Supabase local levantado')
+    ok('Base local de tests levantada')
   } else {
     aviso(
-      'Supabase local no está corriendo',
-      'npx supabase start && npm run seed:usuarios',
+      'La base local de tests no está corriendo',
+      'Para `npm run dev` no importa. Para la suite completa:\n' +
+        '       npx supabase start && npx supabase db reset && npm run seed:usuarios',
     )
   }
 } else {
   aviso(
     'Docker no está disponible',
-    'Sin él, 43 tests de integración se saltean —incluido el anti-overbooking—\n' +
-      '       y `npm test` sale en verde igual. No confundas eso con verificado.',
+    'Para levantar el sistema no hace falta: la base está en la nube.\n' +
+      '       Para los tests sí. Sin él, 43 de integración se saltean —incluido el\n' +
+      '       anti-overbooking— y `npm test` sale en verde igual. Eso no es verificado.',
   )
 }
 

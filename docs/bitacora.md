@@ -3207,3 +3207,58 @@ un usuario creado desde ahí nace `sin_rol` y `activo = false` (ADR 0017): hay q
 correr `npm run seed:usuarios` igual, que es quien lo promueve a `admin`. Queda
 además la auditoría de las 91 políticas RLS una por una, ahora sobre el proyecto
 hosted.
+
+---
+
+## 2026-08-27 — Docker deja de figurar como requisito de arranque
+
+**Resumen:** la mudanza a hosted (entrada anterior, mergeada hoy como PR #23)
+reescribió el instructivo, pero el resto de la documentación seguía diciendo que
+hacía falta Docker para levantar el sistema. Se corrigió esa contradicción sin
+tocar lo que sí lo necesita: los tests y el CI.
+
+**El problema concreto:** el `README.md` abría la puesta en marcha con *«Requiere
+Node.js ≥ 20.12 y **Docker** en ejecución (Supabase local)»* y mandaba a copiar las
+claves de `npx supabase status`. Después de la mudanza eso es falso y además
+manda al lugar equivocado: las claves ahora salen del panel de Supabase. Alguien
+que clonara el repo instalaba Docker Desktop para nada.
+
+**Qué se cambió (7 archivos de documentación + 2 de código):**
+- `README.md` — la puesta en marcha pasa a ser `npm install` + `.env.local` +
+  `npm run dev`, con las claves del panel y la verificación por `/api/salud`. Los
+  tests quedan en una sección aparte, titulada «esto sí necesita Docker».
+- `CLAUDE.md` — la sección «Entorno local (decisión vigente: por ahora local)» ya
+  no describe la realidad: se reemplazó por «Entorno de datos (decisión vigente:
+  Supabase en la nube)».
+- `AGENTS.md` — la fila de la tabla pasa a «Base local **(solo para tests)**», con
+  el motivo debajo.
+- `SECURITY.md`, `docs/prompt-sistema.md`, `.claude/hooks/README.md` — menciones
+  sueltas que ubicaban a Docker en el arranque.
+- `scripts/setup.mjs` — dejaba de ser útil: pedía las claves de `supabase status`
+  y presentaba «Supabase local no está corriendo» como algo a resolver. Ahora
+  distingue si `.env.local` apunta a la nube o a una base local, y el aviso de
+  Docker aclara que para `npm run dev` no importa.
+- `.claude/hooks/al-iniciar.mjs` — el hook de sesión informaba «Docker: no
+  disponible» sin decir para qué; ahora dice «Base de tests».
+- `lib/env.ts` — el mensaje de error de la clave publicable mandaba a
+  `npx supabase status`. Es lo primero que lee alguien a quien le falta la
+  variable, así que ahora nombra el panel de Supabase.
+
+**Decisiones tomadas:**
+- **Se mantiene el criterio de la entrada anterior: Docker no se elimina.** El
+  pedido inicial fue borrar toda mención, y no se hizo. Los 24 archivos de test
+  que escriben con `service_role` borran filas de `reservas`, `huespedes`,
+  `tarifas`, `unidades` y `tipos_unidad`; sin base local esos tests no tendrían
+  dónde correr salvo contra la base del hotel. Lo que se sacó es Docker **como
+  requisito de arranque**, que es donde estorbaba.
+- **No se tocaron los registros históricos.** `docs/bitacora.md` (salvo esta
+  entrada), el ADR 0015, `docs/AUDITORIA_INICIAL.md` y `docs/audit/` mencionan
+  Docker describiendo lo que era cierto cuando se escribieron. Reescribirlos sería
+  falsear el registro que sirve de insumo a la tesis.
+- Tampoco se tocó `.github/workflows/ci.yml`: el CI levanta su Postgres con
+  `supabase start` y ahí Docker es la única forma de correr los 1555 tests.
+
+**Verificación:** `npm run lint` exit 0, `npm run typecheck` exit 0, y
+`node scripts/setup.mjs` ejecutado para confirmar que los mensajes nuevos salen
+bien. Los tests no se corrieron en esta máquina: no tiene Docker ni `.env.local`,
+que es exactamente el escenario que estos cambios documentan.
