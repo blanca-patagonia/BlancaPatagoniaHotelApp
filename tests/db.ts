@@ -19,6 +19,42 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export const hayDB = Boolean(url && serviceKey && !url.includes('placeholder'))
 
+/*
+  Los tests NO se corren contra la base de la nube.
+
+  Desde que el proyecto usa Supabase hosted, el `.env.local` de cualquier máquina
+  apunta a la base real del hotel. Vitest no lee ese archivo, así que `npm test` a
+  secas es inofensivo; el peligro es exportar las variables a mano, que es
+  justamente lo que documentan `AGENTS.md` y el instructivo para no saltear los
+  tests de integración.
+
+  Lo que estaría en juego no es un dato de prueba: 24 archivos escriben con
+  `service_role`, que saltea RLS **y** las revocaciones de `delete` de la
+  migración 0061, y limpian haciendo `delete` sobre `reservas`, `huespedes`,
+  `tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso borra reservas
+  del hotel, y el `delete` no avisa cuántas filas se llevó puestas.
+
+  El corte se hace por la URL, igual que en `scripts/seed-usuarios.mjs`:
+  `localhost` y `127.0.0.1` son inequívocamente desarrollo. No rompe el CI, que
+  levanta su propia base con `supabase start` en `127.0.0.1`.
+
+  La salida de escape existe —hay bases remotas legítimamente descartables, como
+  una rama de Supabase— pero hay que pedirla a propósito.
+*/
+const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url ?? '')
+
+if (hayDB && !esLocal && process.env.PERMITIR_DB_REMOTA !== '1') {
+  throw new Error(
+    `Los tests apuntan a una base que NO es local:\n    ${url}\n\n` +
+      '  La suite escribe con `service_role` y limpia con `delete` sobre reservas,\n' +
+      '  huespedes, tarifas y unidades. Contra la base real eso borra datos del hotel.\n\n' +
+      '  Levantá la base local:  npx supabase start && npx supabase db reset\n' +
+      '  y exportá SUPABASE_URL=http://127.0.0.1:54321 antes de correr los tests.\n\n' +
+      '  Si de verdad querés correrlos contra una base remota descartable:\n' +
+      '    PERMITIR_DB_REMOTA=1 npm test\n',
+  )
+}
+
 if (process.env.EXIGIR_DB === '1' && !hayDB) {
   throw new Error(
     'EXIGIR_DB=1 pero faltan SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY. ' +
@@ -27,9 +63,26 @@ if (process.env.EXIGIR_DB === '1' && !hayDB) {
   )
 }
 
+/*
+  Destino inerte para cuando no hay base.
+
+  `describe.skipIf(!hayDB)` marca los tests como salteados pero **igual ejecuta el
+  cuerpo del `describe`** para recolectarlos. Tres archivos crean su cliente ahí
+  (`const admin = clienteDePrueba()`), así que sin credenciales `createClient`
+  lanzaba «supabaseUrl is required» y el archivo aparecía **fallado en vez de
+  salteado**: son los tres que hacían que `npm test` sin base terminara en rojo
+  mientras el código de salida seguía dando 0.
+
+  Este cliente nunca llega a hacer una petición —los tests que lo usarían están
+  salteados— y no debilita ninguna garantía: con `EXIGIR_DB=1`, la falta de base
+  sigue cortando fuerte más arriba. La URL lleva `placeholder` a propósito, que es
+  lo mismo que `hayDB` ya considera «sin base».
+*/
+const URL_SIN_BASE = 'http://placeholder.invalid'
+
 /** Cliente con `service_role` para preparar y limpiar datos de prueba. */
 export function clienteDePrueba(): SupabaseClient {
-  return createClient(url!, serviceKey!, {
+  return createClient(url ?? URL_SIN_BASE, serviceKey ?? 'sin-clave', {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 }
@@ -48,7 +101,9 @@ export const hayAnon = Boolean(hayDB && anonKey)
  * políticas y las guardas no dejan pasar de más.
  */
 export function clienteAnonimo(): SupabaseClient {
-  return createClient(url!, anonKey!, {
+  // Mismo motivo que en `clienteDePrueba`: el cuerpo del `describe` corre aunque
+  // los tests estén salteados.
+  return createClient(url ?? URL_SIN_BASE, anonKey ?? 'sin-clave', {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 }
