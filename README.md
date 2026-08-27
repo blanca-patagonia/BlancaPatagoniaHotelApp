@@ -138,6 +138,22 @@ que repetirlo ni guardar la contraseña en `.env.local`.
 ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
 ```
 
+En **Windows** esa sintaxis no existe: hay que setear las variables aparte.
+
+```cmd
+:: cmd — OJO: sin comillas, quedarían DENTRO del valor y la contraseña saldría mal
+set ADMIN_EMAIL=tu-mail@dominio.com
+set ADMIN_PASSWORD=una-larga-y-propia
+npm run seed:usuarios
+```
+
+```powershell
+# PowerShell — acá las comillas sí van
+$env:ADMIN_EMAIL = "tu-mail@dominio.com"
+$env:ADMIN_PASSWORD = "una-larga-y-propia"
+npm run seed:usuarios
+```
+
 Contra una base que no sea local el seed **exige** `ADMIN_PASSWORD`: la contraseña
 de desarrollo (`admin@blancapatagonia.local` / `blancadev1234`) es pública, está en
 este repositorio. *(En la base local de tests sí hay que repetirlo seguido, porque

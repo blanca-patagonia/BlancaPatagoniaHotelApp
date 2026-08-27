@@ -61,7 +61,27 @@ no sale nunca del servidor.
 El staff **no se auto-registra**: los usuarios los crea un administrador desde
 `/panel/usuarios`. Para crear el primero:
 
+**Se corre UNA SOLA VEZ.** El usuario queda en la base y no hay que repetirlo.
+
+En **Windows** (que es donde se trabaja este proyecto), las variables se setean
+aparte — la sintaxis `VAR=valor comando` es de bash y no funciona:
+
+```cmd
+:: cmd — SIN comillas: en CMD quedan dentro del valor y la contraseña saldría mal
+set ADMIN_EMAIL=tu-mail@dominio.com
+set ADMIN_PASSWORD=una-larga-y-propia
+npm run seed:usuarios
+```
+
+```powershell
+# PowerShell — acá las comillas sí van
+$env:ADMIN_EMAIL = "tu-mail@dominio.com"
+$env:ADMIN_PASSWORD = "una-larga-y-propia"
+npm run seed:usuarios
+```
+
 ```bash
+# macOS / Linux
 ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
 ```
 
@@ -69,10 +89,18 @@ El script se niega a correr contra una base que no sea local si no le pasás
 `ADMIN_PASSWORD`, y hace bien: la contraseña de desarrollo está publicada en este
 repositorio.
 
-⚠️ **Crear el usuario desde el panel de Supabase no alcanza.** El perfil nace
-`sin_rol` y `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así
-que el usuario puede autenticarse pero el panel lo rechaza. Hay que correr el
-script igual: es el que lo promueve a `admin`.
+⚠️ **Crear el usuario desde el panel de Supabase no alcanza, y el síntoma
+confunde:** el login te acepta las credenciales y te devuelve al login, una y otra
+vez, como si la contraseña estuviera mal. No lo está. El perfil nace `sin_rol` y
+`activo = false` a propósito (ADR 0017, migraciones 0032 y 0035): la autenticación
+pasa, pero `obtenerSesion()` descarta la sesión y el panel te rebota. Hay que
+correr el script igual, que es el que promueve el perfil a `admin`. Para
+confirmarlo, en el SQL Editor de Supabase:
+
+```sql
+select u.email, p.rol, p.activo
+from perfiles p join auth.users u on u.id = p.id;
+```
 
 ## Correr los tests — acá sí hace falta Docker
 
