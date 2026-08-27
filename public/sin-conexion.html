@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sin conexión — Blanca Patagonia</title>
+    <!--
+      Esta pantalla la sirve el service worker cuando no hay red. Tiene que
+      funcionar SOLA: sin CSS externo, sin fuentes de Google y sin JavaScript
+      del bundle, porque en ese momento no se puede descargar nada. Por eso
+      todos los estilos van acá adentro y la tipografía es la del sistema.
+    -->
+    <style>
+      :root {
+        --calafate-700: #003580;
+        --stone-600: #57534e;
+        --stone-900: #1c1917;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: #ffffff;
+        color: var(--stone-900);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        line-height: 1.5;
+      }
+      main {
+        max-width: 26rem;
+        text-align: center;
+      }
+      .marca {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 24px;
+        border-radius: 16px;
+        background: var(--calafate-700);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -1px;
+      }
+      h1 {
+        font-size: 1.375rem;
+        margin: 0 0 12px;
+      }
+      p {
+        color: var(--stone-600);
+        margin: 0 0 12px;
+      }
+      button {
+        margin-top: 20px;
+        width: 100%;
+        min-height: 44px;
+        padding: 12px 20px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--calafate-700);
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #002b66;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="marca" aria-hidden="true">BP</div>
+      <h1>No hay conexión</h1>
+      <p>
+        El sistema necesita internet para mostrar datos del hotel. No se guarda
+        una copia en el teléfono, así que no hay nada que mostrar sin red.
+      </p>
+      <p>
+        <strong>Nada de lo que hiciste se perdió:</strong> lo que ya se había
+        guardado está en el servidor.
+      </p>
+      <button type="button" onclick="location.reload()">Reintentar</button>
+    </main>
+  </body>
+</html>
