@@ -3126,3 +3126,84 @@ la reserva por pagada al instante y el huésped se iba sin pagar.
 **Pendiente:** contratar las pasarelas. Enchufarlas es cargar variables de
 entorno; no hay que tocar código. Ninguna de las dos verifica la tarjeta de
 garantía, y las tres implementaciones lo declaran (ADR 0025).
+
+---
+
+## 2026-08-26 — Mudanza a Supabase hosted
+
+**Resumen:** la base pasó del stack local en Docker a un proyecto Supabase en la
+nube. Se auditó el esquema antes de subirlo, se verificó la mudanza contra el
+proyecto real y se cerró un riesgo que la mudanza misma creó: el procedimiento
+documentado para correr los tests pasaba a apuntar a la base del hotel.
+
+**Auditoría previa (ejecutada contra la base local, no supuesta):**
+- Los seis riesgos candidatos de una mudanza a hosted quedaron descartados con
+  evidencia. El principal era que las migraciones no corren como superusuario en
+  hosted: resultó que **en local tampoco** (`usesuper = f`), y que los dueños de
+  los objetos son los mismos (`public` de `pg_database_owner`, `auth.users` de
+  `supabase_auth_admin`). El trigger `al_crear_usuario` de la 0001 aplica porque
+  crear un trigger pide el privilegio `TRIGGER`, no la propiedad de la tabla.
+- 43 tablas con RLS, 91 políticas, y las 12 funciones `security definer` con
+  `search_path` fijado.
+- La frontera pública se probó con datos reales —`insert` dentro de una
+  transacción, lectura como `anon`, `rollback`— porque sobre tablas vacías cero
+  filas no prueba nada.
+
+**Verificación de la mudanza (contra el proyecto hosted):**
+- Las 67 migraciones aplicadas y sincronizadas.
+- Catálogo cargado: 15 unidades, 30 tarifas, 10 tipos, 3 temporadas, 16 rangos.
+  `db push` **no** lleva el seed: hay que correrlo aparte, y una sola vez, porque
+  no tiene un solo `on conflict`.
+- El **ADR 0016 se sostiene en hosted**, comprobado columna por columna: `anon`
+  lee `precio_rack`, `moneda`, `iva_pct` y `vigente`, y tiene **denegado
+  `precio_neto`** (42501).
+- App corriendo contra la nube: `/api/salud` responde `{"estado":"ok","base":"ok"}`
+  en 81 ms.
+
+**El riesgo que creó la mudanza, y cómo se cerró:**
+
+Desde que `.env.local` apunta a la nube, el procedimiento que documentan
+`AGENTS.md` y el instructivo —exportar `SUPABASE_URL` y
+`SUPABASE_SERVICE_ROLE_KEY` para que los tests de integración no salteen— pasaba a
+apuntar a **la base real del hotel**. No es un dato de prueba lo que estaba en
+juego: **24 archivos** escriben con `service_role`, que saltea RLS *y* las
+revocaciones de `delete` de la migración 0061, y limpian con `delete` sobre
+`reservas`, `huespedes`, `tarifas`, `unidades` y `tipos_unidad`.
+
+Se agregó una guarda en `tests/db.ts` que corta si la URL no es local, con el
+mismo criterio que ya usaba `scripts/seed-usuarios.mjs`. Tiene salida de escape
+(`PERMITIR_DB_REMOTA=1`) para una base remota descartable, y no afecta al CI, que
+levanta la suya en `127.0.0.1`. **Verificada ejecutándola** contra la URL real:
+aborta antes de que corra un solo test.
+
+**De paso, los tres archivos que estaban siempre en rojo:**
+
+`AGENTS.md` documentaba que sin `.env.local` fallan tres archivos y `npm run check`
+igual devuelve 0. La causa: `describe.skipIf` marca los tests como salteados pero
+**igual ejecuta el cuerpo del `describe`** para recolectarlos, y esos tres crean su
+cliente ahí (`const admin = clienteDePrueba()`), así que `createClient` lanzaba
+«supabaseUrl is required». Se resolvió dando un destino inerte a los clientes
+cuando no hay credenciales; no debilita nada, porque `EXIGIR_DB=1` sigue cortando
+más arriba.
+
+- Antes: `3 failed | 74 passed | 17 skipped`
+- Después: `0 failed | 74 passed | 20 skipped` (1169 pasan, 386 saltean)
+
+**Decisiones tomadas:**
+- **Docker no se elimina.** El pedido inicial era borrarlo, pero no existen
+  archivos de Docker propios (no hay `docker-compose.yml` ni `Dockerfile`): lo usa
+  el CLI de Supabase. Y lo que sí lo toca hay que conservarlo — el CI corre los
+  1555 tests contra un Postgres real con `supabase start`, y `supabase/config.toml`
+  es lo que hace funcionar `db push`. Sin base local, los tests destructivos no
+  tendrían dónde correr salvo producción.
+- El instructivo se dio vuelta: `COMO-LEVANTARLO.md` arranca con hosted en tres
+  pasos y deja Docker en una sección aparte, solo para tests.
+- `.env.example` suma las tres variables que faltaban y que hacen fallar el
+  arranque en producción a propósito (ADR 0018): `COTIZACION_PROVIDER`,
+  `CANAL_PROVIDER` y `PAGO_PROVIDER`.
+
+**Pendiente / próximo paso:** el auto-registro quedó cerrado en el dashboard, pero
+un usuario creado desde ahí nace `sin_rol` y `activo = false` (ADR 0017): hay que
+correr `npm run seed:usuarios` igual, que es quien lo promueve a `admin`. Queda
+además la auditoría de las 91 políticas RLS una por una, ahora sobre el proyecto
+hosted.

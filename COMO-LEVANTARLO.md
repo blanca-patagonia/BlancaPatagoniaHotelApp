@@ -1,9 +1,17 @@
 # Blanca Patagonia — cómo levantarlo en otra computadora
 
+El sistema usa un proyecto **Supabase en la nube**: la base ya está creada, con las
+67 migraciones aplicadas y el catálogo cargado. **No hace falta Docker para usar el
+sistema.**
+
+Docker sigue haciendo falta para **una sola cosa**: correr la suite de tests. Está
+explicado más abajo, y conviene leer esa sección antes de correr `npm test`.
+
 ## Lo que hace falta tener instalado
 
 - **Node.js 20.12 o superior** (comprobalo con `node -v`)
-- **Docker Desktop**, corriendo. Sin Docker no hay base de datos local.
+- Nada más para levantar el sistema.
+- *(Opcional)* **Docker Desktop**, solo si vas a correr los tests.
 
 ## Pasos
 
@@ -11,41 +19,96 @@
 # 1. Instalar dependencias (no vienen en el zip, se bajan solas)
 npm install
 
-# 2. Levantar la base local. La primera vez baja imágenes: tarda unos minutos.
-npx supabase start
+# 2. Crear el archivo .env.local con las claves del proyecto (ver abajo)
 
-# 3. Ver las claves que imprime y crear el archivo .env.local (ver abajo)
-npx supabase status
-
-# 4. Aplicar las migraciones y los datos de ejemplo
-npx supabase db  reset
-
-# 5. Crear los usuarios del panel
-#    OJO: hay que correrlo SIEMPRE después del paso 4, que borra los usuarios.
-npm run seed:usuarios
-
-# 6. Arrancar
+# 3. Arrancar
 npm run dev
 ```
 
 Queda en <http://localhost:3000>
 
-**Usuario de prueba del panel:** `admin@blancapatagonia.local` / `blancadev1234`
+Para confirmar que enganchó con la base, entrá a <http://localhost:3000/api/salud>.
+Tiene que responder `{"estado":"ok","base":"ok"}`.
 
 ## El archivo `.env.local`
 
-Crealo en la raíz del proyecto. Los valores salen de `npx supabase status`:
+Crealo en la raíz del proyecto. **No se versiona** (está en `.gitignore`), así que
+en cada computadora hay que armarlo a mano.
+
+Los valores salen del panel de Supabase, en **Project Settings → API keys**:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<el PUBLISHABLE_KEY que imprime supabase status>
-SUPABASE_SERVICE_ROLE_KEY=<el SECRET_KEY que imprime supabase status>
+NEXT_PUBLIC_SUPABASE_URL=https://<tu-proyecto>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<la "publishable key", empieza con sb_publishable_>
+SUPABASE_SERVICE_ROLE_KEY=<la "secret key", empieza con sb_secret_>
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 # Pasarela de pagos. En desarrollo se puede omitir: cae al simulador.
 PAGO_PROVIDER=simulado
 PAGO_WEBHOOK_SECRET=cualquier-cadena-larga-para-desarrollo
 ```
+
+⚠️ **Cuidado con cuál copiás.** La *secret key* es la que empieza con `sb_secret_`.
+En el panel hay además una clave del protocolo S3 del Storage que se parece y **no
+sirve**: con ésa, todo lo que use `service_role` falla —incluida el alta de
+usuarios— y el error no dice que la clave esté mal.
+
+La *publishable key* sí es pública: viaja al navegador por diseño. La *secret key*
+no sale nunca del servidor.
+
+## Entrar al panel
+
+El staff **no se auto-registra**: los usuarios los crea un administrador desde
+`/panel/usuarios`. Para crear el primero:
+
+```bash
+ADMIN_EMAIL="tu-mail@dominio.com" ADMIN_PASSWORD="una-larga-y-propia" npm run seed:usuarios
+```
+
+El script se niega a correr contra una base que no sea local si no le pasás
+`ADMIN_PASSWORD`, y hace bien: la contraseña de desarrollo está publicada en este
+repositorio.
+
+⚠️ **Crear el usuario desde el panel de Supabase no alcanza.** El perfil nace
+`sin_rol` y `activo = false` a propósito (ADR 0017, migraciones 0032 y 0035), así
+que el usuario puede autenticarse pero el panel lo rechaza. Hay que correr el
+script igual: es el que lo promueve a `admin`.
+
+## Correr los tests — acá sí hace falta Docker
+
+**Los tests NO se corren contra el proyecto de la nube.** Hay 24 archivos que
+escriben con `service_role`, que saltea RLS, y borran filas de `reservas`,
+`huespedes`, `tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso
+destruye datos del hotel.
+
+Por eso hay que levantar una base local para testear:
+
+```bash
+npx supabase start          # la primera vez baja imágenes: tarda unos minutos
+npx supabase db reset       # aplica las 67 migraciones y el catálogo
+npm run seed:usuarios       # OJO: db reset borra los usuarios de auth
+
+# y recién ahí, con las variables apuntando a LOCAL:
+npm test
+```
+
+`tests/db.ts` tiene una guarda que corta si las variables apuntan a una base que no
+es local, así que el accidente no puede pasar en silencio.
+
+Sin base local, `npm test` **saltea** los tests de integración en vez de fallar
+—entre ellos el anti-overbooking, que es la garantía central del sistema—. En CI
+eso no puede pasar: `EXIGIR_DB=1` convierte la ausencia de base en error.
+
+## Verificar que está todo bien
+
+```bash
+npm run check      # lint + typecheck + tests + build
+```
+
+Con base local tienen que dar **1555 tests en verde, cero salteados**.
+
+⚠️ **Leé la salida, no el código de salida.** Si no existe `.env.local`, varios
+archivos de test fallan por falta de variables y el comando **igual devuelve 0**.
 
 ## Para probar el cobro de punta a punta
 
@@ -88,23 +151,25 @@ de los huéspedes se queda sin poder pagar.
 El detalle y el porqué de cada decisión está en
 `docs/decisiones/0027-cobro-en-linea-dos-pasarelas-y-una-sola-moneda-de-saldo.md`.
 
-## Verificar que está todo bien
+## Variables obligatorias en producción
 
-```bash
-npm run check      # lint + typecheck + tests + build
+Si faltan, el sistema **falla al arrancar a propósito** (ADR 0018): quedarse con un
+simulador tiene que ser una decisión escrita, nunca un descuido. El de facturación,
+por ejemplo, emite un CAE inventado sobre una factura real.
+
+```
+EMAIL_PROVIDER, FIRMA_PROVIDER, FACTURACION_PROVIDER,
+COTIZACION_PROVIDER, CANAL_PROVIDER, PAGO_PROVIDER
 ```
 
-Tienen que dar **1555 tests en verde, cero salteados**.
-
-⚠️ **Leé la salida, no el código de salida.** Si no existe `.env.local`, varios
-archivos de test fallan por falta de variables y el comando **igual devuelve 0**.
+La plantilla completa, con el nombre del simulador de cada una, está en
+`.env.example`.
 
 ## Qué NO viene en el zip
 
 - `node_modules/` — lo resuelve `npm install`
 - `.next/` — lo genera el build
-- `.env.local` — tiene claves; se arma a mano con el paso 3
-- Los contenedores de Docker con los datos — los levanta `npx supabase start`
+- `.env.local` — tiene claves; se arma a mano con el paso 2
 
 ## Dónde leer más
 
