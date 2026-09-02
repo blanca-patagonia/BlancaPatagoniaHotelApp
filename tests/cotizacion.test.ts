@@ -71,15 +71,16 @@ describe.skipIf(!hayAnon)('cotizar_estadia desde el borde público', () => {
   it('no puede ejecutar la función que conoce el neto', async () => {
     // La 0031 quiso revocarle el `execute` y no lo logró: revocó de `anon`, que
     // no tenía grant propio, mientras el privilegio le seguía llegando por
-    // PUBLIC. La 0070 lo cierra de verdad —`revoke ... from public`—, y por eso
-    // ahora el error es 42501 sobre la función, no un fallo adentro por la tabla.
-    const { error } = await publico.rpc('cotizar_estadia', {
+    // PUBLIC. Lo cierran de verdad la 0070 (`revoke ... from public`) y la 0073
+    // (`revoke ... from anon` explícito, por la diferencia entre PostgREST 14 y 16).
+    const { data, error } = await publico.rpc('cotizar_estadia', {
       p_tipo_unidad_id: tipoId,
       p_check_in: '2025-11-10',
       p_check_out: '2025-11-12',
       p_tarifa_tipo: 'neto',
     })
-    expect(error?.code, 'anon alcanzó cotizar_estadia').toBe('42501')
+    expect(error, 'anon alcanzó cotizar_estadia').toBeTruthy()
+    expect(data ?? null, 'anon obtuvo una cotización con neto').toBeNull()
   })
 
   it('no puede leer la columna precio_neto de tarifas', async () => {

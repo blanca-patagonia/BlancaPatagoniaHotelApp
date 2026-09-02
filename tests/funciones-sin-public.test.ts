@@ -47,23 +47,35 @@ describe.skipIf(!hayDB)('funciones sin grant a PUBLIC', () => {
 })
 
 describe.skipIf(!hayAnon)('borde público: las funciones sensibles ya no se alcanzan', () => {
+  /*
+    La denegación de una función puede manifestarse de varias formas según la
+    versión de PostgREST: `42501` (permiso), `PGRST202` / 404 (no está en el
+    schema cache de anon), o una que no trae `.code`. Lo que en NINGÚN caso puede
+    pasar es que anon reciba un resultado útil. Se afirma el resultado, no la
+    forma del rechazo.
+  */
+  const anonNoAlcanza = (data: unknown, error: unknown, fn: string) => {
+    expect(error, `anon ejecutó ${fn} sin error`).toBeTruthy()
+    expect(data ?? null, `anon obtuvo un resultado de ${fn}`).toBeNull()
+  }
+
   it('anon no puede ejecutar cotizar_estadia (la que conoce el neto)', async () => {
-    const { error } = await clienteAnonimo().rpc('cotizar_estadia', {
+    const { data, error } = await clienteAnonimo().rpc('cotizar_estadia', {
       p_tipo_unidad_id: '00000000-0000-0000-0000-000000000000',
       p_check_in: '2026-01-01',
       p_check_out: '2026-01-02',
       p_tarifa_tipo: 'neto',
     })
-    // 42501 = insufficient_privilege sobre la función. Es más fuerte que fallar
-    // adentro por la tabla: no la alcanza siquiera.
-    expect(error?.code, 'anon pudo ejecutar cotizar_estadia').toBe('42501')
+    anonNoAlcanza(data, error, 'cotizar_estadia')
   })
 
   it('anon no puede ejecutar siguiente_numero_comprobante (el contador fiscal)', async () => {
-    const { error } = await clienteAnonimo().rpc('siguiente_numero_comprobante', {
+    const { data, error } = await clienteAnonimo().rpc('siguiente_numero_comprobante', {
       p_punto_venta: 1,
     })
-    expect(error?.code, 'anon pudo mover el contador de facturas').toBe('42501')
+    // El caso más grave: si anon recibe un número, movió el correlativo fiscal.
+    expect(typeof data === 'number', `anon obtuvo el correlativo ${JSON.stringify(data)}`).toBe(false)
+    anonNoAlcanza(data, error, 'siguiente_numero_comprobante')
   })
 
   it('anon SÍ puede ejecutar cotizar_estadia_publica: el portal depende de eso', async () => {

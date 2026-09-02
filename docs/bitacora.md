@@ -3833,3 +3833,45 @@ técnica y **lo que explícitamente no se cierra sin desplegar**.
 | La carrera de facturación gasta un CAE | **Cerrado.** Migración 0069; medido que el contador avanza 1 y no 2 (F3). Residual documentado: una emisión abandonada de verdad deja el número reservado, ahora **visible** en `facturas_numeracion`. |
 | RLS es la única barrera | **Cerrado en lo verificado.** Premisa parcialmente incorrecta (0 filas, testeado exhaustivo en lectura). Se agregó la capa GRANT: `anon` sin SELECT fuera del catálogo (0072), `cotizar_estadia`/`siguiente_numero_comprobante` sin PUBLIC (0070), test de contrato. Residual: `rls-escritura-por-rol` es dirigida; `contratos` legible por housekeeping (contradice ADR 0005). |
 | Deuda de rendimiento latente | **Cerrado.** 28 índices de FK → 0 (0071); caché del catálogo (F5). Residual: la ficha `/alojamientos/[codigo]` no se cachea, solo el listado. |
+
+---
+
+## 2026-09-01 — Blindaje: `revoke` explícito a `anon`, y el CI en verde
+
+**Resumen:** el push de la auditoría dejó el CI en rojo por dos cosas ajenas a los
+cambios, y una tercera que sí era del trabajo. Las tres cerradas.
+
+**1. CVE de `browserslist` (`chore(deps)`).** `npm audit --audit-level=high` empezó
+a fallar por dos advisories de `browserslist <=4.28.6`. Es transitiva y solo del
+árbol de dev (`eslint-config-next → @babel/core`), sin exposición en producción.
+`npm audit fix` no lo alcanza sin breaking changes: se puso un `overrides` a
+`^4.28.8`.
+
+**2. La diferencia entre PostgREST 14 y 16 (migración 0073).** El stack local
+levanta **PostgREST 14**; el CI, **PostgREST 16**. Contra la 14, el
+`revoke execute ... from public` de la 0070 alcanza: `anon` recibe 42501 al
+llamar a las funciones. Contra la 16, un test de borde detectó que `anon`
+**todavía alcanzaba `siguiente_numero_comprobante`** —el contador fiscal— pese al
+revoke. El resto de las funciones de la 0070 sí quedaron cerradas en las dos
+versiones; la que se escapó es `security definer` y además pasó por la reescritura
+de la 0033 (`pg_get_functiondef` + `create or replace`).
+
+No se llegó a la causa exacta de la discrepancia, y la conclusión es que **no hay
+que depender de que `revoke from public` alcance el grant implícito**. La 0073
+revoca a `anon` **por nombre** (`revoke all ... from anon, public`) sobre las
+funciones que nunca debe tocar —contadores, numeración fiscal, límite de tasa,
+mantenimiento— y re-otorga `execute` explícitamente a quien corresponde.
+Verificado: `has_function_privilege('anon', ...)` da `f` para las 13 funciones y
+`t` para las tres del portal (`cotizar_estadia_publica`, `disponibilidad_por_tipo`,
+`unidades_disponibles`) y para `rol_actual`.
+
+**3. Los tests de borde, menos frágiles.** `tests/funciones-sin-public.test.ts` y
+`tests/cotizacion.test.ts` afirmaban el **código de error exacto** (`42501`). La
+denegación de una función puede llegar como 42501, `PGRST202`, 404 o una respuesta
+sin `.code` según la versión de PostgREST. Ahora se afirma el **resultado** —anon
+no recibe un número, no recibe una cotización— y que hubo error, sin exigir su
+forma. Un flake de red deja de romper el test; un acceso real de `anon` sí lo
+rompe.
+
+`npm run check` local: **1617 tests / 98 archivos / 0 salteados · lint 0 ·
+typecheck 0 · build 0.**
