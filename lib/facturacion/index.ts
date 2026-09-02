@@ -18,6 +18,16 @@ import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/
 export interface SolicitudCae {
   tipo: TipoComprobante
   puntoVenta: number
+  /**
+   * Número correlativo del comprobante, ya reservado por
+   * `reservar_numero_factura` (migración 0069).
+   *
+   * No estaba, y tenía que estar: WSFEv1 lo exige como `CbteDesde`/`CbteHasta`.
+   * Además es lo que vuelve idempotente al pedido — re-consultar el mismo número
+   * devuelve el CAE que AFIP ya autorizó, en vez de autorizar otro—, que es
+   * justamente la propiedad sobre la que se apoya el arreglo de la carrera.
+   */
+  numero: number
   /** Importe total con IVA incluido. */
   total: number
   neto: number

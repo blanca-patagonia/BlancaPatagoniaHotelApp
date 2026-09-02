@@ -48,7 +48,7 @@ export const GRUPOS: readonly GrupoNavegacion[] = [
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
   { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
   { titulo: 'Equipo', areas: ['avisos', 'conversaciones'] },
-  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'config', 'usuarios', 'respaldos'] },
+  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
   { titulo: null, areas: ['ayuda'] },
 ]
 
@@ -107,6 +107,7 @@ export const RUTA_AREA: Record<Area, string> = {
   contratos: '/panel/contratos',
   canales: '/panel/canales',
   auditoria: '/panel/auditoria',
+  errores: '/panel/errores',
   reportes: '/panel/reportes',
   config: '/panel/config',
   usuarios: '/panel/usuarios',

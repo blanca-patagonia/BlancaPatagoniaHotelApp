@@ -40,6 +40,7 @@ import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
+import { registrarErrorSync } from '@/lib/registro'
 import {
   paxQueOcupa,
   validarOcupantes,
@@ -877,21 +878,48 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     exento,
   })
 
-  // Numeración correlativa: la reserva el contador de la base con bloqueo de
-  // fila (migración 0025). Antes se hacía con `count(*) + 1`, que ante dos
-  // emisiones simultáneas generaba el mismo número.
-  const { data: siguiente, error: eNumero } = await supabase.rpc(
-    'siguiente_numero_comprobante',
-    { p_punto_venta: PUNTO_VENTA },
+  // Numeración correlativa, idempotente por reserva (migración 0069).
+  //
+  // No se llama a `siguiente_numero_comprobante` directo, y ésa es la corrección:
+  // hacerlo consumía un número **cada vez**, así que la emisión que perdía una
+  // carrera —o cualquier reintento tras un corte— gastaba uno de más y dejaba un
+  // salto de correlatividad, que es obligación formal (ADR 0015).
+  // `reservar_numero_factura` entrega siempre el mismo número para la misma
+  // reserva, y por eso el reintento vuelve a pedirle a AFIP el CAE del mismo
+  // comprobante en vez de uno nuevo.
+  const { data: reserva_numero, error: eNumero } = await supabase.rpc(
+    'reservar_numero_factura',
+    { p_reserva_id: reservaId, p_punto_venta: PUNTO_VENTA },
   )
-  if (eNumero || typeof siguiente !== 'number') {
-    redirect(`/panel/reservas/${reservaId}?error=numeracion`)
+  if (eNumero) redirect(`/panel/reservas/${reservaId}?error=numeracion`)
+
+  const numeracion = reserva_numero as {
+    ok: boolean
+    motivo?: string
+    numero?: number
+    reusado?: boolean
+  } | null
+
+  // `ya_facturada`: otra emisión llegó primero. Igual que en el 23505 de más
+  // abajo, lo correcto es mostrar el comprobante y no un error: la reserva
+  // **está** facturada.
+  if (numeracion?.motivo === 'ya_facturada') {
+    redirect(`/panel/reservas/${reservaId}/factura`)
   }
+  if (!numeracion?.ok || typeof numeracion.numero !== 'number') {
+    redirect(`/panel/reservas/${reservaId}?error=${numeracion?.motivo ?? 'numeracion'}`)
+  }
+
+  const siguiente = numeracion.numero
 
   const proveedor = obtenerProveedorFacturacion()
   const resultado = await proveedor.solicitarCae({
     tipo,
     puntoVenta: PUNTO_VENTA,
+    // El número va en la solicitud porque WSFEv1 lo exige (`CbteDesde`), y
+    // porque es lo que hace que un reintento reciba el CAE ya autorizado en vez
+    // de uno nuevo: para AFIP, el número ES la clave de idempotencia.
+    numero: siguiente,
     total: desglose.total,
     neto: desglose.neto,
     iva: desglose.iva,
@@ -935,30 +963,32 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   // Mandarla al error genérico sería mentirle a quien la usa: la reserva **está**
   // facturada, solo que la emitió el otro pedido. Lo correcto es mostrarle el
   // comprobante, igual que si hubiera llegado segunda en secuencia.
-  // ⚠️ Lo que este arreglo NO resuelve, y hay que decirlo:
+  // ⚠️ El número correlativo YA NO se gasta acá (migración 0069).
   //
-  // El pedido que pierde la carrera llegó hasta acá, o sea que **ya consumió un
-  // número correlativo** (`siguiente_numero_comprobante`, más arriba) y **ya le
-  // pidió un CAE al proveedor**. Con el proveedor simulado no pasa nada. Con AFIP de
-  // verdad quedaría un CAE emitido para un número que no tiene fila en `facturas`:
-  // un salto en la numeración, que es una obligación formal (ADR 0015).
+  // Esto decía que el pedido perdedor se llevaba puesto un número y un CAE, y era
+  // cierto mientras la numeración salía de `siguiente_numero_comprobante` directo:
+  // esa función entrega uno nuevo **en cada llamada**. Ahora la numeración pasa por
+  // `reservar_numero_factura`, que le da a cada reserva un número y siempre el
+  // mismo, así que las dos emisiones de la carrera piden el CAE del **mismo**
+  // comprobante. AFIP, re-consultado sobre el mismo `CbteDesde`, devuelve el CAE
+  // que ya autorizó: no hay un segundo CAE ni un número perdido.
   //
-  // No se arregla acá. Pedir el CAE después de insertar no alcanza —el CAE va en la
-  // fila— y reservar la fila primero y completarla después choca con la
-  // inmutabilidad de `facturas` (migración 0034). La salida es una función SQL
-  // transaccional que numere, inserte y devuelva, con el CAE pedido dentro de la
-  // misma transacción. Queda anotado como pendiente.
-  //
-  // La ventana es chica (dos pedidos en vuelo sobre la misma reserva) y el daño de
-  // no tener la restricción era mucho peor: dos comprobantes fiscales de la misma
-  // estadía y una nota de crédito para arreglarlo.
+  // Lo que sigue sin resolverse, y hay que decirlo: si una emisión se abandona de
+  // verdad —el CAE se rechaza y nadie reintenta— el número queda reservado y nunca
+  // llega a `facturas`. Ahí sí hay hueco. La diferencia es que ahora **se puede
+  // ver**: queda la fila en `facturas_numeracion` diciendo qué reserva se quedó con
+  // ese número (la consulta está al pie de la migración 0069). Antes el número
+  // desaparecía sin rastro y el salto aparecía recién en una fiscalización.
   if (eFactura?.code === '23505') {
-    // Al log igual: hubo una carrera y probablemente un número gastado.
-    console.error(
-      `Emisión simultánea sobre la reserva ${reservaId}: la restricción única rechazó el segundo comprobante. ` +
-        `Revisar si quedó un salto en la numeración del punto de venta ${PUNTO_VENTA}.`,
-      eFactura.message,
-    )
+    // Sigue yendo al registro, pero ya no como sospecha de número gastado: es
+    // una carrera resuelta como corresponde, y sirve saber que ocurrió.
+    registrarErrorSync('factura_emision_simultanea', {
+      detalle:
+        `Emisión simultánea sobre la reserva ${reservaId}: la restricción única rechazó el segundo comprobante. ` +
+        `La numeración no se duplicó (migración 0069); se muestra el comprobante emitido.`,
+      punto_venta: PUNTO_VENTA,
+      motivo_base: eFactura.message,
+    })
     redirect(`/panel/reservas/${reservaId}/factura`)
   }
 

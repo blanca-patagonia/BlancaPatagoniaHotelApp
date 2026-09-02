@@ -346,6 +346,7 @@ export async function GET(
   const params_url = new URL(peticion.url).searchParams
   const contenido = await definicion.generar(supabase, params_url)
 
-  const fecha = new Date().toISOString().slice(0, 10)
-  return respuestaCsv(contenido, `${definicion.archivo}-${fecha}.csv`)
+  // La fecha del archivo es la del hotel, igual que la de los datos que lleva
+  // adentro: en UTC, un export bajado a las 21:30 salía fechado mañana.
+  return respuestaCsv(contenido, `${definicion.archivo}-${hoyISO()}.csv`)
 }

@@ -42,7 +42,8 @@ interface Props {
    * Llega calculada desde el servidor y no se resuelve acá con `new Date()`:
    * la aritmética de fechas del proyecto vive en `lib/fechas.ts` y trabaja
    * sobre `YYYY-MM-DD`, justamente para no depender de la zona horaria del
-   * navegador (el hotel está en UTC−3 y el sistema razona en UTC).
+   * navegador. El día lo fija el servidor con `hoyISO()`, que lo resuelve en
+   * `ZONA_HOTEL`, así que un huésped en Madrid ve el mismo «hoy» que el hotel.
    */
   salidaPorDefecto: string
   /**

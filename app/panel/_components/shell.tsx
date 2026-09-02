@@ -47,6 +47,9 @@ const ICONO_AREA: Record<Area, NombreIcono> = {
   contratos: 'contratos',
   canales: 'canales',
   auditoria: 'auditoria',
+  // Se reusa `alerta` en vez de dibujar un icono nuevo: es exactamente lo que
+  // significa la pantalla y ya está en la paleta.
+  errores: 'alerta',
   reportes: 'reportes',
   config: 'config',
   usuarios: 'usuarios',

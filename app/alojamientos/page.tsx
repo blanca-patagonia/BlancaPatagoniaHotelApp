@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { crearClienteServidor } from '@/lib/supabase/server'
+import { tiposUnidadPublicos, tarifasPublicas } from '@/lib/catalogo/publico'
 import { ETIQUETAS_CATEGORIA, type CategoriaUnidad } from '@/lib/domain/unidades'
 import {
   FILTROS_CATEGORIA,
@@ -70,17 +70,11 @@ export default async function AlojamientosPage({
 }) {
   const { categoria } = await searchParams
   const filtro = filtroValido(categoria)
-  const supabase = await crearClienteServidor()
 
-  const [{ data: tiposData }, { data: tarifasData }] = await Promise.all([
-    supabase
-      .from('tipos_unidad')
-      .select('id, codigo, nombre, categoria, capacidad_max, descripcion, amenities')
-      .eq('activo', true),
-    // Solo `precio_rack`: el neto es de agencia y `anon` no tiene privilegio
-    // sobre esa columna (migración 0031).
-    supabase.from('tarifas').select('tipo_unidad_id, precio_rack, iva_pct').eq('vigente', true),
-  ])
+  // Catálogo cacheado (etiqueta `catalogo-publico`, se invalida al editar una
+  // tarifa o temporada en el panel). La disponibilidad NO se cachea y vive en
+  // `/reservar`. Ver `lib/catalogo/publico.ts`.
+  const [tiposData, tarifasData] = await Promise.all([tiposUnidadPublicos(), tarifasPublicas()])
 
   const tipos: TipoCatalogo[] = ((tiposData ?? []) as FilaTipo[]).map((t) => ({
     id: t.id,

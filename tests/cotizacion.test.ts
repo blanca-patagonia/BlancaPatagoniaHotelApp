@@ -69,15 +69,17 @@ describe.skipIf(!hayAnon)('cotizar_estadia desde el borde público', () => {
   })
 
   it('no puede ejecutar la función que conoce el neto', async () => {
-    // Migración 0031: se le revocó el `execute`. Es más fuerte que una guarda por
-    // parámetro —no es que se niegue a devolver el neto, es que no la alcanza—.
+    // La 0031 quiso revocarle el `execute` y no lo logró: revocó de `anon`, que
+    // no tenía grant propio, mientras el privilegio le seguía llegando por
+    // PUBLIC. La 0070 lo cierra de verdad —`revoke ... from public`—, y por eso
+    // ahora el error es 42501 sobre la función, no un fallo adentro por la tabla.
     const { error } = await publico.rpc('cotizar_estadia', {
       p_tipo_unidad_id: tipoId,
       p_check_in: '2025-11-10',
       p_check_out: '2025-11-12',
       p_tarifa_tipo: 'neto',
     })
-    expect(error).not.toBeNull()
+    expect(error?.code, 'anon alcanzó cotizar_estadia').toBe('42501')
   })
 
   it('no puede leer la columna precio_neto de tarifas', async () => {

@@ -3495,3 +3495,341 @@ también da 0.
 **Verificación:** `npm run lint` 0 · `npm run typecheck` 0 · `npm run build` 0 ·
 **10 tests nuevos** (`tests/lateral.test.ts`) sobre los límites y la lectura de lo
 guardado. Suite: **1199 pasan, 0 fallan** (386 saltean por falta de base local).
+
+---
+
+## 2026-08-30 — Fase 1 de auditoría: «hoy» es el día del hotel, no el de UTC
+
+**Resumen:** se corrigió un bug que estaba **activo todas las noches** y que
+ninguna de las auditorías anteriores había visto. `hoyISO()` calculaba el día en
+UTC; el hotel está en UTC−3.
+
+**Cómo apareció.** Revisando el riesgo «husos horarios» de la auditoría —listado
+como parte de «el sistema nunca corrió en producción»— se leyó `lib/fechas.ts`,
+cuyo encabezado decía desde la Fase 0: *«se trabaja en UTC por simplicidad; el
+ajuste fino de zona horaria (America/Argentina/Rio_Gallegos) se aborda en una
+fase posterior»*. Esa fase nunca llegó.
+
+**La medición, no la sospecha.** Ejecutado a las 23:13 de El Calafate:
+
+```
+ahora UTC        : 2026-08-31T02:13:34.947Z
+hoyISO() daba    : 2026-08-31
+en El Calafate es: 2026-08-30      <-- un día de diferencia
+```
+
+**Qué rompía.** `hoyISO()` tiene **41 call sites**. Entre las 21:00 y la
+medianoche, todos los días:
+
+- **Housekeeping** (`/panel/housekeeping`) listaba las salidas de mañana como si
+  fueran de hoy.
+- **Punto de venta**: «la noche de hoy» es `rangoISO(hoy, sumarDias(hoy, 1))`, así
+  que un consumo cargado a las 21:30 se cobraba a la noche equivocada — a la
+  estadía de otro huésped, o a ninguna.
+- **Feed iCal de salida** (`/api/canales/ical/[token]`): publica la ocupación
+  desde «hoy», o sea que **publicaba como libre una noche vendida**. Es
+  exactamente el daño que el ADR 0022 se propuso evitar.
+- **Ocupación, reportes, contratos vencidos** y el nombre de los CSV exportados.
+
+**Por qué no lo vio nadie.** De día las dos fechas coinciden, así que programando
+no se nota. Y el CI corre en UTC comparando UTC contra UTC: `vitest.config.ts` no
+fija ninguna zona y `hoyISO()` no tenía **ni un solo test**.
+
+**El arreglo.** `lib/fechas.ts`:
+
+- Constante `ZONA_HOTEL = 'America/Argentina/Rio_Gallegos'`, fuente única.
+- `hoyISO()` resuelve con `Intl.DateTimeFormat(...).formatToParts()`. Se usa
+  `formatToParts` y no `toLocaleDateString('en-CA')` **a propósito**: el formato
+  de un locale es dato de ICU y puede cambiar entre versiones de Node; las partes
+  no. Sin dependencias nuevas.
+- `hoyISO()` acepta un `Date` opcional, que es lo que permite fijar el instante en
+  los tests en vez de manotear `process.env.TZ`.
+
+**Lo que NO se cambió, y es una decisión.** El resto de `lib/fechas.ts`
+(`sumarDias`, `diasEntre`, `listaDias`…) sigue anclando en UTC. No es un descuido:
+esas funciones operan sobre **días, no sobre instantes** —`sumarDias('2026-08-30', 1)`
+es el 31 en cualquier parte del mundo— y ahí la zona no interviene. Tocarlas habría
+sido cambiar código correcto. El único que leía el reloj era `hoyISO()`.
+
+También se corrigió `app/panel/exportar/[recurso]/route.ts`, el único lugar que
+calculaba la fecha a mano con `new Date().toISOString().slice(0, 10)`: un CSV
+bajado a las 21:30 salía nombrado con la fecha de mañana.
+
+**Verificación — el test falla sin el arreglo.** Se revirtió `lib/fechas.ts` con
+`git stash` y se volvió a correr: **5 de los 7 tests nuevos en rojo**, con
+`expected '2026-08-31' to be '2026-08-30'`. Con el arreglo, los 7 en verde. Los
+casos clavan instantes concretos (00:30 y 02:59 UTC = 21:30 y 23:59 del día
+anterior en el hotel), más uno que verifica que enero y julio son ambos UTC−3
+—la Argentina no aplica horario de verano desde 2009— para que un cambio de zona
+por una con DST quede en evidencia.
+
+**Verificación general:** `npm run lint` 0 · `npm run typecheck` 0 ·
+`npm run build` 0 · suite **1592 pasan / 96 archivos / 0 saltean** contra la base
+local con las tres variables y `EXIGIR_DB=1` (eran 1585: +7 nuevos, ninguna
+regresión).
+
+**Decisiones:**
+- La zona del hotel es una **constante exportada**, no un literal repetido: si
+  algún día el hotel abre otra propiedad en otro huso, el cambio tiene un solo
+  lugar.
+- Se documentó la trampa en `AGENTS.md`, junto a las demás, porque la próxima
+  persona que escriba `new Date().toISOString()` va a reintroducir el bug sin
+  darse cuenta.
+- No se agregó ADR: no es una decisión de arquitectura nueva, es la corrección de
+  algo que el propio código declaraba pendiente.
+
+---
+
+## 2026-09-01 — Fase 2 de auditoría: los errores dejan de morir en stdout (ADR 0029)
+
+**Resumen:** el sistema ya emitía log estructurado y no lo guardaba en ningún
+lado. Ahora hay tabla, captura de excepciones no manejadas y pantalla.
+
+**Una corrección al diagnóstico de la auditoría.** Decía «cero logging
+estructurado, cero trazas». Es falso: `lib/registro.ts` ya existía —una línea JSON
+por evento, con id de petición y ocultamiento de datos sensibles en dos capas—. El
+problema real era otro y más chico de enunciar: **lo usaban 2 de ~67 lugares** y
+**nada salía de stdout**. Un log que solo vive en el buffer de Vercel, en un hotel
+donde nadie abre esa consola, es un log que no existe.
+
+**Qué se construyó:**
+
+- **Migración 0068 — tabla `errores`.** Con `evento`, `nivel`, `detalle`, `pedido`
+  (el id de correlación), `ruta`, `usuario_id`, `rol`, `datos jsonb` y —lo que más
+  importa— **`digest`**. RLS activada, lectura para `admin`/`gerencia`, y **sin
+  política de INSERT**: la escribe `service_role`, igual que `auditoria` se escribe
+  sola desde un trigger. Que nadie pueda borrar su propio rastro es el punto.
+  Nace con purga a los 90 días (`purgar_errores`), porque `auditoria` ya crece sin
+  techo y no se quería repetir eso.
+- **`instrumentation.ts` con `onRequestError`.** Es el gancho de Next que se
+  dispara cuando el servidor captura una excepción. **Por qué importa el digest:**
+  las tres pantallas de error del proyecto ya lo mostraban y no lo mandaban a
+  ningún lado. Ese código de ocho caracteres es el único hilo entre «me salió un
+  error» y el stack del servidor; era de solo escritura y ahora cierra el círculo.
+- **El sink en `lib/registro.ts`.** Escribe la fila además de la línea JSON. Tres
+  reglas: **nunca lanza** (un logger que rompe la petición que estaba registrando
+  es peor que no tenerlo), **nunca bloquea de más** (corte a 2 s: es un log, no la
+  operación) y **`info` no se persiste** (sería una fila por navegación).
+  El stdout va **primero** y el sink después, a propósito: si la base es
+  justamente lo que falla, la línea ya salió.
+- **`registrarErrorSync` usa `after()`.** Quien la llama está por lanzar un
+  `redirect()`, así que la petición termina enseguida y en serverless la escritura
+  se perdería. `after()` es el mecanismo de Next para trabajo posterior a la
+  respuesta; fuera de una petición (cron, test) lanza, y ahí se cae a dispararlo y
+  soltarlo, que es lo mejor disponible.
+- **Pantalla `/panel/errores`** (área nueva, con los cinco lugares que exige
+  `AGENTS.md`). De solo lectura: no hay botón de borrar, porque un rastro que quien
+  lo mira puede limpiar deja de ser un rastro. Se reusó el icono `alerta`.
+
+**Verificación:** 5 tests nuevos (`tests/registro.test.ts`) que prueban lo que
+importa, no que se escriba una fila: que el token pasado a mano llega como
+`[oculto]`, que un número de 16 dígitos dentro del texto libre también, que **con
+la base inalcanzable el sink no lanza**, y que `anon` ni lee ni inserta.
+
+---
+
+## 2026-09-01 — Fase 3 de auditoría: la carrera de facturación deja de gastar un CAE
+
+**Resumen:** se cerró el P1 más caro que quedaba abierto. Estaba documentado en el
+código y en `docs/PENDIENTES.md` desde la migración 0045.
+
+**El defecto.** `emitirFactura` hacía **reservar número → pedir CAE → insertar
+fila**, y cada paso es una transacción autocommit distinta sobre PostgREST. Dos
+emisiones simultáneas de la misma reserva pasaban las dos por el chequeo inicial,
+**las dos consumían un número** y **las dos pedían un CAE**. La restricción
+`facturas_una_por_reserva` impedía el segundo comprobante —el daño grande— pero la
+que perdía la carrera ya se había llevado puesto un correlativo. Con AFIP real eso
+es un **salto de numeración**, que es obligación formal (ADR 0015).
+
+**Por qué no servía «meter todo en una transacción SQL»**, que era lo que decía el
+pendiente original: el pedido del CAE es una llamada HTTP a un tercero. Postgres no
+la puede hacer, y sostener una transacción abierta esperando a AFIP dejaría
+bloqueado el contador para todo el hotel. Pedir el CAE después de insertar tampoco:
+el CAE va **en** la fila, y `facturas` es inmutable desde la 0034.
+
+**La salida (migración 0069): el número ES la clave de idempotencia.** Es lo que ya
+es para AFIP —WSFEv1 re-consultado sobre el mismo `CbteDesde` devuelve el CAE que ya
+autorizó, no uno nuevo—. Alcanza con garantizar que cada reserva tenga **un solo
+número, para siempre**: tabla `facturas_numeracion` (un boleto por reserva) y
+función `reservar_numero_factura`, que serializa con `pg_advisory_xact_lock` sobre
+la reserva, **re-chequea después de tomar el bloqueo** —sin eso el bug solo cambiaba
+de lugar— y recién ahí invoca a `siguiente_numero_comprobante`, una sola vez.
+
+Se le agregó `numero` a `SolicitudCae`: no estaba, y WSFEv1 lo exige como
+`CbteDesde`. Es además lo que hace que el reintento reciba el CAE ya autorizado.
+
+**Lo que NO resuelve, y queda escrito:** si una emisión se abandona de verdad —CAE
+rechazado y nadie reintenta— el número queda reservado y no llega a `facturas`. Ahí
+sigue habiendo hueco. La diferencia es que ahora **se ve**: hay una fila que dice
+qué reserva se quedó con ese número. Antes desaparecía sin rastro y el salto
+aparecía recién en una fiscalización.
+
+**Verificación — medido, no supuesto.** El test de concurrencia ya existía y montaba
+la carrera, pero **pasaba con el bug puesto**: solo afirmaba que quedara un
+comprobante. Se le sumó la afirmación que faltaba —capturar `puntos_venta.ultimo_numero`
+antes y después—. Revirtiendo el arreglo:
+
+```
+AssertionError: la emisión que perdió la carrera gastó un número correlativo
+expected 2 to be 1
+```
+
+El contador avanzaba **2**. Con el arreglo avanza 1. Comprobado también a mano en
+la base: dos llamadas seguidas devuelven `{"numero": 413, "reusado": false}` y
+`{"numero": 413, "reusado": true}`, con el contador moviéndose una sola vez.
+
+**Un hallazgo del propio andamiaje:** al aplicar las dos migraciones,
+`tests/rls-por-rol.test.ts` falló dos veces seguidas, y las dos con razón. Primero
+porque `errores` y `facturas_numeracion` no estaban declaradas en la matriz de
+lectura —trae la lista desde la base justamente para eso—. Y después, ya
+declaradas, porque sus casos negativos pasaban **por tabla vacía**: el guardián
+anti-falso-verde las reportó como no auditadas. Se sembró una fila de cada una. Es
+el test funcionando como fue diseñado.
+
+---
+
+## 2026-09-01 — Fase 4 de auditoría: dos grants a PUBLIC que se daban por cerrados
+
+**Resumen:** el ADR 0016 y `CLAUDE.md` afirmaban que `anon` no podía ejecutar
+`cotizar_estadia`. Era falso. Se cierra de verdad y se corrige la documentación.
+
+**El hallazgo.** La migración 0031 hizo
+`revoke execute on function cotizar_estadia(...) from anon` y todos —cuatro
+auditorías— lo dieron por suficiente. No lo era: **Postgres le concede EXECUTE a
+PUBLIC por omisión al crear una función**, `anon` es miembro de PUBLIC, y un
+`revoke` dirigido a `anon` no quita un privilegio que nunca tuvo nominalmente.
+`has_function_privilege('anon', 'cotizar_estadia(...)', 'execute')` devolvía `true`.
+
+Es el gemelo, a nivel función, de la trampa que `AGENTS.md` ya documentaba para
+columnas («un `revoke select (columna)` NO recorta un `grant` de tabla previo»).
+
+**La exposición real era cero**, y hay que decirlo sin adornos: `cotizar_estadia`
+es `security invoker`, `anon` no tiene grant sobre `tarifas`, y la 0030 tiene la
+guarda `current_user <> 'anon'` adentro. Tres capas. Faltaba la cuarta —la que el
+ADR decía tener— y la afirmación del documento, que era incorrecta.
+
+**Hallazgo 2, del mismo tipo.** La migración 0060 revocó `select` sobre `agencias`,
+`proveedores` y `firmas` y lo repuso por columna dejando `token` afuera — pero
+**solo para `authenticated`**. Las tres tablas nacieron después de la 0006, que
+dejó `alter default privileges ... grant select on tables to anon`, así que `anon`
+conservaba SELECT de tabla completo, `token` incluido. RLS lo tapa hoy
+(`rol_actual()` es NULL para `anon`), pero bastaría una política `using (true)` mal
+puesta para exponer el token que abre `/portal/<token>`.
+
+**Migración 0070.** Revoca de PUBLIC y re-otorga nominalmente:
+- `cotizar_estadia` → `authenticated, service_role` (NO `anon`).
+- El contador fiscal `siguiente_numero_comprobante` → con PUBLIC, cualquiera podía
+  quemar números de factura desde el borde público. Era un hallazgo aparte y más
+  grave que `cotizar_estadia`.
+- `registrar_intento` y `consultas_recientes_de_ip` (el limitador de tasa: con
+  PUBLIC se podía atacar la IP de otro), las tareas de mantenimiento, y
+  `crear_reserva` / `cambiar_unidad_reserva`.
+- `revoke select on {agencias,proveedores,firmas} from anon`, sin reposición: el
+  portal del socio usa el cliente privilegiado.
+
+**Lo que NO se toca, verificado con una policy de prueba:** `rol_actual()` y
+`puede_ver_canal()` **tienen que** quedar ejecutables por PUBLIC. Postgres chequea
+el EXECUTE del rol que consulta al evaluar una expresión de política RLS
+(`ERROR: permission denied for function` si falta). Revocárselo rompería la
+lectura de `anon` sobre el catálogo.
+
+**El test de contrato.** `funciones_expuestas_a_publico()` (en la 0070) lista las
+funciones propias —descartando las de `btree_gist` y las de trigger— que PUBLIC
+puede ejecutar. `tests/funciones-sin-public.test.ts` la compara contra una
+allowlist de tres (`rol_actual`, `puede_ver_canal`, `temporada_en`) y falla si
+aparece una cuarta. Es lo que no existía y por eso `cotizar_estadia` pasó cuatro
+auditorías. Se sumó `anon` al bucle de tests de tokens de `tests/rls-por-rol.test.ts`,
+que solo cubría los cuatro roles de staff.
+
+**Corregidos:** `CLAUDE.md`, el ADR 0016 (con nota fechada) y `AGENTS.md` (trampa
+nueva, al lado de la de columnas).
+
+**Verificación:** `set role anon` + `has_function_privilege` da `f` para
+`cotizar_estadia` y `t` para `cotizar_estadia_publica` y `rol_actual`. El portal
+público sigue cotizando. Suite completa en verde.
+
+---
+
+## 2026-09-01 — Fase 5 de auditoría: deuda de rendimiento, mientras es barata
+
+**Resumen:** los 28 índices que faltaban en claves foráneas, caché del catálogo
+público, y la validación de credenciales de pasarela que el ADR 0018 prometía.
+
+**1. Migración 0071 — 28 índices de FK.** Postgres no indexa una clave foránea al
+declararla; sin índice, cada `delete`/`update` de la fila **padre** escanea la
+tabla hija entera. **17 de las 28 apuntan a `perfiles`**, así que dar de baja un
+usuario hacía 17 seq scans. Se notan la primera temporada alta, cuando ya es
+difícil de diagnosticar porque nada empeoró de golpe. La 0034 ya cerró 9 casos y
+los midió (`2,6 ms → 0,1 ms` sobre 30k filas); estos quedaron afuera porque las
+tablas —`canal_*`, `movimientos_*`, `ordenes_*`— están casi vacías hoy.
+Verificado: cero FKs sin índice tras aplicar.
+
+**2. Caché del catálogo público** (`lib/catalogo/publico.ts`). `/alojamientos`
+leía `tipos_unidad` y `tarifas` en **cada visita**: no había una sola primitiva de
+caché en el borde público, porque `crearClienteServidor()` llama a `cookies()` y
+eso vuelve dinámica la ruta. Ahora esas dos consultas van por `unstable_cache`
+con un cliente sin cookies (ve lo que ve `anon`), etiqueta `catalogo-publico`,
+`revalidate: 300`. `actualizarTarifa` dispara `updateTag` para que quien edita un
+precio lo vea al instante.
+⚠️ **La disponibilidad y las cotizaciones NO se cachean** y siguen en `/reservar`:
+publicar una ocupación vencida es vender una unidad ya vendida, el mismo daño que
+el ADR 0022 evita en el iCal. El límite es limpio: `/alojamientos/*` es catálogo,
+`/reservar` es tiempo real.
+
+**3. `verificarCredencialesDePasarela`** (`lib/payments/index.ts`, llamada desde
+`instrumentation.ts` `register()`). El ADR 0018 promete que en producción el
+sistema **falla al arrancar** si falta una variable obligatoria. Se cumplía para
+los `*_PROVIDER` pero no para las credenciales: `PAGO_PROVIDER=stripe` sin
+`STRIPE_SECRET_KEY` levantaba igual y fallaba recién cuando un huésped intentaba
+pagar, con `[stripe] falló la llamada` en un log que nadie mira. Ahora, en
+producción, una pasarela habilitada sin sus dos credenciales corta el arranque
+nombrando las que faltan. Reusa `proveedoresHabilitados` para no re-parsear
+`PAGO_PROVIDER`. 6 tests nuevos.
+
+**Nota — lo que queda de la Fase 4.** Ampliar `tests/rls-escritura-por-rol.test.ts`
+—hoy dirigida por consecuencia, no exhaustiva— sigue pendiente. Es trabajo abierto
+de bajo riesgo: la matriz de **lectura** ya es exhaustiva y la de escritura cubre
+los casos elegidos por consecuencia (escalada, dinero, inventario, borde público,
+borrado). También sigue anotado que `contratos` deja leer a housekeeping
+(`rol_actual() is not null`, migración 0018), que contradice el ADR 0005 y que la
+matriz de lectura hoy *codifica* como esperado en vez de marcar.
+
+---
+
+## 2026-09-01 — Cierre de la auditoría: `anon` sin catálogo, y el chequeo de salud programado
+
+**Resumen:** dos piezas que completan las Fases 4 y 5, respondiendo a los riesgos
+de la auditoría en sus propios términos.
+
+**1. `anon` deja de tener SELECT fuera del catálogo (migración 0072).** La
+auditoría planteaba: *«`anon` conserva SELECT a nivel tabla sobre reservas,
+huéspedes, pagos, facturas, firmas, perfiles y auditoría… saber que las 91
+políticas existen no es lo mismo que saber qué permite cada una»*. El planteo era
+correcto: `anon` leía 0 filas de esas tablas —RLS lo tapaba— pero era **una sola
+capa**. Ahora `anon` mantiene SELECT solo sobre el catálogo público (`tipos_unidad`,
+`tarifas` por columna, `temporadas`, `temporada_rangos`, `politicas_cancelacion`,
+`promociones`) y se le revoca sobre las 24 tablas restantes. Verificado: `anon`
+consultando `reservas` ahora recibe `permission denied for table` —PostgREST corta
+antes de evaluar la política— en vez de 0 filas. Y el `alter default privileges` de
+la 0006 se ajustó para que una tabla nueva nazca cerrada para `anon`. El portal
+público sigue funcionando (verificado: `/alojamientos` y `/reservar` 200).
+
+**2. `/api/cron/salud` + entrada en `vercel.json`.** La auditoría marcaba: *«existe
+/api/salud, pero nadie lo consulta automáticamente»*. Ahora Vercel Cron lo golpea
+cada 15 minutos; si la base no responde, **escribe una fila en `errores`**, que
+tiene pantalla en `/panel/errores`. Una caída de la madrugada queda a la vista a la
+mañana, con hora — sin mandar una alerta por cada chequeo, que sería ruido.
+
+**ADR 0029** creado (los errores van a Postgres, no a un tercero). `CLAUDE.md`
+actualizado: 29 ADRs, y un bloque nuevo que resume las cinco fases de la auditoría
+técnica y **lo que explícitamente no se cierra sin desplegar**.
+
+### Estado de los cinco riesgos de la auditoría
+
+| Riesgo | Estado |
+|---|---|
+| El sistema nunca corrió en producción | **Parcial.** Cerrado lo verificable sin desplegar: husos horarios (F1), concurrencia de facturación (F3), validación de entorno (F5). Abierto: latencia real, límites de conexión, un pago por pasarela viva, un CAE de AFIP, y **restaurar un backup** (el punto ciego más grande, ya en `PENDIENTES.md`). |
+| Sin observabilidad | **Cerrado.** Tabla `errores`, captura de excepciones con `digest`, sink, pantalla, cron de salud (F2, ADR 0029). Residual incremental: adoptar `registrarError` en los ~65 `console.*` que quedan. |
+| La carrera de facturación gasta un CAE | **Cerrado.** Migración 0069; medido que el contador avanza 1 y no 2 (F3). Residual documentado: una emisión abandonada de verdad deja el número reservado, ahora **visible** en `facturas_numeracion`. |
+| RLS es la única barrera | **Cerrado en lo verificado.** Premisa parcialmente incorrecta (0 filas, testeado exhaustivo en lectura). Se agregó la capa GRANT: `anon` sin SELECT fuera del catálogo (0072), `cotizar_estadia`/`siguiente_numero_comprobante` sin PUBLIC (0070), test de contrato. Residual: `rls-escritura-por-rol` es dirigida; `contratos` legible por housekeeping (contradice ADR 0005). |
+| Deuda de rendimiento latente | **Cerrado.** 28 índices de FK → 0 (0071); caché del catálogo (F5). Residual: la ficha `/alojamientos/[codigo]` no se cachea, solo el listado. |

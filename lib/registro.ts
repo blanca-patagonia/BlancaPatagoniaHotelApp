@@ -102,17 +102,116 @@ async function idDePedido(): Promise<string | null> {
   }
 }
 
+/**
+ * ── El sink: además de stdout, la fila en `errores` ──────────────────────────
+ *
+ * Emitir JSON a stdout resuelve el formato, no el destino. En Vercel esa línea
+ * queda en un buffer que nadie del hotel abre: la primera noticia de una falla
+ * la sigue trayendo un huésped que se queja. La tabla `errores` (migración
+ * 0068) le da un lugar donde quedarse, y el panel un lugar donde mirarla.
+ *
+ * Tres reglas que no se negocian:
+ *
+ *  1. **Nunca lanza.** Un logger que rompe la petición que estaba registrando
+ *     es peor que no tener logger. Todo va envuelto y el fallo del sink se
+ *     reporta por stdout, que siempre está.
+ *  2. **Nunca bloquea de más.** Lleva corte por tiempo: si la base no responde,
+ *     el pedido del usuario no se queda esperando a que se guarde un log.
+ *  3. **Solo errores y avisos.** `info` no se persiste: sería un cañón de filas
+ *     por cada navegación y la tabla dejaría de servir para lo que sirve.
+ */
+
+/** Corte del sink. Corto a propósito: es un log, no la operación. */
+const SINK_MS = 2000
+
+/**
+ * El sink se apaga solo en los tests.
+ *
+ * Sin esto, cada test que ejercita un camino de error escribiría en la base
+ * local y `errores` crecería con basura de la suite. Los tests que quieran
+ * probar el sink llaman a `guardarError` directo.
+ */
+function sinkActivo(): boolean {
+  if (process.env.VITEST) return false
+  if (process.env.REGISTRO_SIN_BASE === '1') return false
+  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+}
+
+export interface ContextoError {
+  pedido?: string | null
+  digest?: string | null
+  ruta?: string | null
+  usuarioId?: string | null
+  rol?: string | null
+}
+
+/**
+ * Guarda una fila en `errores`. Exportada para poder probarla sin simular una
+ * petición entera.
+ *
+ * Escribe con `service_role` porque la tabla no tiene política de INSERT: que
+ * nadie pueda borrar ni falsear su propio rastro es justamente el punto.
+ */
+export async function guardarError(
+  nivel: Exclude<Nivel, 'info'>,
+  evento: string,
+  datos: Record<string, unknown>,
+  contexto: ContextoError = {},
+): Promise<void> {
+  try {
+    // Import dinámico: `admin.ts` trae `server-only` y valida el entorno al
+    // construirse. Cargarlo arriba haría que cualquier módulo que loguee
+    // arrastre esa validación aunque el sink esté apagado.
+    const { crearClienteAdmin } = await import('@/lib/supabase/admin')
+    const limpios = limpiar(datos)
+
+    // `detalle` sale de `datos.detalle` si está; es la convención que ya usan
+    // `cortarSiFalla` y `registrarFalla`.
+    const detalle = typeof limpios.detalle === 'string' ? limpios.detalle : null
+
+    const escritura = crearClienteAdmin()
+      .from('errores')
+      .insert({
+        evento,
+        nivel,
+        detalle,
+        pedido: contexto.pedido ?? null,
+        digest: contexto.digest ?? null,
+        ruta: contexto.ruta ?? null,
+        usuario_id: contexto.usuarioId ?? null,
+        rol: contexto.rol ?? null,
+        datos: limpios,
+      })
+
+    const corte = new Promise<{ error: { message: string } | null }>((resolver) =>
+      setTimeout(() => resolver({ error: { message: `el sink no respondió en ${SINK_MS} ms` } }), SINK_MS),
+    )
+
+    const { error } = await Promise.race([escritura, corte])
+
+    // Si el sink falla, se dice por stdout y se sigue. No se reintenta: un
+    // reintento sobre una base caída multiplica el problema que lo causó.
+    if (error) console.error(`{"nivel":"error","evento":"sink_errores_fallo","detalle":${JSON.stringify(error.message)}}`)
+  } catch (e) {
+    const motivo = e instanceof Error ? e.message : String(e)
+    console.error(`{"nivel":"error","evento":"sink_errores_fallo","detalle":${JSON.stringify(motivo)}}`)
+  }
+}
+
 /** Emite una línea JSON. Nunca lanza: un log que rompe la operación es peor. */
 async function emitir(
   nivel: Nivel,
   evento: string,
   datos: Record<string, unknown>,
+  contexto: ContextoError = {},
 ): Promise<void> {
+  const pedido = contexto.pedido ?? (await idDePedido())
+
   try {
     const linea = JSON.stringify({
       nivel,
       evento,
-      pedido: await idDePedido(),
+      pedido,
       en: new Date().toISOString(),
       ...limpiar(datos),
     })
@@ -124,8 +223,15 @@ async function emitir(
     // perder el evento.
     console.error(`{"nivel":"error","evento":"${evento}","detalle":"no se pudo serializar el log"}`)
   }
+
+  // El stdout va primero y el sink después, a propósito: si la base es
+  // justamente lo que está fallando, la línea ya salió.
+  if (nivel !== 'info' && sinkActivo()) {
+    await guardarError(nivel, evento, datos, { ...contexto, pedido })
+  }
 }
 
+/** Solo a stdout: `info` no se persiste (ver el comentario del sink). */
 export async function registrarInfo(
   evento: string,
   datos: Record<string, unknown> = {},
@@ -136,15 +242,17 @@ export async function registrarInfo(
 export async function registrarAviso(
   evento: string,
   datos: Record<string, unknown> = {},
+  contexto: ContextoError = {},
 ): Promise<void> {
-  await emitir('aviso', evento, datos)
+  await emitir('aviso', evento, datos, contexto)
 }
 
 export async function registrarError(
   evento: string,
   datos: Record<string, unknown> = {},
+  contexto: ContextoError = {},
 ): Promise<void> {
-  await emitir('error', evento, datos)
+  await emitir('error', evento, datos, contexto)
 }
 
 /**
@@ -179,4 +287,34 @@ export function registrarErrorSync(evento: string, datos: Record<string, unknown
   } catch {
     console.error(`{"nivel":"error","evento":"${evento}","detalle":"no se pudo serializar el log"}`)
   }
+
+  if (!sinkActivo()) return
+
+  /*
+    El sink desde una función síncrona, sin poder esperarlo.
+
+    Quien llama a esto está por lanzar un `redirect()`, así que la petición
+    termina enseguida. En un servidor de siempre la promesa igual se completa;
+    en una función serverless, el runtime puede cortar el proceso apenas
+    responde y la escritura se perdería.
+
+    `after()` es exactamente el mecanismo que Next da para esto: registra
+    trabajo para después de enviar la respuesta, y la plataforma mantiene la
+    invocación viva hasta que termine. Fuera de una petición (cron, webhook,
+    test) `after()` lanza, y ahí se cae a dispararlo y soltarlo, que es lo mejor
+    disponible en ese contexto.
+  */
+  const escritura = () => guardarError('error', evento, datos)
+
+  import('next/server')
+    .then(({ after }) => {
+      try {
+        after(escritura())
+      } catch {
+        void escritura()
+      }
+    })
+    .catch(() => {
+      void escritura()
+    })
 }

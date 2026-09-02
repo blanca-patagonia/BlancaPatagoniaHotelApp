@@ -380,6 +380,37 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
+    area: 'errores',
+    resumen: 'Qué falló, cuándo y en qué pantalla. Sirve para pedir ayuda con datos.',
+    pasos: [
+      {
+        titulo: 'Para qué es esta pantalla',
+        detalle:
+          'Cuando algo del sistema falla —no carga una pantalla, no se guarda un cobro, el correo no sale— acá queda anotado. Antes eso solo se veía abriendo los registros técnicos del servidor, que nadie del hotel mira. La idea es simple: que una falla de la madrugada no se entere primero el huésped.',
+      },
+      {
+        titulo: 'El código de ocho caracteres',
+        detalle:
+          'Cuando a alguien le aparece la pantalla de "algo salió mal", abajo hay un código. Ese mismo código está en esta lista. Es lo que permite pasar de "no me anduvo" a saber exactamente qué pasó: si te lo pasan, buscalo acá.',
+      },
+      {
+        titulo: 'Que aparezcan errores no es alarma',
+        detalle:
+          'Un sistema en uso siempre registra algo: alguien que perdió la conexión, un archivo mal cargado. Lo que hay que mirar es si el mismo error se repite muchas veces o si aparece uno relacionado con cobros o facturas.',
+      },
+      {
+        titulo: 'No tiene datos de tarjetas ni contraseñas',
+        detalle:
+          'El sistema borra esos datos antes de anotar nada, incluso si vinieran dentro del mensaje de error. Aun así la lista puede tener nombres o números de reserva, así que la ven solo administración y gerencia.',
+      },
+      {
+        titulo: 'Se limpia sola',
+        detalle:
+          'Los errores de más de 90 días se borran automáticamente. Un error de hace tres meses ya no le sirve a nadie y la lista se volvería imposible de leer.',
+      },
+    ],
+  },
+  {
     area: 'reportes',
     resumen: 'Cómo viene el negocio.',
     pasos: [

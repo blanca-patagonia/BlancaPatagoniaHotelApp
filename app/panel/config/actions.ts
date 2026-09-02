@@ -1,7 +1,8 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
+import { ETIQUETA_CATALOGO } from '@/lib/catalogo/publico'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirAcceso, obtenerSesion } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
@@ -33,6 +34,12 @@ export async function actualizarTarifa(formData: FormData): Promise<void> {
     .from('tarifas')
     .update({ precio_neto: neto, precio_rack: rack })
     .eq('id', id)
+
+  // El precio rack se publica en `/alojamientos`, que lo lee cacheado: sin esto,
+  // el nuevo precio tardaría hasta 5 minutos en verse en la web. `updateTag` y no
+  // `revalidateTag` porque esto es una Server Action y quien acaba de guardar
+  // tiene que ver su cambio ya.
+  if (!error) updateTag(ETIQUETA_CATALOGO)
 
   redirect(error ? '/panel/config?error=guardar' : '/panel/config?ok=tarifa')
 }

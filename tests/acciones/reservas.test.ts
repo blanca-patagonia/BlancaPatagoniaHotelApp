@@ -350,6 +350,15 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
     it('con dos emisiones SIMULTÁNEAS, la base deja pasar una sola', async () => {
       const id = await reservaEnEstado('checkout')
 
+      // El contador ANTES. Es la mitad del test que faltaba: sin esto, la carrera
+      // se montaba y se verificaba solo que no hubiera dos comprobantes, que es lo
+      // que ya garantizaba `facturas_una_por_reserva` desde la migración 0045.
+      const { data: antes } = await ctx.db
+        .from('puntos_venta')
+        .select('ultimo_numero')
+        .eq('numero', 1)
+        .single()
+
       // Sin `await` entre las dos: las dos llamadas están en vuelo al mismo tiempo,
       // así que las dos ejecutan su `select` antes de que cualquiera inserte.
       const destinos = await Promise.all([
@@ -371,6 +380,40 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       // emitió, y la que perdió porque la reserva **está** facturada —por la otra—
       // y mandarla a un error genérico sería mentirle.
       for (const destino of destinos) expect(destino).toContain('/factura')
+
+      /*
+        Y el contador se movió UNA sola vez.
+
+        Ésta es la afirmación que convierte al test en una garantía. Antes de la
+        migración 0069 el contador avanzaba **2**: las dos emisiones llamaban a
+        `siguiente_numero_comprobante`, que entrega un número nuevo en cada
+        llamada, y la que perdía la carrera se llevaba el suyo puesto sin dejar
+        fila en `facturas`. Con el simulador eso no se nota; contra AFIP es un
+        salto de correlatividad, que es una obligación formal (ADR 0015).
+
+        Ahora la numeración pasa por `reservar_numero_factura`, que le da a la
+        reserva un número y siempre el mismo, así que las dos emisiones piden el
+        CAE del mismo comprobante.
+      */
+      const { data: despues } = await ctx.db
+        .from('puntos_venta')
+        .select('ultimo_numero')
+        .eq('numero', 1)
+        .single()
+
+      expect(
+        (despues?.ultimo_numero ?? 0) - (antes?.ultimo_numero ?? 0),
+        'la emisión que perdió la carrera gastó un número correlativo: queda un salto en la numeración',
+      ).toBe(1)
+
+      // Y el claim quedó, que es lo que permite detectar un hueco antes de una
+      // fiscalización en vez de descubrirlo durante una.
+      const { count: claims } = await ctx.db
+        .from('facturas_numeracion')
+        .select('reserva_id', { count: 'exact', head: true })
+        .eq('reserva_id', id)
+
+      expect(claims, 'la reserva quedó sin claim de numeración').toBe(1)
     })
 
     it('asigna números correlativos distintos a cada comprobante', async () => {

@@ -186,6 +186,17 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **La app no puede hacer backups de Postgres.** `/panel/respaldos` exporta datos operativos y lo
   aclara. No convertirlo en un botón que diga «hacer backup»: sería la peor función del sistema.
 - **`rangoISO(hoy, hoy)` es un rango VACÍO** (`[hoy,hoy)`) y no se solapa con nada. «La noche de hoy» se escribe `rangoISO(hoy, sumarDias(hoy, 1))`. El punto de venta salía siempre en cero por esto y decía «no hay nadie alojado hoy».
+- **«Hoy» sale SIEMPRE de `hoyISO()`, nunca de `new Date().toISOString()`.** El hotel está en
+  `America/Argentina/Rio_Gallegos` (UTC−3, sin horario de verano) y Vercel corre en UTC: el
+  `toISOString()` pelado devuelve el día siguiente **entre las 21:00 y la medianoche de El
+  Calafate**, todos los días. Mientras estuvo así, housekeeping listaba las salidas de mañana,
+  el punto de venta cargaba el consumo de las 21:30 a la noche equivocada y el feed iCal
+  publicaba como libre una noche vendida. No se ve programando —de día las dos fechas
+  coinciden— ni en el CI, que corre en UTC y comparaba UTC contra UTC. `hoyISO()` acepta un
+  `Date` opcional para poder fijar el instante en los tests; `tests/fechas.test.ts` clava
+  00:30 y 02:59 UTC, que son las 21:30 y 23:59 del día anterior en el hotel. El resto de
+  `lib/fechas.ts` (`sumarDias`, `diasEntre`…) sí ancla en UTC **a propósito**: opera sobre
+  días, no sobre instantes, y ahí la zona no interviene.
 - **PostgREST NO sigue una clave foránea auto-referencial hacia el padre.** Un embed anidado como `departamento:departamentos(nombre, padre:departamentos(nombre))` devuelve `"padre": []` —los hijos, no el padre— y las pistas de FK no lo corrigen. La jerarquía se resuelve en la app con `lib/domain/departamentos.ts`.
 - **Los importes van por `formatearUSD`/`importe` de `lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Ya se migraron los 67 del panel; las cantidades (filas, puntos) sí van con `toLocaleString`.
 - **`[auth.email].enable_signup` NO es «no dejes que se registren»: es «habilitá el proveedor de
@@ -251,6 +262,18 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   catálogos distintos. La `0034` intentó eso sobre `firmas.token` y el privilegio sigue ahí
   (verificable con `has_column_privilege`). Para que surta efecto hay que revocar el de tabla y
   reponer por columna — y eso rompe a quien lea esa columna con el cliente del usuario.
+- **`revoke execute ... from anon` NO cierra una función: Postgres se la concede a PUBLIC.**
+  Al crear una función, el EXECUTE va a `PUBLIC` por omisión, y `anon` / `authenticated` son
+  miembros de PUBLIC. Un `revoke` dirigido a `anon` no quita nada —nunca tuvo grant propio— y
+  `has_function_privilege('anon', 'fn(...)', 'execute')` sigue dando `true`. Es el gemelo, a
+  nivel función, de la trampa de columnas de arriba. Lo pasó `cotizar_estadia` durante cuatro
+  auditorías (lo cerró la `0070` con `revoke execute ... from public` + `grant` nominal). El
+  patrón correcto —`revoke ... from public; grant ... to <roles>`— ya lo usaban
+  `tablas_publicas` (0046/0047) y `sumar_puntos_huesped` (0053). Hay un test de contrato,
+  `tests/funciones-sin-public.test.ts`, apoyado en `funciones_expuestas_a_publico()`.
+  ⚠️ `rol_actual()` y `puede_ver_canal()` **tienen que quedar** ejecutables por PUBLIC: se
+  usan en expresiones de políticas RLS y Postgres chequea el EXECUTE del rol que consulta al
+  evaluar una policy (verificado). Revocárselo rompe la lectura de `anon` sobre el catálogo.
 - **Un token de socio NO se lee con el cliente del usuario.** `agencias.token`,
   `proveedores.token` y `firmas.token` tienen el `select` revocado por columna
   (migración 0060). Para mostrarlos hay que usar `crearClienteAdmin()`. Antes cualquier

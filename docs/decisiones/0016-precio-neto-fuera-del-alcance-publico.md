@@ -65,6 +65,20 @@ Entonces:
 
 `lib/pricing/cotizar.ts` elige la función según el tipo de tarifa.
 
+> **Corrección (2026-09-01, Fase 4 de la auditoría técnica).** El
+> `revoke execute on function cotizar_estadia(...) from anon` de la 0031 **no tuvo
+> efecto**: Postgres le concede EXECUTE a PUBLIC por omisión al crear la función,
+> `anon` es miembro de PUBLIC, y un `revoke` dirigido a `anon` no quita un
+> privilegio que nunca tuvo nominalmente. Es la misma trampa que el `revoke select
+> (columna)` de la 0034 sobre `firmas.token`, a nivel función.
+>
+> La exposición real seguía siendo cero —la función es `security invoker`, `anon`
+> no lee `tarifas`, y la guarda `current_user <> 'anon'` de la 0030 está adentro—,
+> así que las tres capas de este ADR se sostuvieron. Lo que faltaba era la cuarta,
+> la que este texto daba por puesta. La **migración 0070** la agrega de verdad
+> (`revoke execute ... from public`) y suma un test de contrato
+> (`tests/funciones-sin-public.test.ts`) que falla si otra función nace expuesta.
+
 ## Alternativa descartada: `SECURITY DEFINER`
 
 Era el camino obvio para resolver el privilegio de columna, y **habría reabierto en

@@ -23,6 +23,7 @@ export const AREAS = [
   'contratos',
   'canales',
   'auditoria',
+  'errores',
   'reportes',
   'config',
   'usuarios',
@@ -49,6 +50,7 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   contratos: 'Contratos',
   canales: 'Canales de venta',
   auditoria: 'Auditoría',
+  errores: 'Errores del sistema',
   reportes: 'Reportes',
   config: 'Configuración',
   usuarios: 'Usuarios',
@@ -69,6 +71,10 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
     'proveedores', 'contratos', 'canales', 'reportes', 'config',
+    // Gerencia ve los errores del sistema porque es quien decide si hay que
+    // llamar a alguien. La política RLS de `errores` (migración 0068) declara
+    // los mismos dos roles: si acá se agregara uno más, vería la pantalla vacía.
+    'errores',
     // Gerencia **ve** el estado de los respaldos —saber que hace 40 días que nadie
     // exporta es información de gestión— pero **no puede exportar**: eso lo
     // restringe la propia pantalla y el endpoint, porque el archivo concentra los

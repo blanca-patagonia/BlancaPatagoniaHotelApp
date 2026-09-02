@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/canales",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/salud",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

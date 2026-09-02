@@ -24,6 +24,7 @@ import 'server-only'
 import {
   seleccionarProveedores,
   advertirSiEsSimulado,
+  esProduccion,
 } from '@/lib/integraciones/seleccion'
 import { ProveedorSimulado, NOMBRE_SIMULADO } from './simulado'
 import { ProveedorMercadoPago } from './mercadopago'
@@ -95,4 +96,48 @@ export function estaHabilitado(nombre: string, valor = process.env.PAGO_PROVIDER
  */
 export function nombreClave(p: PaymentProvider): string {
   return p.esReal() ? p.nombre : NOMBRE_SIMULADO
+}
+
+/**
+ * Las credenciales que cada pasarela necesita para operar de verdad.
+ *
+ * `lib/env.ts` valida las tres variables de Supabase al arrancar, y
+ * `seleccionarProveedores` valida que `PAGO_PROVIDER` nombre pasarelas que
+ * existen. Lo que **nadie** validaba —y el ADR 0018 promete— es que, si
+ * `PAGO_PROVIDER=stripe`, exista `STRIPE_SECRET_KEY`. Sin eso, el fallo aparece
+ * recién cuando un huésped intenta pagar: `[stripe] falló la llamada` en un log
+ * que nadie del hotel abre, y una reserva sin cobrar.
+ */
+const CREDENCIALES_POR_PASARELA: Record<string, readonly string[]> = {
+  mercadopago: ['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_WEBHOOK_SECRET'],
+  stripe: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+}
+
+/**
+ * Falla al arrancar si una pasarela habilitada no tiene sus credenciales.
+ *
+ * Solo en producción, igual que el resto del régimen del ADR 0018: en desarrollo
+ * `PAGO_PROVIDER` cae al simulador y no hay nada que exigir.
+ *
+ * Se apoya en `proveedoresHabilitados` para no re-parsear `PAGO_PROVIDER` a mano
+ * —ya distingue el simulador y descarta nombres desconocidos—.
+ */
+export function verificarCredencialesDePasarela(valor = process.env.PAGO_PROVIDER): void {
+  if (!esProduccion()) return
+
+  const faltantes: string[] = []
+  for (const proveedor of proveedoresHabilitados(valor)) {
+    if (!proveedor.esReal()) continue
+    for (const variable of CREDENCIALES_POR_PASARELA[proveedor.nombre] ?? []) {
+      if (!process.env[variable]?.trim()) faltantes.push(variable)
+    }
+  }
+
+  if (faltantes.length > 0) {
+    throw new Error(
+      `Faltan credenciales de una pasarela habilitada en PAGO_PROVIDER: ${faltantes.join(', ')}.\n` +
+        `El ADR 0018 exige fallar al arrancar antes que descubrirlo cuando un huésped ` +
+        `no puede pagar. Cargá esas variables o sacá la pasarela de PAGO_PROVIDER.`,
+    )
+  }
 }

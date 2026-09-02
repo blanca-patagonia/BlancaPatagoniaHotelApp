@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { hayDB, clienteDePrueba, sufijoUnico } from './db'
+import { hayDB, clienteDePrueba, clienteAnonimo, sufijoUnico } from './db'
 import {
   crearLosCuatroRoles,
   crearUsuarioSinRol,
@@ -113,6 +113,17 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
 
   // ── Auditoría: solo quien la audita ──
   auditoria: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
+  // ── Errores del sistema (migración 0068) ──
+  // Mismos dos roles que `auditoria`, y por el mismo motivo: un error arrastra
+  // rutas, ids y a veces el dato que lo causó. Recepción no tiene qué hacer con
+  // eso y housekeeping menos.
+  errores: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
+  // ── Numeración de comprobantes (migración 0069) ──
+  // Sigue la línea de `facturas` desde la 0045: no lleva importes, pero sí qué
+  // reserva se quedó con qué número de comprobante, que es información fiscal.
+  facturas_numeracion: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
 
   // ── Canales de venta (migración 0038) ──
   canal_reservas: { todos: 'si' },
@@ -337,6 +348,42 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar el proveedor: ${error.message}`)
 
       sembradas.push({ tabla: 'proveedores', columna: 'nombre', valor: `AUDIT-${sufijo}` })
+    }
+
+    /*
+      ── errores (migración 0068) ──────────────────────────────────────────────
+
+      Nace vacía, y ojalá se quede así: son las fallas del servidor. Pero sin una
+      fila, «recepción y housekeeping no la leen» pasaría por tabla vacía y no por
+      la política — exactamente el verde falso que este guardián existe para
+      denunciar.
+    */
+    if ((await contar('errores')) === 0) {
+      const { error } = await admin
+        .from('errores')
+        .insert({ evento: `auditoria_rls_${sufijo}`, detalle: 'fila de prueba de la matriz RLS' })
+      if (error) throw new Error(`No se pudo sembrar errores: ${error.message}`)
+
+      sembradas.push({ tabla: 'errores', columna: 'evento', valor: `auditoria_rls_${sufijo}` })
+    }
+
+    /*
+      ── facturas_numeracion (migración 0069) ──────────────────────────────────
+
+      Se siembra por el mismo motivo. No se llama a `reservar_numero_factura`: eso
+      movería el contador de `puntos_venta`, y hay otro test —el de la carrera de
+      emisión— que verifica cuánto avanza ese contador. Se inserta directo con
+      `service_role`, que saltea la ausencia de política de INSERT, y con un número
+      alto para no chocar contra la numeración real.
+    */
+    if ((await contar('facturas_numeracion')) === 0) {
+      const reservaId = await reservaParaSembrar()
+      const { error } = await admin
+        .from('facturas_numeracion')
+        .insert({ reserva_id: reservaId, punto_venta: 1, numero: 99_000_000 })
+      if (error) throw new Error(`No se pudo sembrar facturas_numeracion: ${error.message}`)
+
+      sembradas.push({ tabla: 'facturas_numeracion', columna: 'reserva_id', valor: reservaId })
     }
 
     // ── canal_config ──────────────────────────────────────────────────────────
@@ -610,6 +657,19 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · credenciales por columna
         ).toBe('42501')
       })
     }
+
+    // `anon` también, que la 0060 no cubrió: revocó solo de `authenticated` y el
+    // rol público conservaba el SELECT de tabla —token incluido— por el default
+    // de la 0006. Lo cierra la 0070.
+    it(`${tabla}.token NO es legible por anon`, async () => {
+      const { error } = await clienteAnonimo().from(tabla).select('token').limit(1)
+      expect(error?.code, `anon pudo pedir ${tabla}.token`).toBe('42501')
+    })
+
+    it(`${tabla} entera NO es legible por anon`, async () => {
+      const { error } = await clienteAnonimo().from(tabla).select('id').limit(1)
+      expect(error?.code, `anon conserva SELECT de tabla sobre ${tabla}`).toBe('42501')
+    })
   }
 
   it('un `select(*)` tampoco devuelve el token por la puerta de atrás', async () => {

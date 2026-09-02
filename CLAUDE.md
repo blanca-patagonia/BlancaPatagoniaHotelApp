@@ -167,10 +167,17 @@ Tarifario 2025/2026 (Anexo A).
   neto de agencia quedaba expuesto a `anon`** por RPC (migración 0030), el webhook
   de pagos fallaba abierto, inyección de condiciones en los filtros `or` de
   PostgREST y el `<details>` número 12. La segunda parte (migración 0031, **ADR
-  0016**) cierra el otro camino al neto: `anon` ya no puede ejecutar
-  `cotizar_estadia` ni leer la columna `precio_neto`. ⚠️ **No hacer
-  `cotizar_estadia` `security definer`**: ahí `current_user` es el dueño de la
-  función y la guarda quedaría siempre en verdadero.
+  0016**) cierra el otro camino al neto: `anon` no puede **leer la columna
+  `precio_neto`** de `tarifas`. ⚠️ **Corrección de la Fase 4 (migración 0070):**
+  la 0031 decía además revocarle a `anon` el `execute` de `cotizar_estadia`, y
+  **no lo lograba** —revocó de `anon`, que no tenía grant propio, mientras el
+  privilegio le seguía llegando por PUBLIC—. La exposición real era nula igual
+  (la función es `security invoker`, `anon` no lee `tarifas`, y la 0030 tiene la
+  guarda `current_user <> 'anon'` adentro), pero recién la 0070 lo cierra con
+  `revoke execute ... from public`. Hay un test de contrato
+  (`tests/funciones-sin-public.test.ts`) para que ninguna función nazca abierta.
+  ⚠️ **No hacer `cotizar_estadia` `security definer`**: ahí `current_user` es el
+  dueño de la función y la guarda quedaría siempre en verdadero.
   **Pendiente:** auditar las ~75 políticas RLS una por una — que estén activadas en
   las 40 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
   tablas y 14 políticas** a ese pendiente (`cotizaciones`, `canal_reservas`,
@@ -209,7 +216,7 @@ Tarifario 2025/2026 (Anexo A).
   `simulado` (ése sí no habla con nadie).
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 28 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 29 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -227,7 +234,25 @@ Tarifario 2025/2026 (Anexo A).
   guardar el número** (el simulador declara que no puede, no inventa un «válida») ·
   **ADR 0028** la app instalable es el panel y **no cachea datos**: sin caché de
   pantallas autenticadas, sin escrituras diferidas y con el interruptor de apagado
-  escrito antes de encender.
+  escrito antes de encender · **ADR 0029** los errores del servidor se guardan en
+  una tabla de Postgres (`errores`, migración 0068), no en un tercero: los datos de
+  huéspedes no salen del sistema y el hotel no depende de mirar el log de Vercel.
+- **Auditoría técnica — Fases 1 a 5 (2026-09-01).** Cinco riesgos de una auditoría
+  externa, verificados ejecutando y no leyendo. **F1** `hoyISO()` calculaba «hoy» en
+  UTC y el hotel está en UTC−3: bug activo cada noche (housekeeping, punto de venta,
+  feed iCal). Ahora en `ZONA_HOTEL`. **F2** observabilidad (ADR 0029). **F3** la
+  carrera de facturación ya no gasta un CAE: el número correlativo es la clave de
+  idempotencia (migración 0069, `reservar_numero_factura`); medido, el contador
+  avanza 1 y no 2 con dos emisiones simultáneas. **F4** dos grants a PUBLIC que las
+  auditorías previas daban por cerrados: `cotizar_estadia` y
+  `siguiente_numero_comprobante` eran ejecutables por cualquiera (migración 0070,
+  con test de contrato `funciones-sin-public`), y `anon` conservaba SELECT de tabla
+  sobre todo lo no-catálogo (migración 0072). **F5** los 28 índices de FK que
+  faltaban (migración 0071), caché del catálogo público (`lib/catalogo/publico.ts`,
+  la disponibilidad **no** se cachea) y `verificarCredencialesDePasarela` al
+  arrancar. **Lo que NO se cierra desde código:** «el sistema nunca corrió en
+  producción» — latencia real, límites de conexión, un pago por una pasarela viva,
+  un CAE de AFIP, y **restaurar un backup**.
 - **Relevamiento con el cliente (15/08/2026), cerrado el 2026-08-24.** Franco
   mostró WinPAX 9 y el extranet de Booking. La mayoría ya estaba; se hicieron los
   cinco pedidos que faltaban: documentación al día, exención de IVA (migración

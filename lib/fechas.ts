@@ -1,16 +1,54 @@
 /**
  * Utilidades de fecha en formato ISO `yyyy-mm-dd`, sin dependencias externas.
- * Nota: se trabaja en UTC por simplicidad; el ajuste fino de zona horaria
- * (America/Argentina/Rio_Gallegos) se aborda en una fase posterior.
+ *
+ * Las operaciones de calendario (`sumarDias`, `diasEntre`, `listaDias`…) anclan en
+ * UTC **a propósito**: reciben y devuelven días, no instantes, así que la zona no
+ * interviene. `sumarDias('2026-08-30', 1)` es el 31 en cualquier parte del mundo.
+ *
+ * La que sí depende de la zona es `hoyISO()`, porque es la única que lee el reloj.
  */
+
+/**
+ * Zona horaria del hotel (El Calafate, Santa Cruz). UTC−3 todo el año: la
+ * Argentina no aplica horario de verano desde 2009.
+ */
+export const ZONA_HOTEL = 'America/Argentina/Rio_Gallegos'
+
+/**
+ * El día de hoy **en el hotel**, no en el servidor.
+ *
+ * ⚠️ Esto era `new Date().toISOString().slice(0, 10)`, que da el día en **UTC**.
+ * Vercel corre en UTC y el hotel está en UTC−3, así que entre las 21:00 y la
+ * medianoche de El Calafate el sistema entero operaba con la fecha del día
+ * siguiente: housekeeping mostraba las salidas de mañana, el punto de venta
+ * cargaba el consumo de las 21:30 a la noche equivocada, y el feed iCal publicaba
+ * como libre una noche vendida. Tres horas por día, todos los días.
+ *
+ * No se nota programando —de día las dos fechas coinciden— ni en los tests, que
+ * corren en UTC y comparaban UTC contra UTC. Por eso `tests/fechas.test.ts` fija
+ * la zona del proceso a una lejana y exige que el resultado siga siendo el del
+ * hotel.
+ *
+ * `formatToParts` y no `toLocaleDateString('en-CA')`: el formato de un locale es
+ * dato de ICU y puede cambiar entre versiones de Node. Las partes, no.
+ */
+export function hoyISO(fecha: Date = new Date()): string {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: ZONA_HOTEL,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(fecha)
+
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((p) => p.type === tipo)!.value
+
+  return `${parte('year')}-${parte('month')}-${parte('day')}`
+}
 
 export interface Periodo {
   desde: string
   hasta: string
-}
-
-export function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 export function sumarDias(iso: string, dias: number): string {

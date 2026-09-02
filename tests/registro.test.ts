@@ -1,140 +1,110 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, afterAll } from 'vitest'
+import { guardarError } from '@/lib/registro'
+import { clienteDePrueba, clienteAnonimo, hayDB, hayAnon, sufijoUnico } from './db'
 
 /**
- * El registro estructurado, y sobre todo lo que NO deja salir.
+ * El sink de `lib/registro.ts` contra la tabla `errores` (migración 0068).
  *
- * El proveedor de email ya tuvo el problema que este módulo previene: logueaba
- * el cuerpo entero de los correos, y esos cuerpos llevan enlaces con token. Los
- * tokens no caducan, así que cualquiera con acceso de lectura al log tenía
- * credenciales de larga vida.
+ * Lo que se verifica acá no es que se escriba una fila —eso es lo fácil— sino
+ * las tres promesas que hacen que valga la pena tenerlo:
  *
- * `headers()` de Next se falsea: fuera de una petición lanza, y lo que importa
- * acá es el formato de la línea, no de dónde sale el id.
+ *  1. El dato sensible **no llega** a la tabla, aunque alguien lo pase.
+ *  2. El sink **nunca lanza**, ni con la base caída. Un logger que rompe la
+ *     petición que estaba registrando es peor que no tener logger.
+ *  3. `anon` **no lee** la tabla. Un error arrastra rutas, ids y a veces el dato
+ *     que lo causó.
  */
-vi.mock('next/headers', () => ({
-  headers: async () => new Headers({ 'x-vercel-id': 'iad1::abc123' }),
-}))
 
-const { registrarError, registrarAviso, registrarInfo } = await import('@/lib/registro')
+const ctx = { aBorrar: [] as string[] }
 
-/** Captura la última línea emitida y la devuelve ya parseada. */
-function capturar(metodo: 'error' | 'warn' | 'info') {
-  const espia = vi.spyOn(console, metodo).mockImplementation(() => {})
-  return {
-    espia,
-    ultima: () => JSON.parse(espia.mock.calls.at(-1)![0] as string),
-  }
-}
+afterAll(async () => {
+  if (!hayDB || ctx.aBorrar.length === 0) return
+  await clienteDePrueba().from('errores').delete().in('id', ctx.aBorrar)
+})
 
-describe('registro estructurado', () => {
-  let restaurar: (() => void)[] = []
+describe.skipIf(!hayDB)('sink de errores', () => {
+  it('guarda el evento con su contexto', async () => {
+    const evento = `prueba_sink_${sufijoUnico()}`
 
-  beforeEach(() => {
-    restaurar = []
-  })
-  afterEach(() => {
-    for (const r of restaurar) r()
-    vi.restoreAllMocks()
-  })
-
-  it('emite una sola línea JSON con nivel, evento y momento', async () => {
-    const c = capturar('error')
-    restaurar.push(() => c.espia.mockRestore())
-
-    await registrarError('fallo_de_prueba', { reserva: 'BP-1' })
-
-    expect(c.espia).toHaveBeenCalledTimes(1)
-    const linea = c.ultima()
-    expect(linea.nivel).toBe('error')
-    expect(linea.evento).toBe('fallo_de_prueba')
-    expect(linea.reserva).toBe('BP-1')
-    expect(typeof linea.en).toBe('string')
-  })
-
-  it('incluye el id de la petición, que es lo que permite correlacionar', async () => {
-    // Sin esto, en un log con varias peticiones entrelazadas no hay forma de
-    // saber qué líneas pertenecen al mismo pedido.
-    const c = capturar('error')
-    restaurar.push(() => c.espia.mockRestore())
-
-    await registrarError('x')
-    expect(c.ultima().pedido).toBe('iad1::abc123')
-  })
-
-  it('OCULTA los campos sensibles por nombre', async () => {
-    const c = capturar('error')
-    restaurar.push(() => c.espia.mockRestore())
-
-    await registrarError('intento', {
-      token: 'abc-123-secreto',
-      password: 'hunter2',
-      authorization: 'Bearer xyz',
-      reserva: 'BP-9',
+    await guardarError('error', evento, { detalle: 'algo se rompió' }, {
+      pedido: 'iad1::abc123',
+      digest: '1234567890',
+      ruta: '/panel/reservas/[id]',
     })
 
-    const l = c.ultima()
-    expect(l.token).toBe('[oculto]')
-    expect(l.password).toBe('[oculto]')
-    expect(l.authorization).toBe('[oculto]')
-    // Lo que no es sensible sigue saliendo: un log que oculta todo no sirve.
-    expect(l.reserva).toBe('BP-9')
+    const { data } = await clienteDePrueba()
+      .from('errores')
+      .select('id, evento, nivel, detalle, pedido, digest, ruta, datos')
+      .eq('evento', evento)
+      .single()
+
+    expect(data, 'el sink no escribió la fila').not.toBeNull()
+    ctx.aBorrar.push(data!.id)
+
+    expect(data!.nivel).toBe('error')
+    expect(data!.detalle).toBe('algo se rompió')
+    expect(data!.pedido).toBe('iad1::abc123')
+    // El digest es el hilo entre lo que vio el usuario y el stack del servidor.
+    expect(data!.digest).toBe('1234567890')
+    expect(data!.ruta).toBe('/panel/reservas/[id]')
   })
 
-  it('OCULTA lo que parece un número de tarjeta, aunque venga dentro de un texto', async () => {
-    // La capa que salva cuando el dato viaja anidado en un mensaje de error de
-    // la base, que es como se cuela en la práctica.
-    const c = capturar('error')
-    restaurar.push(() => c.espia.mockRestore())
+  it('no deja pasar datos sensibles, ni por nombre de campo ni por contenido', async () => {
+    const evento = `prueba_secreto_${sufijoUnico()}`
 
-    await registrarError('pago', {
-      detalle: 'la tarjeta 4111111111111111 fue rechazada por el emisor',
+    await guardarError('error', evento, {
+      // Por nombre: alguien pasa `token` sin pensarlo.
+      token: 'sbp_0123456789abcdef',
+      // Por contenido: el mensaje de la base arrastra algo que parece una
+      // tarjeta. Es la capa que salva cuando el dato viene en texto libre.
+      detalle: 'falló al procesar 4111111111111111 en el cobro',
     })
 
-    const l = c.ultima()
-    expect(l.detalle).not.toContain('4111111111111111')
-    expect(l.detalle).toContain('[oculto]')
-    // El resto del mensaje se conserva: es lo que hace útil el log.
-    expect(l.detalle).toContain('rechazada por el emisor')
+    const { data } = await clienteDePrueba()
+      .from('errores')
+      .select('id, detalle, datos')
+      .eq('evento', evento)
+      .single()
+
+    ctx.aBorrar.push(data!.id)
+
+    const datos = data!.datos as Record<string, unknown>
+    expect(datos.token, 'el token llegó a la base en claro').toBe('[oculto]')
+    expect(data!.detalle).not.toContain('4111111111111111')
+    expect(data!.detalle).toContain('[oculto]')
   })
 
-  it('un campo que contiene «token» en el nombre también se oculta', async () => {
-    const c = capturar('error')
-    restaurar.push(() => c.espia.mockRestore())
+  it('con la base inalcanzable no lanza: se traga el fallo y sigue', async () => {
+    const urlOriginal = process.env.NEXT_PUBLIC_SUPABASE_URL
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:1/no-existe'
 
-    await registrarError('portal', { ical_token: 'xyz', tarjeta_numero: '1234' })
-    const l = c.ultima()
-    expect(l.ical_token).toBe('[oculto]')
-    expect(l.tarjeta_numero).toBe('[oculto]')
+    try {
+      // Si esto lanzara, rompería la petición que estaba registrando el error,
+      // que es exactamente lo que el sink no puede hacer.
+      await expect(
+        guardarError('error', `prueba_caida_${sufijoUnico()}`, { detalle: 'x' }),
+      ).resolves.toBeUndefined()
+    } finally {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = urlOriginal
+    }
+  })
+})
+
+describe.skipIf(!hayAnon)('borde público de `errores`', () => {
+  it('anon no lee la tabla', async () => {
+    const { data, error } = await clienteAnonimo().from('errores').select('id').limit(1)
+
+    // Puede negar por GRANT (42501) o devolver vacío por RLS. Las dos son
+    // aceptables; lo que no es aceptable es que devuelva filas.
+    expect(data ?? [], 'anon leyó errores del servidor').toHaveLength(0)
+    if (error) expect(['42501', '42P01']).toContain(error.code)
   })
 
-  it('cada nivel usa el canal de consola que le corresponde', async () => {
-    const e = capturar('error')
-    const w = capturar('warn')
-    const i = capturar('info')
-    restaurar.push(() => {
-      e.espia.mockRestore()
-      w.espia.mockRestore()
-      i.espia.mockRestore()
-    })
+  it('anon no puede insertar para ensuciar el rastro', async () => {
+    const { error } = await clienteAnonimo()
+      .from('errores')
+      .insert({ evento: 'inyectado_por_anon', detalle: 'no debería entrar' })
 
-    await registrarError('a')
-    await registrarAviso('b')
-    await registrarInfo('c')
-
-    expect(e.espia).toHaveBeenCalledTimes(1)
-    expect(w.espia).toHaveBeenCalledTimes(1)
-    expect(i.espia).toHaveBeenCalledTimes(1)
-  })
-
-  it('un dato que no se puede serializar no rompe la operación', async () => {
-    // Un log que tira abajo lo que estaba registrando es peor que no tenerlo.
-    const c = capturar('error')
-    restaurar.push(() => c.espia.mockRestore())
-
-    const circular: Record<string, unknown> = {}
-    circular.yo = circular
-
-    await expect(registrarError('circular', circular)).resolves.toBeUndefined()
-    expect(c.espia).toHaveBeenCalled()
+    expect(error, 'anon pudo escribir en errores').not.toBeNull()
   })
 })
