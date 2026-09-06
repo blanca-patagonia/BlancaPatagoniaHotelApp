@@ -733,6 +733,60 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       }
     }
 
+    /**
+     * La idempotencia que no existía.
+     *
+     * `registrarPago` no tenía ninguna clave: dos envíos del mismo formulario eran
+     * **dos pagos**, y el huésped figuraba pagando dos veces. Lo único que lo
+     * frenaba era `BotonEnvio`, que vive en el navegador y no sobrevive a un
+     * reintento de red, un F5 sobre el POST ni al botón de atrás.
+     *
+     * La clave la genera la pantalla al renderizar y la rechaza el `unique` de
+     * `pagos.external_id` (0009), o sea la base y no una comprobación previa que
+     * una carrera podría esquivar.
+     */
+    it('el mismo formulario enviado dos veces cobra UNA sola vez', async () => {
+      const id = await reservaEnEstado('confirmada')
+      const clave = `test-${ctx.sufijo}-doble`
+
+      const envio = () =>
+        destinoDe(() =>
+          registrarPago(formulario({ reserva_id: id, monto: '50', idempotencia: clave })),
+        )
+
+      await envio()
+      await envio()
+      await borrarPagosDe(id)
+
+      const { data } = await ctx.db.from('pagos').select('id').eq('reserva_id', id)
+      expect(
+        (data ?? []).length,
+        'el segundo envío registró un pago más: el huésped figura pagando dos veces',
+      ).toBe(1)
+    })
+
+    it('dos cobros distintos del mismo importe sí entran los dos', async () => {
+      // La idempotencia no puede impedir que alguien pague dos veces de verdad:
+      // cada carga de la pantalla trae su propia clave.
+      const id = await reservaEnEstado('confirmada')
+
+      for (const n of ['a', 'b']) {
+        await destinoDe(() =>
+          registrarPago(
+            formulario({
+              reserva_id: id,
+              monto: '30',
+              idempotencia: `test-${ctx.sufijo}-distinto-${n}`,
+            }),
+          ),
+        )
+      }
+      await borrarPagosDe(id)
+
+      const { data } = await ctx.db.from('pagos').select('id').eq('reserva_id', id)
+      expect((data ?? []).length, 'la idempotencia bloqueó un cobro legítimo').toBe(2)
+    })
+
     it('marca pagada la reserva cuando el cobro cubre alojamiento y consumos', async () => {
       const id = await reservaEnEstado('confirmada')
       const consumos = await consumoDePrueba(id, 2)

@@ -967,6 +967,12 @@ export default async function DetalleReservaPage({
         {(
           <form action={registrarPago} className="mt-4 flex flex-wrap items-end gap-2">
             <input type="hidden" name="reserva_id" value={reserva.id} />
+            {/* Clave de idempotencia del cobro de mostrador. Se genera acá, al
+                renderizar: es la misma para dos envíos del mismo formulario —un
+                reintento de red, un F5 sobre el POST, el botón de atrás— y
+                distinta en cada carga, así que un segundo pago legítimo entra
+                igual. La rechaza el `unique` de `pagos.external_id`. */}
+            <input type="hidden" name="idempotencia" value={crypto.randomUUID()} />
             <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Medio</span>
               <select name="medio" className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm">

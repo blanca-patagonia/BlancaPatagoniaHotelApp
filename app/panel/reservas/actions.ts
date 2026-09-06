@@ -447,6 +447,26 @@ export async function registrarPago(formData: FormData): Promise<void> {
     redirect(`/panel/reservas/${reservaId}?error=ultimos4`)
   }
 
+  /*
+    ── Idempotencia del cobro de mostrador ──────────────────────────────────
+
+    Esta acción no tenía ninguna: dos envíos del mismo formulario eran **dos
+    pagos**. Lo único que lo frenaba era `BotonEnvio`, que vive en el navegador y
+    no sobrevive a un reintento de red, un F5 sobre el POST ni el botón de atrás.
+    Para el hotel eso es un huésped que figura pagando dos veces.
+
+    La clave la genera la pantalla al renderizar, así que es la misma para los dos
+    envíos del mismo formulario y distinta en cada carga: un segundo pago legítimo
+    —el huésped que paga dos veces el mismo importe— entra sin problema porque
+    llega con una clave nueva.
+
+    Se apoya en el `unique` que `pagos.external_id` tiene desde la 0009: la
+    garantía la da la base, no una comprobación previa que una carrera podría
+    esquivar.
+  */
+  const clave = String(formData.get('idempotencia') ?? '').trim()
+  const externalId = clave ? `mostrador:${clave}` : null
+
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('pagos').insert({
     reserva_id: reservaId,
@@ -460,8 +480,13 @@ export async function registrarPago(formData: FormData): Promise<void> {
     cupon: cupon || null,
     ultimos4: ultimos4 || null,
     tarjeta_marca: marca || null,
+    external_id: externalId,
   })
-  if (error) redirect(`/panel/reservas/${reservaId}?error=pago`)
+
+  // 23505 = el mismo formulario se envió dos veces. El pago ya está registrado,
+  // así que NO es un error para quien lo hizo: se sigue como si hubiera entrado
+  // ahora, que es lo que idempotente significa.
+  if (error && error.code !== '23505') redirect(`/panel/reservas/${reservaId}?error=pago`)
 
   // ¿Quedó saldada? → intentar pasar a 'pagada'.
   //
