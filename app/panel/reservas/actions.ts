@@ -774,16 +774,35 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const sesion = await requerirAcceso('reservas')
   const supabase = await crearClienteServidor()
 
-  const { data: existente } = await supabase
+  /*
+    ── Las tres lecturas de acá abajo CORTAN si fallan ───────────────────────
+
+    No es celo de estilo: una factura sale con CAE y es **inmutable** (la 0034 le
+    revocó `update` y `delete`), así que un dato leído de menos no se corrige
+    después. Y como no hay notas de crédito, tampoco se anula.
+
+    Lo que pasaba descartando el `{ error }`:
+
+    · `facturas` → `existente` quedaba nulo y se intentaba emitir una segunda
+      factura sobre la misma reserva. La restricción de la 0045 la frena, pero
+      recién en el `insert`, después de haber quemado el número y pedido el CAE.
+    · `reservas` → `reserva` nulo y redirect al listado, sin decir por qué.
+    · `consumos` → **el caro**: `consumosData` nulo se degrada a `[]`, y
+      `cuentaConsolidada` factura solo el alojamiento. Comprobante fiscal por
+      menos de lo consumido, firmado y sin vuelta atrás.
+  */
+  const { data: existente, error: eExistente } = await supabase
     .from('facturas')
     .select('id')
     .eq('reserva_id', reservaId)
     .maybeSingle()
 
+  cortarSiFalla(eExistente, `/panel/reservas/${reservaId}`, 'lectura_factura')
+
   // Una reserva se factura una sola vez: si ya existe, se muestra la emitida.
   if (existente) redirect(`/panel/reservas/${reservaId}/factura`)
 
-  const { data: reserva } = await supabase
+  const { data: reserva, error: eReserva } = await supabase
     .from('reservas')
     .select(
       'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior)',
@@ -791,6 +810,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     .eq('id', reservaId)
     .single()
 
+  cortarSiFalla(eReserva, `/panel/reservas/${reservaId}`, 'lectura_reserva')
   if (!reserva) redirect('/panel/reservas')
 
   // Solo se factura una estadía consumida: emitir el comprobante de una reserva
@@ -799,10 +819,13 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const motivo = motivoNoFacturable(String(reserva.estado), false)
   if (motivo) redirect(`/panel/reservas/${reservaId}?error=${motivo}`)
 
-  const { data: consumosData } = await supabase
+  const { data: consumosData, error: eConsumos } = await supabase
     .from('consumos')
     .select('cantidad, precio_unitario')
     .eq('reserva_id', reservaId)
+
+  // Ver el bloque de arriba: sin esto, una lectura fallida factura de menos.
+  cortarSiFalla(eConsumos, `/panel/reservas/${reservaId}`, 'lectura_consumos')
 
   const consumos: Consumo[] = (consumosData ?? []).map((c) => ({
     cantidad: c.cantidad as number,

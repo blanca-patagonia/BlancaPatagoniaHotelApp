@@ -146,6 +146,13 @@ const MENSAJES_ERROR: Record<string, string> = {
   quitar_consumo: 'No se pudo quitar el consumo. Sigue cargado a la cuenta.',
   factura:
     'Se pidió el CAE y se consumió el número de comprobante, pero la factura NO quedó guardada. Avisá antes de volver a emitir: el número ya se usó.',
+  // Lecturas previas a la emisión. Cortan a propósito: una factura sale con CAE y
+  // es inmutable, así que es preferible no emitirla a emitirla con un dato de menos.
+  lectura_factura:
+    'No se pudo verificar si esta reserva ya estaba facturada, así que no se emitió nada. Probá de nuevo.',
+  lectura_reserva: 'No se pudieron leer los datos de la reserva. No se emitió ninguna factura.',
+  lectura_consumos:
+    'No se pudieron leer los consumos, así que no se emitió la factura: habría salido por menos de lo que se consumió, y una vez emitida no se corrige.',
   total: 'El cambio se hizo, pero no se pudo recalcular el precio. La reserva quedó con el total anterior.',
   repro: 'No se pudo reprogramar la estadía.',
   // Cobro (Fase 23).
