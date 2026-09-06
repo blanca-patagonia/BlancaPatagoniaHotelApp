@@ -151,19 +151,32 @@ export async function cerrarComanda(
     }
   }
 
-  // ── Descuento de stock ─────────────────────────────────────────────────────
-  // Va después y con `registrarFalla`: el consumo ya está en la cuenta del huésped,
-  // que es el dato que importa. Si el stock no baja, el inventario queda mostrando
-  // más de lo que hay —molesto y corregible— pero cortar acá dejaría a quien cargó
-  // creyendo que la comanda no entró, cuando sí entró.
-  for (const l of aCargar) {
-    if (l.stock == null) continue
-    const { error } = await supabase
-      .from('productos_servicios')
-      .update({ stock: Math.max(0, l.stock - l.cantidad) })
-      .eq('id', l.productoId)
-    registrarFalla(error, `descontar stock de ${l.nombre} en la comanda ${comanda}`)
-  }
+  /*
+    ── El stock NO se descuenta acá, y es a propósito ────────────────────────
+
+    Lo descuenta el trigger `consumos_descuenta_stock` (migración 0015), que
+    corre `after insert on consumos for each row`. El `insert` de arriba ya lo
+    dispara, una vez por línea.
+
+    Acá **había** un bucle que volvía a descontar. Nació como parche cuando el
+    trigger no funcionaba con sesión de recepción —era `security invoker` y el
+    `update` caía en la política `admin/gerencia` de `productos_servicios`,
+    afectaba cero filas y no fallaba—. La migración 0064 arregló la causa
+    poniéndolo `security definer`, pero el parche quedó, y desde entonces:
+
+      · con sesión **admin/gerencia** RLS permitía el update y el stock bajaba
+        **el doble**;
+      · con sesión **recepción** RLS lo bloqueaba y bajaba una sola vez, o sea
+        correcto por accidente — que es justo el caso que cubría el test.
+
+    Además el bucle restaba sobre `l.stock`, leído **antes** del insert: aun
+    solo, era una lectura-modificación-escritura con la carrera puesta. El
+    trigger hace `stock - new.cantidad` en la base, que no la tiene.
+
+    Los otros tres caminos que insertan en `consumos` (`reservas/actions.ts`,
+    `reservas/[id]/cuenta/actions.ts`) nunca descontaron a mano. Éste era el
+    desalineado.
+  */
 
   revalidatePath('/panel/punto-venta')
   revalidatePath(`/panel/reservas/${reservaId}`)
