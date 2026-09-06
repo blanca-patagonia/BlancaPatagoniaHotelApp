@@ -3875,3 +3875,70 @@ rompe.
 
 `npm run check` local: **1617 tests / 98 archivos / 0 salteados · lint 0 ·
 typecheck 0 · build 0.**
+
+---
+
+## 2026-09-06 — Auditoría de arquitectura + Bloque A: los siete P0
+
+**Resumen:** pedido de llevar el sistema a nivel casi productivo como PMS
+centralizado (Booking/OTAs, overbooking, pagos, facturas, recordatorios, OCR,
+conciliación bancaria). Se hizo la auditoría completa —`docs/auditoria-pms-2026-09.md`—
+y se cerraron los siete defectos P0 que perdían plata o corrompían datos.
+
+### Booking.com: la respuesta es cerrada y no es de ingeniería
+
+Verificado contra la documentación oficial: **no hay API pública**. El acceso es
+solo para Connectivity Partners, que son **empresas proveedoras de software**, no
+propiedades. Los requisitos mínimos de permanencia —≥3.000 ABRN por año de
+programa y ≥250 listings abiertos de promedio diario— están dimensionados para
+channel managers; el hotel tiene ~16 unidades. Y hoy Booking **pausó las
+integraciones con proveedores nuevos**. Esto **confirma el ADR 0021** y le agrega
+los números. El camino sigue siendo contratar un channel manager.
+
+### Los siete P0, todos verificados ejecutando
+
+1. **Una cancelación de Booking bloqueaba la habitación para siempre.**
+   `importarEntrante` cortaba con «ya se importó» antes de mirar la cancelación, y
+   por el feed iCal el aviso ni llegaba: una cancelación es la **desaparición del
+   VEVENT** y nada miraba lo que no vino. Migración **0074** (`visto_en`,
+   `ausente_desde`). ⚠️ Se marca, **no se cancela solo**: un feed vacío o una URL
+   caducada se ven igual que cuarenta cancelaciones, y auto-cancelar convertiría
+   una corrida mala del cron en un vaciado de inventario.
+2. **Los reembolsos de pasarela no aterrizaban.** `TRANSICIONES.aprobado` era `[]`,
+   así que un `refunded` se descartaba con un `ok` y la reserva quedaba `pagada`
+   con la plata devuelta. Stripe ni siquiera mapeaba `charge.refunded`, y el
+   formulario manual solo aparecía si la reserva **no** estaba saldada —justo el
+   caso en que hay algo que devolver—.
+3. **El descuento de stock se perdía.** ⚠️ Mi primer diagnóstico dijo «se descuenta
+   dos veces» y **era falso**; lo descubrí porque el test de regresión pasaba sin
+   el arreglo. Es una lectura-modificación-escritura que pisa lo que el trigger ya
+   hizo: con una línea los números coinciden y no se ve, con dos líneas del mismo
+   producto el inventario queda **más alto** que la realidad. Queda anotado como
+   ejemplo de conclusión plausible que hay que verificar ejecutando.
+4. **Se podía emitir una factura con CAE por menos importe**: `emitirFactura`
+   descartaba el `{ error }` de la lectura de consumos, que se degradaba a `[]`.
+   Y `facturas` es inmutable, así que no se corrige.
+5. **El cobro de mostrador no tenía idempotencia**: dos envíos, dos pagos.
+6. **La expiración de reservas dependía solo de pg_cron**, programado dentro de un
+   bloque que se traga el fallo. Sin ella el inventario retenido no se libera nunca.
+   `purgar_errores` (0068) directamente nunca se había programado.
+7. Además: el `motivo` de las entrantes **se borraba en cada corrida del cron**
+   (`motivo: ''` incondicional + el iCal sellando `emitidaEn = new Date()`).
+
+### Los cuatro repos externos: ninguno aporta código
+
+- **hotel-pms** — 🔴 **sin archivo de licencia**: todos los derechos reservados,
+  legalmente no se puede reusar. Y le falta justo lo que se buscaba.
+- **QloApps** — 🟡 **OSL-3.0**, copyleft con cláusula de despliegue en red.
+  Copiar código obligaría a publicar el derivado. Solo ideas.
+- **Evolution API** — 🟡 el modo Baileys automatiza WhatsApp fuera de los términos
+  de Meta: riesgo de **baneo del número del hotel**, y el README no lo advierte.
+- **Invoice Ninja** — 🟡 Elastic License 2.0 y no hace facturación argentina.
+
+**MercadoPago sí tiene API pública** para conciliación
+(`/v1/account/settlement_report`). **Santander Argentina no**: se resuelve
+importando el extracto.
+
+**Verificación:** 1637 tests / 100 archivos / 0 salteados · lint 0 · typecheck 0 ·
+build 0. Migración 0074 aplicada. Cada arreglo entró con un test que **falla sin
+él**, comprobado revirtiendo.
