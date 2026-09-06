@@ -13,7 +13,7 @@ import { guardarEntrantes, importarEntrante } from '@/lib/canales/servicio'
 import { interpretarCsvResenas } from '@/lib/canales/resenas-csv'
 import { guardarResenas } from '@/lib/canales/resenas-servicio'
 import { saldarSiCorresponde } from '@/lib/reservas/saldar'
-import { hoyISO } from '@/lib/fechas'
+import { hoyISO, sumarDias } from '@/lib/fechas'
 import {
   MODALIDADES_COBRO,
   referenciaTransferenciaCanal,
@@ -77,6 +77,9 @@ export async function sincronizarCanal(): Promise<void> {
     proveedor: proveedor.nombre,
     origen: 'sondeo',
     perfilId: sesion.userId,
+    // Mismo sondeo que el cron: foto completa del feed, así que lo ausente se
+    // marca como presunta cancelación. Ver el encabezado de la migración 0074.
+    instantanea: { desde: sumarDias(hoyISO(), 1) },
   })
 
   revalidatePath(DESTINO)

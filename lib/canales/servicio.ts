@@ -12,7 +12,12 @@ import {
   type OcupacionNoche,
 } from '@/lib/domain/canales'
 import { devengarComision } from '@/lib/domain/canales-costos'
-import { ESTADOS_ACTIVOS } from '@/lib/domain/reservas'
+import {
+  ESTADOS_ACTIVOS,
+  ETIQUETAS_ESTADO_RESERVA,
+  puedeTransicionar,
+  type EstadoReserva,
+} from '@/lib/domain/reservas'
 import type { CanalVenta, ReservaDeCanal } from '.'
 
 /**
@@ -69,7 +74,20 @@ interface FilaGuardada {
 export async function guardarEntrantes(
   client: SupabaseClient,
   entrantes: readonly ReservaDeCanal[],
-  contexto: { canal: CanalVenta; proveedor: string; origen: string; perfilId?: string },
+  contexto: {
+    canal: CanalVenta
+    proveedor: string
+    origen: string
+    perfilId?: string
+    /**
+     * Declara que este lote es una **foto completa** del canal desde `desde`.
+     *
+     * Solo con eso la ausencia de una reserva significa algo. El feed iCal lo es
+     * (publica todo lo vigente); el informe CSV del extranet **no** —es una
+     * exportación filtrada— y por eso no lo manda. Ver `marcarAusentes`.
+     */
+    instantanea?: { desde: string }
+  },
 ): Promise<ResumenSincronizacion> {
   const resumen: ResumenSincronizacion = {
     leidas: entrantes.length,
@@ -78,6 +96,11 @@ export async function guardarEntrantes(
     rechazadas: 0,
     motivos: [],
   }
+
+  // Un solo sello para toda la corrida: si cada fila usara su propio `now()`, dos
+  // filas de la misma sincronización quedarían con marcas distintas y «lo que vino
+  // en la última corrida» dejaría de ser una comparación exacta.
+  const corridaEn = new Date().toISOString()
 
   /*
     Los existentes se traen de UNA sola consulta, no una por entrante.
@@ -169,6 +192,10 @@ export async function guardarEntrantes(
       // `'desconocida'`, que es el mismo default de la columna y la verdad del caso.
       modalidad_cobro: e.modalidadCobro ?? 'desconocida',
       notas: e.notas ?? '',
+      // La fuente la confirmó en esta corrida. Y si venía marcada como ausente,
+      // reapareció: se limpia la marca (un feed intermitente no deja rastro).
+      visto_en: corridaEn,
+      ausente_desde: null,
     }
 
     const existente = existentesPorClave.get(clave(e.canal, e.externalId)) ?? null
@@ -192,8 +219,23 @@ export async function guardarEntrantes(
       continue
     }
 
-    // Ya existe: sólo se pisa si el evento entrante es posterior.
-    if (!esEventoMasReciente(e.emitidaEn, existente.emitida_en)) continue
+    /*
+      Ya existe: sólo se pisan los DATOS si el evento entrante es posterior.
+
+      Pero «la vi en esta corrida» no es un dato de la reserva, es un hecho de la
+      sincronización, y vale aunque el evento sea viejo: el informe CSV reenvía las
+      mismas filas con su `emitidaEn` original y eso no las hace desaparecidas. Si
+      `visto_en` se actualizara solo en el camino de abajo, `marcarAusentes` daría
+      por ausente todo lo que no cambió.
+    */
+    if (!esEventoMasReciente(e.emitidaEn, existente.emitida_en)) {
+      const { error } = await client
+        .from('canal_reservas')
+        .update({ visto_en: corridaEn, ausente_desde: null })
+        .eq('id', existente.id)
+      registrarFalla(error, `marcar como vista la entrante ${e.canal}/${e.externalId}`)
+      continue
+    }
 
     /*
       ⚠️ La modalidad de cobro NO se pisa con `'desconocida'`.
@@ -214,7 +256,17 @@ export async function guardarEntrantes(
         ...(modalidadEntrante !== 'desconocida' ? { modalidad_cobro: modalidadEntrante } : {}),
         // Si venía marcada como error, el dato nuevo merece otro intento.
         estado: existente.estado === 'error' ? 'pendiente' : existente.estado,
-        motivo: '',
+        /*
+          ⚠️ El `motivo` sólo se limpia si la fila SALE de `error`.
+
+          Antes era `motivo: ''` incondicional, y con el iCal —que sella
+          `emitidaEn = new Date()` en cada lectura, así que siempre es «más
+          nuevo»— **cada corrida del cron borraba el aviso de todas las filas**.
+          El caso concreto que se perdía: `importarEntrante` escribe ahí la
+          discrepancia de importe entre lo que dice el canal y lo que calculó el
+          sistema, y a la mañana siguiente ya no estaba.
+        */
+        ...(existente.estado === 'error' ? { motivo: '' } : {}),
       })
       .eq('id', existente.id)
 
@@ -237,6 +289,11 @@ export async function guardarEntrantes(
   // Va acá y no en `importarEntrante` porque ahí se descubre cuando alguien aprieta
   // «Importar», que pueden ser días — o el check-in, con el huésped en la puerta.
   await marcarConflictosDeCupo(client, entrantes, contexto.canal)
+
+  // Sólo si quien llamó declaró que el lote es una foto completa. Ver `marcarAusentes`.
+  if (contexto.instantanea) {
+    await marcarAusentes(client, entrantes, contexto.canal, contexto.instantanea.desde, corridaEn)
+  }
 
   // Se registra la corrida completa, incluso si no entró nada: «se sincronizó y
   // no había nada nuevo» es una respuesta distinta de «no se sincronizó».
@@ -529,15 +586,34 @@ export async function importarEntrante(
     .maybeSingle<EntranteFila>()
 
   if (eLectura || !e) return { ok: false, error: 'No se encontró la reserva entrante.' }
-  if (e.estado === 'importada' && e.reserva_id) {
-    return { ok: false, error: 'Esa reserva ya se importó.' }
+
+  /*
+    ── La cancelación se atiende ANTES de «ya se importó», y ése es el arreglo ──
+
+    Esta guarda estaba **después** de la de abajo, así que para toda reserva ya
+    importada era código inalcanzable: el canal cancelaba, el sistema respondía
+    «esa reserva ya se importó» y no tocaba `reservas`. La fila quedaba
+    `confirmada`, la estadía viva y **la unidad invendible para siempre**. En
+    temporada alta, cada cancelación de Booking se comía una unidad del
+    inventario sin que nadie se enterara.
+  */
+  if (e.operacion === 'cancelada') {
+    // Sin reserva creada no hay nada que cancelar: alcanza con marcarla. Es
+    // `ignorada` y no `error` — no hay nada que arreglar.
+    if (!e.reserva_id) {
+      await marcar(
+        client,
+        e.id,
+        'ignorada',
+        'El canal la informó como cancelada: no se creó reserva.',
+      )
+      return { ok: false, error: 'El canal informó esta reserva como cancelada.' }
+    }
+    return await cancelarReservaDelCanal(client, e.id, e.reserva_id, e.canal)
   }
 
-  // Una cancelada no se importa: no hay reserva que crear. Se marca ignorada, que
-  // es distinto de error — no hay nada que arreglar.
-  if (e.operacion === 'cancelada') {
-    await marcar(client, e.id, 'ignorada', 'El canal la informó como cancelada: no se crea reserva.')
-    return { ok: false, error: 'El canal informó esta reserva como cancelada.' }
+  if (e.estado === 'importada' && e.reserva_id) {
+    return { ok: false, error: 'Esa reserva ya se importó.' }
   }
 
   // 1) Resolver el tipo de unidad. El código del canal puede no ser el nuestro.
@@ -651,6 +727,158 @@ export async function importarEntrante(
   registrarFalla(eVinculo, `vincular los cargos de la entrante ${e.id} a su reserva`)
 
   return { ok: true, reservaId: resultado.reserva.id, codigo: resultado.reserva.codigo, aviso }
+}
+
+/**
+ * Marca como ausentes las reservas que la foto completa del canal ya no trae.
+ *
+ * ── Por qué esto existe ─────────────────────────────────────────────────────
+ *
+ * En un feed iCal **una cancelación es la desaparición del VEVENT**, no un evento.
+ * Sin esto, por el único proveedor real del sistema las cancelaciones eran
+ * invisibles y la unidad quedaba vendida para siempre (migración 0074).
+ *
+ * ── Por qué NO cancela sola ─────────────────────────────────────────────────
+ *
+ * Un feed que devuelve vacío, una URL caducada o un parseo que falla se ven
+ * **exactamente igual** que cuarenta cancelaciones. Auto-cancelar convertiría una
+ * corrida mala del cron en un vaciado de inventario de madrugada. Se marca, la
+ * pantalla lo muestra como presunta cancelación, y confirma una persona — el mismo
+ * criterio con el que el cron aterriza pero no importa.
+ *
+ * ── Qué se considera ausente ────────────────────────────────────────────────
+ *
+ * Sólo lo que **debería** haber venido en esta foto: mismo canal, todavía en juego
+ * (`pendiente` o `importada`), con salida dentro del rango que la fuente informa, y
+ * que no vino en el lote. Lo `ignorada` ya se descartó y lo `error` ya tiene su
+ * propio aviso; volver a marcarlos sólo agregaría ruido.
+ */
+async function marcarAusentes(
+  client: SupabaseClient,
+  entrantes: readonly ReservaDeCanal[],
+  canal: CanalVenta,
+  desde: string,
+  corridaEn: string,
+): Promise<void> {
+  /*
+    Un lote vacío NO marca ausencias, y es deliberado.
+
+    Es indistinguible de «el feed falló y devolvió cero». Si marcara, la primera
+    corrida con la URL vencida daría por cancelada toda la ocupación del hotel.
+    Con reservas de verdad, cero entrantes es raro; sin ellas, es lo normal.
+  */
+  if (entrantes.length === 0) return
+
+  const presentes = new Set(entrantes.map((e) => e.externalId).filter(Boolean))
+
+  const { data, error } = await client
+    .from('canal_reservas')
+    .select('id, external_id')
+    .eq('canal', canal)
+    .in('estado', ['pendiente', 'importada'])
+    .is('ausente_desde', null)
+    // La foto informa desde `desde` en adelante: lo que terminó antes no tenía por
+    // qué venir, y marcarlo sería un falso positivo garantizado.
+    .gte('check_out', desde)
+
+  if (error) {
+    // No corta: la sincronización ya aterrizó bien y perder la detección de
+    // ausencias de una corrida es recuperable en la siguiente.
+    registrarFalla(error, `buscar ausentes de ${canal}`)
+    return
+  }
+
+  const ausentes = ((data ?? []) as { id: string; external_id: string }[]).filter(
+    (f) => !presentes.has(f.external_id),
+  )
+  if (ausentes.length === 0) return
+
+  const { error: eMarca } = await client
+    .from('canal_reservas')
+    .update({ ausente_desde: corridaEn })
+    .in(
+      'id',
+      ausentes.map((f) => f.id),
+    )
+  registrarFalla(eMarca, `marcar ${ausentes.length} ausente(s) de ${canal}`)
+}
+
+/**
+ * Cancela la reserva que había nacido de una entrante, porque el canal la canceló.
+ *
+ * ── Por qué alcanza con tocar `reservas` ────────────────────────────────────
+ *
+ * El trigger `sincronizar_estado_estadias` (migración 0005) propaga
+ * `reservas.estado` a `estadias.estado`, y la restricción de exclusión solo
+ * aplica `where estado in ('pendiente','confirmada','pagada','in_house')`. Al
+ * pasar a `cancelada`, la estadía deja de participar y **la unidad se libera
+ * sola**. No hay que borrar nada.
+ *
+ * ── Lo que NO se cancela solo ───────────────────────────────────────────────
+ *
+ * `in_house` y `checkout` no admiten la transición, y es correcto: el huésped ya
+ * llegó. Que Booking diga «cancelada» sobre alguien que está durmiendo en la
+ * habitación es una discrepancia que necesita una persona, no un `update`. Se
+ * marca `error` con el motivo escrito para que aparezca en la pantalla de
+ * canales, que es donde alguien lo va a ver.
+ */
+async function cancelarReservaDelCanal(
+  client: SupabaseClient,
+  entranteId: string,
+  reservaId: string,
+  canal: CanalVenta,
+): Promise<ResultadoImportacion> {
+  const { data: r, error: eLectura } = await client
+    .from('reservas')
+    .select('codigo, estado')
+    .eq('id', reservaId)
+    .maybeSingle<{ codigo: string; estado: EstadoReserva }>()
+
+  if (eLectura || !r) {
+    const motivo = 'El canal la canceló, pero no se pudo leer la reserva para cancelarla.'
+    await marcar(client, entranteId, 'error', motivo)
+    return { ok: false, error: motivo }
+  }
+
+  // Ya estaba cancelada: reprocesar el mismo aviso no es un error. Que el cron
+  // relea el feed cien veces tiene que dar el mismo resultado que una.
+  if (r.estado === 'cancelada') {
+    await marcar(client, entranteId, 'ignorada', `El canal la canceló. La reserva ${r.codigo} ya estaba cancelada.`)
+    return { ok: true, reservaId, codigo: r.codigo, aviso: 'La reserva ya estaba cancelada.' }
+  }
+
+  if (!puedeTransicionar(r.estado, 'cancelada')) {
+    const motivo =
+      `${canal} canceló esta reserva, pero ${r.codigo} está en «${ETIQUETAS_ESTADO_RESERVA[r.estado]}» ` +
+      `y desde ahí no se puede cancelar: el huésped ya llegó. Resolvelo a mano con el canal.`
+    await marcar(client, entranteId, 'error', motivo)
+    return { ok: false, error: motivo }
+  }
+
+  const { error: eUpdate } = await client
+    .from('reservas')
+    .update({ estado: 'cancelada' })
+    .eq('id', reservaId)
+
+  if (eUpdate) {
+    const motivo = `El canal la canceló, pero no se pudo cancelar la reserva ${r.codigo}. La unidad sigue bloqueada.`
+    registrarFalla(eUpdate, `cancelar la reserva ${r.codigo} por aviso de ${canal}`)
+    await marcar(client, entranteId, 'error', motivo)
+    return { ok: false, error: motivo }
+  }
+
+  await marcar(
+    client,
+    entranteId,
+    'ignorada',
+    `${canal} la canceló: se canceló la reserva ${r.codigo} y se liberó la unidad.`,
+  )
+  return {
+    ok: true,
+    reservaId,
+    codigo: r.codigo,
+    aviso: `Se canceló la reserva ${r.codigo} y se liberó la unidad.`,
+  }
 }
 
 /** Marca una entrante con su estado y motivo. */

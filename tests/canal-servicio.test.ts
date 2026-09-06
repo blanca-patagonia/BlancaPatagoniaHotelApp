@@ -471,6 +471,111 @@ describe.skipIf(!hayDB)('capa de canales contra la base', () => {
     expect(fila!.reserva_id).toBeNull()
   })
 
+  /**
+   * El bug más caro que encontró la auditoría de 2026-09.
+   *
+   * `importarEntrante` cortaba con «esa reserva ya se importó» **antes** de mirar
+   * si la operación era una cancelación, así que para toda reserva ya importada la
+   * rama de cancelación era código inalcanzable. Booking cancelaba, el sistema no
+   * tocaba `reservas`, y la unidad quedaba **bloqueada e invendible para siempre**.
+   *
+   * El test de arriba no lo veía porque cubre la cancelada que *nunca* se importó.
+   */
+  describe('cancelación de una reserva YA importada', () => {
+    const REF = `BK-${sufijo}-cancel-importada`
+
+    it('cancela la reserva y libera la unidad', async () => {
+      // 1) Entra y se importa: queda una reserva ocupando inventario.
+      await guardarEntrantes(db, [entrante({ externalId: REF, checkIn: '2027-03-14', checkOut: '2027-03-17' })], contexto)
+
+      const { data: e1 } = await db
+        .from('canal_reservas')
+        .select('id')
+        .eq('external_id', REF)
+        .single()
+
+      const imp = await importarEntrante(db, (e1 as { id: string }).id, perfilId)
+      expect(imp.ok, `no se pudo montar el caso: ${imp.ok ? '' : imp.error}`).toBe(true)
+      if (!imp.ok) return
+
+      const { data: antes } = await db
+        .from('reservas')
+        .select('estado')
+        .eq('id', imp.reservaId)
+        .single()
+      expect((antes as { estado: string }).estado, 'la reserva no quedó activa').not.toBe('cancelada')
+
+      // 2) El canal la cancela. Llega con el MISMO external_id y más nueva.
+      await guardarEntrantes(
+        db,
+        [
+          entrante({
+            externalId: REF,
+            operacion: 'cancelada',
+            checkIn: '2027-03-14',
+            checkOut: '2027-03-17',
+            emitidaEn: '2027-02-01T10:00:00.000Z',
+          }),
+        ],
+        contexto,
+      )
+
+      const { data: e2 } = await db
+        .from('canal_reservas')
+        .select('id')
+        .eq('external_id', REF)
+        .single()
+
+      const r = await importarEntrante(db, (e2 as { id: string }).id, perfilId)
+      expect(
+        r.ok,
+        `la cancelación no se pudo procesar: ${r.ok ? '' : r.error}`,
+      ).toBe(true)
+
+      // 3) Lo que importa: la reserva cancelada y la unidad libre.
+      const { data: despues } = await db
+        .from('reservas')
+        .select('estado')
+        .eq('id', imp.reservaId)
+        .single()
+      expect(
+        (despues as { estado: string }).estado,
+        'la reserva sigue activa: la unidad quedó bloqueada e invendible',
+      ).toBe('cancelada')
+
+      // El trigger `sincronizar_estado_estadias` (0005) tiene que haber propagado
+      // el estado, que es lo que la saca de la restricción de exclusión.
+      const { data: est } = await db
+        .from('estadias')
+        .select('estado')
+        .eq('reserva_id', imp.reservaId)
+
+      for (const fila of (est ?? []) as { estado: string }[]) {
+        expect(fila.estado, 'la estadía sigue ocupando inventario').toBe('cancelada')
+      }
+    })
+
+    it('reprocesar la misma cancelación no falla ni cambia nada', async () => {
+      // El cron relee el feed todos los días: la centésima vez tiene que dar lo
+      // mismo que la primera.
+      const { data: e } = await db
+        .from('canal_reservas')
+        .select('id, reserva_id')
+        .eq('external_id', REF)
+        .single()
+
+      const r = await importarEntrante(db, (e as { id: string }).id, perfilId)
+      expect(r.ok, 'reprocesar una cancelación ya aplicada dio error').toBe(true)
+
+      const { data: reserva } = await db
+        .from('reservas')
+        .select('estado')
+        .eq('id', (e as { reserva_id: string }).reserva_id)
+        .single()
+      expect((reserva as { estado: string }).estado).toBe('cancelada')
+    })
+  })
+
   it('reusa la ficha del huésped si el email ya existe', async () => {
     // Se busca por email y sólo por email: por apellido se fusionarían dos
     // personas distintas, que es peor que tener dos fichas de la misma.
