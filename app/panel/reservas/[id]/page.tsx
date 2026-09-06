@@ -954,9 +954,17 @@ export default async function DetalleReservaPage({
           </ul>
         )}
 
-        {resumen.saldada ? (
-          <p className="mt-4 text-sm font-medium text-emerald-700">✓ Reserva saldada.</p>
-        ) : (
+        {/* Una reserva saldada también puede necesitar una devolución —de hecho es
+            el único caso en que hay algo que devolver—, así que el formulario ya
+            no se esconde. Lo que cambia es qué se puede cargar: sobre una saldada,
+            sólo un reembolso. Antes el `else` lo ocultaba entero y no había ningún
+            camino, ni manual ni por pasarela, para registrar una devolución. */}
+        {resumen.saldada && (
+          <p className="mt-4 text-sm font-medium text-emerald-700">
+            ✓ Reserva saldada. Si hubo que devolver plata, registrala como reembolso.
+          </p>
+        )}
+        {(
           <form action={registrarPago} className="mt-4 flex flex-wrap items-end gap-2">
             <input type="hidden" name="reserva_id" value={reserva.id} />
             <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
@@ -973,10 +981,12 @@ export default async function DetalleReservaPage({
               <span className="text-stone-500">Tipo</span>
               <select
                 name="tipo"
-                defaultValue={resumen.tieneSenia ? 'saldo' : 'senia'}
+                defaultValue={
+                  resumen.saldada ? 'reembolso' : resumen.tieneSenia ? 'saldo' : 'senia'
+                }
                 className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
               >
-                {TIPOS_PAGO.map((t) => (
+                {(resumen.saldada ? (['reembolso'] as const) : TIPOS_PAGO).map((t) => (
                   <option key={t} value={t}>
                     {ETIQUETAS_TIPO_PAGO[t]}
                   </option>

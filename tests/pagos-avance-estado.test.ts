@@ -60,9 +60,35 @@ describe('puedeAvanzarEstadoPago', () => {
 
   it('un rechazo atrasado no degrada el cobro que ya aprobó', () => {
     // El orden inverso del reintento: la pasarela entrega primero el intento
-    // que aprobó y después el que había fallado. `aprobado` es terminal, así
-    // que el evento atrasado no toca nada.
+    // que aprobó y después el que había fallado. Desde `aprobado` lo único que
+    // se admite es la devolución, así que el evento atrasado no toca nada.
     expect(puedeAvanzarEstadoPago('aprobado', 'rechazado')).toBe(false)
+  })
+
+  /*
+    La devolución, que faltaba y por la que se perdía plata.
+
+    MercadoPago ya traducía `refunded`/`charged_back` a `reembolsado`, pero con
+    `aprobado: []` el webhook descartaba el evento y respondía `ok`: **la reserva
+    quedaba `pagada` con la plata ya devuelta**. Devolver no es degradar un cobro,
+    es lo que de verdad pasó después.
+  */
+  it('un cobro aprobado se puede reembolsar', () => {
+    expect(puedeAvanzarEstadoPago('aprobado', 'reembolsado')).toBe(true)
+  })
+
+  it('el reembolso deja de saldar la reserva', () => {
+    const reserva = { total: 200 }
+    const pago = { monto: 200, tipo: 'saldo' as const }
+
+    // Mientras está aprobado, salda.
+    expect(resumenPagos(reserva.total, [{ ...pago, estado: 'aprobado' }]).saldada).toBe(true)
+
+    // Devuelto, ya no: `resumenPagos` sólo cuenta lo aprobado, así que el saldo
+    // se recompone solo sin necesidad de tocar nada más.
+    const tras = resumenPagos(reserva.total, [{ ...pago, estado: 'reembolsado' }])
+    expect(tras.saldada, 'la reserva sigue figurando pagada con la plata devuelta').toBe(false)
+    expect(tras.saldo).toBe(200)
   })
 
   it('ningún estado vuelve a pendiente', () => {

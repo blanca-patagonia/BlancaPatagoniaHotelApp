@@ -198,6 +198,71 @@ describe('Stripe · webhook', () => {
     expect(e.estado).toBe('aprobado')
   })
 
+  /*
+    La devolución, que antes se ignoraba con un 200 y dejaba la reserva `pagada`
+    con la plata ya devuelta.
+
+    Un `charge.refunded` trae un **Charge**, no una Session: no tiene
+    `client_reference_id` ni `amount_total`. Por eso `crearCheckout` copia la
+    referencia al PaymentIntent —de donde el Charge sí la hereda— y el parser lee
+    `amount` como alternativa.
+  */
+  const CARGO_DEVUELTO = {
+    type: 'charge.refunded',
+    data: {
+      object: {
+        currency: 'usd',
+        amount: 14520,
+        amount_refunded: 14520,
+        refunded: true,
+        metadata: {
+          external_id: 'bp_abc123',
+          reserva_id: '11111111-1111-1111-1111-111111111111',
+        },
+      },
+    },
+  }
+
+  it('una devolución se reconoce y se imputa al cobro original', async () => {
+    const e = evento(await new ProveedorStripe().parsearWebhook(await pedidoFirmado(CARGO_DEVUELTO)))
+    expect(e.estado, 'la devolución se seguía ignorando').toBe('reembolsado')
+    // Sin esto el evento no se puede atribuir a ninguna reserva.
+    expect(e.externalId, 'el Charge no heredó la referencia del PaymentIntent').toBe('bp_abc123')
+    expect(e.monto).toBe(145.2)
+  })
+
+  it('un contracargo perdido también cuenta como devolución', async () => {
+    // Para el hotel la plata se fue igual, la haya devuelto él o el banco.
+    const disputa = { ...CARGO_DEVUELTO, type: 'charge.dispute.closed' }
+    const e = evento(await new ProveedorStripe().parsearWebhook(await pedidoFirmado(disputa)))
+    expect(e.estado).toBe('reembolsado')
+  })
+
+  it('el checkout copia la referencia al PaymentIntent', async () => {
+    // Sin este campo, el `charge.refunded` de más arriba llegaría sin forma de
+    // saber a qué cobro pertenece.
+    const cuerpos: string[] = []
+    vi.stubGlobal('fetch', async (_u: string, init: RequestInit) => {
+      cuerpos.push(String(init.body))
+      return new Response(JSON.stringify({ url: 'https://checkout.stripe.com/x' }), { status: 200 })
+    })
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_x')
+
+    await new ProveedorStripe().crearCheckout({
+      externalId: 'bp_ref',
+      reservaId: '11111111-1111-1111-1111-111111111111',
+      tipo: 'senia',
+      monto: 100,
+      moneda: 'USD',
+      descripcion: 'Seña',
+      urls: { exito: 'https://h.local/ok', error: 'https://h.local/err' },
+      venceEn: new Date(Date.now() + 3600_000),
+    })
+
+    const enviado = decodeURIComponent(cuerpos[0] ?? '')
+    expect(enviado).toContain('payment_intent_data[metadata][external_id]=bp_ref')
+  })
+
   it('una sesión vencida se registra como rechazada', async () => {
     const vencida = { ...SESION_PAGADA, type: 'checkout.session.expired' }
     const e = evento(await new ProveedorStripe().parsearWebhook(await pedidoFirmado(vencida)))

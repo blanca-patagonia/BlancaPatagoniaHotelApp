@@ -66,13 +66,23 @@ export const ESTADOS_PAGO_TERMINALES: readonly EstadoPago[] = ['aprobado', 'reem
  *   huésped llegaría al mostrador figurando como impago. Es exactamente el bug
  *   que este módulo se escribió para evitar, un intento más adelante.
  * · `rechazado → reembolsado` no existe: no hay qué devolver.
+ * · **`aprobado → reembolsado` SÍ existe**, y que faltara era un agujero por el
+ *   que se perdía plata. MercadoPago ya traducía `refunded`/`charged_back` a
+ *   `reembolsado`, pero con `aprobado: []` el webhook lo descartaba y respondía
+ *   `ok`: **la reserva quedaba `pagada` con la plata ya devuelta**. Devolver es
+ *   un evento legítimo y posterior sobre un cobro aprobado — no es degradarlo,
+ *   es lo que de verdad pasó.
+ *   `resumenPagos` sólo cuenta lo `aprobado`, así que al pasar a `reembolsado`
+ *   el pago deja de saldar y el saldo se recompone solo.
  * · Nada vuelve a `pendiente`: las pasarelas **no garantizan el orden de
  *   entrega** y un `pendiente` atrasado no puede degradar un cobro confirmado.
+ * · `reembolsado` sigue siendo terminal: una vez devuelta, la plata no vuelve a
+ *   entrar sola. Un cobro nuevo es un cobro nuevo, con su propia fila.
  */
 const TRANSICIONES: Record<EstadoPago, readonly EstadoPago[]> = {
   pendiente: ['aprobado', 'rechazado', 'reembolsado'],
   rechazado: ['aprobado'],
-  aprobado: [],
+  aprobado: ['reembolsado'],
   reembolsado: [],
 }
 

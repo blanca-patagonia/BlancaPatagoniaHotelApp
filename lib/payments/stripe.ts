@@ -135,6 +135,17 @@ export class ProveedorStripe implements PaymentProvider {
       'metadata[external_id]': p.externalId,
       'metadata[reserva_id]': p.reservaId,
       'metadata[tipo]': p.tipo,
+      /*
+        La misma referencia, copiada al PaymentIntent.
+
+        Hace falta para las devoluciones: `charge.refunded` trae un **Charge**, y
+        un Charge NO hereda ni `client_reference_id` ni la metadata de la Session
+        —sólo la del PaymentIntent—. Sin esto, el evento de devolución llega sin
+        forma de saber a qué cobro pertenece y el webhook lo ignora, que es
+        exactamente cómo se perdían los reembolsos.
+      */
+      'payment_intent_data[metadata][external_id]': p.externalId,
+      'payment_intent_data[metadata][reserva_id]': p.reservaId,
       expires_at: String(Math.floor(vence / 1000)),
       'line_items[0][quantity]': '1',
       'line_items[0][price_data][currency]': p.moneda.toLowerCase(),
@@ -253,7 +264,21 @@ export class ProveedorStripe implements PaymentProvider {
       return { tipo: 'invalido', motivo: `moneda desconocida: ${moneda}` }
     }
 
-    const bruto = Number(sesion.amount_total ?? 0)
+    /*
+      `amount_total` es de la Session; `amount`, del Charge.
+
+      Los eventos de devolución (`charge.refunded`, `charge.dispute.closed`)
+      traen un Charge, que no tiene `amount_total`. Se toma el importe ORIGINAL
+      del cargo a propósito: es el que tiene que coincidir con lo que se pidió
+      cobrar para que el webhook lo reconozca como la devolución de ESE pago.
+
+      Consecuencia asumida: una devolución **parcial** informa el mismo `amount`
+      total, así que se procesa como devolución completa. Es el caso raro y el
+      error va hacia el lado seguro —el hotel se anota que devolvió de más, no de
+      menos—, pero conviene revisarlo a mano. Registrar el parcial pide una fila
+      `tipo='reembolso'` propia, que hoy sólo se carga desde el mostrador.
+    */
+    const bruto = Number(sesion.amount_total ?? sesion.amount ?? 0)
     const monto = desdeUnidadMinima(bruto, moneda)
     if (!(monto > 0)) return { tipo: 'invalido', motivo: 'el importe no es positivo' }
 
@@ -306,6 +331,22 @@ function estadoSegunEvento(tipo: string): EstadoPago | null {
     case 'checkout.session.async_payment_failed':
     case 'checkout.session.expired':
       return 'rechazado'
+    /*
+      La devolución. Faltaba, y era el mismo agujero que en la máquina de
+      estados: Stripe avisaba y el sistema ignoraba el evento con un 200, así que
+      la reserva quedaba `pagada` con la plata ya devuelta.
+
+      `charge.refunded` es el reembolso pedido desde el panel de Stripe;
+      `charge.dispute.closed` cubre el contracargo que el banco resolvió a favor
+      del titular, que para el hotel es plata que se fue igual.
+
+      ⚠️ Los dos llegan con el importe ORIGINAL del cargo. Una devolución parcial
+      no coincide con lo pedido y el webhook la manda a «revisar a mano» en vez de
+      saldar: es el camino seguro y está documentado en `ResultadoWebhook`.
+    */
+    case 'charge.refunded':
+    case 'charge.dispute.closed':
+      return 'reembolsado'
     default:
       return null
   }
