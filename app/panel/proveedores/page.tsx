@@ -136,6 +136,19 @@ export default async function ProveedoresPage({
                 Actualizar vencidos
               </BotonEnvio>
             </form>
+            {/*
+              Entrada a la carga por foto (objetivo 9).
+
+              Va en el encabezado y no escondida en la ficha de un proveedor: se
+              escanea la factura cuando llega, y en ese momento todavía no se sabe
+              —ni hace falta saber— a qué proveedor del sistema corresponde.
+            */}
+            <Link
+              href="/panel/proveedores/comprobantes"
+              className={botonClases('secundario')}
+            >
+              Comprobantes recibidos
+            </Link>
             <BotonExportar href={`/panel/exportar/proveedores${construirQuery({ q })}`} />
             {/* La acción principal del módulo, visible desde el primer vistazo. */}
             {puedeGestionar && (

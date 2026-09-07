@@ -222,7 +222,7 @@ Tarifario 2025/2026 (Anexo A).
   `MERCADOPAGO_ACCESS_TOKEN`, que es el mismo del cobro.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 30 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 31 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -245,7 +245,21 @@ Tarifario 2025/2026 (Anexo A).
   huéspedes no salen del sistema y el hotel no depende de mirar el log de Vercel ·
   **ADR 0030** conciliación: el extracto del banco entra por archivo (**no se raspa
   el home banking**), MercadoPago por su API de liquidaciones —el **neto**, no el
-  bruto—, y **sólo la referencia de la pasarela concilia sola**.
+  bruto—, y **sólo la referencia de la pasarela concilia sola** · **ADR 0031** una
+  factura recibida se carga leyendo su **QR obligatorio**, no con OCR.
+- **Comprobantes recibidos (objetivo 9, 2026-09-07).**
+  `/panel/proveedores/comprobantes`, migración **0080**. ⚠️ Cuatro cosas antes de
+  tocarlo:
+  1. **Se lee el QR, NO se hace OCR** (ADR 0031). El OCR adivina: un `8` leído como
+     `3` en el importe da una factura plausible y equivocada que nadie revisa,
+     porque el sistema «ya la cargó». El QR trae lo que el emisor le informó a ARCA.
+  2. **La imagen no viaja ni se guarda.** `BarcodeDetector` decodifica en el
+     navegador y al servidor llega sólo el texto. Guardar fotos de facturas es el
+     ADR 0013 (Storage, retención, permisos) y no está hecho.
+  3. **`moneda` del QR NO es ISO 4217**: `PES` y `DOL` son códigos de ARCA. Se
+     traducen en `lib/domain/comprobante-qr.ts`, en un solo lugar.
+  4. **Una nota de crédito se imputa como PAGO, no como cargo** (códigos 3, 8, 13,
+     53). Devuelve plata; cargarla como un gasto más infla lo que el hotel debe.
 - **Conciliación y gastos (Bloque C, 2026-09-07).** Área nueva `/panel/conciliacion`
   (admin y gerencia). Migraciones **0077** (`movimientos_externos`), **0078**
   (moneda real en cuentas corrientes) y **0079** (cerrar la conciliación del canal).

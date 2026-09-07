@@ -47,7 +47,7 @@ configuración» **no tiene un solo llamador**, así que hoy esa promesa no se c
 | 6 | Recordatorios automáticos | 🔴 **No existe.** Un simulador y cuatro plantillas |
 | 7 | Avisos ante pagos o cambios de estado | 🔴 **No existe.** El webhook que confirma el pago no notifica a nadie |
 | 8 | Operación diaria (recepción, HK, mantenimiento, gerencia) | 🟢 **Es lo más maduro del sistema.** Cubierto y testeado |
-| 9 | Foto de factura → datos en Excel | 🔴 No existe. Buildable sin bloqueos externos |
+| 9 | Foto de factura → datos en Excel | 🟢 **Cerrado (ADR 0031).** Se lee el **QR obligatorio** de la factura electrónica, no OCR: los datos son los que el emisor le informó a ARCA, no una lectura probable. La imagen no sale del dispositivo. Export CSV por el punto único |
 | 10 | MercadoPago + Santander, gastos mensuales | 🟢 **Cerrado (Bloque C, ADR 0030).** MercadoPago por su API de liquidaciones; Santander por importación del extracto —no publica API y **no se raspa el home banking**—; gastos por mes y por concepto en `/panel/conciliacion` |
 | 11 | Trazabilidad, auditoría, seguridad, recuperación | 🟢 Auditoría y RLS son fuertes. 🟡 Observabilidad recién nacida: **67 `console.*` crudos**, los webhooks de pago invisibles en el panel |
 

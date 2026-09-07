@@ -4090,3 +4090,74 @@ equivocada. Hay un test que fija esa diferencia.
 `com.docker.service` está detenido y no arranca sin elevación, así que los 25
 archivos de tests con base quedaron salteados. La suite pura está en verde
 (1314 pasan, 0 fallan). El objetivo 9 —foto de factura → datos— es lo que sigue.
+
+---
+
+## 2026-09-07 — Objetivo 9: la factura se carga sacándole una foto (ADR 0031)
+
+**Resumen:** *«que se le saque una foto a una factura y que se carguen los datos
+de esa factura a un excel»*. El pedido nombra el gesto, no la tecnología, y ahí
+estaba la decisión.
+
+**La opción obvia se descartó**
+
+Reconocimiento de texto sobre la imagen. Tres problemas, en orden de gravedad:
+
+1. **El OCR adivina, y acá adivinar cuesta plata.** Un `8` leído como `3` en el
+   importe da una factura **plausible y equivocada**. Nadie la revisa, porque el
+   sistema «ya la cargó»: el error entra al saldo del proveedor y aparece meses
+   después, cuando alguien reclama. Un dato que parece correcto y no lo es es peor
+   que un campo vacío.
+2. **Saca datos fiscales del sistema**: la imagen —CUIT del hotel, CUIT del
+   proveedor, importes— viaja a un servidor de terceros.
+3. **Cuesta por página, para siempre.**
+
+**Lo que se hizo**
+
+Desde 2021 (RG 4892/2020) toda factura electrónica argentina lleva un **QR
+obligatorio** que codifica los datos del comprobante en JSON: CUIT del emisor,
+punto de venta, número, tipo, fecha, importe, moneda y CAE. O sea, exactamente lo
+que había que cargar, **informado por el propio emisor a ARCA**. Leerlo no adivina
+nada, y el gesto para quien lo usa es el mismo que pidió el cliente.
+
+- **`lib/domain/comprobante-qr.ts`** — lector puro del formato oficial, con sus
+  bordes: URL o payload pelado, base64 url-safe, versión desconocida, campos
+  faltantes. ⚠️ **`moneda` no es ISO 4217**: `PES` y `DOL` son códigos de ARCA y se
+  traducen acá, en un solo lugar; una moneda que el sistema no sabe convertir se
+  rechaza con su motivo en vez de romper el `insert` con un error ilegible.
+- **Migración 0080 — `comprobantes_recibidos`.** Clave `unique` sobre
+  `CUIT del emisor + tipo + punto de venta + número`, que identifica un
+  comprobante de forma única en todo el país. Pasa de verdad: la primera foto sale
+  movida, se vuelve a intentar, y sin eso el gasto entraba dos veces.
+- **Pantalla `/panel/proveedores/comprobantes`**: escanear, cargar a mano, imputar
+  a la cuenta corriente y bajar a Excel.
+- **Recurso `comprobantes` en el punto único de exportación**, que ya verifica el
+  permiso del área y pagina con `traerTodo` para no salir truncado en la fila 1001.
+
+**Cuatro decisiones que quedaron en el ADR 0031**
+
+1. **El QR se lee en el navegador y la imagen no viaja ni se guarda.** Guardar
+   fotos de facturas es gestión documental —Storage, retención, permisos por
+   campo— y tiene su propio ADR pendiente (0013).
+2. **El navegador que no puede se declara, no se esconde.** `BarcodeDetector`
+   existe en Chrome y Edge, también en Android, y no en Safari ni Firefox. Cuando
+   falta, la pantalla lo dice y ofrece las dos salidas que sí funcionan.
+3. **La carga manual queda y se distingue en la lista** (`origen_dato`). No es
+   decorativo: un número tipeado puede estar mal y uno del QR no, así que quien
+   revisa el cierre del mes tiene que poder separarlos.
+4. **Cargar e imputar son dos pasos.** Escanear registra que el comprobante
+   existe; imputarlo dice que el hotel lo debe. Imputar sola cada factura
+   escaneada metería en el libro mayor todo lo que alguien apuntó con la cámara.
+   ⚠️ Una **nota de crédito se imputa como pago**, no como cargo: devuelve plata, y
+   cargarla como un gasto más inflaría lo que el hotel debe.
+
+**Lo que NO resuelve, y está escrito**
+
+- **Verificar el CAE contra ARCA**: leer el QR dice qué informó el emisor, no que
+  ARCA lo haya autorizado. Necesita certificado (Bloque D).
+- **El CUIT del hotel no está en ninguna tabla** —también Bloque D—, así que la
+  advertencia «esta factura no es para el hotel» quedó escrita y **apagada**. No se
+  inventó un CUIT para encenderla: un aviso construido sobre un dato inventado es
+  peor que no tener aviso.
+- **El desglose de IVA por alícuota**: el QR trae el total, no las bases
+  imponibles. Para el libro de IVA compras hace falta más que esto.

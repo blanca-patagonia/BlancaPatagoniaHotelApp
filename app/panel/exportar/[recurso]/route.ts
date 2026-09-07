@@ -21,6 +21,11 @@ import {
   type Plan,
   type Segmento,
 } from '@/lib/domain/reservas'
+import {
+  esNotaDeCredito,
+  nombreDeComprobante,
+  numeroVisible,
+} from '@/lib/domain/comprobante-qr'
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
 
 /**
@@ -284,6 +289,59 @@ const RECURSOS: Record<string, Definicion> = {
       { titulo: 'Teléfono', valor: (p) => p.telefono ?? '' },
       { titulo: 'Activo', valor: (p) => SI_NO(p.activo) },
     ]),
+  },
+
+  /*
+    Comprobantes recibidos — la segunda mitad del objetivo 9.
+
+    «Que se le saque una foto a una factura y que se carguen los datos de esa
+    factura a un excel»: la foto la resuelve el escaneo del QR, y el «excel» es
+    esto. Se baja como CSV con `;`, que es lo que Excel en es-AR abre en columnas
+    sin preguntar nada.
+
+    Las columnas son las que sirven para conciliar contra el papel y para pasarle
+    el archivo al contador: identidad fiscal completa, importe con su moneda, y de
+    dónde salieron los datos —un número tipeado puede estar mal y uno del QR no—.
+  */
+  comprobantes: {
+    area: 'proveedores',
+    archivo: 'comprobantes-recibidos',
+    generar: simple<{
+      fecha: string
+      tipo_codigo: number
+      letra: string | null
+      punto_venta: number
+      numero: number
+      cuit_emisor: string
+      razon_social: string | null
+      total: number | string
+      moneda: string
+      cae: string
+      origen_dato: string
+      movimiento_id: string | null
+      proveedor: { nombre: string } | null
+    }>(
+      'comprobantes_recibidos',
+      'fecha, tipo_codigo, letra, punto_venta, numero, cuit_emisor, razon_social, total, moneda, cae, origen_dato, movimiento_id, proveedor:proveedores(nombre)',
+      'fecha',
+      [
+        { titulo: 'Fecha', valor: (c) => c.fecha },
+        { titulo: 'Comprobante', valor: (c) => nombreDeComprobante(c.tipo_codigo) },
+        { titulo: 'Letra', valor: (c) => c.letra ?? '' },
+        { titulo: 'Número', valor: (c) => numeroVisible(c.punto_venta, c.numero) },
+        { titulo: 'CUIT emisor', valor: (c) => c.cuit_emisor },
+        { titulo: 'Razón social', valor: (c) => c.razon_social ?? c.proveedor?.nombre ?? '' },
+        { titulo: 'Moneda', valor: (c) => c.moneda },
+        // Sin comillas ni símbolo: Excel lo tiene que poder sumar.
+        { titulo: 'Total', valor: (c) => Number(c.total).toFixed(2) },
+        // El signo contable, resuelto acá: una nota de crédito devuelve plata.
+        { titulo: 'Signo', valor: (c) => (esNotaDeCredito(c.tipo_codigo) ? 'Haber' : 'Debe') },
+        { titulo: 'CAE', valor: (c) => c.cae },
+        { titulo: 'Origen del dato', valor: (c) => (c.origen_dato === 'qr' ? 'QR' : 'Manual') },
+        { titulo: 'Imputado', valor: (c) => SI_NO(c.movimiento_id !== null) },
+        { titulo: 'Proveedor', valor: (c) => c.proveedor?.nombre ?? '' },
+      ],
+    ),
   },
 
   mantenimiento: {

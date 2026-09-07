@@ -130,6 +130,14 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // Misma línea que `facturas`: la ve quien factura. Housekeeping no.
   notas_credito: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
 
+  // ── Comprobantes recibidos (migración 0080) ──
+  //
+  // Misma línea que `movimientos_proveedor`: lo lee todo el staff y lo gestionan
+  // admin y gerencia. Que recepción lo LEA es deliberado: quien recibe la factura
+  // del proveedor en el mostrador tiene que poder ver si ya está cargada antes de
+  // volver a escanearla.
+  comprobantes_recibidos: { todos: 'si' },
+
   // ── Movimientos externos (migración 0077) ──
   //
   // Más restrictiva que `facturas`, y a propósito: es el **extracto bancario del
