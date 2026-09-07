@@ -11,7 +11,9 @@ import {
   esperaDeReintento,
   horaDelHotel,
   motivoNoNotificar,
+  esComercial,
 } from '@/lib/domain/notificaciones'
+import { EVENTOS_EMAIL, EVENTOS_INTERNOS } from '@/lib/domain/plantillas'
 
 /**
  * Reglas de la bandeja de salida (migración 0075).
@@ -154,5 +156,76 @@ describe('clave de idempotencia', () => {
     const a = claveDeNotificacion('recordatorio_checkin', 'r1', '2027-03-10')
     const b = claveDeNotificacion('recordatorio_checkin', 'r1', '2027-04-20')
     expect(a).not.toBe(b)
+  })
+})
+
+/**
+ * Las decisiones que un evento nuevo obliga a tomar (catálogo ampliado).
+ */
+describe('el catálogo ampliado y sus reglas', () => {
+  it('los avisos internos NO esperan al horario', () => {
+    /*
+      La franja de 9 a 21 protege al huésped de que le escriban de madrugada. Un
+      aviso interno aterriza en la cartelera del hotel: demorarlo hasta las 9 es
+      justo lo contrario de lo que se busca — «entró una reserva» sirve cuando
+      entró, no a la mañana siguiente.
+    */
+    for (const e of EVENTOS_INTERNOS) {
+      expect(esInmediato(e), `${e} tendría que salir al instante`).toBe(true)
+    }
+  })
+
+  it('los avisos internos NO pasan por el consentimiento del huésped', () => {
+    // Preguntarle a `acepta_avisos` si el hotel puede enterarse de que entró una
+    // reserva no tiene sentido: el que dijo «no me escriban» dejaría al hotel sin
+    // la novedad.
+    const rechaza = { acepta_avisos: false, acepta_promociones: false }
+    for (const e of EVENTOS_INTERNOS) {
+      expect(motivoNoNotificar(e, rechaza), `${e} se bloqueó por consentimiento`).toBeNull()
+    }
+  })
+
+  it('lo que el huésped espera sale al instante; lo que inicia el hotel, no', () => {
+    // Acaba de pagar y quiere el comprobante.
+    expect(esInmediato('pago_recibido')).toBe(true)
+    expect(esInmediato('pago_rechazado')).toBe(true)
+    expect(esInmediato('reserva_confirmada')).toBe(true)
+    // El hotel los inicia: pueden esperar a una hora decente.
+    expect(esInmediato('saldo_pendiente')).toBe(false)
+    expect(esInmediato('checkout_proximo')).toBe(false)
+    expect(esInmediato('solicitud_resena')).toBe(false)
+  })
+
+  it('la reserva por vencer sale al instante, aunque la inicie el hotel', () => {
+    // Es la excepción, y tiene motivo: la reserva se libera mañana. Esperar al
+    // horario le come horas útiles al aviso.
+    expect(esInmediato('reserva_por_vencer')).toBe(true)
+  })
+
+  it('sólo el pedido de reseña es comercial', () => {
+    /*
+      El criterio no es el tono: es de quién es el interés. Todos los demás le
+      informan al huésped algo de SU reserva; el pedido de reseña le pide un favor
+      al hotel.
+
+      ⚠️ La encuesta de satisfacción NO es comercial: sirve para arreglar lo que
+      estuvo mal en la estadía de esa persona, así que es operación. Confundirlas
+      dejaría al hotel sin saber que alguien se fue disconforme.
+    */
+    expect(esComercial('solicitud_resena')).toBe(true)
+    expect(esComercial('encuesta_postcheckout')).toBe(false)
+
+    const sinPromos = { acepta_avisos: true, acepta_promociones: false }
+    expect(motivoNoNotificar('solicitud_resena', sinPromos)).toContain('comerciales')
+    expect(motivoNoNotificar('encuesta_postcheckout', sinPromos)).toBeNull()
+  })
+
+  it('cada evento del catálogo tiene decidida su inmediatez', () => {
+    // No comprueba un valor: comprueba que la función responda para todos. Un
+    // evento nuevo que nadie clasificó cae en `false` por omisión, y eso es una
+    // decisión tomada por descarte.
+    for (const e of EVENTOS_EMAIL) {
+      expect(typeof esInmediato(e), `${e} sin clasificar`).toBe('boolean')
+    }
   })
 })

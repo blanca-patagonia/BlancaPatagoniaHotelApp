@@ -1,5 +1,5 @@
 import { ZONA_HOTEL } from '@/lib/fechas'
-import type { EventoEmail } from './plantillas'
+import { esInterno, type EventoEmail } from './plantillas'
 
 /**
  * Reglas de la bandeja de salida (migración 0075).
@@ -56,9 +56,27 @@ export const HORA_HASTA = 21
  * El resto —recordatorios, encuestas, avisos de fidelidad— sí espera: son
  * mensajes que el hotel inicia, y llegar a las 3 de la mañana es molestar.
  */
-const INMEDIATOS: readonly EventoEmail[] = ['confirmacion_reserva']
+const INMEDIATOS: readonly EventoEmail[] = [
+  // El huésped está esperando: acaba de reservar, de pagar, o de que le
+  // rechacen el pago y quiere reintentar.
+  'confirmacion_reserva',
+  'reserva_confirmada',
+  'pago_recibido',
+  'pago_rechazado',
+  // Se acordaron por teléfono o en el mostrador hace un minuto: llegar mañana a
+  // las 9 haría dudar de si se registró.
+  'reserva_reprogramada',
+  'reserva_cancelada',
+  // La reserva se libera mañana. Esperar al horario le come horas al aviso.
+  'reserva_por_vencer',
+]
 
 export function esInmediato(evento: EventoEmail): boolean {
+  // Los internos no molestan a nadie: aterrizan en la cartelera del hotel, no en
+  // el teléfono de un huésped. La franja horaria protege al huésped, no al staff,
+  // y demorar un aviso operativo hasta las 9 es justamente lo contrario de lo que
+  // se busca — «entró una reserva» sirve cuando entró.
+  if (esInterno(evento)) return true
   return INMEDIATOS.includes(evento)
 }
 
@@ -113,12 +131,16 @@ export interface PreferenciasHuesped {
 /**
  * Eventos comerciales, que exigen opt-in explícito.
  *
- * Hoy ninguno de los cuatro lo es: los cuatro hablan de la propia reserva del
- * huésped. La lista existe para que el día que se agregue una promoción alguien
- * tenga que decidir a conciencia de qué lado va, en vez de que salga por el
- * mismo camino que la confirmación.
+ * El criterio no es el tono: es de quién es el interés. Todos los demás le
+ * informan al huésped algo de **su** reserva —que entró, que se pagó, que se
+ * canceló—; el pedido de reseña le pide un favor **al hotel**. Esa diferencia es
+ * la que decide si hace falta `acepta_promociones`.
+ *
+ * La encuesta de satisfacción NO está acá y es deliberado: sirve para arreglar lo
+ * que estuvo mal en la estadía de esa persona, así que es parte de la operación.
+ * El pedido de reseña pública, en cambio, es marketing.
  */
-const COMERCIALES: readonly EventoEmail[] = []
+const COMERCIALES: readonly EventoEmail[] = ['solicitud_resena']
 
 export function esComercial(evento: EventoEmail): boolean {
   return COMERCIALES.includes(evento)
@@ -135,6 +157,14 @@ export function motivoNoNotificar(
   evento: EventoEmail,
   prefs: PreferenciasHuesped | null,
 ): string | null {
+  /*
+    Un aviso interno no pasa por el consentimiento de nadie: va a la cartelera
+    del hotel, no al huésped. Preguntarle a `acepta_avisos` si el hotel puede
+    enterarse de que entró una reserva no tiene sentido — y si el aviso llevara
+    un `huesped_id` para poder enlazarlo, el que dijo «no me escriban» dejaría al
+    hotel sin la novedad.
+  */
+  if (esInterno(evento)) return null
   if (!prefs) return null // Sin ficha de preferencias no se bloquea nada.
   if (esComercial(evento)) {
     return prefs.acepta_promociones ? null : 'El huésped no aceptó recibir comunicaciones comerciales.'
