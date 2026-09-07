@@ -249,6 +249,13 @@ Tarifario 2025/2026 (Anexo A).
   factura recibida se carga leyendo su **QR obligatorio**, no con OCR · **ADR 0032**
   el lado saliente del canal: el ARI **se calcula aunque no salga**, y el cron
   responde 200 cuando el proveedor no puede publicar.
+- ⚠️ **`crear_reserva` recibe `p_agencia_id` desde la 0084.** El vínculo con la
+  agencia va DENTRO de la función atómica: antes se guardaba con un `update`
+  aparte y un fallo ahí dejaba una reserva de agencia sin agencia —sin saber a
+  quién facturarle, con qué tarifa ni qué cuenta corriente debitar (P1-7)—.
+  Al tocar esa función: **DROP y CREATE, nunca `create or replace`** (cambiar los
+  argumentos crea una sobrecarga y PostgREST puede resolver a la vieja), y
+  **rehacer el `revoke execute ... from public`**, porque una función nace abierta.
 - **Fiscal — la parte sin certificado (Bloque D, 2026-09-07).**
   `lib/domain/wsfev1.ts` traduce el comprobante al formato de ARCA, y la migración
   **0082** guarda los datos del **emisor**. ⚠️ Cuatro cosas antes de tocarlo:

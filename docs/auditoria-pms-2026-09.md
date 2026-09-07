@@ -204,8 +204,8 @@ código: hay que consultar `cron.job` contra la base.
 | ~~**P1-4**~~ | ✅ **corregido (0079)** · `estado_conciliacion` **solo se leía**; no había ninguna escritura de `conciliado`/`en_disputa` en toda la app | quedaba en `devengado` para siempre |
 | ~~**P1-5**~~ | ✅ **corregido** · `linkReutilizable` no filtraba por `medio`: quien elegía MercadoPago/pesos podía recibir el link de Stripe en USD. ⚠️ El filtro va sobre `proveedor.nombre` y no sobre la clave de configuración (el simulador se elige como `simulado` y registra `tarjeta`) | `lib/payments/servicio.ts` |
 | ~~**P1-6**~~ | 🟡 **el camino del dinero, corregido** · Los 5 archivos por los que pasa la plata —webhook, servicio de cobro y los tres adapters— quedaron con **cero `console`**, con test-contrato (`observabilidad-del-dinero`). El resto de los `console.*` del sistema sigue pendiente y no toca dinero | `tests/observabilidad-del-dinero.test.ts` |
-| **P1-7** | **9 flujos sin atomicidad** con consecuencia concreta (reserva de agencia sin `agencia_id` → no se le factura a nadie; mudanza que factura la unidad anterior; reprogramación con precio viejo) | `actions.ts:222,315,890,1086,1167,1243`; `saldar.ts:137`; `servicio.ts:130` |
-| **P1-8** | `purgar_errores` (0068) **no está programado**: la tabla `errores` crece sin límite | ninguna llamada fuera de pg_cron, y ahí tampoco |
+| **P1-7** | 🟡 **el más caro, corregido (0084)** · La reserva de agencia ahora nace con su `agencia_id` dentro de `crear_reserva`: antes se vinculaba con un `update` aparte y un fallo ahí dejaba una estadía que el hotel presta y no le cobra a nadie. **Siguen abiertos los otros flujos** (mudanza, reprogramación, grupales), que necesitan una función SQL transaccional cada uno | `lib/reservas/crear.ts` |
+| ~~**P1-8**~~ | ✅ **corregido** · `purgar_errores` corre en `/api/cron/mantenimiento`, todos los días a las 6:40 | `app/api/cron/mantenimiento/route.ts` |
 
 ### Discrepancias documentación ↔ código
 
@@ -258,7 +258,7 @@ código: hay que consultar `cron.job` contra la base.
 | Cuentas | roto | P1-3 `moneda` que nadie escribe | Saldos mezclando monedas | Medio | — | Escribir moneda + `check` como 0067 | M | — | Test: saldo en 2 monedas no se suma plano |
 | Conciliación | falta | P1-4 `estado_conciliacion` solo lectura | No se puede cerrar una conciliación | Medio | — | Acción + pantalla | M | — | Marcar conciliado/disputa |
 | Observabilidad | parcial | P1-6 webhooks invisibles | Falla de firma no se ve | Medio | — | Migrar `console.*` críticos | M | — | Firma rechazada aparece en `/panel/errores` |
-| Atomicidad | riesgo | P1-7 9 flujos a medias | Datos inconsistentes | Medio | — | RPC transaccionales por flujo | L | — | Test: falla el paso N, no queda rastro |
+| Atomicidad | parcial | P1-7 — el de la agencia, cerrado (0084); quedan mudanza, reprogramación y grupales | Datos inconsistentes | Medio | — | RPC transaccional por flujo | L | — | Test: falla el paso N, no queda rastro |
 | Conciliación | falta | MercadoPago: sin importación | «Gastos mensuales» no existe | Medio | **MP Reports API** | Adapter + importador + pantalla | L | Cuenta MP | Reporte mensual importado y conciliado |
 | Conciliación | falta | Santander: sin extracto | idem | Medio | — | `ExtractoBancarioProvider` + CSV/Excel | M | Formato del extracto | Extracto importado y conciliado |
 | Comprobantes | falta | OCR foto→datos | Carga manual | Bajo | — | `OcrComprobanteProvider` + zod | L | Proveedor de visión | Foto → fila revisable → export |

@@ -4495,3 +4495,63 @@ CSV—, porque las dos son del tipo que se reintroduce sola.
 
 **Verificación:** typecheck 0 · lint 0 · build 0 · **1914 tests en verde**
 (118 archivos). Los cuatro arreglos fallan contra el código anterior.
+
+---
+
+## 2026-09-07 — P1-7: la reserva de agencia nace con su agencia (migración 0084)
+
+**Resumen:** de los nueve flujos sin atomicidad que marcó la auditoría, éste era el
+que tenía la consecuencia más cara y más silenciosa.
+
+`crearReserva` daba de alta la reserva con `crear_reserva` —que es atómica— y
+**después**, en un `update` aparte, le ponía `agencia_id`. Si ese segundo paso
+fallaba, la reserva **existía y no estaba vinculada a nadie**.
+
+Ese vínculo no es decorativo: decide **a quién se le factura**, qué tarifa
+corresponde —neto de agencia contra rack de mostrador (ADR 0004)— y qué cuenta
+corriente se debita. Una reserva de agencia sin `agencia_id` es una estadía que el
+hotel presta y no le cobra a nadie, y no se ve: la reserva figura normal en la
+grilla.
+
+**El argumento ya estaba escrito, y no se había aplicado a este campo**
+
+La migración 0039, cuando agregó el desglose de ocupación, dejó anotado textual:
+*«un `update` posterior podría fallar y dejar la reserva creada con el desglose a
+medias, que es justo lo que la atomicidad de esta función evita»*. El desglose se
+resolvió así; el vínculo con la agencia quedó afuera.
+
+El motivo por el que quedó afuera está escrito en el código y **el razonamiento era
+correcto**: «el helper de alta atómica es compartido con el portal público, donde
+no existe el concepto de convenio». Lo que estaba mal era la conclusión: el
+parámetro puede ser opcional, y el portal simplemente no lo manda.
+
+**Dos trampas de Postgres que la migración documenta**
+
+1. **DROP y CREATE, no `create or replace`.** Cambiar la lista de argumentos crea
+   una **sobrecarga** en vez de reemplazar. Con dos versiones conviviendo,
+   PostgREST responde `PGRST203` —«could not choose the best candidate»— o, peor,
+   resuelve a la vieja, que ignora la agencia.
+2. **Hay que rehacer el `revoke ... from public`.** Una función recién creada nace
+   con `EXECUTE` para PUBLIC; sin eso, `tests/funciones-sin-public.test.ts` falla
+   nombrándola. Es la trampa que la 0070 cerró para el resto del sistema.
+
+**El test**
+
+Cuatro casos. El último se llamaba «hay una sola versión de la función» y
+**comprobaba otra cosa** —el grant a PUBLIC—, así que se reescribió: ahora la
+evidencia de que no hay sobrecarga es que los tres casos anteriores **llamaron a la
+función por nombre y funcionaron**, más una llamada deliberadamente inválida que
+tiene que fallar con `22007` (el error que levanta la propia función) y no con
+`PGRST203` (ambigüedad de resolución).
+
+**Lo que sigue abierto de P1-7**
+
+Los otros flujos —mudanza, reprogramación, altas grupales— siguen siendo de varios
+pasos. Cada uno necesita su propia función SQL transaccional; no hay un arreglo
+común. Queda anotado en la matriz de la auditoría en vez de darse por cerrado.
+
+**Y P1-8 ya estaba cerrado.** `purgar_errores` corre en `/api/cron/mantenimiento`
+desde el Bloque A; la auditoría decía que no estaba programado y quedó
+desactualizada.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1405 tests puros en verde.

@@ -251,6 +251,8 @@ export async function crearReservaAction(
     estado: 'confirmada',
     ocupantes,
     noMover,
+    // En la misma transacción que la reserva (migración 0083). Ver abajo.
+    agenciaId: agenciaId || null,
     comercial: {
       plan,
       garantia,
@@ -278,19 +280,20 @@ export async function crearReservaAction(
     return { error: res.error, valores }
   }
 
-  // El vínculo con la agencia se guarda aparte: el helper de alta atómica es
-  // compartido con el portal público, donde no existe el concepto de convenio.
-  if (agenciaId) {
-    const { error } = await supabase
-      .from('reservas')
-      .update({ agencia_id: agenciaId })
-      .eq('id', res.reserva.id)
-    // La reserva ya está creada: no se devuelve `{ error }` porque diría que no
-    // se pudo reservar, y sí se pudo. Va al detalle avisando qué quedó sin
-    // guardar, que además decide la tarifa y la cuenta corriente.
-    cortarSiFalla(error, `/panel/reservas/${res.reserva.id}`, 'agencia')
-  }
+  /*
+    El vínculo con la agencia ya viajó en la llamada de arriba.
 
+    Hasta la migración 0084 se guardaba con un `update` aparte, con este
+    razonamiento: «el helper de alta atómica es compartido con el portal público,
+    donde no existe el concepto de convenio». El razonamiento estaba bien y la
+    conclusión mal — el parámetro puede ser opcional, y el portal simplemente no
+    lo manda—, porque si ese segundo paso fallaba la reserva quedaba **creada y
+    sin agencia**: sin saber a quién facturarle, con qué tarifa ni qué cuenta
+    corriente debitar (auditoría 2026-09, P1-7).
+
+    Es el mismo movimiento que la 0039 hizo con el desglose de ocupación, que
+    dejó escrito el argumento y no alcanzó a este campo.
+  */
   redirect(`/panel/reservas/${res.reserva.id}`)
 }
 
