@@ -4382,7 +4382,7 @@ emisión y alícuotas.
 (0775398, 82 migraciones, 51 tablas, 118 archivos de test). La mayor parte del
 recorrido **no encontró nada**, y eso también es un resultado: se deja anotado
 qué se verificó, para no volver a recorrerlo desde cero. Lo que sí apareció
-fueron tres defectos que comparten una característica —**ninguno rompe nada
+fueron cuatro defectos que comparten una característica —**ninguno rompe nada
 visiblemente**—, más el arreglo de un fallo silencioso en el seed.
 
 ### Lo que se verificó y estaba bien
@@ -4412,7 +4412,7 @@ varios de estos «hallazgos» eran del detector, no del código.
 - La IP del limitador de tasa ya se toma sólo de encabezados de plataforma.
 - La inyección de fórmulas en CSV ya estaba neutralizada (ver abajo el reverso).
 
-### Los tres defectos
+### Los cuatro defectos
 
 **1 · La hora del hotel, del lado de lo que se muestra.** `hoyISO()` había
 arreglado la fecha con la que el sistema **opera**. Quedaban **14 pantallas**
@@ -4455,6 +4455,24 @@ distinguirlas: al huésped en `/reservar`, y a recepción en la zona de canales,
 donde el motivo queda escrito en la fila pendiente y manda a buscar un
 overbooking que nunca existió.
 
+**4 · Cancelar a exactamente 14 días salía gratis.** El Tarifario 2025/2026 fija
+«**más de 14 días** sin cargo · **de 14 a 7 días** la primera noche». La regla
+cargada era `{"desde_dias": 14, "cargo": "ninguno"}` y `cargoPorCancelacion`
+aplica el umbral de forma **inclusiva** (`diasAntes >= desde_dias`), así que el
+día 14 caía en «sin cargo» cuando el tarifario lo pone del otro lado: son el
+primer día del tramo que **sí** cobra. «Más de 14» son 15.
+
+Lo interesante es por qué sobrevivió: el comentario de `lib/domain/cancelacion.ts`
+describía la regla **bien** desde el principio —lo que no coincidía era el dato—,
+y el test decía en su título «no cobra si se cancela con más de 14 días» y a
+continuación verificaba el día **14**, que no es más de 14. La afirmación y la
+comprobación no eran la misma cosa. El borde de abajo ya estaba bien: a
+exactamente 7 días se cobra la primera noche, que es lo que corresponde.
+
+Se corrige con la **migración 0083** (que actualiza sólo la política `estandar`:
+si alguien cargó una propia, el umbral que eligió es decisión suya), el seed y el
+test.
+
 ### Además
 
 - **`scripts/seed-usuarios.mjs`** informaba éxito aunque
@@ -4471,5 +4489,5 @@ overbooking que nunca existió.
 instantes sólo con los helpers de `lib/fechas.ts`, y la excepción numérica del
 CSV—, porque las dos son del tipo que se reintroduce sola.
 
-**Verificación:** typecheck 0 · lint 0 · build 0 · **1913 tests en verde**
-(118 archivos). Los tres arreglos fallan contra el código anterior.
+**Verificación:** typecheck 0 · lint 0 · build 0 · **1914 tests en verde**
+(118 archivos). Los cuatro arreglos fallan contra el código anterior.

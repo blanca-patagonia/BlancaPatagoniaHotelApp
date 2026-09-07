@@ -371,8 +371,8 @@ Tarifario 2025/2026 (Anexo A).
      la caché devolvería JavaScript viejo.
   4. **Cero escrituras diferidas.** Sin background sync: una escritura reproducida
      más tarde se aplicaría sobre una realidad distinta de la que la originó.
-- **1913 tests verdes** (118 archivos), **cero salteados**, verificados contra la base
-  local con las **82** migraciones aplicadas en orden. El feed iCal de salida (B7,
+- **1914 tests verdes** (118 archivos), **cero salteados**, verificados contra la base
+  local con las **83** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
   0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos
   migraciones con el mismo número **no conviven**: Supabase registra la versión por

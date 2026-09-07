@@ -164,6 +164,6 @@ garantía vive en el motor de datos, no en la aplicación. Ver
 
 ## Estado actual
 
-**82 migraciones** (hasta `0057_vistas_de_saldos_fuera_del_alcance_publico.sql`),
+**83 migraciones** (hasta `0083_cancelacion_a_los_14_dias.sql`),
 **51 tablas**, **103 políticas RLS** y **4 vistas**, todas aplicadas y verificadas
 contra una base local levantada desde cero.
