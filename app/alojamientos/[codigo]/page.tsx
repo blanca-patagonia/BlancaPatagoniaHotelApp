@@ -289,8 +289,8 @@ export default async function AlojamientoDetallePage({
           <div className="sm:col-span-2">
             <dt className="text-sm font-medium text-stone-500">Cancelación</dt>
             <dd className="mt-0.5 leading-relaxed text-stone-800">
-              Sin cargo hasta 14 días antes del check-in. Entre 14 y 7 días se cobra la primera
-              noche, y dentro de los 7 días el total de la estadía.
+              Sin cargo cancelando con más de 14 días de anticipación. Entre 14 y 7 días se
+              cobra la primera noche, y dentro de los 7 días el total de la estadía.
             </dd>
           </div>
         </dl>

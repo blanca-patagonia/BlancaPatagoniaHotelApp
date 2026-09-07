@@ -4471,7 +4471,11 @@ exactamente 7 días se cobra la primera noche, que es lo que corresponde.
 
 Se corrige con la **migración 0083** (que actualiza sólo la política `estandar`:
 si alguien cargó una propia, el umbral que eligió es decisión suya), el seed y el
-test.
+test. Y con el texto que lee el huésped en la ficha del alojamiento, que decía
+«sin cargo **hasta** 14 días antes» y a renglón seguido «entre 14 y 7 días se
+cobra la primera noche»: el mismo error, contradiciéndose dentro del mismo
+párrafo. El resto del proyecto —CLAUDE.md, la tesis, el comentario del módulo y
+`tests/asistente.test.ts`, que ya usaba **15**— siempre lo dijo bien.
 
 ### Además
 
