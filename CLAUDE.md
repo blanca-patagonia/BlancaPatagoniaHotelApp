@@ -253,8 +253,11 @@ Tarifario 2025/2026 (Anexo A).
   `lib/canales/ari.ts` + migración **0081** (`canal_tipos`) + `/api/cron/ari`.
   ⚠️ Cuatro cosas antes de tocarlo:
   1. **Esto NO evita el overbooking hoy**, y la pantalla lo dice ARRIBA de la
-     tabla. Con los proveedores disponibles el envío responde `noSoportado`. **No
+     tabla. Con el proveedor real (iCal) el envío responde `noSoportado`. **No
      quitar esa advertencia**: la solución es contratar un channel manager.
+     ⚠️ El proveedor **simulado** declara `publicaDisponibilidad: true` a propósito
+     —para poder ejercitar las pantallas—, así que en desarrollo el circuito
+     publica y en producción no. No concluir mirando local que ya funciona.
   2. **El cron devuelve 200 cuando no se puede publicar.** Con 500 quedaría en rojo
      para siempre —es la situación normal— y un fallo real se perdería entre el
      ruido. El cuerpo lleva `noSoportado` para que el 200 no se lea como éxito.

@@ -65,13 +65,20 @@ describe.skipIf(!hayDB)('publicar el ARI', () => {
     expect(data?.sentido, 'una corrida de salida se confundiría con una importación').toBe('salida')
   }, 60_000)
 
-  it('con el tipo mapeado, calcula y declara que el proveedor no publica', async () => {
+  it('con el tipo mapeado, calcula y publica de punta a punta', async () => {
     /*
-      El caso real de hoy.
+      El circuito completo contra el proveedor simulado.
 
-      Los dos caminos disponibles sin ser Connectivity Partner son de solo
-      lectura, así que las filas se calculan y el proveedor responde
-      `noSoportado`. **No es un error**: es la limitación del ADR 0021, declarada.
+      ⚠️ **El simulador declara `publicaDisponibilidad: true` a propósito** —está
+      escrito en `lib/canales/index.ts`: sirve justamente para poder ejercitar las
+      operaciones que ningún proveedor real de solo lectura soporta—. Así que este
+      caso NO prueba la limitación del ADR 0021; prueba que el cálculo, el envío y
+      el rastro funcionan.
+
+      La primera versión de este test afirmaba `noSoportado: true` acá y CI la
+      volteó. Queda anotado porque es la clase de suposición que se ve razonable:
+      «el proveedor de prueba no publica» era falso, y el que sí lo declara es el
+      de iCal. El caso «no puedo» se cubre puro, en `motivoNoPublicar`.
     */
     const { error } = await db.from('canal_tipos').insert({
       canal: 'booking',
@@ -82,9 +89,37 @@ describe.skipIf(!hayDB)('publicar el ARI', () => {
 
     const r = await publicarAri('booking', { dias: 7 })
 
-    expect(r.noSoportado, 'no distinguió «no puedo» de «fallé»').toBe(true)
-    expect(r.ok).toBe(false)
-    expect(r.detalle).toContain('solo lectura')
+    // Con tarifas cargadas publica; sin ellas, el motivo es «faltan tarifas» y
+    // tampoco es un fallo del sistema. Las dos salidas son legítimas y la que NO
+    // puede pasar es un error de lectura o de escritura.
+    expect(r.detalle, JSON.stringify(r)).toBeTruthy()
+    expect(r.detalle).not.toContain('No se pudo')
+
+    if (r.resumen.filas > 0) {
+      expect(r.ok, `el simulador tendría que aceptar las filas: ${r.detalle}`).toBe(true)
+      expect(r.aceptadas).toBe(r.resumen.filas)
+    } else {
+      expect(r.detalle, 'sin filas, el motivo tiene que ser la falta de tarifas').toContain(
+        'tarifas',
+      )
+    }
+
+    const { data } = await db
+      .from('canal_sincronizaciones')
+      .select('sentido, leidas, actualizadas, rechazadas')
+      .eq('origen', 'ari')
+      .order('corrida_en', { ascending: false })
+      .limit(1)
+      .maybeSingle<{
+        sentido: string
+        leidas: number
+        actualizadas: number
+        rechazadas: number
+      }>()
+
+    expect(data?.sentido).toBe('salida')
+    expect(data?.leidas, 'el rastro no registró las filas calculadas').toBe(r.resumen.filas)
+    expect(data?.actualizadas).toBe(r.aceptadas)
   }, 60_000)
 
   it('un tipo no se mapea dos veces al mismo canal', async () => {

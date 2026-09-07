@@ -40,9 +40,16 @@ eligió una OTA.
 adelante: cupo, precio, mínimo de noches y si está cerrado. `lib/canales/ari.ts`
 lo arma contra la base y llama a `publicarDisponibilidad`.
 
-Con los proveedores disponibles hoy —informe CSV y feed iCal, ambos de solo
-lectura— ese llamado devuelve `noSoportado`, y **la corrida queda registrada
-diciendo exactamente eso** en `canal_sincronizaciones` con `sentido = 'salida'`.
+Con el proveedor **real** de hoy —el feed iCal, de solo lectura— ese llamado
+devuelve `noSoportado`, y **la corrida queda registrada diciendo exactamente eso**
+en `canal_sincronizaciones` con `sentido = 'salida'`.
+
+> ⚠️ El proveedor **simulado** sí declara `publicaDisponibilidad: true`, y es
+> deliberado: existe para poder ejercitar las pantallas de todas las operaciones,
+> incluidas las que ningún proveedor real de solo lectura soporta. O sea que en
+> desarrollo el circuito publica de punta a punta y en producción no. Conviene
+> saberlo antes de concluir, mirando la pantalla en local, que la sincronización
+> bidireccional ya funciona.
 
 **Por qué calcular algo que no sale a ningún lado.** Porque el trabajo real no es
 el adapter: es decidir qué precio se publica, cómo se cuenta el cupo, qué pasa con
