@@ -30,6 +30,7 @@ import {
   alternarProducto,
   cargarCotizacion,
   guardarUbicacionUnidad,
+  guardarDatosFiscales,
 } from './actions'
 import {
   DESCRIPCION_FUENTE,
@@ -40,6 +41,12 @@ import {
   textoEstado,
 } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
+import { datosFiscales } from '@/lib/facturacion/emisor'
+import {
+  CONDICIONES_IVA,
+  ETIQUETAS_CONDICION_IVA,
+  formatearCuit,
+} from '@/lib/domain/facturacion'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
 import { enviarPlantillaPrueba } from './plantillas-actions'
 import { importe } from '@/lib/domain/moneda'
@@ -98,6 +105,12 @@ const MENSAJES_ERROR: Record<string, string> = {
   moneda: 'Esa moneda no está soportada.',
   ubicacion: 'No se pudo guardar la ubicación. Quedó como estaba.',
   unidad: 'Faltó indicar la unidad.',
+  fiscales_rol:
+    'Los datos fiscales del hotel los cambia administración: afectan todos los comprobantes que se emitan desde ese momento.',
+  fiscales_razon: 'Escribí la razón social tal como figura en la constancia de inscripción.',
+  fiscales_cuit:
+    'Ese CUIT no es válido. Se verifica el dígito verificador, no sólo la cantidad de números: once dígitos cualesquiera harían rechazar todos los comprobantes.',
+  fiscales: 'No se pudieron guardar los datos fiscales. Quedaron como estaban.',
 }
 
 export default async function ConfigPage({
@@ -541,6 +554,7 @@ export default async function ConfigPage({
         )}
       </Tarjeta>
 
+      <SeccionFiscal esAdmin={sesion.rol === 'admin'} />
       <SeccionDivisas puedeEditar={puedeEditar} />
       <SeccionUbicaciones puedeEditar={puedeEditar} />
     </Pagina>
@@ -811,6 +825,148 @@ async function SeccionDivisas({ puedeEditar }: { puedeEditar: boolean }) {
           <p className="mt-4 text-xs text-stone-600">
             Solo administración y gerencia pueden cargar una cotización a mano.
           </p>
+        )}
+      </div>
+    </Tarjeta>
+  )
+}
+
+/**
+ * Datos del hotel como **emisor** de comprobantes (migración 0082).
+ *
+ * ── Por qué esta sección existe ─────────────────────────────────────────────
+ *
+ * El CUIT del hotel no estaba en ninguna tabla. Suena increíble en un sistema que
+ * emite facturas, y sin embargo era así: `facturas` guarda el CUIT del *receptor*,
+ * y el emisor nunca hizo falta porque el CAE es simulado.
+ *
+ * Sin él quedaban bloqueadas dos cosas: la solicitud de CAE contra ARCA, que lo
+ * exige en cada comprobante, y el aviso de «esta factura no es para el hotel» al
+ * escanear un comprobante recibido, que no tenía contra qué comparar.
+ *
+ * ⚠️ Cargar esto **no habilita a facturar de verdad**: sigue faltando el
+ * certificado y el adapter WSAA/WSFEv1 (ADR 0012). Es el dato, no la integración,
+ * y la pantalla lo dice para que nadie concluya lo contrario al guardar.
+ */
+async function SeccionFiscal({ esAdmin }: { esAdmin: boolean }) {
+  const supabase = await crearClienteServidor()
+  const datos = await datosFiscales(supabase)
+
+  return (
+    <Tarjeta
+      titulo="Datos fiscales del hotel"
+      descripcion="Los que van impresos en la factura y los que ARCA pide de quien la emite."
+    >
+      <div id="fiscales" className="scroll-mt-20 px-5 py-4">
+        {!datos && (
+          <p className="mb-3 rounded-lg bg-lenga-50 px-3 py-2 text-sm text-lenga-900 ring-1 ring-lenga-200">
+            <strong>Todavía no están cargados.</strong> Sin el CUIT del hotel no se puede pedir un
+            CAE, y la pantalla de comprobantes recibidos no puede avisar cuando una factura
+            escaneada no es del hotel.
+          </p>
+        )}
+
+        <p className="mb-3 text-xs leading-snug text-stone-600">
+          Cargar esto <strong>no habilita a facturar contra ARCA</strong>: para eso falta el
+          certificado fiscal y la integración (ADR 0012). Es el dato que a esa integración le va a
+          hacer falta, y el que hoy usa el escaneo de facturas recibidas.
+        </p>
+
+        {!esAdmin ? (
+          <div className="text-sm text-stone-700">
+            {datos ? (
+              <p>
+                <strong>{datos.razonSocial}</strong> · CUIT {formatearCuit(datos.cuit)} ·{' '}
+                {ETIQUETAS_CONDICION_IVA[datos.condicionIva]}
+              </p>
+            ) : (
+              <p className="text-stone-500">Sin cargar.</p>
+            )}
+            <p className="mt-1 text-xs text-stone-500">
+              Los cambia administración: afectan todos los comprobantes que se emitan.
+            </p>
+          </div>
+        ) : (
+          <form action={guardarDatosFiscales} className="grid gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <Campo etiqueta="Razón social" requerido>
+                <input
+                  name="razon_social"
+                  required
+                  maxLength={120}
+                  defaultValue={datos?.razonSocial ?? ''}
+                  className={CAMPO}
+                />
+              </Campo>
+            </div>
+
+            <Campo
+              etiqueta="CUIT"
+              requerido
+              ayuda="Se verifica el dígito verificador, no sólo la cantidad."
+            >
+              <input
+                name="cuit"
+                required
+                inputMode="numeric"
+                defaultValue={datos ? formatearCuit(datos.cuit) : ''}
+                placeholder="30-71234567-8"
+                className={CAMPO}
+              />
+            </Campo>
+
+            <Campo
+              etiqueta="Condición frente al IVA"
+              ayuda="Del hotel, no del huésped: define qué letras puede emitir."
+            >
+              <select
+                name="condicion_iva"
+                defaultValue={datos?.condicionIva ?? 'responsable_inscripto'}
+                className={CAMPO}
+              >
+                {CONDICIONES_IVA.map((c) => (
+                  <option key={c} value={c}>
+                    {ETIQUETAS_CONDICION_IVA[c]}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+
+            <Campo etiqueta="Inicio de actividades">
+              <input
+                name="inicio_actividades"
+                type="date"
+                defaultValue={datos?.inicioActividades ?? ''}
+                className={CAMPO}
+              />
+            </Campo>
+
+            <Campo etiqueta="Ingresos brutos">
+              <input
+                name="ingresos_brutos"
+                maxLength={60}
+                defaultValue={datos?.ingresosBrutos ?? ''}
+                className={CAMPO}
+              />
+            </Campo>
+
+            <div className="sm:col-span-3">
+              <Campo etiqueta="Domicilio comercial">
+                <input
+                  name="domicilio"
+                  maxLength={200}
+                  defaultValue={datos?.domicilio ?? ''}
+                  className={CAMPO}
+                />
+              </Campo>
+            </div>
+
+            <div className="sm:col-span-3">
+              <BotonEnvio variante="secundario" cargando="Guardando…">
+                Guardar datos fiscales
+              </BotonEnvio>
+            </div>
+          </form>
         )}
       </div>
     </Tarjeta>

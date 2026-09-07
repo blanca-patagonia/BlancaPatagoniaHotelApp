@@ -22,6 +22,7 @@ export const AREAS = [
   'proveedores',
   'contratos',
   'canales',
+  'conciliacion',
   'auditoria',
   'errores',
   'reportes',
@@ -49,6 +50,7 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   proveedores: 'Proveedores',
   contratos: 'Contratos',
   canales: 'Canales de venta',
+  conciliacion: 'Conciliación y gastos',
   auditoria: 'Auditoría',
   errores: 'Errores del sistema',
   reportes: 'Reportes',
@@ -71,6 +73,14 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
     'proveedores', 'contratos', 'canales', 'reportes', 'config',
+    /*
+      Conciliación es el extracto bancario del hotel: sueldos, proveedores, todo lo
+      que pasó por la cuenta, y no sólo lo que tiene que ver con las reservas. Va
+      para admin y gerencia y para nadie más, igual que la política RLS de
+      `movimientos_externos` (migración 0077). Si acá se agregara otro rol, vería
+      la pantalla vacía y no entendería por qué.
+    */
+    'conciliacion',
     // Gerencia ve los errores del sistema porque es quien decide si hay que
     // llamar a alguien. La política RLS de `errores` (migración 0068) declara
     // los mismos dos roles: si acá se agregara uno más, vería la pantalla vacía.

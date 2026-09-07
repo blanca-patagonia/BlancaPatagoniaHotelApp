@@ -146,6 +146,13 @@ const MENSAJES_ERROR: Record<string, string> = {
   quitar_consumo: 'No se pudo quitar el consumo. Sigue cargado a la cuenta.',
   factura:
     'Se pidió el CAE y se consumió el número de comprobante, pero la factura NO quedó guardada. Avisá antes de volver a emitir: el número ya se usó.',
+  // Lecturas previas a la emisión. Cortan a propósito: una factura sale con CAE y
+  // es inmutable, así que es preferible no emitirla a emitirla con un dato de menos.
+  lectura_factura:
+    'No se pudo verificar si esta reserva ya estaba facturada, así que no se emitió nada. Probá de nuevo.',
+  lectura_reserva: 'No se pudieron leer los datos de la reserva. No se emitió ninguna factura.',
+  lectura_consumos:
+    'No se pudieron leer los consumos, así que no se emitió la factura: habría salido por menos de lo que se consumió, y una vez emitida no se corrige.',
   total: 'El cambio se hizo, pero no se pudo recalcular el precio. La reserva quedó con el total anterior.',
   repro: 'No se pudo reprogramar la estadía.',
   // Cobro (Fase 23).
@@ -947,11 +954,25 @@ export default async function DetalleReservaPage({
           </ul>
         )}
 
-        {resumen.saldada ? (
-          <p className="mt-4 text-sm font-medium text-emerald-700">✓ Reserva saldada.</p>
-        ) : (
+        {/* Una reserva saldada también puede necesitar una devolución —de hecho es
+            el único caso en que hay algo que devolver—, así que el formulario ya
+            no se esconde. Lo que cambia es qué se puede cargar: sobre una saldada,
+            sólo un reembolso. Antes el `else` lo ocultaba entero y no había ningún
+            camino, ni manual ni por pasarela, para registrar una devolución. */}
+        {resumen.saldada && (
+          <p className="mt-4 text-sm font-medium text-emerald-700">
+            ✓ Reserva saldada. Si hubo que devolver plata, registrala como reembolso.
+          </p>
+        )}
+        {(
           <form action={registrarPago} className="mt-4 flex flex-wrap items-end gap-2">
             <input type="hidden" name="reserva_id" value={reserva.id} />
+            {/* Clave de idempotencia del cobro de mostrador. Se genera acá, al
+                renderizar: es la misma para dos envíos del mismo formulario —un
+                reintento de red, un F5 sobre el POST, el botón de atrás— y
+                distinta en cada carga, así que un segundo pago legítimo entra
+                igual. La rechaza el `unique` de `pagos.external_id`. */}
+            <input type="hidden" name="idempotencia" value={crypto.randomUUID()} />
             <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Medio</span>
               <select name="medio" className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm">
@@ -966,10 +987,12 @@ export default async function DetalleReservaPage({
               <span className="text-stone-500">Tipo</span>
               <select
                 name="tipo"
-                defaultValue={resumen.tieneSenia ? 'saldo' : 'senia'}
+                defaultValue={
+                  resumen.saldada ? 'reembolso' : resumen.tieneSenia ? 'saldo' : 'senia'
+                }
                 className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
               >
-                {TIPOS_PAGO.map((t) => (
+                {(resumen.saldada ? (['reembolso'] as const) : TIPOS_PAGO).map((t) => (
                   <option key={t} value={t}>
                     {ETIQUETAS_TIPO_PAGO[t]}
                   </option>

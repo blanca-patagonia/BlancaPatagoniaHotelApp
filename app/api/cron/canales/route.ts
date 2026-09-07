@@ -3,6 +3,7 @@ import { obtenerProveedorCanal } from '@/lib/canales'
 import { guardarEntrantes } from '@/lib/canales/servicio'
 import { comparacionConstante } from '@/lib/integraciones/firma-webhook'
 import { registrarFalla } from '@/lib/acciones'
+import { hoyISO, sumarDias } from '@/lib/fechas'
 
 /**
  * Sincronización automática de canales: `POST /api/cron/canales`.
@@ -110,6 +111,21 @@ export async function POST(req: Request) {
     canal: 'booking',
     proveedor: proveedor.nombre,
     origen: 'cron',
+    /*
+      El feed iCal publica TODO lo vigente, así que este lote es una foto completa
+      y lo que no vino se puede presumir cancelado (migración 0074). El informe CSV
+      no manda esto: es una exportación filtrada por fechas y su ausencia no
+      significa nada.
+
+      El corte es **mañana** y no hoy a propósito: una reserva que sale hoy puede
+      caerse del feed legítimamente al completarse, y marcarla todos los días como
+      presunta cancelación entrenaría a ignorar el aviso. Lo que interesa es la
+      reserva futura que desapareció.
+
+      `hoyISO()` y no `toISOString()`: el hotel está en UTC−3 y el cron corre en
+      UTC, así que entre las 21:00 y la medianoche el segundo devuelve mañana.
+    */
+    instantanea: { desde: sumarDias(hoyISO(), 1) },
   })
 
   return Response.json({

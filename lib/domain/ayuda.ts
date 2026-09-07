@@ -247,6 +247,36 @@ export const CAPITULOS: Capitulo[] = [
         detalle:
           'Registrá el comprobante con su vencimiento. De esa fecha sale el informe de qué hay que pagar primero.',
       },
+      {
+        titulo: 'La moneda del comprobante',
+        detalle:
+          'Cargá el importe tal como figura en el papel y elegí la moneda al lado. El saldo del proveedor se lleva en dólares, así que el sistema convierte solo con la cotización del día y guarda las dos cosas. Antes había que hacer la cuenta a mano, y una factura en pesos cargada como dólares multiplicaba la deuda por mil.',
+      },
+      {
+        titulo: 'Sacarle una foto a la factura',
+        detalle:
+          'En "Comprobantes recibidos" apretás "Sacar foto", el teléfono abre la cámara y se lee el código QR que toda factura electrónica trae desde 2021. Los datos entran solos: CUIT, número, fecha, importe y CAE. No es que el sistema "lea" la factura adivinando: son los datos que el proveedor le informó a ARCA.',
+      },
+      {
+        titulo: 'La foto no se guarda',
+        detalle:
+          'El código se lee en el mismo teléfono y al sistema viaja sólo el texto del QR. La imagen no se sube ni queda archivada en ninguna parte.',
+      },
+      {
+        titulo: 'Cargar es una cosa; imputar es otra',
+        detalle:
+          'Escanear la factura la registra. Recién cuando apretás "Imputar" pasa a la cuenta corriente del proveedor y suma a lo que el hotel debe. Es a propósito: una factura puede llegar con un error o corresponder a otro lado, y no todo lo que alguien apunta con la cámara tiene que entrar al libro mayor.',
+      },
+      {
+        titulo: 'Escanear dos veces no duplica',
+        detalle:
+          'Si la primera foto sale movida y volvés a intentar, el sistema reconoce que es el mismo comprobante y avisa en vez de cargarlo de nuevo.',
+      },
+      {
+        titulo: 'Bajarlo a Excel',
+        detalle:
+          'El botón "Bajar a Excel (CSV)" arma el archivo con todos los comprobantes del filtro, listo para abrir en Excel o mandarle al contador. Incluye si cada uno se leyó del QR o se cargó a mano.',
+      },
     ],
   },
   {
@@ -365,6 +395,62 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Mensajes y reseñas se cargan a mano',
         detalle:
           'El informe de Booking no los trae. Se cargan acá para que no queden sólo en la memoria de quien los leyó: un pedido de cuna sin atender termina siendo una queja en la reseña.',
+      },
+      {
+        titulo: 'Cómo llama el canal a cada habitación',
+        detalle:
+          'En "Publicación al canal" se anota, una sola vez, con qué nombre conoce Booking a cada tipo de unidad del hotel. Sirve para que la importación no falle cuando los nombres no coinciden: antes había que renombrar el tipo del hotel para que coincidiera con el que eligió la OTA.',
+      },
+      {
+        titulo: 'Guardarse habitaciones para la venta directa',
+        detalle:
+          'El "tope de cupo" limita cuántas unidades de ese tipo se le ofrecen al canal. Vacío significa todas. Sirve para no quedarse sin nada que vender por teléfono en temporada alta, y para no pagar comisión por el 100% de lo que se vende.',
+      },
+      {
+        titulo: 'Por qué la publicación dice que no salió',
+        detalle:
+          'Porque hoy es cierto. El sistema calcula todos los días qué habría que informarle al canal, pero los caminos disponibles sin ser socio certificado de Booking sólo sirven para traer reservas, no para mandar. Queda calculado y registrado para que el día que el hotel contrate un channel manager sea sólo enchufarlo.',
+      },
+      {
+        titulo: 'Los días sin tarifa no se publican',
+        detalle:
+          'Si una fecha no tiene temporada cargada, no se informa al canal en vez de informarla en cero: publicar cero sería publicar una noche gratis. La pantalla dice cuántos días quedaron afuera por eso.',
+      },
+    ],
+  },
+  {
+    area: 'conciliacion',
+    resumen: 'Cruzar lo que el sistema dice que se cobró contra lo que de verdad entró.',
+    pasos: [
+      {
+        titulo: 'Para qué sirve',
+        detalle:
+          'El sistema sabe lo que tendría que haber cobrado. Esta pantalla trae lo que realmente entró a la cuenta —del banco y de MercadoPago— y las cruza. Es donde se ve un cobro que la pasarela hizo y el sistema no registró, una comisión que salió más cara de lo pactado, y en qué se fue la plata cada mes.',
+      },
+      {
+        titulo: 'El extracto del banco se sube a mano',
+        detalle:
+          'El banco no tiene una forma automática de mandarnos los movimientos, así que hay que entrar al Home Banking, exportar el extracto en CSV y subirlo acá. Subir dos veces el mismo archivo no duplica nada: el sistema reconoce los movimientos que ya tenía.',
+      },
+      {
+        titulo: 'MercadoPago sí se trae solo',
+        detalle:
+          'Con el botón "Traer de MercadoPago". La primera vez el sistema le pide el reporte a MercadoPago y hay que volver a apretar en unos minutos, porque del otro lado tarda en armarlo. El reporte trae lo que MercadoPago acreditó de verdad, ya descontada su comisión, que no es lo mismo que lo que cobró.',
+      },
+      {
+        titulo: 'Lo que se concilia solo y lo que no',
+        detalle:
+          'Cuando el movimiento trae la referencia del cobro, el sistema lo cierra solo: no hay dudas posibles. Cuando sólo coinciden el importe y la fecha, se muestra como sugerencia y decide una persona. Es a propósito: dos huéspedes que pagan la misma seña el mismo día es lo más común del mundo, y casarlo con la reserva equivocada deja a uno figurando impago y al otro pagado sin haber pagado.',
+      },
+      {
+        titulo: 'Ignorar no es esconder',
+        detalle:
+          'Un movimiento sin contrapartida en el sistema —un gasto, una transferencia entre cuentas propias— se marca "Ignorado" con una nota. Deja de aparecer como pendiente pero sigue contando en los gastos del mes.',
+      },
+      {
+        titulo: 'Los gastos del mes',
+        detalle:
+          'Se calculan sobre los movimientos que salieron de la cuenta, agrupados por mes y por concepto. Cada moneda se muestra por separado: sumar pesos con dólares daría un total que no significa nada.',
       },
     ],
   },

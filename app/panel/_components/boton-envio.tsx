@@ -27,6 +27,8 @@ export function BotonEnvio({
   variante = 'primario',
   extra = '',
   confirmar,
+  name,
+  value,
   'aria-label': etiquetaAccesible,
 }: {
   children: ReactNode
@@ -36,6 +38,17 @@ export function BotonEnvio({
   extra?: string
   /** Si se indica, se pide confirmación antes de enviar. */
   confirmar?: string
+  /**
+   * Par nombre/valor que viaja en el `FormData` cuando **este** botón es el que
+   * envía.
+   *
+   * Es para los formularios con dos salidas que comparten los mismos campos:
+   * «Conciliar» e «Ignorar» sobre el mismo movimiento, por ejemplo. La
+   * alternativa —dos `<form>` separados— obligaría a duplicar los campos o a
+   * dejar uno sin ellos, y ahí es donde se pierde la nota que alguien escribió.
+   */
+  name?: string
+  value?: string
   /**
    * Nombre accesible, para los botones cuyo contenido es solo un símbolo.
    *
@@ -53,6 +66,8 @@ export function BotonEnvio({
       disabled={pending}
       aria-busy={pending}
       aria-label={etiquetaAccesible}
+      name={name}
+      value={value}
       onClick={
         confirmar
           ? (e) => {

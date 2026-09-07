@@ -31,6 +31,7 @@ import 'server-only'
  */
 
 import { hmacHex, comparacionConstante, timestampVigente } from '@/lib/integraciones/firma-webhook'
+import { registrarError } from '@/lib/registro'
 import { TIPOS_PAGO, type MedioPago, type TipoPago, type EstadoPago } from '@/lib/domain/pagos'
 import type { MonedaCobro } from '@/lib/domain/cobro'
 import { esMonedaDeCobro } from './simulado'
@@ -135,6 +136,17 @@ export class ProveedorStripe implements PaymentProvider {
       'metadata[external_id]': p.externalId,
       'metadata[reserva_id]': p.reservaId,
       'metadata[tipo]': p.tipo,
+      /*
+        La misma referencia, copiada al PaymentIntent.
+
+        Hace falta para las devoluciones: `charge.refunded` trae un **Charge**, y
+        un Charge NO hereda ni `client_reference_id` ni la metadata de la Session
+        —sólo la del PaymentIntent—. Sin esto, el evento de devolución llega sin
+        forma de saber a qué cobro pertenece y el webhook lo ignora, que es
+        exactamente cómo se perdían los reembolsos.
+      */
+      'payment_intent_data[metadata][external_id]': p.externalId,
+      'payment_intent_data[metadata][reserva_id]': p.reservaId,
       expires_at: String(Math.floor(vence / 1000)),
       'line_items[0][quantity]': '1',
       'line_items[0][price_data][currency]': p.moneda.toLowerCase(),
@@ -175,7 +187,7 @@ export class ProveedorStripe implements PaymentProvider {
       // Fail-closed en producción: sin secreto, cualquiera podría registrar
       // pagos aprobados que nadie hizo.
       if (process.env.NODE_ENV === 'production') {
-        console.error('[webhook stripe] falta STRIPE_WEBHOOK_SECRET')
+        await registrarError('webhook_pago_sin_secreto', { proveedor: 'stripe' })
         return false
       }
       return true
@@ -183,7 +195,7 @@ export class ProveedorStripe implements PaymentProvider {
 
     const cabecera = req.headers.get('stripe-signature')
     if (!cabecera) {
-      console.error('[webhook stripe] falta la cabecera stripe-signature')
+      await registrarError('webhook_pago_sin_firma', { proveedor: 'stripe' })
       return false
     }
 
@@ -199,14 +211,14 @@ export class ProveedorStripe implements PaymentProvider {
     }
 
     if (!t || firmas.length === 0) {
-      console.error('[webhook stripe] stripe-signature sin t o v1')
+      await registrarError('webhook_pago_firma_malformada', { proveedor: 'stripe' })
       return false
     }
 
     if (!timestampVigente(t, Math.floor(Date.now() / 1000))) {
       // Sin esto, capturar un evento válido una vez alcanza para reenviarlo
       // para siempre.
-      console.error('[webhook stripe] timestamp fuera de la ventana de tolerancia')
+      await registrarError('webhook_pago_timestamp_vencido', { proveedor: 'stripe' })
       return false
     }
 
@@ -216,7 +228,7 @@ export class ProveedorStripe implements PaymentProvider {
     const esperada = await hmacHex(secreto, `${t}.${cuerpo}`)
 
     if (!firmas.some((f) => comparacionConstante(esperada, f))) {
-      console.error('[webhook stripe] la firma no coincide con el cuerpo recibido')
+      await registrarError('webhook_pago_firma_invalida', { proveedor: 'stripe' })
       return false
     }
     return true
@@ -253,7 +265,21 @@ export class ProveedorStripe implements PaymentProvider {
       return { tipo: 'invalido', motivo: `moneda desconocida: ${moneda}` }
     }
 
-    const bruto = Number(sesion.amount_total ?? 0)
+    /*
+      `amount_total` es de la Session; `amount`, del Charge.
+
+      Los eventos de devolución (`charge.refunded`, `charge.dispute.closed`)
+      traen un Charge, que no tiene `amount_total`. Se toma el importe ORIGINAL
+      del cargo a propósito: es el que tiene que coincidir con lo que se pidió
+      cobrar para que el webhook lo reconozca como la devolución de ESE pago.
+
+      Consecuencia asumida: una devolución **parcial** informa el mismo `amount`
+      total, así que se procesa como devolución completa. Es el caso raro y el
+      error va hacia el lado seguro —el hotel se anota que devolvió de más, no de
+      menos—, pero conviene revisarlo a mano. Registrar el parcial pide una fila
+      `tipo='reembolso'` propia, que hoy sólo se carga desde el mostrador.
+    */
+    const bruto = Number(sesion.amount_total ?? sesion.amount ?? 0)
     const monto = desdeUnidadMinima(bruto, moneda)
     if (!(monto > 0)) return { tipo: 'invalido', motivo: 'el importe no es positivo' }
 
@@ -306,6 +332,22 @@ function estadoSegunEvento(tipo: string): EstadoPago | null {
     case 'checkout.session.async_payment_failed':
     case 'checkout.session.expired':
       return 'rechazado'
+    /*
+      La devolución. Faltaba, y era el mismo agujero que en la máquina de
+      estados: Stripe avisaba y el sistema ignoraba el evento con un 200, así que
+      la reserva quedaba `pagada` con la plata ya devuelta.
+
+      `charge.refunded` es el reembolso pedido desde el panel de Stripe;
+      `charge.dispute.closed` cubre el contracargo que el banco resolvió a favor
+      del titular, que para el hotel es plata que se fue igual.
+
+      ⚠️ Los dos llegan con el importe ORIGINAL del cargo. Una devolución parcial
+      no coincide con lo pedido y el webhook la manda a «revisar a mano» en vez de
+      saldar: es el camino seguro y está documentado en `ResultadoWebhook`.
+    */
+    case 'charge.refunded':
+    case 'charge.dispute.closed':
+      return 'reembolsado'
     default:
       return null
   }
@@ -323,14 +365,24 @@ async function llamar(url: string, init: RequestInit): Promise<Respuesta> {
     if (!res.ok) {
       // El error de Stripe trae el motivo real. Va al log del servidor; al
       // huésped se le muestra algo genérico.
-      console.error(`[stripe] ${res.status} en ${url}: ${texto.slice(0, 500)}`)
+      await registrarError('pasarela_http_error', {
+        proveedor: 'stripe',
+        estado: res.status,
+        url,
+        cuerpo: texto.slice(0, 500),
+      })
       return { error: `Stripe respondió ${res.status}.` }
     }
 
     return { datos: JSON.parse(texto) as Record<string, unknown> }
   } catch (e) {
     const motivo = e instanceof Error ? e.message : String(e)
-    console.error(`[stripe] falló la llamada a ${url}: ${motivo}`)
+    await registrarError('pasarela_sin_respuesta', {
+      proveedor: 'stripe',
+      url,
+      motivo,
+      corto: corte.aborted,
+    })
     return {
       error: corte.aborted ? 'Stripe no respondió a tiempo.' : 'No se pudo contactar a Stripe.',
     }

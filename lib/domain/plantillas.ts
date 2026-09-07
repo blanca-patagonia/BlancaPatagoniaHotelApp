@@ -33,18 +33,35 @@ export const PLANTILLAS: Record<EventoEmail, Plantilla> = {
   confirmacion_reserva: {
     evento: 'confirmacion_reserva',
     nombre: 'Confirmación de reserva',
-    disparador: 'Al confirmarse la reserva',
-    asunto: 'Tu reserva en Blanca Patagonia está confirmada ({{codigo}})',
+    /*
+      ⚠️ Este correo sale al ALTA de la reserva, que nace `pendiente`, no al
+      confirmarse.
+
+      El texto decía «Confirmamos tu reserva» y el disparador «Al confirmarse la
+      reserva», y las dos cosas eran falsas: quien confirma es el pago, y una
+      reserva pendiente **expira a los 5 días** liberando la unidad
+      (`expirar_reservas_pendientes`). El huésped se quedaba con la idea de que
+      tenía la habitación asegurada y podía encontrarse sin ella.
+
+      Decirle que la recibimos y que hay que abonar la seña es la verdad, y además
+      es lo que hace que la seña llegue.
+    */
+    disparador: 'Al recibirse la reserva, antes del pago',
+    asunto: 'Recibimos tu reserva en Blanca Patagonia ({{codigo}})',
     cuerpo: `Hola {{nombre}},
 
-Confirmamos tu reserva en Blanca Patagonia.
+Recibimos tu reserva en Blanca Patagonia. Todavía **no está confirmada**: para
+asegurar la habitación hay que abonar la seña.
 
 · Código: {{codigo}}
 · Llegada: {{check_in}} desde las {{hora_check_in}}
 · Salida: {{check_out}} hasta las {{hora_check_out}}
-· Total: USD {{total}}
+· Total: {{total}}
 
-Podés ver el detalle en {{enlace}}.
+Podés abonar la seña y ver el detalle en {{enlace}}.
+
+Si no recibimos la seña, la reserva se libera y la habitación vuelve a quedar
+disponible para otros huéspedes.
 
 ¡Te esperamos en El Calafate!`,
     variables: [

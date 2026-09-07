@@ -120,6 +120,40 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // eso y housekeeping menos.
   errores: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  // ── Bandeja de salida de avisos (migración 0075) ──
+  // La lee quien atiende al huésped: si alguien llama diciendo «no me llegó
+  // nada», recepción tiene que poder mirarlo sin pedirle a un admin. Housekeeping
+  // no: lleva el email del huésped y el enlace con su token.
+  notificaciones: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+
+  // ── Notas de crédito (migración 0076) ──
+  // Misma línea que `facturas`: la ve quien factura. Housekeeping no.
+  notas_credito: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+
+  // ── Datos fiscales del hotel (migración 0082) ──
+  //
+  // Lo lee todo el staff y lo escribe sólo admin. Que lo lea todo el staff es
+  // deliberado: son los datos impresos en la factura que recepción le entrega al
+  // huésped, y el CUIT de una empresa es público. La restricción real está en la
+  // escritura, que la cubre `rls-escritura-por-rol`.
+  datos_fiscales: { todos: 'si' },
+
+  // ── Comprobantes recibidos (migración 0080) ──
+  //
+  // Misma línea que `movimientos_proveedor`: lo lee todo el staff y lo gestionan
+  // admin y gerencia. Que recepción lo LEA es deliberado: quien recibe la factura
+  // del proveedor en el mostrador tiene que poder ver si ya está cargada antes de
+  // volver a escanearla.
+  comprobantes_recibidos: { todos: 'si' },
+
+  // ── Movimientos externos (migración 0077) ──
+  //
+  // Más restrictiva que `facturas`, y a propósito: es el **extracto bancario del
+  // hotel**. Trae sueldos, pagos a proveedores y todo lo que pasó por la cuenta, no
+  // sólo lo que tiene que ver con las reservas. Recepción concilia cobros de
+  // huéspedes desde la ficha de la reserva, no desde acá.
+  movimientos_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
   // ── Numeración de comprobantes (migración 0069) ──
   // Sigue la línea de `facturas` desde la 0045: no lleva importes, pero sí qué
   // reserva se quedó con qué número de comprobante, que es información fiscal.
@@ -143,6 +177,13 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // que `anon` no lo lee, y eso lo verifica el borde público del mismo test.
   canal_mapeos_columnas: { todos: 'si' },
   canal_config: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
+  // ── Mapeo de tipos por canal (migración 0081) ──
+  //
+  // Misma línea que `canal_config`, y por el mismo motivo: lleva el tope de
+  // inventario que el hotel se reserva para la venta directa y qué tipos tiene
+  // cerrados en cada OTA. Eso es estrategia comercial, no operación de mostrador.
+  canal_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
   // ── Divisas y respaldos ──
   cotizaciones: { todos: 'si' },
@@ -384,6 +425,107 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar facturas_numeracion: ${error.message}`)
 
       sembradas.push({ tabla: 'facturas_numeracion', columna: 'reserva_id', valor: reservaId })
+    }
+
+    /*
+      ── notificaciones (migración 0075) ───────────────────────────────────────
+
+      Mismo motivo que `errores`: nace vacía, y «housekeeping no la lee» pasaría
+      por tabla vacía en vez de por la política. La fila lleva el email del
+      huésped y el enlace con su token, así que el caso negativo importa.
+
+      Se inserta directo con `service_role` en vez de llamar a `encolar`: esa
+      función consulta consentimiento y calcula el horario, y acá sólo hace falta
+      que exista una fila.
+    */
+    if ((await contar('notificaciones')) === 0) {
+      const clave = `auditoria_rls_${sufijo}`
+      const { error } = await admin.from('notificaciones').insert({
+        evento: 'confirmacion_reserva',
+        clave,
+        destinatario: 'auditoria@example.com',
+      })
+      if (error) throw new Error(`No se pudo sembrar notificaciones: ${error.message}`)
+
+      sembradas.push({ tabla: 'notificaciones', columna: 'clave', valor: clave })
+    }
+
+    /*
+      ── notas_credito (migración 0076) ────────────────────────────────────────
+
+      Nace vacía y su caso negativo (housekeeping) pasaría por eso. Cuelga de una
+      factura, así que se siembra una si no hay: los triggers de la 0076 exigen
+      que la letra siga a la factura y que no se acredite de más.
+    */
+    if ((await contar('notas_credito')) === 0) {
+      const reservaId = await reservaParaSembrar()
+
+      const { data: fac } = await admin
+        .from('facturas')
+        .select('id, total, tipo_comprobante')
+        .eq('reserva_id', reservaId)
+        .maybeSingle<{ id: string; total: number; tipo_comprobante: string | null }>()
+
+      if (fac) {
+        const { error } = await admin.from('notas_credito').insert({
+          factura_id: fac.id,
+          tipo_comprobante: fac.tipo_comprobante ?? 'B',
+          total: 0.01,
+          motivo: `auditoria rls ${sufijo}`,
+        })
+        if (error) throw new Error(`No se pudo sembrar notas_credito: ${error.message}`)
+
+        sembradas.push({ tabla: 'notas_credito', columna: 'motivo', valor: `auditoria rls ${sufijo}` })
+      }
+    }
+
+    /*
+      ── movimientos_externos (migración 0077) ─────────────────────────────────
+
+      Nace vacía —los movimientos entran cuando alguien sube un extracto— así que
+      sin sembrar, los DOS casos negativos (recepción y housekeeping) pasarían por
+      tabla vacía en vez de por la política. Es el extracto bancario del hotel: es
+      justo la tabla donde un falso positivo sale caro.
+    */
+    if ((await contar('movimientos_externos')) === 0) {
+      const externalId = `auditoria-rls-${sufijo}`
+      const { error } = await admin.from('movimientos_externos').insert({
+        origen: 'banco',
+        external_id: externalId,
+        fecha: '2026-01-02',
+        descripcion: 'fila de prueba de la matriz RLS',
+        monto: -1,
+        moneda: 'ARS',
+      })
+      if (error) throw new Error(`No se pudo sembrar movimientos_externos: ${error.message}`)
+
+      sembradas.push({ tabla: 'movimientos_externos', columna: 'external_id', valor: externalId })
+    }
+
+    /*
+      ── canal_tipos (migración 0081) ──────────────────────────────────────────
+
+      Nace vacía —con qué código conoce cada canal a cada tipo es una decisión del
+      hotel— así que sin sembrar, los dos casos negativos (recepción y
+      housekeeping) pasarían por tabla vacía en vez de por la política.
+    */
+    if ((await contar('canal_tipos')) === 0) {
+      const { data: tipo } = await admin
+        .from('tipos_unidad')
+        .select('id')
+        .order('codigo')
+        .limit(1)
+        .maybeSingle<{ id: string }>()
+
+      if (tipo) {
+        const codigo = `AUDIT-RLS-${sufijo}`
+        const { error } = await admin
+          .from('canal_tipos')
+          .insert({ canal: 'booking', tipo_unidad_id: tipo.id, codigo_canal: codigo })
+        if (error) throw new Error(`No se pudo sembrar canal_tipos: ${error.message}`)
+
+        sembradas.push({ tabla: 'canal_tipos', columna: 'codigo_canal', valor: codigo })
+      }
     }
 
     // ── canal_config ──────────────────────────────────────────────────────────

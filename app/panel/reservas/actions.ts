@@ -25,17 +25,23 @@ import {
   normalizarCuit,
   exigeCuitReceptor,
   motivoNoFacturable,
+  motivoNoAcreditar,
+  desglosarIva,
+  discriminaIva,
   type CondicionIva,
+  type TipoComprobante,
 } from '@/lib/domain/facturacion'
 import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
+import { datosFiscales } from '@/lib/facturacion/emisor'
+import { armarComprobante, MENSAJES_NO_ARMABLE } from '@/lib/domain/wsfev1'
 import { obtenerProveedor } from '@/lib/payments'
 import { iniciarCobro, falloElCobro } from '@/lib/payments/servicio'
 import { estadoDeCobro } from '@/lib/reservas/cobro'
 import { imputarEnUSD, motivoNoSeCobra, MONEDA_BASE } from '@/lib/domain/cobro'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
-import { enviarPlantilla } from '@/lib/email'
+import { encolar } from '@/lib/notificaciones'
 import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
@@ -357,10 +363,19 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
       } | null
 
       if (nivelNuevo !== nivelPrevio && huespedFid?.email) {
-        await enviarPlantilla('cambio_nivel_fidelidad', huespedFid.email, {
-          nombre: huespedFid.nombre,
-          nivel: ETIQUETAS_NIVEL[nivelNuevo],
-          puntos: totales,
+        // Se encola: el aviso de fidelidad no puede demorar ni hacer fallar un
+        // check-out. `huespedId` deja que la bandeja consulte el consentimiento.
+        await encolar(supabase, {
+          evento: 'cambio_nivel_fidelidad',
+          entidadId: id,
+          destinatario: huespedFid.email,
+          huespedId: reserva.huesped_id as string | null,
+          reservaId: id,
+          variables: {
+            nombre: huespedFid.nombre,
+            nivel: ETIQUETAS_NIVEL[nivelNuevo],
+            puntos: totales,
+          },
         })
       }
     }
@@ -375,9 +390,18 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
       .maybeSingle()
 
     if (encuesta?.token && huesped?.email) {
-      await enviarPlantilla('encuesta_postcheckout', huesped.email, {
-        nombre: huesped.nombre,
-        enlace: `${urlDelSitio()}/encuesta/${encuesta.token}`,
+      // La encuesta respeta el horario permitido: es un mensaje que inicia el
+      // hotel, y un check-out de las 23:00 no justifica escribirle a esa hora.
+      await encolar(supabase, {
+        evento: 'encuesta_postcheckout',
+        entidadId: id,
+        destinatario: huesped.email,
+        huespedId: reserva.huesped_id as string | null,
+        reservaId: id,
+        variables: {
+          nombre: huesped.nombre,
+          enlace: `${urlDelSitio()}/encuesta/${encuesta.token}`,
+        },
       })
     }
   }
@@ -447,6 +471,26 @@ export async function registrarPago(formData: FormData): Promise<void> {
     redirect(`/panel/reservas/${reservaId}?error=ultimos4`)
   }
 
+  /*
+    ── Idempotencia del cobro de mostrador ──────────────────────────────────
+
+    Esta acción no tenía ninguna: dos envíos del mismo formulario eran **dos
+    pagos**. Lo único que lo frenaba era `BotonEnvio`, que vive en el navegador y
+    no sobrevive a un reintento de red, un F5 sobre el POST ni el botón de atrás.
+    Para el hotel eso es un huésped que figura pagando dos veces.
+
+    La clave la genera la pantalla al renderizar, así que es la misma para los dos
+    envíos del mismo formulario y distinta en cada carga: un segundo pago legítimo
+    —el huésped que paga dos veces el mismo importe— entra sin problema porque
+    llega con una clave nueva.
+
+    Se apoya en el `unique` que `pagos.external_id` tiene desde la 0009: la
+    garantía la da la base, no una comprobación previa que una carrera podría
+    esquivar.
+  */
+  const clave = String(formData.get('idempotencia') ?? '').trim()
+  const externalId = clave ? `mostrador:${clave}` : null
+
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('pagos').insert({
     reserva_id: reservaId,
@@ -460,8 +504,13 @@ export async function registrarPago(formData: FormData): Promise<void> {
     cupon: cupon || null,
     ultimos4: ultimos4 || null,
     tarjeta_marca: marca || null,
+    external_id: externalId,
   })
-  if (error) redirect(`/panel/reservas/${reservaId}?error=pago`)
+
+  // 23505 = el mismo formulario se envió dos veces. El pago ya está registrado,
+  // así que NO es un error para quien lo hizo: se sigue como si hubiera entrado
+  // ahora, que es lo que idempotente significa.
+  if (error && error.code !== '23505') redirect(`/panel/reservas/${reservaId}?error=pago`)
 
   // ¿Quedó saldada? → intentar pasar a 'pagada'.
   //
@@ -774,23 +823,46 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const sesion = await requerirAcceso('reservas')
   const supabase = await crearClienteServidor()
 
-  const { data: existente } = await supabase
+  /*
+    ── Las tres lecturas de acá abajo CORTAN si fallan ───────────────────────
+
+    No es celo de estilo: una factura sale con CAE y es **inmutable** (la 0034 le
+    revocó `update` y `delete`), así que un dato leído de menos no se corrige
+    después. Y como no hay notas de crédito, tampoco se anula.
+
+    Lo que pasaba descartando el `{ error }`:
+
+    · `facturas` → `existente` quedaba nulo y se intentaba emitir una segunda
+      factura sobre la misma reserva. La restricción de la 0045 la frena, pero
+      recién en el `insert`, después de haber quemado el número y pedido el CAE.
+    · `reservas` → `reserva` nulo y redirect al listado, sin decir por qué.
+    · `consumos` → **el caro**: `consumosData` nulo se degrada a `[]`, y
+      `cuentaConsolidada` factura solo el alojamiento. Comprobante fiscal por
+      menos de lo consumido, firmado y sin vuelta atrás.
+  */
+  const { data: existente, error: eExistente } = await supabase
     .from('facturas')
     .select('id')
     .eq('reserva_id', reservaId)
     .maybeSingle()
 
+  cortarSiFalla(eExistente, `/panel/reservas/${reservaId}`, 'lectura_factura')
+
   // Una reserva se factura una sola vez: si ya existe, se muestra la emitida.
   if (existente) redirect(`/panel/reservas/${reservaId}/factura`)
 
-  const { data: reserva } = await supabase
+  const { data: reserva, error: eReserva } = await supabase
     .from('reservas')
     .select(
-      'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior)',
+      // `estadias(check_in, check_out)`: WSFEv1 exige el período facturado en un
+      // comprobante de servicios, y una estadía lo es. Son columnas GENERADAS
+      // desde `periodo` (migración 0037), así que no pueden desincronizarse.
+      'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior), estadias(check_in, check_out)',
     )
     .eq('id', reservaId)
     .single()
 
+  cortarSiFalla(eReserva, `/panel/reservas/${reservaId}`, 'lectura_reserva')
   if (!reserva) redirect('/panel/reservas')
 
   // Solo se factura una estadía consumida: emitir el comprobante de una reserva
@@ -799,10 +871,13 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const motivo = motivoNoFacturable(String(reserva.estado), false)
   if (motivo) redirect(`/panel/reservas/${reservaId}?error=${motivo}`)
 
-  const { data: consumosData } = await supabase
+  const { data: consumosData, error: eConsumos } = await supabase
     .from('consumos')
     .select('cantidad, precio_unitario')
     .eq('reserva_id', reservaId)
+
+  // Ver el bloque de arriba: sin esto, una lectura fallida factura de menos.
+  cortarSiFalla(eConsumos, `/panel/reservas/${reservaId}`, 'lectura_consumos')
 
   const consumos: Consumo[] = (consumosData ?? []).map((c) => ({
     cantidad: c.cantidad as number,
@@ -912,6 +987,54 @@ export async function emitirFactura(formData: FormData): Promise<void> {
 
   const siguiente = numeracion.numero
 
+  /*
+    El comprobante en formato ARCA.
+
+    Se arma **acá y no en el adapter** para que cada implementación tenga que
+    serializar y no decidir: las reglas de WSFEv1 son condicionales —una estadía
+    es un servicio y entonces las fechas del período son obligatorias, la nota de
+    crédito lleva otro código y el comprobante asociado, la base imponible es el
+    neto menos lo exento— y repetirlas en cada adapter es repetir el error.
+
+    `motivo` no corta la emisión. Hoy el CAE es simulado y el circuito interno
+    tiene que poder seguir aunque falte, por ejemplo, el CUIT del hotel: cortar
+    ahí dejaría al sistema sin poder facturar por un dato que sólo hace falta para
+    una integración que todavía no existe. Se registra y se sigue.
+  */
+  const emisor = await datosFiscales(supabase)
+  const periodo = (reserva.estadias ?? []) as { check_in: string; check_out: string }[]
+  const { comprobante, motivo: motivoComprobante } = armarComprobante({
+    cuitEmisor: emisor?.cuit ?? null,
+    tipo,
+    esNotaCredito: false,
+    puntoVenta: PUNTO_VENTA,
+    numero: siguiente,
+    fecha: hoyISO(),
+    total: desglose.total,
+    neto: desglose.neto,
+    exento: desglose.exento,
+    iva: desglose.iva,
+    alicuota: desglose.alicuota,
+    discriminaIva: discriminaIva(tipo),
+    cuitReceptor: cuitLimpio,
+    condicionReceptor: receptor.condicion,
+    // `facturas.total` está en USD, igual que `reservas.total`. La conversión a
+    // pesos para ARCA es parte del adapter real y de una decisión del contador;
+    // hoy se declara la moneda que efectivamente tiene el importe.
+    moneda: 'USD',
+    cotizacion: null,
+    tieneProductos: consumos.length > 0,
+    servicioDesde: periodo[0]?.check_in ?? null,
+    servicioHasta: periodo[0]?.check_out ?? null,
+  })
+
+  if (motivoComprobante) {
+    registrarFalla(
+      { message: `${motivoComprobante}: ${MENSAJES_NO_ARMABLE[motivoComprobante]}` },
+      `armar el comprobante ARCA de la reserva ${reservaId}`,
+    )
+  }
+
   const proveedor = obtenerProveedorFacturacion()
   const resultado = await proveedor.solicitarCae({
     tipo,
@@ -926,6 +1049,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     condicionReceptor: receptor.condicion,
     cuitReceptor: cuitLimpio,
     fecha: hoyISO(),
+    comprobante,
   })
 
   if (!resultado.ok) redirect(`/panel/reservas/${reservaId}?error=cae`)
@@ -1000,6 +1124,132 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   cortarSiFalla(eFactura, `/panel/reservas/${reservaId}`, 'factura')
 
   redirect(`/panel/reservas/${reservaId}/factura`)
+}
+
+/**
+ * Emite una nota de crédito sobre la factura de una reserva (migración 0076).
+ *
+ * ── Por qué hacía falta ─────────────────────────────────────────────────────
+ *
+ * `facturas` es inmutable (0034) y hay una sola por reserva (0045): sin notas de
+ * crédito, **una factura mal emitida no tenía ningún camino de corrección**. Con
+ * el simulador es un inconveniente; con CAE real el comprobante ya está informado
+ * a ARCA y la única forma de revertirlo es ésta.
+ *
+ * ── Qué garantiza la base y qué se comprueba acá ────────────────────────────
+ *
+ * Las dos reglas duras —la letra la hereda de la factura, y la suma de las notas
+ * no puede superar el total— viven en triggers (0076), porque dos emisiones
+ * simultáneas leerían el mismo acumulado y las dos pasarían una comprobación
+ * hecha en la aplicación. Acá se comprueba lo mismo **antes** para poder decirlo
+ * en pantalla en vez de mostrar un error de Postgres.
+ */
+export async function emitirNotaCredito(formData: FormData): Promise<void> {
+  const sesion = await requerirAcceso('reservas')
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  if (!reservaId) redirect('/panel/reservas')
+
+  const monto = Number(formData.get('monto') ?? 0)
+  const motivo = String(formData.get('motivo') ?? '').trim()
+  const destino = `/panel/reservas/${reservaId}/factura`
+
+  const supabase = await crearClienteServidor()
+
+  const { data: factura, error: eFactura } = await supabase
+    .from('facturas')
+    .select('id, total, cae, tipo_comprobante, punto_venta')
+    .eq('reserva_id', reservaId)
+    .maybeSingle<{
+      id: string
+      total: number
+      cae: string | null
+      tipo_comprobante: TipoComprobante | null
+      punto_venta: number | null
+    }>()
+
+  cortarSiFalla(eFactura, destino, 'lectura_factura')
+
+  const { data: previas, error: ePrevias } = await supabase
+    .from('notas_credito')
+    .select('total')
+    .eq('factura_id', factura?.id ?? '00000000-0000-0000-0000-000000000000')
+
+  cortarSiFalla(ePrevias, destino, 'lectura_notas')
+
+  const yaAcreditado = ((previas ?? []) as { total: number }[]).reduce(
+    (a, n) => a + Number(n.total),
+    0,
+  )
+
+  const impedimento = motivoNoAcreditar({
+    factura: factura ? { total: Number(factura.total), cae: factura.cae } : null,
+    yaAcreditado,
+    monto,
+    motivo,
+  })
+  if (impedimento) redirect(`${destino}?error=${impedimento}`)
+
+  const puntoVenta = factura!.punto_venta ?? PUNTO_VENTA
+  // La letra la hereda: no se elige. Si la factura es vieja y no la tiene, se cae
+  // a `B`, que es el comprobante al consumidor final.
+  const tipo: TipoComprobante = factura!.tipo_comprobante ?? 'B'
+
+  const { data: numero, error: eNumero } = await supabase.rpc(
+    'siguiente_numero_nota_credito',
+    { p_punto_venta: puntoVenta },
+  )
+  if (eNumero || numero == null) {
+    registrarFalla(eNumero, `pedir el número de nota de crédito de la reserva ${reservaId}`)
+    redirect(`${destino}?error=numeracion_nc`)
+  }
+  const siguiente = Number(numero)
+
+  // El IVA de la nota se calcula sobre el importe a acreditar con la misma
+  // alícuota del comprobante original: acreditar un neto distinto del que se
+  // facturó dejaría el IVA descalzado.
+  const desglose = desglosarIva(monto, ALICUOTA)
+
+  const proveedor = obtenerProveedorFacturacion()
+  const resultado = await proveedor.solicitarCae({
+    tipo,
+    puntoVenta,
+    numero: siguiente,
+    total: monto,
+    neto: desglose.neto,
+    iva: desglose.iva,
+    condicionReceptor: 'consumidor_final',
+    fecha: hoyISO(),
+    // ⚠️ Sin esto, un adapter real de WSFEv1 emitiría una FACTURA por el importe
+    // que se quería devolver: en ARCA las notas de crédito son otros códigos de
+    // comprobante (3, 8 y 13) y tienen que informar el comprobante asociado.
+    esNotaCredito: true,
+    numeroAsociado: siguiente,
+  })
+
+  if (!resultado.ok) redirect(`${destino}?error=cae`)
+
+  const { error: eNota } = await supabase.from('notas_credito').insert({
+    factura_id: factura!.id,
+    tipo_comprobante: tipo,
+    punto_venta: puntoVenta,
+    total: monto,
+    neto: desglose.neto,
+    iva: desglose.iva,
+    alicuota_iva: ALICUOTA,
+    motivo,
+    numero_fiscal: numeroComprobante(puntoVenta, siguiente),
+    cae: resultado.cae,
+    cae_vto: resultado.caeVto,
+    cae_solicitado_en: new Date().toISOString(),
+    emitida_por: sesion?.userId ?? null,
+  })
+
+  // Mismo punto caro que en `emitirFactura`: acá ya se pidió el CAE y ya se
+  // consumió el correlativo. Si el insert se pierde en silencio queda un CAE
+  // emitido sin nota, y el hueco de correlatividad es una obligación formal.
+  cortarSiFalla(eNota, destino, 'nota_credito')
+
+  redirect(`${destino}?ok=nota_credito`)
 }
 
 export interface EstadoReservaGrupal {
@@ -1292,37 +1542,71 @@ export async function enviarRecordatoriosLlegada(): Promise<void> {
   const manana = sumarDias(hoyISO(), 1)
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  /*
+    Se filtra en la BASE, no en JavaScript.
+
+    Antes se traían **todas** las estadías activas y se descartaban en un bucle
+    las que no llegaban mañana. Con eso, PostgREST cortaba en 1000 filas —con
+    HTTP 200 y sin aviso— y a partir de ahí los recordatorios simplemente dejaban
+    de salir para quien quedara del otro lado del corte, sin ningún error.
+
+    `estadias.check_in` es una columna GENERADA desde `periodo` (migración 0037) y
+    existe exactamente para esto: permite el filtro por fecha del lado del
+    servidor, que PostgREST no puede expresar sobre un `daterange`.
+  */
+  const { data, error } = await supabase
     .from('estadias')
     .select(
-      'periodo, reserva:reservas(codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(nombre, email))',
+      'reserva:reservas(id, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email))',
     )
+    .eq('check_in', manana)
     .in('estado', [...ESTADOS_ACTIVOS])
 
+  // Antes se descartaba: si la consulta fallaba, la pantalla decía «0
+  // recordatorios» y eso se lee igual que «no llega nadie mañana».
+  cortarSiFalla(error, '/panel/reservas', 'recordatorios')
+
   const filas = (data ?? []) as unknown as {
-    periodo: string
     reserva: {
+      id: string
       codigo: string
-      estado: EstadoReserva
+      huesped_id: string | null
       huesped: { nombre: string; email: string | null } | null
     } | null
   }[]
 
-  let enviados = 0
+  let encolados = 0
   for (const fila of filas) {
-    // El check-in es el inicio del período de la estadía.
-    if (parsearPeriodo(fila.periodo).desde !== manana) continue
-    const h = fila.reserva?.huesped
-    if (!h?.email) continue
+    const r = fila.reserva
+    const h = r?.huesped
+    if (!r || !h?.email) continue
 
-    const r = await enviarPlantilla('recordatorio_checkin', h.email, {
-      nombre: h.nombre,
-      codigo: fila.reserva!.codigo,
-      check_in: formatoFechaCorta(manana),
-      hora_check_in: HORA_CHECK_IN,
+    /*
+      El `discriminante` es la fecha de llegada, y no es un detalle.
+
+      Sin él, la clave sería `recordatorio_checkin:<reserva_id>` y una reserva que
+      se reprograma no volvería a recibir aviso nunca. Con la fecha adentro, cada
+      llegada tiene el suyo — y apretar el botón dos veces el mismo día sigue
+      mandando uno solo, que es lo que hacía falta: antes no tenía idempotencia
+      ninguna y dos clics eran dos correos.
+    */
+    const res = await encolar(supabase, {
+      evento: 'recordatorio_checkin',
+      entidadId: r.id,
+      discriminante: manana,
+      destinatario: h.email,
+      huespedId: r.huesped_id,
+      reservaId: r.id,
+      variables: {
+        nombre: h.nombre,
+        codigo: r.codigo,
+        check_in: formatoFechaCorta(manana),
+        hora_check_in: HORA_CHECK_IN,
+      },
     })
-    if (r.ok) enviados++
+    // `yaEstaba` no suma: es el mismo recordatorio que ya estaba anotado.
+    if (res.ok && !res.yaEstaba) encolados++
   }
 
-  redirect(`/panel/reservas?recordatorios=${enviados}`)
+  redirect(`/panel/reservas?recordatorios=${encolados}`)
 }

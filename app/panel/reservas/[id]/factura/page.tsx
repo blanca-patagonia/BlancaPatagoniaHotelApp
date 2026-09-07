@@ -15,6 +15,27 @@ import { hoyISO } from '@/lib/fechas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { BotonImprimir } from './boton-imprimir'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
+import { MENSAJES_NO_ACREDITAR, saldoAcreditable } from '@/lib/domain/facturacion'
+import { emitirNotaCredito } from '../../actions'
+import { BotonEnvio } from '../../../_components/boton-envio'
+import { Mensaje } from '../../../_components/ui'
+
+/**
+ * Fallos que pueden llegar a esta pantalla al emitir una nota de crédito.
+ *
+ * Los cinco primeros son los de `motivoNoAcreditar`; los otros, escrituras que la
+ * base puede rechazar. Sin este mapa, `?error=` recargaría la pantalla sin decir
+ * nada — la trampa que documenta `AGENTS.md`.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  ...MENSAJES_NO_ACREDITAR,
+  cae: 'El proveedor de facturación rechazó la nota de crédito. Revisá el importe.',
+  numeracion_nc: 'No se pudo asignar el número de la nota de crédito. Probá de nuevo.',
+  nota_credito:
+    'Se pidió el CAE y se consumió el número, pero la nota NO quedó guardada. Avisá antes de volver a emitir: el número ya se usó.',
+  lectura_factura: 'No se pudo leer la factura. No se emitió nada.',
+  lectura_notas: 'No se pudieron leer las notas de crédito anteriores. No se emitió nada.',
+}
 
 interface Reserva {
   codigo: string
@@ -36,9 +57,16 @@ interface ConsumoRow {
   producto: { nombre: string } | null
 }
 
-export default async function FacturaPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FacturaPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string; ok?: string }>
+}) {
   await requerirAcceso('reservas')
   const { id } = await params
+  const sp = await searchParams
   const supabase = await crearClienteServidor()
 
   const { data } = await supabase
@@ -60,7 +88,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
     supabase
       .from('facturas')
       .select(
-        'numero, emitida_en, tipo_comprobante, numero_fiscal, neto, iva, alicuota_iva, exento, motivo_exencion, cae, cae_vto, cuit_receptor, condicion_iva_receptor',
+        'id, total, numero, emitida_en, tipo_comprobante, numero_fiscal, neto, iva, alicuota_iva, exento, motivo_exencion, cae, cae_vto, cuit_receptor, condicion_iva_receptor',
       )
       .eq('reserva_id', id)
       .maybeSingle(),
@@ -75,6 +103,8 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
     consumos.map((c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }) as Consumo),
   )
   const fac = factura as {
+    id: string
+    total: number | string
     numero: string
     emitida_en: string
     tipo_comprobante: TipoComprobante | null
@@ -94,6 +124,32 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
 
   // Un comprobante con CAE es fiscal; sin CAE, sigue siendo la proforma interna.
   const esFiscal = Boolean(fac?.cae && fac?.tipo_comprobante)
+
+  /*
+    Notas de crédito (migración 0076).
+
+    Se leen siempre, no sólo cuando hay: si existen, cambian lo que el comprobante
+    dice de verdad, y una factura de 100 con una nota de 40 acreditados no vale
+    100. Mostrar sólo la factura sería publicar un número que ya no es cierto.
+  */
+  const { data: notasData } = await supabase
+    .from('notas_credito')
+    .select('id, numero, numero_fiscal, total, motivo, emitida_en, cae')
+    .eq('factura_id', fac?.id ?? '00000000-0000-0000-0000-000000000000')
+    .order('emitida_en')
+
+  const notas = (notasData ?? []) as {
+    id: string
+    numero: string
+    numero_fiscal: string | null
+    total: number | string
+    motivo: string
+    emitida_en: string
+    cae: string | null
+  }[]
+
+  const acreditado = notas.reduce((a, n) => a + Number(n.total), 0)
+  const porAcreditar = saldoAcreditable(Number(fac?.total ?? 0), acreditado)
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -290,6 +346,107 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
           </p>
         )}
       </div>
+
+      {/* ── Notas de crédito ────────────────────────────────────────────────
+          Fuera de la caja del comprobante y con `print:hidden` en el formulario:
+          lo que se imprime y se le entrega al cliente es la factura, no la
+          herramienta para corregirla. Las notas ya emitidas SÍ se imprimen —
+          cambian lo que el comprobante vale de verdad. */}
+      {esFiscal && (
+        <div className="mt-4 rounded-xl border border-stone-200 bg-white p-6">
+          <h2 className="text-sm font-semibold text-stone-800">Notas de crédito</h2>
+
+          <div className="print:hidden">
+            {sp.error && (
+              <Mensaje tono="error">
+                {MENSAJES_ERROR[sp.error] ?? 'No se pudo emitir la nota de crédito.'}
+              </Mensaje>
+            )}
+            {sp.ok === 'nota_credito' && (
+              <Mensaje tono="ok">Nota de crédito emitida.</Mensaje>
+            )}
+          </div>
+
+          {notas.length === 0 ? (
+            <p className="mt-2 text-xs text-stone-600">
+              No hay ninguna. Se emite una cuando hay que corregir o anular este comprobante:
+              la factura es inmutable y no se puede editar.
+            </p>
+          ) : (
+            <ul className="mt-3 divide-y divide-stone-100 text-sm">
+              {notas.map((n) => (
+                <li key={n.id} className="flex items-start justify-between gap-3 py-2">
+                  <span className="min-w-0">
+                    <span className="font-medium text-stone-800">
+                      {n.numero_fiscal ?? n.numero}
+                    </span>
+                    <span className="ml-2 text-xs text-stone-500">
+                      {new Date(n.emitida_en).toLocaleDateString('es-AR')}
+                    </span>
+                    <span className="mt-0.5 block text-xs break-words text-stone-600">
+                      {n.motivo}
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-medium text-red-600">
+                    −{formatearUSD(Number(n.total))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {notas.length > 0 && (
+            <p className="mt-3 border-t border-stone-100 pt-2 text-sm">
+              Acreditado: <strong>{formatearUSD(acreditado)}</strong> · Neto del comprobante:{' '}
+              <strong>{formatearUSD(Number(fac!.total) - acreditado)}</strong>
+            </p>
+          )}
+
+          {porAcreditar > 0 ? (
+            <form
+              action={emitirNotaCredito}
+              className="mt-4 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-4 print:hidden"
+            >
+              <input type="hidden" name="reserva_id" value={id} />
+              <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                <span className="text-stone-500">Importe a acreditar</span>
+                <input
+                  name="monto"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={porAcreditar}
+                  required
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm sm:w-40"
+                />
+              </label>
+              <label className="flex w-full min-w-0 flex-1 flex-col gap-1 text-xs">
+                <span className="text-stone-500">Motivo</span>
+                <input
+                  name="motivo"
+                  required
+                  minLength={5}
+                  placeholder="Por qué se acredita (queda en el comprobante)"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              {/* Sin vuelta atrás: la nota se emite con CAE y es inmutable. */}
+              <BotonEnvio
+                confirmar={`Se va a emitir una nota de crédito con CAE. No se puede deshacer. Quedan ${formatearUSD(porAcreditar)} sin acreditar.`}
+              >
+                Emitir nota de crédito
+              </BotonEnvio>
+              <p className="w-full text-xs text-stone-500">
+                Quedan {formatearUSD(porAcreditar)} sin acreditar de esta factura.
+              </p>
+            </form>
+          ) : (
+            <p className="mt-3 border-t border-stone-100 pt-2 text-xs text-stone-600 print:hidden">
+              La factura está acreditada por completo: no queda nada por acreditar.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

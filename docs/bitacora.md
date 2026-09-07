@@ -3875,3 +3875,501 @@ rompe.
 
 `npm run check` local: **1617 tests / 98 archivos / 0 salteados · lint 0 ·
 typecheck 0 · build 0.**
+
+---
+
+## 2026-09-06 — Auditoría de arquitectura + Bloque A: los siete P0
+
+**Resumen:** pedido de llevar el sistema a nivel casi productivo como PMS
+centralizado (Booking/OTAs, overbooking, pagos, facturas, recordatorios, OCR,
+conciliación bancaria). Se hizo la auditoría completa —`docs/auditoria-pms-2026-09.md`—
+y se cerraron los siete defectos P0 que perdían plata o corrompían datos.
+
+### Booking.com: la respuesta es cerrada y no es de ingeniería
+
+Verificado contra la documentación oficial: **no hay API pública**. El acceso es
+solo para Connectivity Partners, que son **empresas proveedoras de software**, no
+propiedades. Los requisitos mínimos de permanencia —≥3.000 ABRN por año de
+programa y ≥250 listings abiertos de promedio diario— están dimensionados para
+channel managers; el hotel tiene ~16 unidades. Y hoy Booking **pausó las
+integraciones con proveedores nuevos**. Esto **confirma el ADR 0021** y le agrega
+los números. El camino sigue siendo contratar un channel manager.
+
+### Los siete P0, todos verificados ejecutando
+
+1. **Una cancelación de Booking bloqueaba la habitación para siempre.**
+   `importarEntrante` cortaba con «ya se importó» antes de mirar la cancelación, y
+   por el feed iCal el aviso ni llegaba: una cancelación es la **desaparición del
+   VEVENT** y nada miraba lo que no vino. Migración **0074** (`visto_en`,
+   `ausente_desde`). ⚠️ Se marca, **no se cancela solo**: un feed vacío o una URL
+   caducada se ven igual que cuarenta cancelaciones, y auto-cancelar convertiría
+   una corrida mala del cron en un vaciado de inventario.
+2. **Los reembolsos de pasarela no aterrizaban.** `TRANSICIONES.aprobado` era `[]`,
+   así que un `refunded` se descartaba con un `ok` y la reserva quedaba `pagada`
+   con la plata devuelta. Stripe ni siquiera mapeaba `charge.refunded`, y el
+   formulario manual solo aparecía si la reserva **no** estaba saldada —justo el
+   caso en que hay algo que devolver—.
+3. **El descuento de stock se perdía.** ⚠️ Mi primer diagnóstico dijo «se descuenta
+   dos veces» y **era falso**; lo descubrí porque el test de regresión pasaba sin
+   el arreglo. Es una lectura-modificación-escritura que pisa lo que el trigger ya
+   hizo: con una línea los números coinciden y no se ve, con dos líneas del mismo
+   producto el inventario queda **más alto** que la realidad. Queda anotado como
+   ejemplo de conclusión plausible que hay que verificar ejecutando.
+4. **Se podía emitir una factura con CAE por menos importe**: `emitirFactura`
+   descartaba el `{ error }` de la lectura de consumos, que se degradaba a `[]`.
+   Y `facturas` es inmutable, así que no se corrige.
+5. **El cobro de mostrador no tenía idempotencia**: dos envíos, dos pagos.
+6. **La expiración de reservas dependía solo de pg_cron**, programado dentro de un
+   bloque que se traga el fallo. Sin ella el inventario retenido no se libera nunca.
+   `purgar_errores` (0068) directamente nunca se había programado.
+7. Además: el `motivo` de las entrantes **se borraba en cada corrida del cron**
+   (`motivo: ''` incondicional + el iCal sellando `emitidaEn = new Date()`).
+
+### Los cuatro repos externos: ninguno aporta código
+
+- **hotel-pms** — 🔴 **sin archivo de licencia**: todos los derechos reservados,
+  legalmente no se puede reusar. Y le falta justo lo que se buscaba.
+- **QloApps** — 🟡 **OSL-3.0**, copyleft con cláusula de despliegue en red.
+  Copiar código obligaría a publicar el derivado. Solo ideas.
+- **Evolution API** — 🟡 el modo Baileys automatiza WhatsApp fuera de los términos
+  de Meta: riesgo de **baneo del número del hotel**, y el README no lo advierte.
+- **Invoice Ninja** — 🟡 Elastic License 2.0 y no hace facturación argentina.
+
+**MercadoPago sí tiene API pública** para conciliación
+(`/v1/account/settlement_report`). **Santander Argentina no**: se resuelve
+importando el extracto.
+
+**Verificación:** 1637 tests / 100 archivos / 0 salteados · lint 0 · typecheck 0 ·
+build 0. Migración 0074 aplicada. Cada arreglo entró con un test que **falla sin
+él**, comprobado revirtiendo.
+
+---
+
+## 2026-09-06 — Bloque B: el sistema empieza a comunicarse (objetivos 6 y 7)
+
+**Resumen:** hasta hoy el único `EmailProvider` era `consola`. Los objetivos 6
+(«recordatorios automáticos») y 7 («avisos ante pagos o cambios de estado») del
+pedido no existían: había cuatro plantillas y un simulador que escribía en stdout.
+
+**Qué se construyó**
+
+- **Migración 0075 — bandeja de salida (`notificaciones`).** Patrón *outbox*: la
+  acción que origina el aviso **encola** y no envía. Encolar es una escritura
+  local que no puede fallar por una API caída, y el envío se reintenta aparte.
+  Idempotencia por `clave` única —el mismo evento sobre la misma entidad no se
+  manda dos veces— y estado, intentos, `proximo_en` y error.
+- **Consentimiento en la base**: `huespedes.acepta_avisos` (default `true`,
+  transaccional: la confirmación de la reserva no es publicidad) y
+  `acepta_promociones` (default `false`, comercial). Son dos permisos distintos y
+  mezclarlos es lo que convierte un sistema útil en spam.
+- **`lib/domain/notificaciones.ts`** — reglas puras: reintentos con escala
+  `[1, 5, 30, 120, 360]` minutos y tope de 5 intentos; ventana horaria del hotel
+  (9 a 21, en `ZONA_HOTEL`); `claveDeNotificacion`.
+- **`lib/notificaciones/`** — `encolar()` y `despachar()`, más el cron
+  `/api/cron/notificaciones` cada 5 minutos.
+- **Adapter Resend real** (`lib/email/resend.ts`), por HTTP y sin SDK, con
+  `Idempotency-Key` y `AbortSignal.timeout`. **No reintenta**: de eso se ocupa la
+  bandeja, y dos capas de reintento se multiplican.
+
+**La trampa que costó una tarde**
+
+`despachar()` tomaba 0 filas de forma intermitente. No era un test *flaky*: era
+**desfasaje de reloj** entre el contenedor de Docker y el host. La consulta
+comparaba `proximo_en` contra un `new Date().toISOString()` calculado en Node.
+Ahora usa el literal `'now'` de Postgres, así el «ahora» lo pone la base y no la
+aplicación. Verificado estable en tres corridas seguidas, con un test de
+regresión propio.
+
+**Decisión:** la plantilla `confirmacion_reserva` **dejó de decir que la reserva
+está confirmada**. Una reserva de la web nace `pendiente` y se libera a los 5 días
+sin seña; el correo decía lo contrario, y eso es prometerle al huésped una
+habitación que el sistema va a revender.
+
+---
+
+## 2026-09-06 — Notas de crédito: una factura mal emitida ya se puede corregir
+
+**Resumen:** `facturas` es inmutable (0034), hay una sola por reserva (0045) y el
+enum de comprobantes solo tenía A, B y C. O sea: **una factura mal emitida no
+tenía ningún camino de corrección**. Con CAE real eso no es un inconveniente, es
+un problema fiscal: el comprobante ya está informado a ARCA.
+
+**Migración 0076** — tabla `notas_credito` con dos triggers que la base impone:
+
+1. `nota_credito_hereda_letra` — la letra de la nota **sigue** a la de la factura.
+   Dejarlo a criterio de quien la emite es el error que después hay que corregir
+   con otra nota.
+2. `nota_credito_no_supera_factura` — con `for update` sobre la fila de la
+   factura, así dos notas simultáneas no pueden sumar más que el total. Acreditar
+   de más es devolver IVA que nunca se cobró.
+
+Más `siguiente_numero_nota_credito()` y `puntos_venta.ultimo_nc`: **la numeración
+de notas es propia y no toca la de facturas**. Verificado con un test que mide que
+`ultimo_numero` no se mueve.
+
+`SolicitudCae` ganó `esNotaCredito` y `numeroAsociado`. No es cosmético: en WSFEv1
+las notas de crédito son los tipos 3, 8 y 13 —contra 1, 6 y 11 de las facturas— y
+un adapter real que ignore la bandera **emitiría una factura por el importe que se
+quería devolver**.
+
+---
+
+## 2026-09-07 — Bloque C: conciliación y gastos (objetivos 4 y 10, ADR 0030)
+
+**Resumen:** el sistema sabía lo que **debería** haber cobrado y no tenía ninguna
+forma de contrastarlo contra lo que de verdad entró a la cuenta. Cierra los dos
+objetivos del pedido que quedaban sin tocar.
+
+**Lo que se corrigió (dos hallazgos de la auditoría)**
+
+- **P1-3 · la moneda que nadie escribía.** `movimientos_cuenta` (0012) y
+  `movimientos_proveedor` (0016) tenían columna `moneda` desde el primer día, y
+  **ninguno de los tres `insert` de la aplicación la pasaba**: todas las filas
+  decían USD. El proveedor local factura en pesos, así que una factura de
+  lavandería de ARS 185.000 entraba como una deuda de **USD 185.000** —al saldo,
+  al KPI de deuda del panel y al aging report—. **Migración 0078**: `monto_origen`
+  + `cotizacion` + los mismos `check` de coherencia que la 0067 puso en `pagos`, y
+  los tres formularios con selector de moneda.
+  ⚠️ **No hay backfill posible**: el dato de la moneda real nunca existió. Las
+  cuentas corrientes anteriores a hoy hay que revisarlas contra el papel.
+- **P1-4 · la conciliación que no se podía cerrar.**
+  `canal_cargos.estado_conciliacion` existía desde la 0049 con sus tres valores,
+  su índice parcial y su columna en pantalla, y **ninguna parte de la aplicación
+  lo escribía**. Todos los cargos quedaban `devengado` para siempre, así que cada
+  mes había que volver a revisar lo ya revisado. **Migración 0079**: firma, fecha
+  y motivo, con dos `check` — disputar exige escribir por qué, y salir de
+  `devengado` exige decir quién y cuándo.
+
+**Lo que se construyó**
+
+- **Migración 0077 — `movimientos_externos`.** Una tabla para las dos fuentes: el
+  extracto del banco y la liquidación de la pasarela son la misma clase de cosa.
+  El importe va **con signo** y **no** hay columna `tipo`: un `tipo` aparte obliga
+  a recordar el signo en cada suma. Idempotencia por `(origen, external_id)`, e
+  índice único parcial para que **un pago no se concilie contra dos movimientos**.
+- **Puerto `ExtractoProvider`** (`lib/conciliacion/`), el octavo adapter. Declara
+  `capacidades()`: el proveedor de banco dice `puedeConsultar: false` y responde
+  `noSoportado`, que distingue «el banco no tiene API» de «la API del banco no
+  respondió». Sin esa distinción la pantalla mostraría un error rojo permanente
+  sobre algo que funciona exactamente como tiene que funcionar.
+- **Importador del extracto** (`extracto-csv.ts`), con los tres problemas reales
+  del formato resueltos y probados: el preámbulo del banco antes de la tabla, las
+  dos formas de expresar el importe (`Importe` con signo contra `Débito`/`Crédito`
+  en positivo — leer una como la otra invierte el mes entero) y el formato local
+  de los números.
+- **MercadoPago por API** (`mercadopago-reportes.ts`): el *settlement report*, con
+  los endpoints verificados contra la documentación oficial. Se guarda el **neto
+  liquidado** y no el bruto: conciliar contra el bruto dejaría siempre una
+  diferencia igual a la comisión.
+- **Pantalla `/panel/conciliacion`** (área nueva, admin y gerencia), con los
+  gastos del mes por moneda y por concepto.
+
+**Decisiones (ADR 0030)**
+
+1. **No se raspa el home banking.** Santander Argentina no publica API de
+   movimientos para clientes. Guardar la clave del banco para automatizar la
+   descarga sería una violación de sus términos y el peor secreto que este sistema
+   podría almacenar. El extracto se sube a mano y la pantalla lo dice.
+2. **La conciliación propone; sólo cierra sola lo que no admite duda.** Únicamente
+   la referencia de la pasarela concilia automáticamente. El importe y la fecha
+   son una sugerencia: dos huéspedes que pagan la misma seña el mismo día es lo
+   más común del mundo, y casar el cobro con la reserva equivocada deja a uno
+   figurando impago y al otro pagado sin haber pagado — y eso **no lo revisa nadie
+   después**.
+3. **Los gastos se agrupan por moneda.** Sumar pesos con dólares da un número que
+   no significa nada, y con la inflación argentina el error ni siquiera se ve raro.
+
+**Un detalle de honestidad en la interfaz.** El importador numera las filas
+descartadas por su posición en el archivo **sin contar las líneas en blanco**, y
+lo dice así en pantalla. La primera versión prometía «el número de línea que ves
+en Excel», y no es cierto: `partirCsv` descarta las filas vacías, así que una
+línea en blanco en el medio corre la numeración y manda a mirar la fila
+equivocada. Hay un test que fija esa diferencia.
+
+**Pendiente / próximo paso:** correr el gate completo contra la base local — hoy
+`com.docker.service` está detenido y no arranca sin elevación, así que los 25
+archivos de tests con base quedaron salteados. La suite pura está en verde
+(1314 pasan, 0 fallan). El objetivo 9 —foto de factura → datos— es lo que sigue.
+
+---
+
+## 2026-09-07 — Objetivo 9: la factura se carga sacándole una foto (ADR 0031)
+
+**Resumen:** *«que se le saque una foto a una factura y que se carguen los datos
+de esa factura a un excel»*. El pedido nombra el gesto, no la tecnología, y ahí
+estaba la decisión.
+
+**La opción obvia se descartó**
+
+Reconocimiento de texto sobre la imagen. Tres problemas, en orden de gravedad:
+
+1. **El OCR adivina, y acá adivinar cuesta plata.** Un `8` leído como `3` en el
+   importe da una factura **plausible y equivocada**. Nadie la revisa, porque el
+   sistema «ya la cargó»: el error entra al saldo del proveedor y aparece meses
+   después, cuando alguien reclama. Un dato que parece correcto y no lo es es peor
+   que un campo vacío.
+2. **Saca datos fiscales del sistema**: la imagen —CUIT del hotel, CUIT del
+   proveedor, importes— viaja a un servidor de terceros.
+3. **Cuesta por página, para siempre.**
+
+**Lo que se hizo**
+
+Desde 2021 (RG 4892/2020) toda factura electrónica argentina lleva un **QR
+obligatorio** que codifica los datos del comprobante en JSON: CUIT del emisor,
+punto de venta, número, tipo, fecha, importe, moneda y CAE. O sea, exactamente lo
+que había que cargar, **informado por el propio emisor a ARCA**. Leerlo no adivina
+nada, y el gesto para quien lo usa es el mismo que pidió el cliente.
+
+- **`lib/domain/comprobante-qr.ts`** — lector puro del formato oficial, con sus
+  bordes: URL o payload pelado, base64 url-safe, versión desconocida, campos
+  faltantes. ⚠️ **`moneda` no es ISO 4217**: `PES` y `DOL` son códigos de ARCA y se
+  traducen acá, en un solo lugar; una moneda que el sistema no sabe convertir se
+  rechaza con su motivo en vez de romper el `insert` con un error ilegible.
+- **Migración 0080 — `comprobantes_recibidos`.** Clave `unique` sobre
+  `CUIT del emisor + tipo + punto de venta + número`, que identifica un
+  comprobante de forma única en todo el país. Pasa de verdad: la primera foto sale
+  movida, se vuelve a intentar, y sin eso el gasto entraba dos veces.
+- **Pantalla `/panel/proveedores/comprobantes`**: escanear, cargar a mano, imputar
+  a la cuenta corriente y bajar a Excel.
+- **Recurso `comprobantes` en el punto único de exportación**, que ya verifica el
+  permiso del área y pagina con `traerTodo` para no salir truncado en la fila 1001.
+
+**Cuatro decisiones que quedaron en el ADR 0031**
+
+1. **El QR se lee en el navegador y la imagen no viaja ni se guarda.** Guardar
+   fotos de facturas es gestión documental —Storage, retención, permisos por
+   campo— y tiene su propio ADR pendiente (0013).
+2. **El navegador que no puede se declara, no se esconde.** `BarcodeDetector`
+   existe en Chrome y Edge, también en Android, y no en Safari ni Firefox. Cuando
+   falta, la pantalla lo dice y ofrece las dos salidas que sí funcionan.
+3. **La carga manual queda y se distingue en la lista** (`origen_dato`). No es
+   decorativo: un número tipeado puede estar mal y uno del QR no, así que quien
+   revisa el cierre del mes tiene que poder separarlos.
+4. **Cargar e imputar son dos pasos.** Escanear registra que el comprobante
+   existe; imputarlo dice que el hotel lo debe. Imputar sola cada factura
+   escaneada metería en el libro mayor todo lo que alguien apuntó con la cámara.
+   ⚠️ Una **nota de crédito se imputa como pago**, no como cargo: devuelve plata, y
+   cargarla como un gasto más inflaría lo que el hotel debe.
+
+**Lo que NO resuelve, y está escrito**
+
+- **Verificar el CAE contra ARCA**: leer el QR dice qué informó el emisor, no que
+  ARCA lo haya autorizado. Necesita certificado (Bloque D).
+- **El CUIT del hotel no está en ninguna tabla** —también Bloque D—, así que la
+  advertencia «esta factura no es para el hotel» quedó escrita y **apagada**. No se
+  inventó un CUIT para encenderla: un aviso construido sobre un dato inventado es
+  peor que no tener aviso.
+- **El desglose de IVA por alícuota**: el QR trae el total, no las bases
+  imponibles. Para el libro de IVA compras hace falta más que esto.
+
+---
+
+## 2026-09-07 — Dos P1 del camino del dinero: la pasarela cruzada y el silencio
+
+**Resumen:** dos hallazgos de la auditoría que comparten un rasgo —los dos fallan
+sin que nadie se entere— y que están en el mismo camino: el del cobro.
+
+### P1-5 · El link de pago cruzaba de pasarela
+
+`linkReutilizable` busca un link vivo para no generar dos por el mismo saldo —dos
+links son dos cobros posibles, y devolver esa plata es un trámite manual con la
+pasarela—. Pero la consulta filtraba por reserva, tipo y estado, y **no por medio
+de pago**.
+
+Cada medio cobra en su moneda: Stripe en dólares, MercadoPago en pesos. Así que un
+huésped que había abierto el link de Stripe y después volvía y elegía «pesos con
+MercadoPago» recibía de vuelta **el link de Stripe, en dólares**. Elegir el medio
+es justamente lo que el catálogo le ofrece decidir, y el sistema le devolvía el
+otro sin decir nada.
+
+⚠️ **El arreglo tenía una trampa que casi lo rompe.** El filtro natural sería
+`.eq('medio', p.proveedor)`, y está mal: el simulador se elige como `simulado` y
+registra sus pagos como `tarjeta`, porque el enum `medio_pago` de la base no tiene
+un valor «simulado» (el código ya lo documentaba en `nombreClave`). Filtrado así,
+el simulador nunca encontraría su propio link y crearía uno nuevo en cada intento
+—o sea, exactamente el cobro doble que la función existe para evitar—, y no se
+vería como un error. El filtro va sobre `proveedor.nombre`.
+
+De paso, la comparación de importes pasó a `coincideElImporte`, que compara
+centavos enteros. La forma anterior —`Math.abs(a - b) > 0.01`— hereda el error de
+coma flotante que quiere evitar, y es el motivo por el que ese helper existe.
+
+**Tests:** tres casos contra la base. El que importa es el par: **no** devuelve el
+link de otra pasarela, y **sí** devuelve el propio. Un arreglo que rompiera el
+segundo sería peor que el bug.
+
+### P1-6 · El camino del dinero se registraba en un lugar que nadie mira
+
+La verificación de firma de los dos webhooks de pago reportaba con
+`console.error`. Eso va al stdout de Vercel, que nadie del hotel abre, así que el
+síntoma de un secreto mal configurado —o de alguien probando firmas— era
+exactamente ninguno: **los cobros simplemente dejaban de llegar**.
+
+Desde el ADR 0029 hay una tabla `errores` y una pantalla que la muestra. Lo que
+faltaba era usarla donde más importa. Los cinco archivos por los que pasa la plata
+—el handler del webhook, el servicio de cobro y los tres adapters— quedaron con
+**cero `console`**, con nombres de evento estables para poder buscarlos:
+`webhook_pago_sin_secreto`, `webhook_pago_firma_invalida`,
+`webhook_pago_importe_distinto`, `pasarela_http_error`…
+
+**Lo que sigue valiendo:** el motivo del rechazo de una firma va al registro y
+**nunca a la respuesta HTTP**. Explicarle a quien manda una firma inválida por qué
+no coincide es ayudarlo a construir una válida.
+
+**El test es un test-contrato que lee los archivos**, y no uno que ejecute: el
+sink no escribe bajo Vitest a propósito (`sinkActivo()` corta si `process.env.VITEST`),
+así que «apareció la fila» no se puede comprobar corriendo. Lo que sí se fija es la
+regla, igual que `tests/pwa.test.ts` hace con `public/sw.js`.
+
+**Alcance honesto:** los `console.*` que quedan en el resto del sistema **siguen
+ahí**. No tocan dinero y no se migraron en esta pasada; la auditoría lo dice así en
+vez de dar el hallazgo por cerrado entero.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1350 tests puros en verde.
+
+---
+
+## 2026-09-07 — Bloque E: el lado saliente del canal (objetivos 1, 2 y 3, ADR 0032)
+
+**Resumen:** el ADR 0021 dice que el hotel resuelve el overbooking de OTAs
+contratando un channel manager, y que **enchufarlo sería configuración** porque el
+puerto ya declara `publicarDisponibilidad`. **No era cierto**: ese método tenía
+cero llamadores. Nadie calculaba qué publicar, nadie leía las tarifas para armarlo,
+nadie lo disparaba y nadie registraba el resultado.
+
+**Lo que se hizo**
+
+- **`lib/domain/ari.ts`** — el cálculo puro: para cada tipo mapeado y cada noche de
+  un año, cupo, precio, mínimo de noches y si está cerrado. 21 tests.
+- **`lib/canales/ari.ts`** — lo arma contra la base y llama al puerto. Lee la
+  ocupación por `traerTodo`: un año de estadías pasa el corte de 1000 filas de
+  PostgREST, y el efecto de no paginarlo sería **publicar como libres noches
+  vendidas**, que es el peor resultado posible de esta función.
+- **Migración 0081 — `canal_tipos`.** El mapeo que faltaba, en los **dos** sentidos.
+- **`/api/cron/ari`**, todos los días a las 6:20.
+- **Vista «Publicación al canal»** en el panel, con la advertencia arriba de la tabla.
+
+**El segundo defecto, más chico y más inmediato**
+
+`importarEntrante` resolvía el tipo con `eq('codigo', tipo_unidad_codigo)`, o sea
+asumiendo que el código del canal **es** el nuestro, con un comentario al lado
+diciendo que puede no serlo. Si Booking llama `DBL-LAGO` a lo que el sistema llama
+`DOBLE_VISTA`, la importación fallaba y la salida era renombrar el tipo del hotel
+para que coincidiera con el nombre que eligió una OTA. Ahora se anota la
+equivalencia una vez.
+
+**Las decisiones (ADR 0032)**
+
+1. **Se calcula aunque no salga.** El trabajo real no es el adapter: es decidir qué
+   precio se publica, cómo se cuenta el cupo, qué pasa con un día sin tarifa y
+   dónde queda el rastro. Eso ya está hecho y probado.
+2. **«No puedo» no es «fallé», y el cron devuelve 200.** Con 500, el cron quedaría
+   en rojo **para siempre** —porque ésa es la situación normal hoy— y el día que sí
+   haya channel manager un fallo real se perdería entre un año de ruido. El cuerpo
+   lleva `noSoportado` para que ese 200 no se lea como éxito.
+3. **Se publica el rack CON IVA.** Rack y no neto: el neto es tarifa de agencia
+   (ADR 0004) y publicarlo rompería la paridad tarifaria que los contratos de OTA
+   exigen, además de regalarle al canal el margen de la comisión. Con IVA porque
+   `precio_rack` se guarda sin él, y publicar la columna cruda anunciaría un precio
+   más bajo del que después se cobra.
+4. **Un día sin tarifa no se publica.** Publicar `0` es publicar una noche gratis
+   —es el «USD 0 al reservar» de la Fase 18, otra vez— y publicar el precio de otro
+   día es inventar una tarifa. Se omite y se cuenta aparte.
+5. **Cupo cero SÍ se publica, como cerrado.** Omitir el día deja al canal con el
+   valor anterior, que es el que hay que corregir.
+6. **El hotel puede guardarse inventario** (`tope_cupo`). Publicar todo en una OTA
+   deja sin nada que vender por teléfono en temporada, y paga comisión por el 100 %.
+
+**Lo que sigue sin resolverse, y está escrito**
+
+- **Esto NO evita el overbooking hoy.** La pantalla lo dice **antes** de la tabla y
+  no después: alguien que entra a algo titulado «Publicación al canal» asume, con
+  razón, que el sistema está informando, y esa conclusión hay que desarmarla antes
+  de que se forme.
+- **Restricciones por fecha**: el mínimo de noches y el cierre son por tipo, no por
+  día. «Mínimo 3 noches en el finde largo» no se puede expresar.
+- **El webhook de canales sigue sin llamador**: sin channel manager no hay quién lo
+  emita.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1378 tests puros en verde.
+
+---
+
+## 2026-09-07 — Bloque D: lo fiscal que se puede hacer sin certificado
+
+**Resumen:** `SolicitudCae` llevaba lo mínimo para que el simulador devolviera
+catorce dígitos —tipo, punto de venta, número, total, neto, IVA y CUIT del
+receptor—. **Le faltaba casi todo lo que WSFEv1 exige de verdad.** Escribir eso el
+día que llegue el certificado, contra una API que rechaza el comprobante entero por
+un campo y no dice cuál, es la peor forma de descubrir estas reglas.
+
+### `lib/domain/wsfev1.ts` — la traducción, pura y probada
+
+Las tres trampas del formato, **verificadas contra el manual oficial y no de
+memoria**:
+
+1. **Una estadía es un SERVICIO** (`Concepto = 2`), y con Concepto 2 o 3 son
+   obligatorios `FchServDesde`, `FchServHasta` y `FchVtoPago`. Mandarlo como
+   producto para «simplificar» hace que el comprobante de un hotel declare algo que
+   no es, y omitir esas fechas lo hace rechazar.
+2. **El consumidor final es `DocTipo = 99` con `DocNro = 0`.** ⚠️ Una de las
+   fuentes que consulté decía **5**, y es incorrecta. Verificarlo contra el manual
+   es lo que evita que el primer comprobante real se rechace — y es exactamente el
+   tipo de dato que no se puede tomar del primer resultado de una búsqueda.
+3. **La moneda es `PES`/`DOL`, no ISO 4217.** Y con `MonId` distinto de `PES`,
+   `MonCotiz` es obligatorio y **no puede ser 1**: eso declararía que el dólar vale
+   un peso.
+
+Más tres reglas que salen del propio sistema:
+
+- **La base imponible es el neto MENOS lo exento.** Acá `exento` es un subconjunto
+  de `neto` y no un sumando (ADR 0024, `check` de la 0058). Mandar el neto entero
+  declararía IVA sobre una porción que la ley exime.
+- **Una alícuota que ARCA no conoce se omite**, no se aproxima a la más cercana: un
+  comprobante sin discriminar es visiblemente incorrecto; uno con la alícuota
+  parecida es sutilmente falso, que es peor.
+- **`cierraElTotal`** valida `ImpTotal = ImpTotConc + ImpNeto + ImpOpEx + ImpIVA +
+  ImpTrib`, que es lo que ARCA verifica y rechaza sin decir cuál de los cinco está
+  mal.
+
+27 tests. El comprobante viaja **armado** dentro de `SolicitudCae`: así el adapter
+real sólo tiene que serializar. Si además tuviera que decidir, cada implementación
+repetiría las mismas reglas y la que se equivoque lo haría contra ARCA.
+
+### Migración 0082 — el CUIT del hotel no estaba en ninguna tabla
+
+Suena increíble en un sistema que emite facturas, y sin embargo era así: `facturas`
+guarda el CUIT del **receptor**, y el emisor nunca hizo falta porque el CAE es
+simulado. **No estaba en la lista de pendientes de nadie.**
+
+Bloqueaba dos cosas concretas:
+
+1. WSFEv1 exige el CUIT del emisor en cada solicitud.
+2. El aviso de «esta factura no es para el hotel» al escanear un comprobante
+   recibido (objetivo 9) no tenía contra qué comparar. Quedó escrito y **apagado**;
+   ahora se enciende solo cuando el dato existe.
+
+Tabla de **una sola fila, impuesta por la base** (`id boolean primary key check
+(id)`): con dos, el sistema elegiría una al azar y el comprobante saldría a nombre
+de quien toque. **No se siembra con datos de ejemplo**: un CUIT inventado sería
+peor que la tabla vacía —el sistema arrancaría creyendo que ya está configurado—.
+
+La pantalla de Configuración lo carga, sólo admin, y **valida el dígito
+verificador** y no sólo la longitud: once dígitos cualesquiera pasan el `check` de
+la base y hacen rechazar todos los comprobantes con un error que no dice que el
+CUIT esté mal.
+
+### Dos correcciones a la auditoría
+
+- **`facturas` SÍ tenía columna `moneda`** desde la 0010, con default `'USD'`. El
+  documento decía que no. El defecto real era el mismo de P1-3 —nadie la
+  escribía— y acá el default resultaba correcto, porque `reservas.total` está en
+  USD. Lo que falta de verdad es la conversión a pesos para ARCA, que es decisión
+  del contador.
+- **El CUIT del emisor** no figuraba como pendiente y era bloqueante.
+
+**Lo que sigue faltando, y no se puede hacer desde el código:** el certificado
+fiscal, el adapter WSAA/WSFEv1, y las decisiones del contador sobre moneda de
+emisión y alícuotas.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1405 tests puros en verde.

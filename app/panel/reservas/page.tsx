@@ -95,6 +95,20 @@ interface Params {
   impuestos?: string
   pagina?: string
   recordatorios?: string
+  /** Motivo de un fallo, con la convención `?error=` del panel. */
+  error?: string
+}
+
+/**
+ * Fallos que pueden llegar a esta pantalla.
+ *
+ * La pantalla NO renderizaba `?error=` y `enviarRecordatoriosLlegada` redirigía
+ * acá: el mensaje se perdía entero y quien apretaba el botón veía la lista
+ * recargarse como si nada. Es la trampa que `AGENTS.md` documenta.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  recordatorios:
+    'No se pudieron leer las llegadas de mañana, así que no se anotó ningún recordatorio. Probá de nuevo.',
 }
 
 export default async function ReservasPage({
@@ -255,9 +269,19 @@ export default async function ReservasPage({
         }
       />
 
+      {sp.error && (
+        <Mensaje tono="error">
+          {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+        </Mensaje>
+      )}
+
       {sp.recordatorios && (
         <Mensaje tono="ok">
-          Se enviaron {sp.recordatorios} recordatorio(s) a los huéspedes que llegan mañana.
+          {/* «Se anotaron» y no «se enviaron»: el envío lo hace el cron desde la
+              bandeja de salida, con reintentos. Decir «enviados» acá sería
+              afirmar algo que todavía no pasó. */}
+          Se anotaron {sp.recordatorios} recordatorio(s) para los huéspedes que llegan mañana.
+          Salen en los próximos minutos.
         </Mensaje>
       )}
 

@@ -14,6 +14,7 @@ import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
  */
 
 import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
+import { ProveedorResend } from './resend'
 
 export interface MensajeEmail {
   para: string
@@ -81,6 +82,7 @@ class ProveedorConsola implements EmailProvider {
 
 const PROVEEDORES: Record<string, EmailProvider> = {
   consola: new ProveedorConsola(),
+  resend: new ProveedorResend(),
 }
 
 export function obtenerProveedorEmail(

@@ -464,8 +464,72 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     if (error) throw new Error(`No se pudo sembrar el cargo: ${error.message}`)
 
     try {
+      /*
+        El `update` tiene que ser VÁLIDO para que el caso pruebe RLS.
+
+        Desde la migración 0079 un cargo que sale de «devengado» exige firma
+        (`canal_cargos_cierre_con_firma`). Mandar sólo `estado_conciliacion` haría
+        fallar el update por restricción (23514) en vez de por política, y el caso
+        pasaría verde sin haber probado nada de lo que dice probar.
+      */
       await noPuedeActualizar(usuarios.recepcion, 'canal_cargos', data.id, {
         estado_conciliacion: data.estado_conciliacion === 'conciliado' ? 'devengado' : 'conciliado',
+        conciliado_por: usuarios.recepcion.id,
+        conciliado_en: new Date().toISOString(),
+      })
+    } finally {
+      await admin.from('canal_cargos').delete().eq('clave_idempotencia', clave)
+    }
+  })
+
+  it('gerencia SÍ puede conciliar, y la base le exige firma y motivo', async () => {
+    /*
+      La contracara del caso anterior, que faltaba: si nadie puede conciliar, el
+      arreglo de P1-4 no sirve de nada y el test de arriba pasaría igual.
+
+      Y de paso se verifican los dos `check` de la 0079, que son la única barrera
+      real: la aplicación puede olvidarse de mandar el motivo, la base no.
+    */
+    const admin = clienteDePrueba()
+    const clave = `manual:comision:AUDIT-CONCILIA-OK-${sufijo}`
+    const { data, error } = await admin
+      .from('canal_cargos')
+      .insert({
+        canal: 'booking',
+        concepto: 'comision',
+        origen: 'manual',
+        monto: 1,
+        clave_idempotencia: clave,
+      })
+      .select('id')
+      .single<{ id: string }>()
+    if (error) throw new Error(`No se pudo sembrar el cargo: ${error.message}`)
+
+    try {
+      // 1) Conciliar sin firma no entra, ni siquiera siendo gerencia.
+      const { error: eSinFirma } = await usuarios.gerencia.cliente
+        .from('canal_cargos')
+        .update({ estado_conciliacion: 'conciliado' })
+        .eq('id', data.id)
+      expect(eSinFirma, 'se pudo cerrar la revisión sin decir quién la cerró').not.toBeNull()
+
+      // 2) Disputar sin motivo tampoco.
+      const { error: eSinMotivo } = await usuarios.gerencia.cliente
+        .from('canal_cargos')
+        .update({
+          estado_conciliacion: 'en_disputa',
+          conciliado_por: usuarios.gerencia.id,
+          conciliado_en: new Date().toISOString(),
+        })
+        .eq('id', data.id)
+      expect(eSinMotivo, 'se pudo abrir una disputa sin escribir por qué').not.toBeNull()
+
+      // 3) Con todo, sí.
+      await siPuedeActualizar(usuarios.gerencia, 'canal_cargos', data.id, {
+        estado_conciliacion: 'en_disputa',
+        conciliado_por: usuarios.gerencia.id,
+        conciliado_en: new Date().toISOString(),
+        nota_conciliacion: 'La comisión facturada no coincide con la del informe.',
       })
     } finally {
       await admin.from('canal_cargos').delete().eq('clave_idempotencia', clave)

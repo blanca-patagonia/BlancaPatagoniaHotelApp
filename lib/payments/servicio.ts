@@ -23,8 +23,10 @@ import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { registrarFalla } from '@/lib/acciones'
+import { registrarError } from '@/lib/registro'
 import {
   calcularCobro,
+  coincideElImporte,
   linkVigente,
   medioDeCobro,
   MONEDA_BASE,
@@ -98,7 +100,7 @@ export async function iniciarCobro(
     mail, pide otro, y termina pagando los dos. Devolver esa plata es un trámite
     manual con la pasarela.
   */
-  const existente = await linkReutilizable(cliente, p)
+  const existente = await linkReutilizable(cliente, p, proveedor.nombre)
   if (existente) return existente
 
   /* ── 1. La moneda y la cotización, congeladas ── */
@@ -146,7 +148,14 @@ export async function iniciarCobro(
     .single()
 
   if (eInsert || !fila) {
-    console.error(`[cobro] no se pudo registrar el pago pendiente: ${eInsert?.message}`)
+    // Va a `errores` y no sólo a stdout: acá se cae el cobro antes de mandar al
+    // huésped a la pasarela, así que es una venta que no se concreta y alguien
+    // del hotel tiene que poder verlo sin abrir la consola de Vercel (ADR 0029).
+    await registrarError('cobro_pendiente_no_registrado', {
+      reservaId: p.reservaId,
+      proveedor: p.proveedor,
+      detalle: eInsert?.message,
+    })
     return { error: 'No se pudo registrar el cobro. Probá de nuevo en un momento.' }
   }
 
@@ -201,18 +210,36 @@ export async function iniciarCobro(
 /**
  * El link vivo que ya existe para este saldo, si lo hay.
  *
- * «Vivo» es: mismo tipo de pago, todavía `pendiente`, sin vencer y con URL
- * guardada. Cualquier otra cosa no sirve para mandar de nuevo.
+ * «Vivo» es: **mismo medio de pago**, mismo tipo, todavía `pendiente`, sin vencer
+ * y con URL guardada. Cualquier otra cosa no sirve para mandar de nuevo.
+ *
+ * ⚠️ **El filtro por `medio` no es una optimización: sin él se manda a pagar por
+ * la pasarela equivocada.** (Auditoría 2026-09, P1-5.) Cada medio cobra en su
+ * moneda —Stripe en dólares, MercadoPago en pesos (`MEDIOS_DE_COBRO`)— así que un
+ * huésped que había abierto el link de Stripe y después elige «pesos con
+ * MercadoPago» recibía de vuelta **el link de Stripe, en dólares**. Elegir el
+ * medio es justamente lo que el catálogo le ofrece decidir, y el sistema le
+ * devolvía el otro sin decir nada.
+ *
+ * ⚠️⚠️ El filtro va sobre `proveedor.nombre` y **no** sobre `ParamsCobro.proveedor`.
+ * No es lo mismo: el simulador se elige como `simulado` y registra sus pagos como
+ * `tarjeta`, porque el enum de la base no tiene un valor «simulado» (ver
+ * `nombreClave` en `lib/payments/index.ts`). Filtrar por la clave de configuración
+ * no encontraría nunca su propio link y crearía uno nuevo en cada intento — que es
+ * exactamente el cobro doble que esta función existe para evitar.
  */
 async function linkReutilizable(
   cliente: Cliente,
   p: ParamsCobro,
+  medio: string,
 ): Promise<ResultadoCobro | null> {
   const { data, error } = await cliente
     .from('pagos')
     .select('external_id, url_pago, vence_en, monto')
     .eq('reserva_id', p.reservaId)
     .eq('tipo', p.tipo)
+    // `pagos.medio` guarda `proveedor.nombre` (ver el `insert` de arriba).
+    .eq('medio', medio)
     .eq('estado', 'pendiente')
     .order('creado_en', { ascending: false })
     .limit(5)
@@ -228,9 +255,16 @@ async function linkReutilizable(
   for (const fila of data ?? []) {
     if (!fila.url_pago) continue
     if (!linkVigente(fila.vence_en, ahora)) continue
-    // Si el saldo cambió —se cargaron consumos— el link viejo cobra de menos y
-    // no sirve. Se deja vencer y se crea uno por el importe correcto.
-    if (Math.abs(Number(fila.monto) - p.montoUSD) > 0.01) continue
+    /*
+      Si el saldo cambió —se cargaron consumos— el link viejo cobra de menos y no
+      sirve. Se deja vencer y se crea uno por el importe correcto.
+
+      Va por `coincideElImporte`, que compara centavos enteros, y no por
+      `Math.abs(a - b) > 0.01`: esa forma hereda el error de coma flotante que
+      quiere evitar (`145.21 - 145.20` da `0.010000000000019`). Es la misma razón
+      por la que existe el helper, documentada en `lib/domain/cobro.ts`.
+    */
+    if (!coincideElImporte(Number(fila.monto), p.montoUSD)) continue
     return { url: fila.url_pago, externalId: fila.external_id, reutilizado: true }
   }
   return null

@@ -12,6 +12,10 @@ import {
   ETIQUETAS_ORIGEN,
   ETIQUETAS_CONCILIACION,
   ESTADOS_CONCILIACION,
+  DESCRIPCION_CONCILIACION,
+  MENSAJES_NO_CONCILIAR,
+  motivoNoConciliar,
+  type MotivoNoConciliar,
 } from '@/lib/domain/canales-costos'
 
 describe('costos de canal · devengo de la comisión', () => {
@@ -210,5 +214,61 @@ describe('costos de canal · los catálogos están completos', () => {
     for (const c of CONCEPTOS_CARGO) expect(ETIQUETAS_CONCEPTO[c]).toBeTruthy()
     for (const o of ORIGENES_CARGO) expect(ETIQUETAS_ORIGEN[o]).toBeTruthy()
     for (const e of ESTADOS_CONCILIACION) expect(ETIQUETAS_CONCILIACION[e]).toBeTruthy()
+  })
+
+  it('cada estado de conciliación explica qué significa', () => {
+    // Quien tiene que elegir uno necesita saber qué está declarando: «en disputa»
+    // abre un reclamo contra el canal, no es un rótulo interno.
+    for (const e of ESTADOS_CONCILIACION) expect(DESCRIPCION_CONCILIACION[e]).toBeTruthy()
+  })
+})
+
+/**
+ * Cerrar la conciliación de un cargo (auditoría 2026-09, P1-4; migración 0079).
+ *
+ * El defecto que cierra: `estado_conciliacion` existía desde la 0049 con sus tres
+ * valores, su índice y su columna en pantalla, y **ninguna parte de la aplicación
+ * lo escribía**. Todos los cargos quedaban «devengado» para siempre, así que cada
+ * mes había que volver a revisar lo ya revisado.
+ */
+describe('costos de canal · mover el estado de conciliación', () => {
+  const caso = (over: Partial<Parameters<typeof motivoNoConciliar>[0]> = {}) =>
+    motivoNoConciliar({ actual: 'devengado', nuevo: 'conciliado', nota: '', ...over })
+
+  it('cerrar una revisión sin diferencias no pide explicación', () => {
+    expect(caso()).toBeNull()
+  })
+
+  it('disputar SÍ exige escribir por qué', () => {
+    // Una disputa sin motivo es un reclamo que nadie puede sostener meses después,
+    // cuando el canal conteste. La base lo impone también (0079).
+    expect(caso({ nuevo: 'en_disputa' })).toBe('motivo_corto')
+    expect(caso({ nuevo: 'en_disputa', nota: '   x  ' })).toBe('motivo_corto')
+    expect(caso({ nuevo: 'en_disputa', nota: 'La comisión no coincide.' })).toBeNull()
+  })
+
+  it('un estado inventado se rechaza', () => {
+    expect(caso({ nuevo: 'aprobado' })).toBe('estado')
+  })
+
+  it('no se guarda un cambio que no cambia nada', () => {
+    expect(caso({ actual: 'conciliado' })).toBe('sin_cambio')
+  })
+
+  it('se puede volver atrás desde cualquier estado', () => {
+    /*
+      No hay máquina de estados, y es a propósito: los tres valores describen en qué
+      punto de la revisión está el cargo, no una secuencia irreversible. Un cargo
+      conciliado por error tiene que poder volver a disputa cuando aparece la
+      liquidación que lo desmiente.
+    */
+    expect(caso({ actual: 'conciliado', nuevo: 'devengado' })).toBeNull()
+    expect(caso({ actual: 'conciliado', nuevo: 'en_disputa', nota: 'apareció la liquidación' })).toBeNull()
+    expect(caso({ actual: 'en_disputa', nuevo: 'conciliado' })).toBeNull()
+  })
+
+  it('todos los motivos tienen mensaje', () => {
+    const motivos: MotivoNoConciliar[] = ['estado', 'sin_cambio', 'motivo_corto']
+    for (const m of motivos) expect(MENSAJES_NO_CONCILIAR[m], `falta el mensaje de ${m}`).toBeTruthy()
   })
 })

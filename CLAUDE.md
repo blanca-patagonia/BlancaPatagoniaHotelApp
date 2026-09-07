@@ -214,9 +214,15 @@ Tarifario 2025/2026 (Anexo A).
   mienta**, porque sus fuentes son públicas y sin credenciales. El respaldo de
   divisas es `manual` (no inventa: usa lo que un admin cargó) y el de canales es
   `simulado` (ése sí no habla con nadie).
+  **El octavo es `ExtractoProvider`** (`lib/conciliacion/`, ADR 0030) y rompe el
+  patrón a propósito: **no tiene variable de entorno**. No se elige una fuente —el
+  hotel usa el banco y MercadoPago a la vez, como `PAGO_PROVIDER`— y su respaldo
+  (`archivo`) no es un simulador sino la implementación real y única para un banco
+  sin API. Se arma con `fuentesDeExtracto()`; MercadoPago se suma solo si hay
+  `MERCADOPAGO_ACCESS_TOKEN`, que es el mismo del cobro.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 29 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 32 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -236,7 +242,74 @@ Tarifario 2025/2026 (Anexo A).
   pantallas autenticadas, sin escrituras diferidas y con el interruptor de apagado
   escrito antes de encender · **ADR 0029** los errores del servidor se guardan en
   una tabla de Postgres (`errores`, migración 0068), no en un tercero: los datos de
-  huéspedes no salen del sistema y el hotel no depende de mirar el log de Vercel.
+  huéspedes no salen del sistema y el hotel no depende de mirar el log de Vercel ·
+  **ADR 0030** conciliación: el extracto del banco entra por archivo (**no se raspa
+  el home banking**), MercadoPago por su API de liquidaciones —el **neto**, no el
+  bruto—, y **sólo la referencia de la pasarela concilia sola** · **ADR 0031** una
+  factura recibida se carga leyendo su **QR obligatorio**, no con OCR · **ADR 0032**
+  el lado saliente del canal: el ARI **se calcula aunque no salga**, y el cron
+  responde 200 cuando el proveedor no puede publicar.
+- **Fiscal — la parte sin certificado (Bloque D, 2026-09-07).**
+  `lib/domain/wsfev1.ts` traduce el comprobante al formato de ARCA, y la migración
+  **0082** guarda los datos del **emisor**. ⚠️ Cuatro cosas antes de tocarlo:
+  1. **El CUIT del hotel no estaba en ninguna tabla** hasta la 0082, y bloqueaba
+     tanto la solicitud de CAE como el aviso de «esta factura no es para el hotel»
+     del escaneo (0080). La tabla es de **una sola fila, impuesta por la base**, y
+     **no se siembra**: un CUIT inventado haría creer que ya está configurado.
+  2. **Consumidor final es `DocTipo = 99` con `DocNro = 0`.** Hay documentación de
+     terceros que dice `5` y es incorrecta.
+  3. **Una estadía es `Concepto = 2` (servicios)**, y eso vuelve obligatorias
+     `FchServDesde`, `FchServHasta` y `FchVtoPago`.
+  4. **La base imponible es el neto MENOS lo exento** (ADR 0024), y la moneda es
+     `PES`/`DOL`, no ISO 4217 — con `MonId != PES`, `MonCotiz` no puede ser 1.
+  ⚠️ **`facturas` YA tenía columna `moneda`** desde la 0010 (la auditoría decía que
+  no). Lo que falta es la conversión a pesos para ARCA, que es del contador.
+- **Publicación al canal (Bloque E, 2026-09-07).** `lib/domain/ari.ts` +
+  `lib/canales/ari.ts` + migración **0081** (`canal_tipos`) + `/api/cron/ari`.
+  ⚠️ Cuatro cosas antes de tocarlo:
+  1. **Esto NO evita el overbooking hoy**, y la pantalla lo dice ARRIBA de la
+     tabla. Con el proveedor real (iCal) el envío responde `noSoportado`. **No
+     quitar esa advertencia**: la solución es contratar un channel manager.
+     ⚠️ El proveedor **simulado** declara `publicaDisponibilidad: true` a propósito
+     —para poder ejercitar las pantallas—, así que en desarrollo el circuito
+     publica y en producción no. No concluir mirando local que ya funciona.
+  2. **El cron devuelve 200 cuando no se puede publicar.** Con 500 quedaría en rojo
+     para siempre —es la situación normal— y un fallo real se perdería entre el
+     ruido. El cuerpo lleva `noSoportado` para que el 200 no se lea como éxito.
+  3. **Se publica `precio_rack` CON IVA.** Neto es tarifa de agencia (ADR 0004) y
+     publicarlo rompe la paridad tarifaria; sin IVA anuncia menos de lo que cobra.
+  4. **Un día sin tarifa NO se publica.** Publicar `0` es publicar una noche
+     gratis: es el «USD 0» de la Fase 18. Se omite y se cuenta en `sinPrecio`.
+- **Comprobantes recibidos (objetivo 9, 2026-09-07).**
+  `/panel/proveedores/comprobantes`, migración **0080**. ⚠️ Cuatro cosas antes de
+  tocarlo:
+  1. **Se lee el QR, NO se hace OCR** (ADR 0031). El OCR adivina: un `8` leído como
+     `3` en el importe da una factura plausible y equivocada que nadie revisa,
+     porque el sistema «ya la cargó». El QR trae lo que el emisor le informó a ARCA.
+  2. **La imagen no viaja ni se guarda.** `BarcodeDetector` decodifica en el
+     navegador y al servidor llega sólo el texto. Guardar fotos de facturas es el
+     ADR 0013 (Storage, retención, permisos) y no está hecho.
+  3. **`moneda` del QR NO es ISO 4217**: `PES` y `DOL` son códigos de ARCA. Se
+     traducen en `lib/domain/comprobante-qr.ts`, en un solo lugar.
+  4. **Una nota de crédito se imputa como PAGO, no como cargo** (códigos 3, 8, 13,
+     53). Devuelve plata; cargarla como un gasto más infla lo que el hotel debe.
+- **Conciliación y gastos (Bloque C, 2026-09-07).** Área nueva `/panel/conciliacion`
+  (admin y gerencia). Migraciones **0077** (`movimientos_externos`), **0078**
+  (moneda real en cuentas corrientes) y **0079** (cerrar la conciliación del canal).
+  ⚠️ Tres cosas antes de tocarlo:
+  1. **`movimientos_externos.monto` va CON SIGNO** y no hay columna `tipo`. Un
+     `tipo` aparte obliga a recordar el signo en cada suma, y ése es el error que
+     aparece después como un total que no cierra.
+  2. **`movimientos_cuenta.monto` y `movimientos_proveedor.monto` están SIEMPRE en
+     USD**, igual que `pagos` (ADR 0027). El importe del comprobante va en
+     `monto_origen` + `moneda` + `cotizacion`, y la 0078 tiene los `check`. Antes
+     ninguna acción escribía `moneda`: una factura de ARS 185.000 entraba como
+     USD 185.000. **Las cuentas corrientes anteriores al 2026-09-07 hay que
+     revisarlas contra el papel** — no hay backfill posible.
+  3. **Coincidir en importe y fecha NO alcanza para conciliar solo.** Dos huéspedes
+     que pagan la misma seña el mismo día es lo más común del mundo, y casarlo mal
+     deja a uno impago y al otro pagado sin haber pagado. Sólo cierra sola la
+     referencia de la pasarela, y sólo si es única.
 - **Auditoría técnica — Fases 1 a 5 (2026-09-01).** Cinco riesgos de una auditoría
   externa, verificados ejecutando y no leyendo. **F1** `hoyISO()` calculaba «hoy» en
   UTC y el hotel está en UTC−3: bug activo cada noche (housekeeping, punto de venta,
