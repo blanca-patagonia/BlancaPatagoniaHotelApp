@@ -11,7 +11,7 @@ export const SEPARADOR = ';'
 const INICIO_FORMULA = ['=', '+', '-', '@', '\t', '\r']
 
 /**
- * Un número decimal escrito entero, con su signo opcional y nada más.
+ * Un número negativo escrito entero: el `-`, dígitos, y nada más.
  *
  * ── Por qué hace falta la excepción ─────────────────────────────────────────
  *
@@ -23,10 +23,11 @@ const INICIO_FORMULA = ['=', '+', '-', '@', '\t', '\r']
  * positivos entran y los negativos, que son justamente los que corrigen, no.
  * Y el error es del tipo que no se ve —el total da un número, solo que otro—.
  *
- * La condición es deliberadamente estricta: dígitos, un punto decimal y a lo
- * sumo un `-` al principio. `-2+3` no pasa (sigue escapándose), `+50` tampoco,
- * ni la notación científica, ni un tabulador —que `Number('\t')` convertiría en
- * `0` si esto se hubiera escrito con `Number.isFinite`—.
+ * El `-` es obligatorio, no opcional: un número positivo no empieza con ninguno
+ * de los caracteres de `INICIO_FORMULA`, así que nunca llega hasta acá. La
+ * condición es estricta a propósito y todo lo demás se sigue escapando: `-2+3`,
+ * `-1e9`, `+50`, `=-5`, y un tabulador —que es la razón de no escribir esto con
+ * `Number`, que convertiría `'\t'` en `0` y lo dejaría pasar como «número»—.
  */
 const NUMERO_LLANO = /^-\d+(\.\d+)?$/
 
