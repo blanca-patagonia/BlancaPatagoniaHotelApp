@@ -255,7 +255,11 @@ describe('Stripe · webhook', () => {
       monto: 100,
       moneda: 'USD',
       descripcion: 'Seña',
-      urls: { exito: 'https://h.local/ok', error: 'https://h.local/err' },
+      urls: {
+        exito: 'https://h.local/ok',
+        error: 'https://h.local/err',
+        pendiente: 'https://h.local/pendiente',
+      },
       venceEn: new Date(Date.now() + 3600_000),
     })
 
