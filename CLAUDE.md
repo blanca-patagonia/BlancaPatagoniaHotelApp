@@ -249,6 +249,14 @@ Tarifario 2025/2026 (Anexo A).
   factura recibida se carga leyendo su **QR obligatorio**, no con OCR · **ADR 0032**
   el lado saliente del canal: el ARI **se calcula aunque no salga**, y el cron
   responde 200 cuando el proveedor no puede publicar.
+- ⚠️ **El precio de la estadía y el total de la reserva se escriben JUNTOS**, con
+  `aplicar_precio_reserva` (0085). Reprogramar y recotizar por mudanza lo hacían
+  con dos `update` sueltos, y si el segundo fallaba el total contradecía a la
+  estadía: la reserva quedaba con el precio de las fechas viejas, o facturando la
+  unidad anterior. **No volver a escribir `reservas.total` a mano** en esos
+  flujos. ⚠️ La función es `security invoker` y comprueba `FOUND` después de CADA
+  `update`: sin eso, un RLS que bloquee la escritura afecta cero filas, **no
+  lanza**, y la función devolvería «listo» sin haber hecho nada.
 - ⚠️ **`crear_reserva` recibe `p_agencia_id` desde la 0084.** El vínculo con la
   agencia va DENTRO de la función atómica: antes se guardaba con un `update`
   aparte y un fallo ahí dejaba una reserva de agencia sin agencia —sin saber a

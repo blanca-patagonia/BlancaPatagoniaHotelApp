@@ -1417,20 +1417,29 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   const noches = diasEntre(checkIn, checkOut)
   const precioNoche = noches > 0 ? Number((cot.resumen.totalNeto / noches).toFixed(2)) : 0
 
-  const { error } = await supabase
-    .from('estadias')
-    .update({ periodo: `[${checkIn},${checkOut})`, precio_noche: precioNoche })
-    .eq('id', estadia.id)
-  if (error) {
-    redirect(`/panel/reservas/${id}?error=${error.code === '23P01' ? 'overlap' : 'repro'}`)
+  /*
+    Las fechas, el precio por noche y el total, en UNA transacción (0085).
+
+    Antes eran dos `update` sueltos, y el comentario que estaba acá lo admitía:
+    «las fechas ya se movieron; si el total no se actualiza, la reserva queda con
+    el precio de las fechas viejas». Eso no se ve —la reserva figura normal en la
+    grilla— y se descubre al facturar, cuando ya hay comprobante emitido.
+  */
+  const { data: aplicado, error } = await supabase.rpc('aplicar_precio_reserva', {
+    p_reserva_id: id,
+    p_precio_noche: precioNoche,
+    p_total: cot.resumen.total,
+    p_check_in: checkIn,
+    p_check_out: checkOut,
+  })
+  if (error) redirect(`/panel/reservas/${id}?error=repro`)
+
+  const r = aplicado as { ok: boolean; motivo?: string } | null
+  if (!r?.ok) {
+    // `ocupada` es la restricción de exclusión rechazando el período nuevo: no es
+    // una falla del sistema, es el anti-overbooking funcionando (ADR 0002).
+    redirect(`/panel/reservas/${id}?error=${r?.motivo === 'ocupada' ? 'overlap' : 'repro'}`)
   }
-  const { error: eTotal } = await supabase
-    .from('reservas')
-    .update({ total: cot.resumen.total })
-    .eq('id', id)
-  // Las fechas ya se movieron. Si el total no se actualiza, la reserva queda con
-  // el precio de las fechas viejas: hay que decirlo, no es un detalle.
-  cortarSiFalla(eTotal, `/panel/reservas/${id}`, 'total')
   redirect(`/panel/reservas/${id}`)
 }
 
@@ -1511,18 +1520,27 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
     if (!cot.faltanTarifas) {
       const noches = diasEntre(desde, hasta)
       const precioNoche = noches > 0 ? Number((cot.resumen.totalNeto / noches).toFixed(2)) : 0
-      const { error: ePrecio } = await supabase
-        .from('estadias')
-        .update({ precio_noche: precioNoche })
-        .eq('reserva_id', id)
-      cortarSiFalla(ePrecio, `/panel/reservas/${id}`, 'total')
-      const { error: eTotalMudanza } = await supabase
-        .from('reservas')
-        .update({ total: cot.resumen.total })
-        .eq('id', id)
-      // La mudanza ya se hizo. Si el precio no se recotiza, la reserva queda
-      // facturando la unidad anterior.
-      cortarSiFalla(eTotalMudanza, `/panel/reservas/${id}`, 'total')
+
+      /*
+        El precio y el total, en una sola transacción (0085).
+
+        Eran dos `update` sueltos y el comentario lo admitía: «si el precio no se
+        recotiza, la reserva queda facturando la unidad anterior». Ahora o se
+        aplican los dos o no se aplica ninguno.
+
+        ⚠️ Esto NO mete la recotización dentro de la mudanza, y es a propósito: esa
+        decisión está tomada más arriba —el huésped ya está mudado, que es lo
+        urgente, y revertir una mudanza por un problema de tarifa sería peor—.
+        Lo que cambia es que la recotización dejó de poder quedar a medias.
+      */
+      const { data: recotizado, error: eRecotizar } = await supabase.rpc(
+        'aplicar_precio_reserva',
+        { p_reserva_id: id, p_precio_noche: precioNoche, p_total: cot.resumen.total },
+      )
+      cortarSiFalla(eRecotizar, `/panel/reservas/${id}`, 'total')
+      if (!(recotizado as { ok: boolean } | null)?.ok) {
+        cortarSiFalla({ message: 'no se pudo recotizar' }, `/panel/reservas/${id}`, 'total')
+      }
     } else {
       redirect(`/panel/reservas/${id}?error=tarifa_destino`)
     }
