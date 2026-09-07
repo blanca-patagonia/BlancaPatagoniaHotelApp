@@ -130,6 +130,14 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // Misma línea que `facturas`: la ve quien factura. Housekeeping no.
   notas_credito: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
 
+  // ── Datos fiscales del hotel (migración 0082) ──
+  //
+  // Lo lee todo el staff y lo escribe sólo admin. Que lo lea todo el staff es
+  // deliberado: son los datos impresos en la factura que recepción le entrega al
+  // huésped, y el CUIT de una empresa es público. La restricción real está en la
+  // escritura, que la cubre `rls-escritura-por-rol`.
+  datos_fiscales: { todos: 'si' },
+
   // ── Comprobantes recibidos (migración 0080) ──
   //
   // Misma línea que `movimientos_proveedor`: lo lee todo el staff y lo gestionan

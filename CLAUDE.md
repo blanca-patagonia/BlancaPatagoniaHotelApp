@@ -249,6 +249,21 @@ Tarifario 2025/2026 (Anexo A).
   factura recibida se carga leyendo su **QR obligatorio**, no con OCR · **ADR 0032**
   el lado saliente del canal: el ARI **se calcula aunque no salga**, y el cron
   responde 200 cuando el proveedor no puede publicar.
+- **Fiscal — la parte sin certificado (Bloque D, 2026-09-07).**
+  `lib/domain/wsfev1.ts` traduce el comprobante al formato de ARCA, y la migración
+  **0082** guarda los datos del **emisor**. ⚠️ Cuatro cosas antes de tocarlo:
+  1. **El CUIT del hotel no estaba en ninguna tabla** hasta la 0082, y bloqueaba
+     tanto la solicitud de CAE como el aviso de «esta factura no es para el hotel»
+     del escaneo (0080). La tabla es de **una sola fila, impuesta por la base**, y
+     **no se siembra**: un CUIT inventado haría creer que ya está configurado.
+  2. **Consumidor final es `DocTipo = 99` con `DocNro = 0`.** Hay documentación de
+     terceros que dice `5` y es incorrecta.
+  3. **Una estadía es `Concepto = 2` (servicios)**, y eso vuelve obligatorias
+     `FchServDesde`, `FchServHasta` y `FchVtoPago`.
+  4. **La base imponible es el neto MENOS lo exento** (ADR 0024), y la moneda es
+     `PES`/`DOL`, no ISO 4217 — con `MonId != PES`, `MonCotiz` no puede ser 1.
+  ⚠️ **`facturas` YA tenía columna `moneda`** desde la 0010 (la auditoría decía que
+  no). Lo que falta es la conversión a pesos para ARCA, que es del contador.
 - **Publicación al canal (Bloque E, 2026-09-07).** `lib/domain/ari.ts` +
   `lib/canales/ari.ts` + migración **0081** (`canal_tipos`) + `/api/cron/ari`.
   ⚠️ Cuatro cosas antes de tocarlo:

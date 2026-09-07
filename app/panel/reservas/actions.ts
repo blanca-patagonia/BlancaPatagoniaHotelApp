@@ -27,11 +27,14 @@ import {
   motivoNoFacturable,
   motivoNoAcreditar,
   desglosarIva,
+  discriminaIva,
   type CondicionIva,
   type TipoComprobante,
 } from '@/lib/domain/facturacion'
 import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
+import { datosFiscales } from '@/lib/facturacion/emisor'
+import { armarComprobante, MENSAJES_NO_ARMABLE } from '@/lib/domain/wsfev1'
 import { obtenerProveedor } from '@/lib/payments'
 import { iniciarCobro, falloElCobro } from '@/lib/payments/servicio'
 import { estadoDeCobro } from '@/lib/reservas/cobro'
@@ -851,7 +854,10 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   const { data: reserva, error: eReserva } = await supabase
     .from('reservas')
     .select(
-      'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior)',
+      // `estadias(check_in, check_out)`: WSFEv1 exige el período facturado en un
+      // comprobante de servicios, y una estadía lo es. Son columnas GENERADAS
+      // desde `periodo` (migración 0037), así que no pueden desincronizarse.
+      'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior), estadias(check_in, check_out)',
     )
     .eq('id', reservaId)
     .single()
@@ -981,6 +987,54 @@ export async function emitirFactura(formData: FormData): Promise<void> {
 
   const siguiente = numeracion.numero
 
+  /*
+    El comprobante en formato ARCA.
+
+    Se arma **acá y no en el adapter** para que cada implementación tenga que
+    serializar y no decidir: las reglas de WSFEv1 son condicionales —una estadía
+    es un servicio y entonces las fechas del período son obligatorias, la nota de
+    crédito lleva otro código y el comprobante asociado, la base imponible es el
+    neto menos lo exento— y repetirlas en cada adapter es repetir el error.
+
+    `motivo` no corta la emisión. Hoy el CAE es simulado y el circuito interno
+    tiene que poder seguir aunque falte, por ejemplo, el CUIT del hotel: cortar
+    ahí dejaría al sistema sin poder facturar por un dato que sólo hace falta para
+    una integración que todavía no existe. Se registra y se sigue.
+  */
+  const emisor = await datosFiscales(supabase)
+  const periodo = (reserva.estadias ?? []) as { check_in: string; check_out: string }[]
+  const { comprobante, motivo: motivoComprobante } = armarComprobante({
+    cuitEmisor: emisor?.cuit ?? null,
+    tipo,
+    esNotaCredito: false,
+    puntoVenta: PUNTO_VENTA,
+    numero: siguiente,
+    fecha: hoyISO(),
+    total: desglose.total,
+    neto: desglose.neto,
+    exento: desglose.exento,
+    iva: desglose.iva,
+    alicuota: desglose.alicuota,
+    discriminaIva: discriminaIva(tipo),
+    cuitReceptor: cuitLimpio,
+    condicionReceptor: receptor.condicion,
+    // `facturas.total` está en USD, igual que `reservas.total`. La conversión a
+    // pesos para ARCA es parte del adapter real y de una decisión del contador;
+    // hoy se declara la moneda que efectivamente tiene el importe.
+    moneda: 'USD',
+    cotizacion: null,
+    tieneProductos: consumos.length > 0,
+    servicioDesde: periodo[0]?.check_in ?? null,
+    servicioHasta: periodo[0]?.check_out ?? null,
+  })
+
+  if (motivoComprobante) {
+    registrarFalla(
+      { message: `${motivoComprobante}: ${MENSAJES_NO_ARMABLE[motivoComprobante]}` },
+      `armar el comprobante ARCA de la reserva ${reservaId}`,
+    )
+  }
+
   const proveedor = obtenerProveedorFacturacion()
   const resultado = await proveedor.solicitarCae({
     tipo,
@@ -995,6 +1049,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     condicionReceptor: receptor.condicion,
     cuitReceptor: cuitLimpio,
     fecha: hoyISO(),
+    comprobante,
   })
 
   if (!resultado.ok) redirect(`/panel/reservas/${reservaId}?error=cae`)

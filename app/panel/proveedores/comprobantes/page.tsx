@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { datosFiscales } from '@/lib/facturacion/emisor'
 import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda } from '@/lib/listados'
 import { formatoFechaCorta } from '@/lib/fechas'
 import { importe } from '@/lib/domain/moneda'
@@ -138,6 +139,10 @@ export default async function ComprobantesPage({
       .limit(300),
   ])
 
+  // El CUIT del hotel, para poder avisar si una factura escaneada no es suya.
+  // `null` cuando todavía no se cargó: ver el comentario del `EscanearComprobante`.
+  const emisor = await datosFiscales(supabase)
+
   const comprobantes = (data ?? []) as unknown as ComprobanteRow[]
   const total = count ?? 0
   const proveedores = (proveedoresData ?? []) as { id: string; nombre: string }[]
@@ -206,13 +211,14 @@ export default async function ComprobantesPage({
             className="overflow-hidden p-0"
           >
             {/*
-              El CUIT del hotel todavía no está en ninguna tabla —es parte del
-              Bloque D fiscal, que necesita decisiones del contador—, así que va
-              `null` y la advertencia «esta factura no es para el hotel» queda
-              apagada. No se inventa un CUIT para encenderla: un aviso construido
-              sobre un dato inventado es peor que no tener aviso.
+              El CUIT del hotel sale de `datos_fiscales` (migración 0082).
+
+              Cuando todavía no está cargado va `null` y la advertencia «esta
+              factura no es para el hotel» queda **apagada**, no aproximada: un
+              aviso construido sobre un dato inventado es peor que no tener aviso.
+              La pantalla de configuración dice que falta cargarlo.
             */}
-            <EscanearComprobante proveedores={proveedores} cuitHotel={null} />
+            <EscanearComprobante proveedores={proveedores} cuitHotel={emisor?.cuit ?? null} />
           </Tarjeta>
 
           <Tarjeta

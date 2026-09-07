@@ -389,8 +389,23 @@ Tres cosas que salieron distintas de lo planificado, y por qué:
 - **La conciliación NO se cierra sola salvo por referencia exacta.** Está explicado
   en el ADR 0030 §4; es la decisión de diseño más importante del bloque.
 
-**Bloque D — fiscal** · notas de crédito (0083), campos de `SolicitudCae`, moneda en
-`facturas`, adapter WSAA/WSFEv1. **Requiere certificado y decisiones del contador.**
+**Bloque D — fiscal** · 🟡 **la parte de dominio, hecha.** Notas de crédito
+(**0076**), los campos que faltaban en `SolicitudCae` —resueltos con
+`lib/domain/wsfev1.ts`, que arma el comprobante entero— y los datos del **emisor**
+(**0082**), que no estaban en ninguna tabla.
+
+⚠️ Dos correcciones a lo que decía este documento:
+
+- **`facturas` SÍ tenía columna `moneda`** desde la migración 0010, con default
+  `'USD'`. El defecto era el mismo de P1-3 —nadie la escribía— y en este caso el
+  default resultaba correcto, porque `reservas.total` está en USD. Lo que falta de
+  verdad es la conversión a pesos para ARCA, que es decisión del contador.
+- **El CUIT del hotel no existía en ninguna parte.** No estaba en la lista de
+  pendientes y bloqueaba dos cosas: la solicitud de CAE y el aviso de «esta
+  factura no es para el hotel» del escaneo (0080).
+
+**Sigue faltando el certificado y el adapter WSAA/WSFEv1**, más las decisiones del
+contador sobre moneda de emisión y alícuotas.
 
 **Bloque E — canales bidireccional** · cableado ARI de salida, mapeo en base, adapter
 de channel manager. **Requiere contratar el channel manager.**

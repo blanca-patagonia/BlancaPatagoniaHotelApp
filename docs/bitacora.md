@@ -4292,3 +4292,84 @@ equivalencia una vez.
   emita.
 
 **Verificación:** typecheck 0 · lint 0 · build 0 · 1378 tests puros en verde.
+
+---
+
+## 2026-09-07 — Bloque D: lo fiscal que se puede hacer sin certificado
+
+**Resumen:** `SolicitudCae` llevaba lo mínimo para que el simulador devolviera
+catorce dígitos —tipo, punto de venta, número, total, neto, IVA y CUIT del
+receptor—. **Le faltaba casi todo lo que WSFEv1 exige de verdad.** Escribir eso el
+día que llegue el certificado, contra una API que rechaza el comprobante entero por
+un campo y no dice cuál, es la peor forma de descubrir estas reglas.
+
+### `lib/domain/wsfev1.ts` — la traducción, pura y probada
+
+Las tres trampas del formato, **verificadas contra el manual oficial y no de
+memoria**:
+
+1. **Una estadía es un SERVICIO** (`Concepto = 2`), y con Concepto 2 o 3 son
+   obligatorios `FchServDesde`, `FchServHasta` y `FchVtoPago`. Mandarlo como
+   producto para «simplificar» hace que el comprobante de un hotel declare algo que
+   no es, y omitir esas fechas lo hace rechazar.
+2. **El consumidor final es `DocTipo = 99` con `DocNro = 0`.** ⚠️ Una de las
+   fuentes que consulté decía **5**, y es incorrecta. Verificarlo contra el manual
+   es lo que evita que el primer comprobante real se rechace — y es exactamente el
+   tipo de dato que no se puede tomar del primer resultado de una búsqueda.
+3. **La moneda es `PES`/`DOL`, no ISO 4217.** Y con `MonId` distinto de `PES`,
+   `MonCotiz` es obligatorio y **no puede ser 1**: eso declararía que el dólar vale
+   un peso.
+
+Más tres reglas que salen del propio sistema:
+
+- **La base imponible es el neto MENOS lo exento.** Acá `exento` es un subconjunto
+  de `neto` y no un sumando (ADR 0024, `check` de la 0058). Mandar el neto entero
+  declararía IVA sobre una porción que la ley exime.
+- **Una alícuota que ARCA no conoce se omite**, no se aproxima a la más cercana: un
+  comprobante sin discriminar es visiblemente incorrecto; uno con la alícuota
+  parecida es sutilmente falso, que es peor.
+- **`cierraElTotal`** valida `ImpTotal = ImpTotConc + ImpNeto + ImpOpEx + ImpIVA +
+  ImpTrib`, que es lo que ARCA verifica y rechaza sin decir cuál de los cinco está
+  mal.
+
+27 tests. El comprobante viaja **armado** dentro de `SolicitudCae`: así el adapter
+real sólo tiene que serializar. Si además tuviera que decidir, cada implementación
+repetiría las mismas reglas y la que se equivoque lo haría contra ARCA.
+
+### Migración 0082 — el CUIT del hotel no estaba en ninguna tabla
+
+Suena increíble en un sistema que emite facturas, y sin embargo era así: `facturas`
+guarda el CUIT del **receptor**, y el emisor nunca hizo falta porque el CAE es
+simulado. **No estaba en la lista de pendientes de nadie.**
+
+Bloqueaba dos cosas concretas:
+
+1. WSFEv1 exige el CUIT del emisor en cada solicitud.
+2. El aviso de «esta factura no es para el hotel» al escanear un comprobante
+   recibido (objetivo 9) no tenía contra qué comparar. Quedó escrito y **apagado**;
+   ahora se enciende solo cuando el dato existe.
+
+Tabla de **una sola fila, impuesta por la base** (`id boolean primary key check
+(id)`): con dos, el sistema elegiría una al azar y el comprobante saldría a nombre
+de quien toque. **No se siembra con datos de ejemplo**: un CUIT inventado sería
+peor que la tabla vacía —el sistema arrancaría creyendo que ya está configurado—.
+
+La pantalla de Configuración lo carga, sólo admin, y **valida el dígito
+verificador** y no sólo la longitud: once dígitos cualesquiera pasan el `check` de
+la base y hacen rechazar todos los comprobantes con un error que no dice que el
+CUIT esté mal.
+
+### Dos correcciones a la auditoría
+
+- **`facturas` SÍ tenía columna `moneda`** desde la 0010, con default `'USD'`. El
+  documento decía que no. El defecto real era el mismo de P1-3 —nadie la
+  escribía— y acá el default resultaba correcto, porque `reservas.total` está en
+  USD. Lo que falta de verdad es la conversión a pesos para ARCA, que es decisión
+  del contador.
+- **El CUIT del emisor** no figuraba como pendiente y era bloqueante.
+
+**Lo que sigue faltando, y no se puede hacer desde el código:** el certificado
+fiscal, el adapter WSAA/WSFEv1, y las decisiones del contador sobre moneda de
+emisión y alícuotas.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1405 tests puros en verde.
