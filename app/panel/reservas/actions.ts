@@ -25,7 +25,10 @@ import {
   normalizarCuit,
   exigeCuitReceptor,
   motivoNoFacturable,
+  motivoNoAcreditar,
+  desglosarIva,
   type CondicionIva,
+  type TipoComprobante,
 } from '@/lib/domain/facturacion'
 import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
@@ -1066,6 +1069,132 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   cortarSiFalla(eFactura, `/panel/reservas/${reservaId}`, 'factura')
 
   redirect(`/panel/reservas/${reservaId}/factura`)
+}
+
+/**
+ * Emite una nota de crédito sobre la factura de una reserva (migración 0076).
+ *
+ * ── Por qué hacía falta ─────────────────────────────────────────────────────
+ *
+ * `facturas` es inmutable (0034) y hay una sola por reserva (0045): sin notas de
+ * crédito, **una factura mal emitida no tenía ningún camino de corrección**. Con
+ * el simulador es un inconveniente; con CAE real el comprobante ya está informado
+ * a ARCA y la única forma de revertirlo es ésta.
+ *
+ * ── Qué garantiza la base y qué se comprueba acá ────────────────────────────
+ *
+ * Las dos reglas duras —la letra la hereda de la factura, y la suma de las notas
+ * no puede superar el total— viven en triggers (0076), porque dos emisiones
+ * simultáneas leerían el mismo acumulado y las dos pasarían una comprobación
+ * hecha en la aplicación. Acá se comprueba lo mismo **antes** para poder decirlo
+ * en pantalla en vez de mostrar un error de Postgres.
+ */
+export async function emitirNotaCredito(formData: FormData): Promise<void> {
+  const sesion = await requerirAcceso('reservas')
+  const reservaId = String(formData.get('reserva_id') ?? '')
+  if (!reservaId) redirect('/panel/reservas')
+
+  const monto = Number(formData.get('monto') ?? 0)
+  const motivo = String(formData.get('motivo') ?? '').trim()
+  const destino = `/panel/reservas/${reservaId}/factura`
+
+  const supabase = await crearClienteServidor()
+
+  const { data: factura, error: eFactura } = await supabase
+    .from('facturas')
+    .select('id, total, cae, tipo_comprobante, punto_venta')
+    .eq('reserva_id', reservaId)
+    .maybeSingle<{
+      id: string
+      total: number
+      cae: string | null
+      tipo_comprobante: TipoComprobante | null
+      punto_venta: number | null
+    }>()
+
+  cortarSiFalla(eFactura, destino, 'lectura_factura')
+
+  const { data: previas, error: ePrevias } = await supabase
+    .from('notas_credito')
+    .select('total')
+    .eq('factura_id', factura?.id ?? '00000000-0000-0000-0000-000000000000')
+
+  cortarSiFalla(ePrevias, destino, 'lectura_notas')
+
+  const yaAcreditado = ((previas ?? []) as { total: number }[]).reduce(
+    (a, n) => a + Number(n.total),
+    0,
+  )
+
+  const impedimento = motivoNoAcreditar({
+    factura: factura ? { total: Number(factura.total), cae: factura.cae } : null,
+    yaAcreditado,
+    monto,
+    motivo,
+  })
+  if (impedimento) redirect(`${destino}?error=${impedimento}`)
+
+  const puntoVenta = factura!.punto_venta ?? PUNTO_VENTA
+  // La letra la hereda: no se elige. Si la factura es vieja y no la tiene, se cae
+  // a `B`, que es el comprobante al consumidor final.
+  const tipo: TipoComprobante = factura!.tipo_comprobante ?? 'B'
+
+  const { data: numero, error: eNumero } = await supabase.rpc(
+    'siguiente_numero_nota_credito',
+    { p_punto_venta: puntoVenta },
+  )
+  if (eNumero || numero == null) {
+    registrarFalla(eNumero, `pedir el número de nota de crédito de la reserva ${reservaId}`)
+    redirect(`${destino}?error=numeracion_nc`)
+  }
+  const siguiente = Number(numero)
+
+  // El IVA de la nota se calcula sobre el importe a acreditar con la misma
+  // alícuota del comprobante original: acreditar un neto distinto del que se
+  // facturó dejaría el IVA descalzado.
+  const desglose = desglosarIva(monto, ALICUOTA)
+
+  const proveedor = obtenerProveedorFacturacion()
+  const resultado = await proveedor.solicitarCae({
+    tipo,
+    puntoVenta,
+    numero: siguiente,
+    total: monto,
+    neto: desglose.neto,
+    iva: desglose.iva,
+    condicionReceptor: 'consumidor_final',
+    fecha: hoyISO(),
+    // ⚠️ Sin esto, un adapter real de WSFEv1 emitiría una FACTURA por el importe
+    // que se quería devolver: en ARCA las notas de crédito son otros códigos de
+    // comprobante (3, 8 y 13) y tienen que informar el comprobante asociado.
+    esNotaCredito: true,
+    numeroAsociado: siguiente,
+  })
+
+  if (!resultado.ok) redirect(`${destino}?error=cae`)
+
+  const { error: eNota } = await supabase.from('notas_credito').insert({
+    factura_id: factura!.id,
+    tipo_comprobante: tipo,
+    punto_venta: puntoVenta,
+    total: monto,
+    neto: desglose.neto,
+    iva: desglose.iva,
+    alicuota_iva: ALICUOTA,
+    motivo,
+    numero_fiscal: numeroComprobante(puntoVenta, siguiente),
+    cae: resultado.cae,
+    cae_vto: resultado.caeVto,
+    cae_solicitado_en: new Date().toISOString(),
+    emitida_por: sesion?.userId ?? null,
+  })
+
+  // Mismo punto caro que en `emitirFactura`: acá ya se pidió el CAE y ya se
+  // consumió el correlativo. Si el insert se pierde en silencio queda un CAE
+  // emitido sin nota, y el hueco de correlatividad es una obligación formal.
+  cortarSiFalla(eNota, destino, 'nota_credito')
+
+  redirect(`${destino}?ok=nota_credito`)
 }
 
 export interface EstadoReservaGrupal {

@@ -217,3 +217,69 @@ export function motivoNoFacturable(
 export function puedeFacturarse(estado: string, yaTieneFactura = false): boolean {
   return motivoNoFacturable(estado, yaTieneFactura) === null
 }
+
+/* ────────────────────────────────────────────────── notas de crédito ──── */
+
+/**
+ * Reglas de la nota de crédito (migración 0076).
+ *
+ * ── Por qué existe ──────────────────────────────────────────────────────────
+ *
+ * `facturas` es inmutable (0034) y hay una sola por reserva (0045): la nota de
+ * crédito es el **único** camino para corregir un comprobante mal emitido. Con el
+ * simulador eso es un inconveniente; con CAE real, un problema fiscal.
+ *
+ * Las reglas duras —la letra la hereda de la factura y no se puede acreditar más
+ * de lo facturado— viven en la base, en los triggers de la 0076, porque dos
+ * emisiones simultáneas leerían el mismo acumulado y las dos pasarían una
+ * comprobación hecha en la aplicación. Acá está lo que hace falta para **decirlo
+ * en pantalla antes** de intentarlo.
+ */
+
+export const MOTIVO_NC_MINIMO = 5
+
+export type MotivoNoAcreditar =
+  | 'sin_factura'
+  | 'sin_cae'
+  | 'importe'
+  | 'excede'
+  | 'motivo_corto'
+
+export const MENSAJES_NO_ACREDITAR: Record<MotivoNoAcreditar, string> = {
+  sin_factura: 'Esta reserva no tiene factura emitida: no hay nada que acreditar.',
+  sin_cae:
+    'La factura todavía no tiene CAE. Sin comprobante autorizado no corresponde una nota de crédito.',
+  importe: 'El importe de la nota de crédito tiene que ser mayor que cero.',
+  excede:
+    'No se puede acreditar más de lo facturado: revisá el importe contra lo que queda sin acreditar.',
+  motivo_corto: 'Escribí el motivo de la nota de crédito: sin eso no se puede reconstruir después.',
+}
+
+/** Cuánto queda por acreditar de una factura. Nunca negativo. */
+export function saldoAcreditable(totalFactura: number, yaAcreditado: number): number {
+  const resto = totalFactura - yaAcreditado
+  return resto > 0 ? Math.round((resto + Number.EPSILON) * 100) / 100 : 0
+}
+
+/**
+ * Por qué NO se puede emitir esta nota de crédito. `null` = se puede.
+ *
+ * Devuelve un motivo y no un booleano por lo mismo de siempre en este proyecto:
+ * quien está en el mostrador necesita saber **qué** corregir, no que «no se
+ * pudo».
+ */
+export function motivoNoAcreditar(p: {
+  factura: { total: number; cae?: string | null } | null
+  yaAcreditado: number
+  monto: number
+  motivo: string
+}): MotivoNoAcreditar | null {
+  if (!p.factura) return 'sin_factura'
+  // Sin CAE el comprobante no llegó a ARCA: no hay qué revertir. Con el simulador
+  // el CAE existe igual, así que esto no estorba la demostración.
+  if (!p.factura.cae) return 'sin_cae'
+  if (!(p.monto > 0)) return 'importe'
+  if (p.motivo.trim().length < MOTIVO_NC_MINIMO) return 'motivo_corto'
+  if (p.monto > saldoAcreditable(p.factura.total, p.yaAcreditado) + 0.001) return 'excede'
+  return null
+}

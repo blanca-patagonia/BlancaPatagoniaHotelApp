@@ -126,6 +126,10 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // no: lleva el email del huésped y el enlace con su token.
   notificaciones: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
 
+  // ── Notas de crédito (migración 0076) ──
+  // Misma línea que `facturas`: la ve quien factura. Housekeeping no.
+  notas_credito: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+
   // ── Numeración de comprobantes (migración 0069) ──
   // Sigue la línea de `facturas` desde la 0045: no lleva importes, pero sí qué
   // reserva se quedó con qué número de comprobante, que es información fiscal.
@@ -413,6 +417,35 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar notificaciones: ${error.message}`)
 
       sembradas.push({ tabla: 'notificaciones', columna: 'clave', valor: clave })
+    }
+
+    /*
+      ── notas_credito (migración 0076) ────────────────────────────────────────
+
+      Nace vacía y su caso negativo (housekeeping) pasaría por eso. Cuelga de una
+      factura, así que se siembra una si no hay: los triggers de la 0076 exigen
+      que la letra siga a la factura y que no se acredite de más.
+    */
+    if ((await contar('notas_credito')) === 0) {
+      const reservaId = await reservaParaSembrar()
+
+      const { data: fac } = await admin
+        .from('facturas')
+        .select('id, total, tipo_comprobante')
+        .eq('reserva_id', reservaId)
+        .maybeSingle<{ id: string; total: number; tipo_comprobante: string | null }>()
+
+      if (fac) {
+        const { error } = await admin.from('notas_credito').insert({
+          factura_id: fac.id,
+          tipo_comprobante: fac.tipo_comprobante ?? 'B',
+          total: 0.01,
+          motivo: `auditoria rls ${sufijo}`,
+        })
+        if (error) throw new Error(`No se pudo sembrar notas_credito: ${error.message}`)
+
+        sembradas.push({ tabla: 'notas_credito', columna: 'motivo', valor: `auditoria rls ${sufijo}` })
+      }
     }
 
     // ── canal_config ──────────────────────────────────────────────────────────

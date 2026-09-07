@@ -36,6 +36,21 @@ export interface SolicitudCae {
   /** CUIT del receptor; obligatorio en comprobantes A. */
   cuitReceptor?: string | null
   fecha: string
+  /**
+   * `true` cuando el comprobante es una **nota de crédito** (migración 0076).
+   *
+   * No es un detalle de presentación: en WSFEv1 el tipo de comprobante es un
+   * código distinto —3, 8 y 13 para las notas de crédito A, B y C, contra 1, 6 y
+   * 11 de las facturas—, y además la nota tiene que informar el comprobante que
+   * asocia. Un adapter real que ignore esta bandera emitiría una **factura** por
+   * el importe que se quería devolver: el error más caro posible acá.
+   *
+   * El simulador no la usa más que para el rastro, pero el campo existe para que
+   * el día que se enchufe ARCA el dato ya esté llegando.
+   */
+  esNotaCredito?: boolean
+  /** Número de la factura que la nota corrige. Sólo con `esNotaCredito`. */
+  numeroAsociado?: number | null
 }
 
 export interface ResultadoCae {
