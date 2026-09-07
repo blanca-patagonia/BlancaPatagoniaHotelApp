@@ -11,7 +11,7 @@ import {
   type CondicionIva,
   type TipoComprobante,
 } from '@/lib/domain/facturacion'
-import { hoyISO } from '@/lib/fechas'
+import { fechaHotel, hoyISO } from '@/lib/fechas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { BotonImprimir } from './boton-imprimir'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
@@ -381,7 +381,7 @@ export default async function FacturaPage({
                       {n.numero_fiscal ?? n.numero}
                     </span>
                     <span className="ml-2 text-xs text-stone-500">
-                      {new Date(n.emitida_en).toLocaleDateString('es-AR')}
+                      {fechaHotel(n.emitida_en)}
                     </span>
                     <span className="mt-0.5 block text-xs break-words text-stone-600">
                       {n.motivo}

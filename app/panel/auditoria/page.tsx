@@ -20,6 +20,7 @@ import {
   botonClases,
   type Tono,
 } from '../_components/ui'
+import { fechaHoraHotel } from '@/lib/fechas'
 
 /** Tablas auditadas (las que tienen trigger en la migración 0020). */
 const TABLAS = ['pagos', 'tarifas', 'reservas'] as const
@@ -176,7 +177,7 @@ export default async function AuditoriaPage({
                   return (
                     <tr key={r.id} className={FILA}>
                       <td className={`${TD} tabular whitespace-nowrap text-stone-500`}>
-                        {new Date(r.creado_en).toLocaleString('es-AR')}
+                        {fechaHoraHotel(r.creado_en)}
                       </td>
                       <td className={`${TD} text-stone-700`}>
                         {r.usuario_id ? (nombres.get(r.usuario_id) ?? 'Usuario dado de baja') : 'Sistema'}

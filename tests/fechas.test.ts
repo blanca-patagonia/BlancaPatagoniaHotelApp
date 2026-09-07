@@ -8,6 +8,9 @@ import {
   nochesEnVentana,
   inicioFinDeMes,
   hoyISO,
+  fechaHotel,
+  fechaHoraHotel,
+  horaHotel,
   ZONA_HOTEL,
 } from '@/lib/fechas'
 
@@ -83,6 +86,69 @@ describe('utilidades de fecha', () => {
 
     it('devuelve el formato ISO que espera el resto del módulo', () => {
       expect(hoyISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    })
+  })
+
+  describe('mostrar un instante (fechaHotel · fechaHoraHotel · horaHotel)', () => {
+    /*
+      El mismo error que arregló `hoyISO`, del lado de lo que se muestra.
+
+      Catorce pantallas hacían `new Date(iso).toLocaleDateString('es-AR')` sin
+      zona, así que tomaban la del proceso: UTC en Vercel. Entre las 21:00 y la
+      medianoche de El Calafate eso corre la fecha un día para adelante, y toda
+      hora tres horas. Donde aparecía no era decorativo: la fecha de firma de un
+      contrato, la de emisión de una nota de crédito y el registro de auditoría.
+
+      Estos tests fallan con la implementación vieja: `toLocaleDateString` sin
+      `timeZone` en un runner en UTC devuelve el 31.
+    */
+
+    // 00:30 UTC del 31 = 21:30 del 30 en El Calafate.
+    const deNoche = new Date('2026-08-31T00:30:00Z')
+
+    it('una fecha de la noche se muestra con el día del hotel, no el de UTC', () => {
+      expect(fechaHotel(deNoche)).toBe('30/8/2026')
+    })
+
+    it('acepta un ISO igual que un Date', () => {
+      expect(fechaHotel('2026-08-31T00:30:00Z')).toBe('30/8/2026')
+    })
+
+    it('deja pasar las opciones de formato sin perder la zona', () => {
+      // Con la zona del proceso (UTC) diría 31.
+      expect(fechaHotel(deNoche, { day: '2-digit', month: 'short', year: 'numeric' })).toBe(
+        '30 de ago de 2026',
+      )
+    })
+
+    it('la fecha y hora juntas también van en la hora del hotel', () => {
+      expect(fechaHoraHotel(deNoche)).toBe('30/8/2026, 21:30:00')
+    })
+
+    it('la hora sola se corre las tres horas que corresponde', () => {
+      expect(horaHotel(deNoche, { hour: '2-digit', minute: '2-digit' })).toBe('21:30')
+    })
+
+    it('la hora se dice en 24 horas y nunca queda ambigua', () => {
+      // El ICU de Node formatea `es-AR` en 12 horas y `toLocaleString` no le
+      // pone el a. m. / p. m.: las 21:30 salían como «09:30:00», idénticas a las
+      // 9 de la mañana. En la auditoría y en el registro de errores eso vuelve
+      // inservible el único dato que importa.
+      const deManiana = new Date('2026-08-30T12:30:00Z') // 09:30 en el hotel
+      expect(fechaHoraHotel(deManiana)).toBe('30/8/2026, 09:30:00')
+      expect(fechaHoraHotel(deNoche)).not.toBe(fechaHoraHotel(deManiana))
+      expect(horaHotel(deNoche)).toBe('21:30:00')
+    })
+
+    it('no depende de la zona del proceso', () => {
+      // Misma comprobación que la de `hoyISO`: se compara contra la zona
+      // declarada, que es la única fuente.
+      const ahora = new Date()
+      expect(fechaHotel(ahora)).toBe(ahora.toLocaleDateString('es-AR', { timeZone: ZONA_HOTEL }))
+    })
+
+    it('de día, cuando UTC y el hotel coinciden, no cambia nada', () => {
+      expect(fechaHotel(new Date('2026-08-30T15:00:00Z'))).toBe('30/8/2026')
     })
   })
 

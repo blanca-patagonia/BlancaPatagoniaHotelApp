@@ -173,7 +173,7 @@ lo pedido ya estaba; lo que faltaba se abordó así:
       inmutables, 51 Server Actions con verificación de rol, firma HMAC real en el
       webhook y simuladores que fallan fuerte en producción (ADR 0018).
       Migraciones `0032`–`0035`, **aplicadas y verificadas contra Postgres**
-- [x] Matriz de **lectura** RLS exhaustiva: 43 tablas × 4 roles
+- [x] Matriz de **lectura** RLS exhaustiva: 51 tablas × 4 roles
       (`tests/rls-por-rol.test.ts`), con la lista traída de la base para que una
       tabla nueva sin declarar haga fallar el test
 - [ ] Matriz de **escritura** RLS: hoy es dirigida (20 casos elegidos por

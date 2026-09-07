@@ -46,6 +46,65 @@ export function hoyISO(fecha: Date = new Date()): string {
   return `${parte('year')}-${parte('month')}-${parte('day')}`
 }
 
+/**
+ * Formatea un **instante** (`timestamptz`) para mostrarlo, siempre en la hora del
+ * hotel.
+ *
+ * ── El mismo error que arregló `hoyISO`, del otro lado ──────────────────────
+ *
+ * `hoyISO` corrigió la fecha con la que el sistema **opera**. Esto corrige la
+ * que el sistema **muestra**. Eran catorce pantallas escribiendo
+ * `new Date(iso).toLocaleDateString('es-AR')`, que no lleva zona: usa la del
+ * proceso. En Vercel el proceso corre en UTC y el hotel está en UTC−3, así que
+ * todo lo ocurrido entre las 21:00 y la medianoche de El Calafate se mostraba
+ * **con la fecha del día siguiente**, y toda hora, tres horas adelantada.
+ *
+ * No es un detalle cosmético en las pantallas donde aparecía: la fecha de firma
+ * de un contrato, la de emisión de una nota de crédito y el registro de
+ * auditoría son, las tres, constancias de cuándo pasó algo.
+ *
+ * Había además una inconsistencia visible: `conversaciones/page.tsx` pinta la
+ * lista en el servidor (UTC) y `chat.tsx` es un componente de cliente, que usaba
+ * la zona del navegador (la del hotel). El mismo mensaje mostraba dos horas
+ * distintas según qué lo dibujara. Fijar la zona hace que coincidan.
+ *
+ * `es-AR` da `dd/mm/aaaa`, que es como se escribe una fecha en la Argentina.
+ */
+export function fechaHotel(iso: string | Date, opciones?: Intl.DateTimeFormatOptions): string {
+  return new Date(iso).toLocaleDateString('es-AR', { timeZone: ZONA_HOTEL, ...opciones })
+}
+
+/**
+ * Reloj de 24 horas, que es como se dice la hora en la Argentina.
+ *
+ * ── Por qué se fija en vez de dejar el default del locale ───────────────────
+ *
+ * El ICU de Node formatea `es-AR` en 12 horas, y ahí aparece un problema peor
+ * que el de la zona: `toLocaleString('es-AR')` devuelve `«30/8/2026, 09:30:00»`
+ * **sin ningún indicador de a. m. / p. m.**. Esa hora es ambigua: 09:30 de la
+ * mañana y 21:30 de la noche se escriben igual.
+ *
+ * Donde se muestra —auditoría, registro de errores, respaldos, conversaciones—
+ * la hora es el dato. Un registro de auditoría en el que no se puede distinguir
+ * la mañana de la noche no sirve para lo que existe. Con `h23` se lee `21:30`,
+ * que además es lo que espera cualquiera acá.
+ */
+const RELOJ_24: Intl.DateTimeFormatOptions = { hourCycle: 'h23' }
+
+/** Fecha y hora de un instante, en la hora del hotel. */
+export function fechaHoraHotel(iso: string | Date): string {
+  return new Date(iso).toLocaleString('es-AR', { timeZone: ZONA_HOTEL, ...RELOJ_24 })
+}
+
+/** Solo la hora de un instante, en la hora del hotel. */
+export function horaHotel(iso: string | Date, opciones?: Intl.DateTimeFormatOptions): string {
+  return new Date(iso).toLocaleTimeString('es-AR', {
+    timeZone: ZONA_HOTEL,
+    ...RELOJ_24,
+    ...opciones,
+  })
+}
+
 export interface Periodo {
   desde: string
   hasta: string

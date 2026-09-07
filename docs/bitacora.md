@@ -4373,3 +4373,103 @@ fiscal, el adapter WSAA/WSFEv1, y las decisiones del contador sobre moneda de
 emisión y alícuotas.
 
 **Verificación:** typecheck 0 · lint 0 · build 0 · 1405 tests puros en verde.
+
+---
+
+## 2026-09-07 — Auditoría completa del repositorio: tres defectos de los que no avisan
+
+**Resumen:** auditoría de todo el proyecto sobre el último estado de `main`
+(0775398, 82 migraciones, 51 tablas, 118 archivos de test). La mayor parte del
+recorrido **no encontró nada**, y eso también es un resultado: se deja anotado
+qué se verificó, para no volver a recorrerlo desde cero. Lo que sí apareció
+fueron tres defectos que comparten una característica —**ninguno rompe nada
+visiblemente**—, más el arreglo de un fallo silencioso en el seed.
+
+### Lo que se verificó y estaba bien
+
+Se comprueba mecánicamente y se lee el resultado, que es donde estuvo el trabajo:
+varios de estos «hallazgos» eran del detector, no del código.
+
+- **Escrituras que descartan el error:** **0**. La regla de la Fase 20 sigue
+  valiendo en las 82 migraciones y en todas las Server Actions.
+- **RLS:** las **51** tablas la tienen activada. De las 113 `create policy` del
+  historial, las 4 permisivas (`using (true)`) alcanzables por `anon` son las del
+  catálogo, que es lo que la web pública necesita leer. **Ninguna política de
+  escritura** admite un rol nulo: todas pasan por `rol_actual()`.
+- **`perfiles: cada uno edita el suyo`** parecía habilitar el auto-ascenso a
+  `admin` —RLS filtra filas, no columnas—. Está cerrado en la capa correcta: la
+  migración 0066 revoca el UPDATE de tabla y regrana sólo `nombre` y `telefono`,
+  y `tests/mis-datos.test.ts` lo prueba.
+- **El `alter default privileges ... grant select ... to anon` de la 0006**
+  habría devuelto a `anon` la lectura de toda tabla creada después del blindaje
+  de la 0072. La 0072 lo revoca (línea 76) **y** las seis tablas nuevas
+  (0075-0082) revocan además explícitamente. Doble cobertura.
+- `redirect()` dentro de un `try`: los 555 usos están bien; todo `catch` que
+  puede recibirlo lo re-lanza.
+- Builders de PostgREST devueltos sin `await` (la trampa *thenable*): ninguno.
+- `dangerouslySetInnerHTML`: ninguno. Guardas de `CRON_SECRET`: fallan cerrado,
+  con comparación en tiempo constante y sin filtrar detalle en el 401.
+- La IP del limitador de tasa ya se toma sólo de encabezados de plataforma.
+- La inyección de fórmulas en CSV ya estaba neutralizada (ver abajo el reverso).
+
+### Los tres defectos
+
+**1 · La hora del hotel, del lado de lo que se muestra.** `hoyISO()` había
+arreglado la fecha con la que el sistema **opera**. Quedaban **14 pantallas**
+formateando instantes con `new Date(iso).toLocaleDateString('es-AR')`, sin
+`timeZone`: toman la del proceso, que en Vercel es UTC. Entre las 21:00 y la
+medianoche de El Calafate la fecha mostrada era **la del día siguiente**, y toda
+hora salía tres horas adelantada. Donde aparecía no era decorativo: la **fecha de
+firma de un contrato**, la de **emisión de una nota de crédito** y el **registro
+de auditoría**. Había además una inconsistencia a la vista: la lista de
+conversaciones se pinta en el servidor (UTC) y el chat es un componente de
+cliente (zona del navegador), así que el mismo mensaje mostraba dos horas
+distintas según qué lo dibujara.
+
+Al escribir el test apareció un **segundo defecto, peor, en el mismo código**: el
+ICU de Node formatea `es-AR` en 12 horas y `toLocaleString` **no le agrega el
+a. m. / p. m.**, así que las 21:30 se mostraban como `09:30:00`, idénticas a las
+9 de la mañana. Una auditoría en la que no se distingue la mañana de la noche no
+sirve para lo que existe.
+
+Se agregan `fechaHotel()`, `fechaHoraHotel()` y `horaHotel()` a `lib/fechas.ts`,
+que fijan `ZONA_HOTEL` y reloj de 24 horas, y se migran las 14 pantallas.
+
+**2 · Todo importe negativo llegaba a Excel como texto.** `escaparCampo()`
+antepone un apóstrofo a lo que empiece con `= + - @` para neutralizar la
+inyección de fórmulas. Correcto para `-2+3`; el problema es que **todo importe
+negativo empieza igual**: un saldo a favor, una nota de crédito, la diferencia
+contra la liquidación de un canal. Con el apóstrofo, Excel deja de verlos como
+números: en el archivo que se le manda al contador, la columna «Saldo» **suma
+sólo los positivos**. El error da un número, nada más que otro, y por eso no se
+ve. Se exceptúa el decimal escrito entero (`/^-\d+(\.\d+)?$/`), deliberadamente
+estricto: `-2+3`, `-1e9`, `+50` y el tabulador se siguen escapando —éste último
+es la razón de no escribirlo con `Number`, que convertiría `'\t'` en `0`—.
+
+**3 · «No hay unidades disponibles» cuando lo que falló fue la base.**
+`crearReservaEnUnidadLibre` descartaba el error de `unidades_disponibles`; el
+`?? []` lo convertía en «no encontré ninguna» y el sistema respondía con la misma
+frase que cuando el hotel está lleno de verdad. Las dos situaciones piden lo
+contrario —una es esperar, la otra reintentar— y llegan a gente que no puede
+distinguirlas: al huésped en `/reservar`, y a recepción en la zona de canales,
+donde el motivo queda escrito en la fila pendiente y manda a buscar un
+overbooking que nunca existió.
+
+### Además
+
+- **`scripts/seed-usuarios.mjs`** informaba éxito aunque
+  `auth.admin.updateUserById` fallara: el usuario quedaba con la contraseña vieja
+  y el mensaje decía que se había actualizado. Ahora corta con código de salida.
+- **`tests/limites.test.ts`** (nuevo): el límite de tasa es un control de
+  seguridad y no tenía un solo test. Nueve, incluido que el mensaje **no revele
+  el máximo** y que la ventana del iCal tolere las lecturas legítimas.
+- Números desactualizados en la documentación viva (README, CLAUDE.md, AGENTS.md,
+  roadmap, modelo de datos, tesis). Los informes con fecha **no se tocan**: dicen
+  lo que era cierto el día que se escribieron.
+
+**Decisiones:** las dos convenciones nuevas quedan en `CLAUDE.md` —formatear
+instantes sólo con los helpers de `lib/fechas.ts`, y la excepción numérica del
+CSV—, porque las dos son del tipo que se reintroduce sola.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · **1913 tests en verde**
+(118 archivos). Los tres arreglos fallan contra el código anterior.

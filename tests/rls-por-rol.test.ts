@@ -14,8 +14,8 @@ import type { Rol } from '@/lib/domain/roles'
  *
  * ── El pendiente que este archivo cierra ─────────────────────────────────────
  *
- * La auditoría de seguridad venía arrastrando este ítem: *«las ~75 políticas RLS
- * nunca se probaron rol por rol; que RLS esté activo en las 40 tablas no dice qué
+ * La auditoría de seguridad venía arrastrando este ítem: *«las 103 políticas RLS
+ * nunca se probaron rol por rol; que RLS esté activo en las 51 tablas no dice qué
  * permite cada política»*. Seguía abierto por una razón concreta: **ningún test se
  * autenticaba como un rol de staff**. `tests/db.ts` solo daba `service_role` (que
  * saltea RLS) y `anon` (el borde público, ya verificado).

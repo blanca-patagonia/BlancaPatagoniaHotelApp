@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import { fechaHoraHotel, fechaHotel, formatoFechaCorta, hoyISO } from '@/lib/fechas'
 import {
   ETIQUETAS_ESTADO_CONTRATO,
   ETIQUETAS_TIPO_CONTRATO,
@@ -172,7 +172,7 @@ export default async function DetalleContratoPage({
               <dt className="text-stone-500">Enviado</dt>
               <dd className="text-stone-800">
                 {contrato.fecha_envio
-                  ? new Date(contrato.fecha_envio).toLocaleDateString('es-AR')
+                  ? fechaHotel(contrato.fecha_envio)
                   : '—'}
               </dd>
             </div>
@@ -189,7 +189,7 @@ export default async function DetalleContratoPage({
               <div className="flex justify-between gap-3">
                 <dt className="text-stone-500">Fecha</dt>
                 <dd className="text-stone-800">
-                  {new Date(firma.fecha_firma).toLocaleString('es-AR')}
+                  {fechaHoraHotel(firma.fecha_firma)}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">

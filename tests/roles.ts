@@ -13,7 +13,7 @@ import type { Rol } from '@/lib/domain/roles'
  *
  * Lo que **nunca se pudo probar** es el borde *entre* roles de staff: que
  * housekeeping no lea el padrón de huéspedes, que recepción no toque la
- * configuración, que gerencia no cree usuarios. Las ~75 políticas RLS dicen cosas
+ * configuración, que gerencia no cree usuarios. Las 103 políticas RLS dicen cosas
  * como `rol_actual() in ('admin','gerencia','recepcion')`, y hasta acá nadie las
  * había ejecutado con un `rol_actual()` que devolviera algo distinto de `null`.
  *

@@ -11,6 +11,26 @@ export const SEPARADOR = ';'
 const INICIO_FORMULA = ['=', '+', '-', '@', '\t', '\r']
 
 /**
+ * Un número decimal escrito entero, con su signo opcional y nada más.
+ *
+ * ── Por qué hace falta la excepción ─────────────────────────────────────────
+ *
+ * El `-` está en `INICIO_FORMULA` porque `-2+3` es una fórmula. El problema es
+ * que **todo importe negativo empieza igual**: un saldo a favor, una nota de
+ * crédito, la diferencia contra la liquidación de un canal. Con el apóstrofo
+ * delante, Excel deja de verlos como números y los muestra como texto, así que
+ * la columna «Saldo» del archivo que se le manda al contador **suma mal**: los
+ * positivos entran y los negativos, que son justamente los que corrigen, no.
+ * Y el error es del tipo que no se ve —el total da un número, solo que otro—.
+ *
+ * La condición es deliberadamente estricta: dígitos, un punto decimal y a lo
+ * sumo un `-` al principio. `-2+3` no pasa (sigue escapándose), `+50` tampoco,
+ * ni la notación científica, ni un tabulador —que `Number('\t')` convertiría en
+ * `0` si esto se hubiera escrito con `Number.isFinite`—.
+ */
+const NUMERO_LLANO = /^-\d+(\.\d+)?$/
+
+/**
  * Escapa un valor para que sea un campo CSV seguro.
  *
  * Además del entrecomillado estándar, neutraliza la **inyección de fórmulas**:
@@ -21,7 +41,9 @@ export function escaparCampo(valor: unknown): string {
   if (valor === null || valor === undefined) return ''
   let texto = String(valor)
 
-  if (INICIO_FORMULA.some((c) => texto.startsWith(c))) texto = `'${texto}`
+  if (INICIO_FORMULA.some((c) => texto.startsWith(c)) && !NUMERO_LLANO.test(texto)) {
+    texto = `'${texto}`
+  }
 
   if (
     texto.includes(SEPARADOR) ||
