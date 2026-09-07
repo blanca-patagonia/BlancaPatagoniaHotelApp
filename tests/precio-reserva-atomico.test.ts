@@ -52,7 +52,25 @@ describe.skipIf(!hayDB)('precio y total, en una sola transacción', () => {
     await db.from('huespedes').delete().eq('id', huespedId)
   })
 
-  /** Crea una reserva en 2034, lejos de las de cualquier otro test. */
+  /*
+    Reparto de fechas dentro de mayo de 2034.
+
+    Todas las reservas de este archivo caen en la MISMA unidad —es la primera por
+    nombre— así que sus períodos no pueden pisarse entre sí o la restricción de
+    exclusión rechaza el alta. Cada caso tiene su tramo y están escritos acá para
+    que no se solapen por accidente al agregar uno nuevo:
+
+      [1,3)   reprogramación (después se mueve a [20,23))
+      [4,6)   recotización sin fechas
+      [8,10)  el ocupante del caso de choque
+      [12,14) el que intenta moverse encima de él
+      [16,18) período al revés
+      [25,27) media reprogramación
+      [28,30) importe negativo
+
+    Es lo que CI destapó: dos casos pedían el mismo tramo y el segundo fallaba en
+    el alta, no en lo que decía probar.
+  */
   async function crear(dia: number, total = 200) {
     const { data, error } = await db.rpc('crear_reserva', {
       p_huesped_id: huespedId,
@@ -113,7 +131,7 @@ describe.skipIf(!hayDB)('precio y total, en una sola transacción', () => {
   }, 60_000)
 
   it('sin fechas sólo recotiza, que es el caso de la mudanza', async () => {
-    const id = await crear(6)
+    const id = await crear(4)
     const antes = await leer(id)
 
     const { data } = await db.rpc('aplicar_precio_reserva', {
@@ -137,17 +155,17 @@ describe.skipIf(!hayDB)('precio y total, en una sola transacción', () => {
       fechas que no se pudieron mover: la reserva terminaba cobrando por un
       período que no ocupa.
     */
-    const ocupante = await crear(10)
-    const aMover = await crear(15)
+    const ocupante = await crear(8)
+    const aMover = await crear(12)
     const antes = await leer(aMover)
 
     const { data, error } = await db.rpc('aplicar_precio_reserva', {
       p_reserva_id: aMover,
       p_precio_noche: 999,
       p_total: 9999,
-      // Se pisa con la reserva de arriba, en la misma unidad.
-      p_check_in: '2034-05-10',
-      p_check_out: '2034-05-12',
+      // Exactamente el período del ocupante, en la misma unidad.
+      p_check_in: '2034-05-08',
+      p_check_out: '2034-05-10',
     })
 
     expect(error, error?.message).toBeNull()
@@ -163,11 +181,11 @@ describe.skipIf(!hayDB)('precio y total, en una sola transacción', () => {
     expect(despues.checkIn).toBe(antes.checkIn)
 
     // Y la reserva que ya estaba, intacta.
-    expect((await leer(ocupante)).checkIn).toBe('2034-05-10')
+    expect((await leer(ocupante)).checkIn).toBe('2034-05-08')
   }, 60_000)
 
   it('rechaza un período al revés sin tocar nada', async () => {
-    const id = await crear(25)
+    const id = await crear(16)
     const antes = await leer(id)
 
     const { data } = await db.rpc('aplicar_precio_reserva', {
@@ -183,7 +201,7 @@ describe.skipIf(!hayDB)('precio y total, en una sola transacción', () => {
   }, 60_000)
 
   it('media reprogramación no significa nada: las dos fechas van juntas', async () => {
-    const id = await crear(1, 200)
+    const id = await crear(25)
 
     const { data } = await db.rpc('aplicar_precio_reserva', {
       p_reserva_id: id,
@@ -196,7 +214,7 @@ describe.skipIf(!hayDB)('precio y total, en una sola transacción', () => {
   }, 60_000)
 
   it('un importe negativo se rechaza', async () => {
-    const id = await crear(1, 200)
+    const id = await crear(28)
 
     const { data: precio } = await db.rpc('aplicar_precio_reserva', {
       p_reserva_id: id,
