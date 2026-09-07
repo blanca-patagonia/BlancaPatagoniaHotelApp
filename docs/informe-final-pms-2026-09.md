@@ -3,18 +3,22 @@
 - **Fecha:** 2026-09-07
 - **Alcance:** los 11 objetivos del pedido, ejecutados sobre la auditoría de
   `docs/auditoria-pms-2026-09.md`.
-- **Verificación:** **1894 tests / 117 archivos / 0 salteados**, con las **82
+- **Verificación:** **1928 tests / 120 archivos / 0 salteados**, con las **85
   migraciones** aplicadas en orden, en CI (Docker + `EXIGIR_DB=1`). Lint 0,
   typecheck 0, build 0.
-- **Rama:** `fix/bloque-a-p0-auditoria` · PR #35.
+- **Mergeado en `main`:** PR #35 (los once objetivos), #37 y #38 (P1-7), #39 (P1-6).
 
 ---
 
 ## 1. Qué cambió, en una página
 
 Se cerraron **los 7 defectos P0** que perdían dinero o corrompían datos, los
-**bloques B, C, D y E** del plan, y **5 de los 7 P1**. Entraron **9 migraciones**
-(0074–0082) y **3 ADRs** (0030, 0031, 0032).
+**bloques B, C, D y E** del plan, y **los 8 P1**. Entraron **11 migraciones**
+(0074–0082, 0084 y 0085) y **3 ADRs** (0030, 0031, 0032).
+
+> **Con esto, todo lo que la auditoría marcó como corregible desde el código está
+> corregido.** Lo que queda abierto depende de una contratación, de un certificado
+> o de desplegar — está en las secciones 6 y 7.
 
 El sistema pasó de:
 
@@ -109,13 +113,19 @@ ejercitar las pantallas. **En desarrollo el circuito publica y en producción no
 | P1-4 | `estado_conciliacion` existía desde la 0049 y **nada lo escribía** |
 | P1-5 | El link de pago **cruzaba de pasarela**: quien elegía pesos recibía el de Stripe en dólares |
 | P1-6 | Los webhooks de pago reportaban en `console.error`, invisible para el hotel |
+| P1-7 | **9 flujos sin atomicidad.** La reserva de agencia quedaba sin agencia —sin saber a quién facturarle—; reprogramar y mudar dejaban el total contradiciendo a la estadía |
+| P1-8 | `purgar_errores` no estaba programado: `errores` crecía sin límite |
 
-### P1 que siguen abiertos
+### Lo único que quedó deliberadamente afuera
 
-- **P1-7 · atomicidad.** Nueve flujos de varios pasos donde, si falla el paso 3,
-  los datos quedan a medias. Está anotado en el código y resolverlo pide funciones
-  SQL transaccionales, una por flujo.
-- **El resto de los `console.*`** fuera del camino del dinero.
+- **El alta grupal no es atómica, y está bien así.** Un lote de 5 que consigue 3 es
+  un resultado útil, no una transacción a medias; está argumentado en
+  `crearReservaGrupal` desde antes de esta auditoría.
+- **Quedan 15 `console.*`**, en ocho archivos donde `console` es la respuesta
+  correcta: el chequeo de salud (el sink escribe en la misma base que vigila), los
+  *error boundaries* y la PWA (son cliente), el proveedor de correo «consola» (esa
+  ES su salida) y las caídas transitorias de la fuente de divisas. El test-contrato
+  **exige que cada excepción tenga su motivo escrito**.
 
 ---
 
@@ -202,6 +212,13 @@ los va a volver a pensar.
 | 0080 | Comprobantes recibidos |
 | 0081 | Mapeo de tipos por canal (P1-1) |
 | 0082 | Datos fiscales del hotel |
+| 0084 | La reserva de agencia nace con su agencia (P1-7) |
+| 0085 | Precio de la estadía y total, en una transacción (P1-7) |
+
+⚠️ La **0083** no es de este trabajo: es la de cancelación a los 14 días, del PR
+#36. La mía nació con ese número y hubo que renumerarla — dos migraciones con el
+mismo prefijo **no conviven**, Supabase da la segunda por aplicada y la saltea en
+silencio.
 
 **ADRs**
 
