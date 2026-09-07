@@ -139,7 +139,14 @@ const MENSAJES_ERROR: Record<string, string> = {
   // Escrituras que la base puede rechazar. Antes fallaban en silencio: la
   // pantalla recargaba igual y no había forma de saber que no se había guardado.
   estado: 'No se pudo guardar el estado nuevo. La reserva quedó como estaba.',
-  agencia: 'La reserva se creó, pero no se pudo vincular con la agencia. Asignala desde la ficha: de eso dependen la tarifa y la cuenta corriente.',
+  /*
+    El slug `agencia` se quitó con la migración 0084.
+
+    Existía para el caso «la reserva se creó pero no se pudo vincular con la
+    agencia», que era posible porque el vínculo se guardaba en un `update`
+    aparte. Ahora viaja dentro de `crear_reserva`, así que o se crean las dos
+    cosas o no se crea ninguna: el mensaje ya no puede ocurrir (P1-7).
+  */
   puntos: 'Se registró el check-out, pero no se pudieron acreditar los puntos de fidelidad. Cargalos a mano desde la ficha del huésped.',
   saldada: 'Se registró el pago, pero la reserva no quedó marcada como pagada. Revisá el estado antes de seguir.',
   consumo: 'No se pudo cargar el consumo. No se cobró ni se descontó del stock.',

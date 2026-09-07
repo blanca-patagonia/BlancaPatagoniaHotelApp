@@ -42,6 +42,17 @@ export interface ParamsReserva {
   /** «No mover»: el huésped pidió esta habitación en particular. */
   noMover?: boolean
 
+  /**
+   * Agencia con convenio, si la reserva es de una.
+   *
+   * Viaja acá y **no** en un `update` posterior (auditoría 2026-09, P1-7). No es
+   * un dato decorativo: decide a quién se le factura, qué tarifa corresponde
+   * —neto de agencia contra rack de mostrador, ADR 0004— y qué cuenta corriente
+   * se debita. Una reserva de agencia sin `agencia_id` es una estadía que el
+   * hotel presta y no le cobra a nadie.
+   */
+  agenciaId?: string | null
+
   /** Datos comerciales (paso 6). Todos opcionales, con los valores por omisión de la base. */
   comercial?: {
     plan?: Plan
@@ -156,6 +167,11 @@ export async function crearReservaEnUnidadLibre(
     p_subtotal: cot.resumen.subtotalNeto,
     p_total_neto: cot.resumen.totalNeto,
     p_iva: cot.resumen.iva,
+
+    // La agencia, en la MISMA transacción (migración 0084). Antes se vinculaba
+    // con un `update` aparte y un fallo ahí dejaba la reserva sin agencia: sin
+    // saber a quién facturarle ni qué cuenta corriente debitar.
+    p_agencia_id: p.agenciaId ?? null,
   })
   if (error) {
     if (error.code === '23P01') {
