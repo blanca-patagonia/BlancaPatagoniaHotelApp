@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/notificaciones",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/ari",
+      "schedule": "20 6 * * *"
     }
   ]
 }

@@ -39,9 +39,9 @@ configuración» **no tiene un solo llamador**, así que hoy esa promesa no se c
 
 | # | Objetivo | Veredicto |
 |---|---|---|
-| 1 | Integración con Booking y canales | 🔴 **Directa: imposible.** Vía channel manager: arquitectura lista a medias (falta el lado saliente) |
-| 2 | Prevención real de overbooking | 🟡 La garantía de la base es **sólida y sin agujeros**. El riesgo real entra por las OTAs de solo lectura, y por el bug P0-1 |
-| 3 | Sincronización de reservas/disponibilidad/tarifas/estados | 🔴 Solo entrada, solo reservas. Disponibilidad/tarifas/restricciones: **cero salida** |
+| 1 | Integración con Booking y canales | 🟡 **Directa: imposible** y no es de ingeniería (sección 3). Vía channel manager: **la arquitectura ya está completa del lado del sistema** (ADR 0032) — falta el adapter, que depende de contratarlo |
+| 2 | Prevención real de overbooking | 🟡 La garantía de la base es **sólida y sin agujeros**, y el bug P0-1 está corregido. **El riesgo residual sigue siendo el mismo y es una contratación**: sin channel manager, la OTA puede vender lo ya vendido (ADR 0021, ADR 0032) |
+| 3 | Sincronización de reservas/disponibilidad/tarifas/estados | 🟡 **Entrada completa; salida calculada y declarada** (ADR 0032). Cupo, tarifas, mínimo de noches y cierres se arman todos los días y se registran; hoy no salen porque el proveedor es de solo lectura, y la pantalla lo dice |
 | 4 | Análisis y conciliación de facturas | 🟢 **Cerrado (Bloque C, ADR 0030).** Comisiones de canal, conciliación bancaria y de pasarela, `estado_conciliacion` escribible con firma y motivo |
 | 5 | Registro y confirmación de pagos | 🟢 **Cerrado (Bloque A).** Cobro en línea real; reembolsos arreglados (P0-2), mostrador con idempotencia (P0-6) y el link de pago ya no cruza pasarelas (P1-5) |
 | 6 | Recordatorios automáticos | 🟢 **Cerrado (Bloque B).** Bandeja de salida con idempotencia, reintentos acotados, ventana horaria del hotel y consentimiento; adapter Resend real. **Falta contratar la cuenta de correo** |
@@ -198,7 +198,7 @@ código: hay que consultar `cron.job` contra la base.
 
 | | Defecto | Evidencia |
 |---|---|---|
-| **P1-1** | El puerto de salida ARI **no tiene llamadores**. `publicarDisponibilidad`, `interpretarWebhook` y `confirmarRecepcion` solo aparecen en `lib/canales/*` y sus tests. No hay ruta de webhook de canales | el ADR 0021 promete que enchufar un CM es configuración; hoy no lo es |
+| ~~**P1-1**~~ | 🟡 **el ARI ya tiene llamador (ADR 0032)** · Se calcula un año de cupo y tarifas, se llama a `publicarDisponibilidad` y la corrida queda registrada con `sentido='salida'`. Con los proveedores de hoy responde `noSoportado`, que es la verdad. **Queda sin llamador el webhook de canales** (`interpretarWebhook`, `confirmarRecepcion`): sin channel manager no hay quién lo emita | `lib/canales/ari.ts`, migración 0081 |
 | **P1-2** | **Cero notificaciones reales.** Único `EmailProvider`: `consola`. Sin registro de envíos, sin reintentos, sin idempotencia, sin consentimiento | `lib/email/index.ts:82` |
 | ~~**P1-3**~~ | ✅ **corregido (0078)** · `movimientos_cuenta` y `movimientos_proveedor` tenían columna `moneda` **que ninguna acción escribía**, y `saldoCuenta` suma sin mirarla | el mismo bug que la 0067 arregló en `pagos`, acá sin `check` |
 | ~~**P1-4**~~ | ✅ **corregido (0079)** · `estado_conciliacion` **solo se leía**; no había ninguna escritura de `conciliado`/`en_disputa` en toda la app | quedaba en `devengado` para siempre |

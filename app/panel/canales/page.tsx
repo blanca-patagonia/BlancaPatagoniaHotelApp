@@ -33,6 +33,8 @@ import {
   cargarMensaje,
   cargarResena,
   conciliarCargo,
+  guardarMapeoCanal,
+  publicarAhora,
   ignorarEntrante,
   importarUna,
   marcarMensajeAtendido,
@@ -87,13 +89,14 @@ function horasDesde(iso: string): number {
   return (Date.now() - Date.parse(iso)) / 3600000
 }
 
-const VISTAS = ['entrantes', 'cobros', 'costos', 'mensajes', 'resenas', 'calendario'] as const
+const VISTAS = ['entrantes', 'cobros', 'costos', 'publicacion', 'mensajes', 'resenas', 'calendario'] as const
 type Vista = (typeof VISTAS)[number]
 
 const ETIQUETAS_VISTA: Record<Vista, string> = {
   entrantes: 'Reservas entrantes',
   cobros: 'Cobros y conciliación',
   costos: 'Costos y comisión',
+  publicacion: 'Publicación al canal',
   mensajes: 'Mensajes y peticiones',
   resenas: 'Reseñas',
   calendario: 'Calendario para el canal',
@@ -154,6 +157,14 @@ const MENSAJES_ERROR: Record<string, string> = {
   conciliar_sin_cambio: MENSAJES_NO_CONCILIAR.sin_cambio,
   conciliar_motivo_corto: MENSAJES_NO_CONCILIAR.motivo_corto,
   conciliar: 'No se pudo guardar el estado de conciliación. El cargo quedó como estaba.',
+  mapeo_rol:
+    'Configurar la publicación al canal es de administración o gerencia: define cuánto inventario se le entrega a la OTA.',
+  mapeo_codigo: 'Escribí con qué código conoce el canal a ese tipo de unidad.',
+  mapeo_codigo_repetido:
+    'Ese código del canal ya está asignado a otro tipo de unidad. Si estuvieran repetidos, una reserva entrante caería en el tipo equivocado.',
+  mapeo_tope: 'El tope de cupo tiene que ser un número entero de cero o más.',
+  mapeo_minimo: 'El mínimo de noches tiene que ser un número entero de uno o más.',
+  mapeo: 'No se pudo guardar el mapeo. Quedó como estaba.',
   transf_referencia: 'Poné la referencia de la liquidación: es lo que evita registrar dos veces la misma transferencia.',
   transf_monto: 'El importe de la transferencia tiene que ser mayor que cero.',
   transf_lectura: 'No se pudo leer la reserva. Probá de nuevo.',
@@ -301,6 +312,8 @@ export default async function CanalesPage({
     { data: tiposData },
     { data: unidadesData },
     { data: configData },
+    { data: mapeosData },
+    { data: salidaData },
   ] = await Promise.all([
       consultaEntrantes,
       supabase
@@ -352,7 +365,25 @@ export default async function CanalesPage({
         .select('canal, ical_token, ical_leido_en')
         .eq('canal', 'booking')
         .maybeSingle(),
-    ])
+      /*
+      El mapeo de tipos por canal y la última corrida de SALIDA (migración 0081).
+
+      Van en el mismo `Promise.all` que el resto: son dos lecturas chicas y
+      encadenarlas sumaría un viaje a la base por una pantalla que ya hace ocho.
+    */
+    supabase
+      .from('canal_tipos')
+      .select('tipo_unidad_id, codigo_canal, tope_cupo, minimo_noches, cerrado')
+      .eq('canal', 'booking')
+      .eq('activo', true),
+    supabase
+      .from('canal_sincronizaciones')
+      .select('proveedor, leidas, actualizadas, rechazadas, detalle, corrida_en')
+      .eq('sentido', 'salida')
+      .order('corrida_en', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
 
   const entrantes = (entrantesData ?? []) as unknown as EntranteRow[]
 
@@ -485,6 +516,30 @@ export default async function CanalesPage({
   } | null
 
   const tiposUnidad = (tiposData ?? []) as { id: string; codigo: string; nombre: string }[]
+
+  /*
+    El mapeo, indexado por tipo para que la tabla no busque en un arreglo por cada
+    fila. Un tipo sin fila mapeada muestra su propio código como valor por
+    omisión: es lo más probable y ahorra escribirlo.
+  */
+  const mapeoPorTipo = new Map(
+    ((mapeosData ?? []) as {
+      tipo_unidad_id: string
+      codigo_canal: string
+      tope_cupo: number | null
+      minimo_noches: number | null
+      cerrado: boolean
+    }[]).map((m) => [m.tipo_unidad_id, m]),
+  )
+
+  const ultimaSalida = salidaData as {
+    proveedor: string
+    leidas: number
+    actualizadas: number
+    rechazadas: number
+    detalle: string
+    corrida_en: string
+  } | null
   const unidadesFeed = (unidadesData ?? []) as {
     id: string
     nombre: string
@@ -554,6 +609,18 @@ export default async function CanalesPage({
       {sp.ok === 'mensaje' && <Mensaje tono="ok">Mensaje guardado.</Mensaje>}
       {sp.ok === 'resena' && <Mensaje tono="ok">Reseña guardada.</Mensaje>}
       {sp.ok === 'respuesta' && <Mensaje tono="ok">Respuesta guardada.</Mensaje>}
+      {sp.ok === 'mapeo' && (
+        <Mensaje tono="ok">Guardado. Se usa para importar y para publicar.</Mensaje>
+      )}
+      {sp.ok === 'publicado' && (
+        <Mensaje tono="ok">Disponibilidad publicada. El detalle está más abajo.</Mensaje>
+      )}
+      {sp.ok === 'publicado_sin_efecto' && (
+        <Mensaje tono="ok">
+          Se calculó la disponibilidad y quedó registrada, pero no salió a ningún lado: el
+          proveedor configurado no puede publicarle al canal. El motivo está más abajo.
+        </Mensaje>
+      )}
       {sp.ok === 'conciliar' && (
         <Mensaje tono="ok">Estado de conciliación guardado, con tu nombre y la fecha.</Mensaje>
       )}
@@ -1738,6 +1805,181 @@ export default async function CanalesPage({
             </form>
             </Tarjeta>
           </div>
+        </div>
+      )}
+
+      {vista === 'publicacion' && (
+        <div className="space-y-4">
+          {/*
+            La advertencia va PRIMERO y no al final.
+
+            Alguien que entra a una pantalla titulada «Publicación al canal»
+            asume, con toda razón, que el sistema le está informando a Booking qué
+            queda libre. Hoy no lo hace: los dos caminos disponibles sin ser
+            Connectivity Partner son de solo lectura. Que eso se lea después de la
+            tabla sería dejar que se forme la conclusión equivocada primero.
+          */}
+          {!capacidades.publicaDisponibilidad && (
+            <div className="flex items-start gap-3 rounded-xl bg-lenga-50 px-4 py-3 ring-1 ring-lenga-200">
+              <span className="mt-0.5 shrink-0 text-lenga-700">
+                <Icono nombre="alerta" tam={18} />
+              </span>
+              <div className="text-sm text-lenga-900">
+                <p className="font-semibold">
+                  El proveedor configurado NO puede publicarle disponibilidad al canal.
+                </p>
+                <p className="mt-1 text-stone-700">
+                  Lo de acá abajo se calcula y se registra, pero no sale a ningún lado. Sirve para
+                  dos cosas concretas: que la importación resuelva bien los tipos aunque Booking
+                  les diga de otra forma, y que el día que el hotel contrate un{' '}
+                  <strong>channel manager</strong> lo único que falte sea enchufarlo. La
+                  sincronización en las dos direcciones es una contratación, no una decisión
+                  técnica.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <Tarjeta
+            titulo="Cómo llama el canal a cada tipo de unidad"
+            descripcion="Sirve para los dos sentidos: resolver una reserva entrante y armar lo que se publica."
+          >
+            <p className="mb-4 text-sm text-stone-600">
+              Booking puede llamar «DBL-LAGO» a lo que el sistema llama «DOBLE_VISTA». Hasta ahora
+              había que renombrar el tipo del hotel para que la importación funcionara; con esto se
+              anota la equivalencia una vez.
+            </p>
+
+            {tiposUnidad.length === 0 ? (
+              <EstadoVacio
+                titulo="No hay tipos de unidad activos"
+                descripcion="Cargá los tipos de unidad antes de mapearlos a un canal."
+                icono="ocupacion"
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <Tabla resumen="Tipos de unidad y su equivalencia en el canal, con el tope de cupo y las restricciones que se publican.">
+                  <thead>
+                    <tr className={FILA}>
+                      <th className={TH}>Tipo del hotel</th>
+                      <th className={TH}>Código en el canal</th>
+                      <th className={TH}>Tope de cupo</th>
+                      <th className={`${TH} ${COL_SECUNDARIA}`}>Mín. noches</th>
+                      <th className={TH}>Cerrado</th>
+                      <th className={TH}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tiposUnidad.map((t) => {
+                      const m = mapeoPorTipo.get(t.id)
+                      return (
+                        <tr key={t.id} className={FILA}>
+                          <td className={TD}>
+                            <span className="font-medium text-stone-800">{t.nombre}</span>
+                            <span className="block font-mono text-xs text-stone-500">
+                              {t.codigo}
+                            </span>
+                          </td>
+                          <td className={TD} colSpan={5}>
+                            <form
+                              action={guardarMapeoCanal}
+                              className="flex flex-wrap items-end gap-2"
+                            >
+                              <input type="hidden" name="tipo_unidad_id" value={t.id} />
+                              <Campo etiqueta="Código en el canal">
+                                <input
+                                  name="codigo_canal"
+                                  defaultValue={m?.codigo_canal ?? t.codigo}
+                                  maxLength={60}
+                                  required
+                                  className={`${CAMPO} w-40`}
+                                />
+                              </Campo>
+                              <Campo
+                                etiqueta="Tope de cupo"
+                                ayuda="Vacío = todas las unidades."
+                              >
+                                <input
+                                  name="tope_cupo"
+                                  type="number"
+                                  min="0"
+                                  defaultValue={m?.tope_cupo ?? ''}
+                                  className={`${CAMPO} w-24`}
+                                />
+                              </Campo>
+                              <Campo etiqueta="Mín. noches">
+                                <input
+                                  name="minimo_noches"
+                                  type="number"
+                                  min="1"
+                                  defaultValue={m?.minimo_noches ?? ''}
+                                  className={`${CAMPO} w-24`}
+                                />
+                              </Campo>
+                              <label className="flex items-center gap-2 pb-2 text-sm text-stone-700">
+                                <input
+                                  type="checkbox"
+                                  name="cerrado"
+                                  defaultChecked={m?.cerrado ?? false}
+                                  className="size-4"
+                                />
+                                Cerrado
+                              </label>
+                              <BotonEnvio variante="secundario" cargando="Guardando…">
+                                Guardar
+                              </BotonEnvio>
+                            </form>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </Tabla>
+              </div>
+            )}
+          </Tarjeta>
+
+          <Tarjeta
+            titulo="Última publicación"
+            descripcion="Que quede registrada aunque no salga nada es el punto: «no se actualiza» y «nadie lo corrió» son problemas distintos."
+          >
+            {ultimaSalida ? (
+              <div className="space-y-2 text-sm text-stone-700">
+                <p>
+                  <strong>{formatoFechaCorta(ultimaSalida.corrida_en.slice(0, 10))}</strong> ·{' '}
+                  {new Date(ultimaSalida.corrida_en).toLocaleTimeString('es-AR')} · proveedor{' '}
+                  {ultimaSalida.proveedor}
+                </p>
+                <p className="tabular">
+                  {ultimaSalida.leidas} filas calculadas · {ultimaSalida.actualizadas} aceptadas por
+                  el canal · {ultimaSalida.rechazadas} días sin tarifa cargada
+                </p>
+                {ultimaSalida.rechazadas > 0 && (
+                  <p className="rounded-lg bg-lenga-50 px-3 py-2 text-lenga-900 ring-1 ring-lenga-200">
+                    Los días sin tarifa <strong>no se publican</strong>, y es a propósito: publicar
+                    cero sería publicar una noche gratis. Cargá las temporadas que faltan para que
+                    esas fechas salgan a la venta.
+                  </p>
+                )}
+                {ultimaSalida.detalle && (
+                  <p className="text-stone-600">{ultimaSalida.detalle}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-stone-600">
+                Todavía no se corrió ninguna publicación. Se dispara sola todos los días, o con el
+                botón de acá abajo.
+              </p>
+            )}
+
+            {puedeConciliarCargos && (
+              <form action={publicarAhora} className="mt-4">
+                <BotonEnvio variante="secundario" cargando="Publicando…">
+                  Publicar ahora
+                </BotonEnvio>
+              </form>
+            )}
+          </Tarjeta>
         </div>
       )}
 

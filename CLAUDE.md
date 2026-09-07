@@ -222,7 +222,7 @@ Tarifario 2025/2026 (Anexo A).
   `MERCADOPAGO_ACCESS_TOKEN`, que es el mismo del cobro.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 31 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 32 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -246,7 +246,22 @@ Tarifario 2025/2026 (Anexo A).
   **ADR 0030** conciliación: el extracto del banco entra por archivo (**no se raspa
   el home banking**), MercadoPago por su API de liquidaciones —el **neto**, no el
   bruto—, y **sólo la referencia de la pasarela concilia sola** · **ADR 0031** una
-  factura recibida se carga leyendo su **QR obligatorio**, no con OCR.
+  factura recibida se carga leyendo su **QR obligatorio**, no con OCR · **ADR 0032**
+  el lado saliente del canal: el ARI **se calcula aunque no salga**, y el cron
+  responde 200 cuando el proveedor no puede publicar.
+- **Publicación al canal (Bloque E, 2026-09-07).** `lib/domain/ari.ts` +
+  `lib/canales/ari.ts` + migración **0081** (`canal_tipos`) + `/api/cron/ari`.
+  ⚠️ Cuatro cosas antes de tocarlo:
+  1. **Esto NO evita el overbooking hoy**, y la pantalla lo dice ARRIBA de la
+     tabla. Con los proveedores disponibles el envío responde `noSoportado`. **No
+     quitar esa advertencia**: la solución es contratar un channel manager.
+  2. **El cron devuelve 200 cuando no se puede publicar.** Con 500 quedaría en rojo
+     para siempre —es la situación normal— y un fallo real se perdería entre el
+     ruido. El cuerpo lleva `noSoportado` para que el 200 no se lea como éxito.
+  3. **Se publica `precio_rack` CON IVA.** Neto es tarifa de agencia (ADR 0004) y
+     publicarlo rompe la paridad tarifaria; sin IVA anuncia menos de lo que cobra.
+  4. **Un día sin tarifa NO se publica.** Publicar `0` es publicar una noche
+     gratis: es el «USD 0» de la Fase 18. Se omite y se cuenta en `sinPrecio`.
 - **Comprobantes recibidos (objetivo 9, 2026-09-07).**
   `/panel/proveedores/comprobantes`, migración **0080**. ⚠️ Cuatro cosas antes de
   tocarlo:

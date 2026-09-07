@@ -170,6 +170,13 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   canal_mapeos_columnas: { todos: 'si' },
   canal_config: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  // ── Mapeo de tipos por canal (migración 0081) ──
+  //
+  // Misma línea que `canal_config`, y por el mismo motivo: lleva el tope de
+  // inventario que el hotel se reserva para la venta directa y qué tipos tiene
+  // cerrados en cada OTA. Eso es estrategia comercial, no operación de mostrador.
+  canal_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
   // ── Divisas y respaldos ──
   cotizaciones: { todos: 'si' },
   respaldos: { todos: 'si' },
@@ -485,6 +492,32 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar movimientos_externos: ${error.message}`)
 
       sembradas.push({ tabla: 'movimientos_externos', columna: 'external_id', valor: externalId })
+    }
+
+    /*
+      ── canal_tipos (migración 0081) ──────────────────────────────────────────
+
+      Nace vacía —con qué código conoce cada canal a cada tipo es una decisión del
+      hotel— así que sin sembrar, los dos casos negativos (recepción y
+      housekeeping) pasarían por tabla vacía en vez de por la política.
+    */
+    if ((await contar('canal_tipos')) === 0) {
+      const { data: tipo } = await admin
+        .from('tipos_unidad')
+        .select('id')
+        .order('codigo')
+        .limit(1)
+        .maybeSingle<{ id: string }>()
+
+      if (tipo) {
+        const codigo = `AUDIT-RLS-${sufijo}`
+        const { error } = await admin
+          .from('canal_tipos')
+          .insert({ canal: 'booking', tipo_unidad_id: tipo.id, codigo_canal: codigo })
+        if (error) throw new Error(`No se pudo sembrar canal_tipos: ${error.message}`)
+
+        sembradas.push({ tabla: 'canal_tipos', columna: 'codigo_canal', valor: codigo })
+      }
     }
 
     // ── canal_config ──────────────────────────────────────────────────────────

@@ -4226,3 +4226,69 @@ ahí**. No tocan dinero y no se migraron en esta pasada; la auditoría lo dice a
 vez de dar el hallazgo por cerrado entero.
 
 **Verificación:** typecheck 0 · lint 0 · build 0 · 1350 tests puros en verde.
+
+---
+
+## 2026-09-07 — Bloque E: el lado saliente del canal (objetivos 1, 2 y 3, ADR 0032)
+
+**Resumen:** el ADR 0021 dice que el hotel resuelve el overbooking de OTAs
+contratando un channel manager, y que **enchufarlo sería configuración** porque el
+puerto ya declara `publicarDisponibilidad`. **No era cierto**: ese método tenía
+cero llamadores. Nadie calculaba qué publicar, nadie leía las tarifas para armarlo,
+nadie lo disparaba y nadie registraba el resultado.
+
+**Lo que se hizo**
+
+- **`lib/domain/ari.ts`** — el cálculo puro: para cada tipo mapeado y cada noche de
+  un año, cupo, precio, mínimo de noches y si está cerrado. 21 tests.
+- **`lib/canales/ari.ts`** — lo arma contra la base y llama al puerto. Lee la
+  ocupación por `traerTodo`: un año de estadías pasa el corte de 1000 filas de
+  PostgREST, y el efecto de no paginarlo sería **publicar como libres noches
+  vendidas**, que es el peor resultado posible de esta función.
+- **Migración 0081 — `canal_tipos`.** El mapeo que faltaba, en los **dos** sentidos.
+- **`/api/cron/ari`**, todos los días a las 6:20.
+- **Vista «Publicación al canal»** en el panel, con la advertencia arriba de la tabla.
+
+**El segundo defecto, más chico y más inmediato**
+
+`importarEntrante` resolvía el tipo con `eq('codigo', tipo_unidad_codigo)`, o sea
+asumiendo que el código del canal **es** el nuestro, con un comentario al lado
+diciendo que puede no serlo. Si Booking llama `DBL-LAGO` a lo que el sistema llama
+`DOBLE_VISTA`, la importación fallaba y la salida era renombrar el tipo del hotel
+para que coincidiera con el nombre que eligió una OTA. Ahora se anota la
+equivalencia una vez.
+
+**Las decisiones (ADR 0032)**
+
+1. **Se calcula aunque no salga.** El trabajo real no es el adapter: es decidir qué
+   precio se publica, cómo se cuenta el cupo, qué pasa con un día sin tarifa y
+   dónde queda el rastro. Eso ya está hecho y probado.
+2. **«No puedo» no es «fallé», y el cron devuelve 200.** Con 500, el cron quedaría
+   en rojo **para siempre** —porque ésa es la situación normal hoy— y el día que sí
+   haya channel manager un fallo real se perdería entre un año de ruido. El cuerpo
+   lleva `noSoportado` para que ese 200 no se lea como éxito.
+3. **Se publica el rack CON IVA.** Rack y no neto: el neto es tarifa de agencia
+   (ADR 0004) y publicarlo rompería la paridad tarifaria que los contratos de OTA
+   exigen, además de regalarle al canal el margen de la comisión. Con IVA porque
+   `precio_rack` se guarda sin él, y publicar la columna cruda anunciaría un precio
+   más bajo del que después se cobra.
+4. **Un día sin tarifa no se publica.** Publicar `0` es publicar una noche gratis
+   —es el «USD 0 al reservar» de la Fase 18, otra vez— y publicar el precio de otro
+   día es inventar una tarifa. Se omite y se cuenta aparte.
+5. **Cupo cero SÍ se publica, como cerrado.** Omitir el día deja al canal con el
+   valor anterior, que es el que hay que corregir.
+6. **El hotel puede guardarse inventario** (`tope_cupo`). Publicar todo en una OTA
+   deja sin nada que vender por teléfono en temporada, y paga comisión por el 100 %.
+
+**Lo que sigue sin resolverse, y está escrito**
+
+- **Esto NO evita el overbooking hoy.** La pantalla lo dice **antes** de la tabla y
+  no después: alguien que entra a algo titulado «Publicación al canal» asume, con
+  razón, que el sistema está informando, y esa conclusión hay que desarmarla antes
+  de que se forme.
+- **Restricciones por fecha**: el mínimo de noches y el cierre son por tipo, no por
+  día. «Mínimo 3 noches en el finde largo» no se puede expresar.
+- **El webhook de canales sigue sin llamador**: sin channel manager no hay quién lo
+  emita.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1378 tests puros en verde.

@@ -396,6 +396,26 @@ export const CAPITULOS: Capitulo[] = [
         detalle:
           'El informe de Booking no los trae. Se cargan acá para que no queden sólo en la memoria de quien los leyó: un pedido de cuna sin atender termina siendo una queja en la reseña.',
       },
+      {
+        titulo: 'Cómo llama el canal a cada habitación',
+        detalle:
+          'En "Publicación al canal" se anota, una sola vez, con qué nombre conoce Booking a cada tipo de unidad del hotel. Sirve para que la importación no falle cuando los nombres no coinciden: antes había que renombrar el tipo del hotel para que coincidiera con el que eligió la OTA.',
+      },
+      {
+        titulo: 'Guardarse habitaciones para la venta directa',
+        detalle:
+          'El "tope de cupo" limita cuántas unidades de ese tipo se le ofrecen al canal. Vacío significa todas. Sirve para no quedarse sin nada que vender por teléfono en temporada alta, y para no pagar comisión por el 100% de lo que se vende.',
+      },
+      {
+        titulo: 'Por qué la publicación dice que no salió',
+        detalle:
+          'Porque hoy es cierto. El sistema calcula todos los días qué habría que informarle al canal, pero los caminos disponibles sin ser socio certificado de Booking sólo sirven para traer reservas, no para mandar. Queda calculado y registrado para que el día que el hotel contrate un channel manager sea sólo enchufarlo.',
+      },
+      {
+        titulo: 'Los días sin tarifa no se publican',
+        detalle:
+          'Si una fecha no tiene temporada cargada, no se informa al canal en vez de informarla en cero: publicar cero sería publicar una noche gratis. La pantalla dice cuántos días quedaron afuera por eso.',
+      },
     ],
   },
   {
