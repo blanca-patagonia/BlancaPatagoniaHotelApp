@@ -5,6 +5,7 @@ import { puedeAvanzarEstadoPago, type EstadoPago } from '@/lib/domain/pagos'
 import { coincideElImporte, imputarEnUSD, MONEDA_BASE } from '@/lib/domain/cobro'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { saldarSiCorresponde } from '@/lib/reservas/saldar'
+import { registrarError } from '@/lib/registro'
 
 type ClienteAdmin = ReturnType<typeof crearClienteAdmin>
 
@@ -60,10 +61,10 @@ export async function POST(
       // endpoint, y ahí se pierden también los avisos buenos.
       return Response.json({ ok: true, ignorado: leido.motivo })
     case 'invalido':
-      console.error(`[webhook ${proveedor}] evento inválido: ${leido.motivo}`)
+      await registrarError('webhook_pago_evento_invalido', { proveedor, motivo: leido.motivo })
       return Response.json({ error: 'evento inválido' }, { status: 400 })
     case 'reintentar':
-      console.error(`[webhook ${proveedor}] no se pudo procesar ahora: ${leido.motivo}`)
+      await registrarError('webhook_pago_reintentar', { proveedor, motivo: leido.motivo })
       return Response.json({ error: 'no se pudo procesar' }, { status: 500 })
   }
 
@@ -126,10 +127,14 @@ async function confirmarCobroConocido(
   */
   const esperado = previo.monto_cobrado ?? previo.monto
   if (!coincideElImporte(esperado, evento.monto)) {
-    console.error(
-      `[webhook ${proveedor}] importe distinto del pedido en ${evento.externalId}: ` +
-        `se pidió ${esperado} ${previo.moneda} y la pasarela informó ${evento.monto} ${evento.moneda}`,
-    )
+    await registrarError('webhook_pago_importe_distinto', {
+      proveedor,
+      externalId: evento.externalId,
+      pedido: esperado,
+      monedaPedida: previo.moneda,
+      informado: evento.monto,
+      monedaInformada: evento.moneda,
+    })
 
     const { error } = await admin
       .from('pagos')
@@ -184,7 +189,7 @@ async function registrarCobroAjeno(
   if (!evento.reservaId) {
     // Sin reserva no hay a qué imputarlo. 200 porque el aviso está bien: el que
     // no corresponde es el cobro, y reintentarlo no lo va a arreglar.
-    console.error(`[webhook ${proveedor}] cobro sin reserva: ${evento.externalId}`)
+    await registrarError('webhook_pago_sin_reserva', { proveedor, externalId: evento.externalId })
     return Response.json({ ok: true, ignorado: 'el cobro no referencia ninguna reserva' })
   }
 
@@ -207,9 +212,11 @@ async function registrarCobroAjeno(
     if (!valor) {
       // Sin cotización, el importe en USD sería inventado y saldaría mal la
       // reserva. 500 para que la pasarela reintente: puede haberla en un rato.
-      console.error(
-        `[webhook ${proveedor}] sin cotización de ${evento.moneda}: no se puede imputar en USD`,
-      )
+      await registrarError('webhook_pago_sin_cotizacion', {
+        proveedor,
+        moneda: evento.moneda,
+        externalId: evento.externalId,
+      })
       return Response.json({ error: 'sin cotización para convertir' }, { status: 500 })
     }
 

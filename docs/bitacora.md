@@ -4161,3 +4161,68 @@ nada, y el gesto para quien lo usa es el mismo que pidió el cliente.
   peor que no tener aviso.
 - **El desglose de IVA por alícuota**: el QR trae el total, no las bases
   imponibles. Para el libro de IVA compras hace falta más que esto.
+
+---
+
+## 2026-09-07 — Dos P1 del camino del dinero: la pasarela cruzada y el silencio
+
+**Resumen:** dos hallazgos de la auditoría que comparten un rasgo —los dos fallan
+sin que nadie se entere— y que están en el mismo camino: el del cobro.
+
+### P1-5 · El link de pago cruzaba de pasarela
+
+`linkReutilizable` busca un link vivo para no generar dos por el mismo saldo —dos
+links son dos cobros posibles, y devolver esa plata es un trámite manual con la
+pasarela—. Pero la consulta filtraba por reserva, tipo y estado, y **no por medio
+de pago**.
+
+Cada medio cobra en su moneda: Stripe en dólares, MercadoPago en pesos. Así que un
+huésped que había abierto el link de Stripe y después volvía y elegía «pesos con
+MercadoPago» recibía de vuelta **el link de Stripe, en dólares**. Elegir el medio
+es justamente lo que el catálogo le ofrece decidir, y el sistema le devolvía el
+otro sin decir nada.
+
+⚠️ **El arreglo tenía una trampa que casi lo rompe.** El filtro natural sería
+`.eq('medio', p.proveedor)`, y está mal: el simulador se elige como `simulado` y
+registra sus pagos como `tarjeta`, porque el enum `medio_pago` de la base no tiene
+un valor «simulado» (el código ya lo documentaba en `nombreClave`). Filtrado así,
+el simulador nunca encontraría su propio link y crearía uno nuevo en cada intento
+—o sea, exactamente el cobro doble que la función existe para evitar—, y no se
+vería como un error. El filtro va sobre `proveedor.nombre`.
+
+De paso, la comparación de importes pasó a `coincideElImporte`, que compara
+centavos enteros. La forma anterior —`Math.abs(a - b) > 0.01`— hereda el error de
+coma flotante que quiere evitar, y es el motivo por el que ese helper existe.
+
+**Tests:** tres casos contra la base. El que importa es el par: **no** devuelve el
+link de otra pasarela, y **sí** devuelve el propio. Un arreglo que rompiera el
+segundo sería peor que el bug.
+
+### P1-6 · El camino del dinero se registraba en un lugar que nadie mira
+
+La verificación de firma de los dos webhooks de pago reportaba con
+`console.error`. Eso va al stdout de Vercel, que nadie del hotel abre, así que el
+síntoma de un secreto mal configurado —o de alguien probando firmas— era
+exactamente ninguno: **los cobros simplemente dejaban de llegar**.
+
+Desde el ADR 0029 hay una tabla `errores` y una pantalla que la muestra. Lo que
+faltaba era usarla donde más importa. Los cinco archivos por los que pasa la plata
+—el handler del webhook, el servicio de cobro y los tres adapters— quedaron con
+**cero `console`**, con nombres de evento estables para poder buscarlos:
+`webhook_pago_sin_secreto`, `webhook_pago_firma_invalida`,
+`webhook_pago_importe_distinto`, `pasarela_http_error`…
+
+**Lo que sigue valiendo:** el motivo del rechazo de una firma va al registro y
+**nunca a la respuesta HTTP**. Explicarle a quien manda una firma inválida por qué
+no coincide es ayudarlo a construir una válida.
+
+**El test es un test-contrato que lee los archivos**, y no uno que ejecute: el
+sink no escribe bajo Vitest a propósito (`sinkActivo()` corta si `process.env.VITEST`),
+así que «apareció la fila» no se puede comprobar corriendo. Lo que sí se fija es la
+regla, igual que `tests/pwa.test.ts` hace con `public/sw.js`.
+
+**Alcance honesto:** los `console.*` que quedan en el resto del sistema **siguen
+ahí**. No tocan dinero y no se migraron en esta pasada; la auditoría lo dice así en
+vez de dar el hallazgo por cerrado entero.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1350 tests puros en verde.

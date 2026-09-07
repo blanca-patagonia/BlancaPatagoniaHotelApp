@@ -25,6 +25,7 @@ import 'server-only'
  */
 
 import { verificarFirmaWebhook } from '@/lib/integraciones/firma-webhook'
+import { registrarError } from '@/lib/registro'
 import { MONEDAS_EXTRANJERAS } from '@/lib/domain/divisas'
 import {
   ESTADOS_PAGO,
@@ -132,9 +133,12 @@ export class ProveedorSimulado implements PaymentProvider {
     const { valida, motivo } = await verificarFirmaWebhook(secreto, req.headers, cuerpo)
 
     if (!valida) {
-      // El motivo va al log del servidor y nunca a la respuesta: decirle a quien
-      // llama *por qué* falló su firma es ayudarlo a construir una válida.
-      console.error(`[webhook ${NOMBRE_SIMULADO}] firma rechazada: ${motivo}`)
+      // El motivo va al registro y nunca a la respuesta: decirle a quien llama
+      // *por qué* falló su firma es ayudarlo a construir una válida.
+      await registrarError('webhook_pago_firma_invalida', {
+        proveedor: NOMBRE_SIMULADO,
+        motivo,
+      })
     }
     return valida
   }

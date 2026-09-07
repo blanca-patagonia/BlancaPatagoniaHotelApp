@@ -43,13 +43,13 @@ configuración» **no tiene un solo llamador**, así que hoy esa promesa no se c
 | 2 | Prevención real de overbooking | 🟡 La garantía de la base es **sólida y sin agujeros**. El riesgo real entra por las OTAs de solo lectura, y por el bug P0-1 |
 | 3 | Sincronización de reservas/disponibilidad/tarifas/estados | 🔴 Solo entrada, solo reservas. Disponibilidad/tarifas/restricciones: **cero salida** |
 | 4 | Análisis y conciliación de facturas | 🟢 **Cerrado (Bloque C, ADR 0030).** Comisiones de canal, conciliación bancaria y de pasarela, `estado_conciliacion` escribible con firma y motivo |
-| 5 | Registro y confirmación de pagos | 🟡 Cobro en línea real y bien hecho. **Reembolsos rotos** (P0-2), mostrador sin idempotencia (P0-6) |
-| 6 | Recordatorios automáticos | 🔴 **No existe.** Un simulador y cuatro plantillas |
-| 7 | Avisos ante pagos o cambios de estado | 🔴 **No existe.** El webhook que confirma el pago no notifica a nadie |
+| 5 | Registro y confirmación de pagos | 🟢 **Cerrado (Bloque A).** Cobro en línea real; reembolsos arreglados (P0-2), mostrador con idempotencia (P0-6) y el link de pago ya no cruza pasarelas (P1-5) |
+| 6 | Recordatorios automáticos | 🟢 **Cerrado (Bloque B).** Bandeja de salida con idempotencia, reintentos acotados, ventana horaria del hotel y consentimiento; adapter Resend real. **Falta contratar la cuenta de correo** |
+| 7 | Avisos ante pagos o cambios de estado | 🟢 **Cerrado (Bloque B).** Los eventos encolan en la bandeja en vez de enviar, así que una API caída no tumba la operación que los originó |
 | 8 | Operación diaria (recepción, HK, mantenimiento, gerencia) | 🟢 **Es lo más maduro del sistema.** Cubierto y testeado |
 | 9 | Foto de factura → datos en Excel | 🟢 **Cerrado (ADR 0031).** Se lee el **QR obligatorio** de la factura electrónica, no OCR: los datos son los que el emisor le informó a ARCA, no una lectura probable. La imagen no sale del dispositivo. Export CSV por el punto único |
 | 10 | MercadoPago + Santander, gastos mensuales | 🟢 **Cerrado (Bloque C, ADR 0030).** MercadoPago por su API de liquidaciones; Santander por importación del extracto —no publica API y **no se raspa el home banking**—; gastos por mes y por concepto en `/panel/conciliacion` |
-| 11 | Trazabilidad, auditoría, seguridad, recuperación | 🟢 Auditoría y RLS son fuertes. 🟡 Observabilidad recién nacida: **67 `console.*` crudos**, los webhooks de pago invisibles en el panel |
+| 11 | Trazabilidad, auditoría, seguridad, recuperación | 🟢 Auditoría y RLS son fuertes. **El camino del dinero ya se ve en `/panel/errores`** (P1-6), con test-contrato. 🟡 Queda el resto de los `console.*`, que no tocan dinero, y **restaurar un backup**, que no se cierra desde el código |
 
 ---
 
@@ -202,8 +202,8 @@ código: hay que consultar `cron.job` contra la base.
 | **P1-2** | **Cero notificaciones reales.** Único `EmailProvider`: `consola`. Sin registro de envíos, sin reintentos, sin idempotencia, sin consentimiento | `lib/email/index.ts:82` |
 | ~~**P1-3**~~ | ✅ **corregido (0078)** · `movimientos_cuenta` y `movimientos_proveedor` tenían columna `moneda` **que ninguna acción escribía**, y `saldoCuenta` suma sin mirarla | el mismo bug que la 0067 arregló en `pagos`, acá sin `check` |
 | ~~**P1-4**~~ | ✅ **corregido (0079)** · `estado_conciliacion` **solo se leía**; no había ninguna escritura de `conciliado`/`en_disputa` en toda la app | quedaba en `devengado` para siempre |
-| **P1-5** | `linkReutilizable` no filtra por `medio`: quien elige MercadoPago/pesos puede recibir el link de Stripe en USD | `lib/payments/servicio.ts:211-217` |
-| **P1-6** | **67 `console.error/warn` crudos**; solo 5 archivos usan `registrarError`. Toda la verificación de firma de los webhooks de pago queda en stdout, invisible en `/panel/errores` | `route.ts:63,66,129,187,210`, `mercadopago.ts` (8), `stripe.ts` (7) |
+| ~~**P1-5**~~ | ✅ **corregido** · `linkReutilizable` no filtraba por `medio`: quien elegía MercadoPago/pesos podía recibir el link de Stripe en USD. ⚠️ El filtro va sobre `proveedor.nombre` y no sobre la clave de configuración (el simulador se elige como `simulado` y registra `tarjeta`) | `lib/payments/servicio.ts` |
+| ~~**P1-6**~~ | 🟡 **el camino del dinero, corregido** · Los 5 archivos por los que pasa la plata —webhook, servicio de cobro y los tres adapters— quedaron con **cero `console`**, con test-contrato (`observabilidad-del-dinero`). El resto de los `console.*` del sistema sigue pendiente y no toca dinero | `tests/observabilidad-del-dinero.test.ts` |
 | **P1-7** | **9 flujos sin atomicidad** con consecuencia concreta (reserva de agencia sin `agencia_id` → no se le factura a nadie; mudanza que factura la unidad anterior; reprogramación con precio viejo) | `actions.ts:222,315,890,1086,1167,1243`; `saldar.ts:137`; `servicio.ts:130` |
 | **P1-8** | `purgar_errores` (0068) **no está programado**: la tabla `errores` crece sin límite | ninguna llamada fuera de pg_cron, y ahí tampoco |
 

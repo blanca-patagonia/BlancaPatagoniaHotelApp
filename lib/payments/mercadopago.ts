@@ -31,6 +31,7 @@ import 'server-only'
  */
 
 import { hmacHex, comparacionConstante, timestampVigente } from '@/lib/integraciones/firma-webhook'
+import { registrarError } from '@/lib/registro'
 import type { MedioPago, TipoPago, EstadoPago } from '@/lib/domain/pagos'
 import { TIPOS_PAGO } from '@/lib/domain/pagos'
 import type { MonedaCobro } from '@/lib/domain/cobro'
@@ -200,7 +201,7 @@ export class ProveedorMercadoPago implements PaymentProvider {
       // Fail-closed en producción: sin secreto, cualquiera podría registrar
       // pagos aprobados que nadie hizo.
       if (process.env.NODE_ENV === 'production') {
-        console.error('[webhook mercadopago] falta MERCADOPAGO_WEBHOOK_SECRET')
+        await registrarError('webhook_pago_sin_secreto', { proveedor: 'mercadopago' })
         return false
       }
       return true
@@ -209,7 +210,7 @@ export class ProveedorMercadoPago implements PaymentProvider {
     const firma = req.headers.get('x-signature')
     const requestId = req.headers.get('x-request-id') ?? ''
     if (!firma) {
-      console.error('[webhook mercadopago] falta la cabecera x-signature')
+      await registrarError('webhook_pago_sin_firma', { proveedor: 'mercadopago' })
       return false
     }
 
@@ -223,27 +224,27 @@ export class ProveedorMercadoPago implements PaymentProvider {
     const ts = partes.get('ts')
     const recibida = partes.get('v1')
     if (!ts || !recibida) {
-      console.error('[webhook mercadopago] x-signature sin ts o v1')
+      await registrarError('webhook_pago_firma_malformada', { proveedor: 'mercadopago' })
       return false
     }
 
     if (!timestampVigente(ts, Math.floor(Date.now() / 1000))) {
       // Sin esto, capturar un evento válido una vez alcanza para reenviarlo
       // para siempre.
-      console.error('[webhook mercadopago] timestamp fuera de la ventana de tolerancia')
+      await registrarError('webhook_pago_timestamp_vencido', { proveedor: 'mercadopago', ts })
       return false
     }
 
     const idPago = await idDelPago(req)
     if (!idPago) {
-      console.error('[webhook mercadopago] el cuerpo no trae data.id')
+      await registrarError('webhook_pago_sin_id', { proveedor: 'mercadopago' })
       return false
     }
 
     const manifiesto = `id:${idPago};request-id:${requestId};ts:${ts};`
     const esperada = await hmacHex(secreto, manifiesto)
     if (!comparacionConstante(esperada, recibida)) {
-      console.error('[webhook mercadopago] la firma no coincide')
+      await registrarError('webhook_pago_firma_invalida', { proveedor: 'mercadopago' })
       return false
     }
     return true
@@ -374,14 +375,25 @@ async function llamar(url: string, init: RequestInit): Promise<Respuesta> {
     if (!res.ok) {
       // El cuerpo del error de MercadoPago trae el motivo real. Va al log del
       // servidor; al huésped se le muestra algo genérico.
-      console.error(`[mercadopago] ${res.status} en ${url}: ${texto.slice(0, 500)}`)
+      await registrarError('pasarela_http_error', {
+        proveedor: 'mercadopago',
+        estado: res.status,
+        url,
+        // Acotado: el cuerpo del error puede traer el eco de lo enviado.
+        cuerpo: texto.slice(0, 500),
+      })
       return { error: `MercadoPago respondió ${res.status}.` }
     }
 
     return { datos: JSON.parse(texto) as Record<string, unknown> }
   } catch (e) {
     const motivo = e instanceof Error ? e.message : String(e)
-    console.error(`[mercadopago] falló la llamada a ${url}: ${motivo}`)
+    await registrarError('pasarela_sin_respuesta', {
+      proveedor: 'mercadopago',
+      url,
+      motivo,
+      corto: corte.aborted,
+    })
     return {
       error:
         corte.aborted

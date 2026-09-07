@@ -31,6 +31,7 @@ import 'server-only'
  */
 
 import { hmacHex, comparacionConstante, timestampVigente } from '@/lib/integraciones/firma-webhook'
+import { registrarError } from '@/lib/registro'
 import { TIPOS_PAGO, type MedioPago, type TipoPago, type EstadoPago } from '@/lib/domain/pagos'
 import type { MonedaCobro } from '@/lib/domain/cobro'
 import { esMonedaDeCobro } from './simulado'
@@ -186,7 +187,7 @@ export class ProveedorStripe implements PaymentProvider {
       // Fail-closed en producción: sin secreto, cualquiera podría registrar
       // pagos aprobados que nadie hizo.
       if (process.env.NODE_ENV === 'production') {
-        console.error('[webhook stripe] falta STRIPE_WEBHOOK_SECRET')
+        await registrarError('webhook_pago_sin_secreto', { proveedor: 'stripe' })
         return false
       }
       return true
@@ -194,7 +195,7 @@ export class ProveedorStripe implements PaymentProvider {
 
     const cabecera = req.headers.get('stripe-signature')
     if (!cabecera) {
-      console.error('[webhook stripe] falta la cabecera stripe-signature')
+      await registrarError('webhook_pago_sin_firma', { proveedor: 'stripe' })
       return false
     }
 
@@ -210,14 +211,14 @@ export class ProveedorStripe implements PaymentProvider {
     }
 
     if (!t || firmas.length === 0) {
-      console.error('[webhook stripe] stripe-signature sin t o v1')
+      await registrarError('webhook_pago_firma_malformada', { proveedor: 'stripe' })
       return false
     }
 
     if (!timestampVigente(t, Math.floor(Date.now() / 1000))) {
       // Sin esto, capturar un evento válido una vez alcanza para reenviarlo
       // para siempre.
-      console.error('[webhook stripe] timestamp fuera de la ventana de tolerancia')
+      await registrarError('webhook_pago_timestamp_vencido', { proveedor: 'stripe' })
       return false
     }
 
@@ -227,7 +228,7 @@ export class ProveedorStripe implements PaymentProvider {
     const esperada = await hmacHex(secreto, `${t}.${cuerpo}`)
 
     if (!firmas.some((f) => comparacionConstante(esperada, f))) {
-      console.error('[webhook stripe] la firma no coincide con el cuerpo recibido')
+      await registrarError('webhook_pago_firma_invalida', { proveedor: 'stripe' })
       return false
     }
     return true
@@ -364,14 +365,24 @@ async function llamar(url: string, init: RequestInit): Promise<Respuesta> {
     if (!res.ok) {
       // El error de Stripe trae el motivo real. Va al log del servidor; al
       // huésped se le muestra algo genérico.
-      console.error(`[stripe] ${res.status} en ${url}: ${texto.slice(0, 500)}`)
+      await registrarError('pasarela_http_error', {
+        proveedor: 'stripe',
+        estado: res.status,
+        url,
+        cuerpo: texto.slice(0, 500),
+      })
       return { error: `Stripe respondió ${res.status}.` }
     }
 
     return { datos: JSON.parse(texto) as Record<string, unknown> }
   } catch (e) {
     const motivo = e instanceof Error ? e.message : String(e)
-    console.error(`[stripe] falló la llamada a ${url}: ${motivo}`)
+    await registrarError('pasarela_sin_respuesta', {
+      proveedor: 'stripe',
+      url,
+      motivo,
+      corto: corte.aborted,
+    })
     return {
       error: corte.aborted ? 'Stripe no respondió a tiempo.' : 'No se pudo contactar a Stripe.',
     }
