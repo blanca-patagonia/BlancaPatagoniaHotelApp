@@ -49,10 +49,30 @@ describe('render', () => {
 
   it('reemplaza los marcadores en asunto y cuerpo', () => {
     const r = renderizar('confirmacion_reserva', datos)
-    expect(r.asunto).toBe('Tu reserva en Blanca Patagonia está confirmada (BP-0042)')
+    expect(r.asunto).toBe('Recibimos tu reserva en Blanca Patagonia (BP-0042)')
     expect(r.cuerpo).toContain('Hola Ana,')
-    expect(r.cuerpo).toContain('USD 642,51')
+    expect(r.cuerpo).toContain('642,51')
     expect(r.faltantes).toEqual([])
+  })
+
+  /*
+    El correo sale al ALTA, cuando la reserva nace `pendiente`, no al confirmarse.
+    Decía «Confirmamos tu reserva» y el huésped se quedaba creyendo que tenía la
+    habitación asegurada — cuando en realidad expira a los 5 días sin la seña y la
+    unidad se libera. Este test evita que el texto vuelva a prometer eso.
+  */
+  it('NO le dice al huésped que la reserva está confirmada', () => {
+    const r = renderizar('confirmacion_reserva', datos)
+    expect(r.asunto.toLowerCase()).not.toContain('confirmada')
+    expect(r.cuerpo.toLowerCase(), 'el correo afirma una confirmación que no ocurrió').not.toContain(
+      'confirmamos tu reserva',
+    )
+  })
+
+  it('le dice que hay que abonar la seña y qué pasa si no', () => {
+    const r = renderizar('confirmacion_reserva', datos)
+    expect(r.cuerpo.toLowerCase()).toContain('seña')
+    expect(r.cuerpo.toLowerCase()).toContain('libera')
   })
 
   it('no deja marcadores sin reemplazar cuando están todos los datos', () => {

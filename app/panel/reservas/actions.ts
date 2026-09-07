@@ -35,7 +35,7 @@ import { estadoDeCobro } from '@/lib/reservas/cobro'
 import { imputarEnUSD, motivoNoSeCobra, MONEDA_BASE } from '@/lib/domain/cobro'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
-import { enviarPlantilla } from '@/lib/email'
+import { encolar } from '@/lib/notificaciones'
 import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
@@ -357,10 +357,19 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
       } | null
 
       if (nivelNuevo !== nivelPrevio && huespedFid?.email) {
-        await enviarPlantilla('cambio_nivel_fidelidad', huespedFid.email, {
-          nombre: huespedFid.nombre,
-          nivel: ETIQUETAS_NIVEL[nivelNuevo],
-          puntos: totales,
+        // Se encola: el aviso de fidelidad no puede demorar ni hacer fallar un
+        // check-out. `huespedId` deja que la bandeja consulte el consentimiento.
+        await encolar(supabase, {
+          evento: 'cambio_nivel_fidelidad',
+          entidadId: id,
+          destinatario: huespedFid.email,
+          huespedId: reserva.huesped_id as string | null,
+          reservaId: id,
+          variables: {
+            nombre: huespedFid.nombre,
+            nivel: ETIQUETAS_NIVEL[nivelNuevo],
+            puntos: totales,
+          },
         })
       }
     }
@@ -375,9 +384,18 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
       .maybeSingle()
 
     if (encuesta?.token && huesped?.email) {
-      await enviarPlantilla('encuesta_postcheckout', huesped.email, {
-        nombre: huesped.nombre,
-        enlace: `${urlDelSitio()}/encuesta/${encuesta.token}`,
+      // La encuesta respeta el horario permitido: es un mensaje que inicia el
+      // hotel, y un check-out de las 23:00 no justifica escribirle a esa hora.
+      await encolar(supabase, {
+        evento: 'encuesta_postcheckout',
+        entidadId: id,
+        destinatario: huesped.email,
+        huespedId: reserva.huesped_id as string | null,
+        reservaId: id,
+        variables: {
+          nombre: huesped.nombre,
+          enlace: `${urlDelSitio()}/encuesta/${encuesta.token}`,
+        },
       })
     }
   }
@@ -1340,37 +1358,71 @@ export async function enviarRecordatoriosLlegada(): Promise<void> {
   const manana = sumarDias(hoyISO(), 1)
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  /*
+    Se filtra en la BASE, no en JavaScript.
+
+    Antes se traían **todas** las estadías activas y se descartaban en un bucle
+    las que no llegaban mañana. Con eso, PostgREST cortaba en 1000 filas —con
+    HTTP 200 y sin aviso— y a partir de ahí los recordatorios simplemente dejaban
+    de salir para quien quedara del otro lado del corte, sin ningún error.
+
+    `estadias.check_in` es una columna GENERADA desde `periodo` (migración 0037) y
+    existe exactamente para esto: permite el filtro por fecha del lado del
+    servidor, que PostgREST no puede expresar sobre un `daterange`.
+  */
+  const { data, error } = await supabase
     .from('estadias')
     .select(
-      'periodo, reserva:reservas(codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(nombre, email))',
+      'reserva:reservas(id, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email))',
     )
+    .eq('check_in', manana)
     .in('estado', [...ESTADOS_ACTIVOS])
 
+  // Antes se descartaba: si la consulta fallaba, la pantalla decía «0
+  // recordatorios» y eso se lee igual que «no llega nadie mañana».
+  cortarSiFalla(error, '/panel/reservas', 'recordatorios')
+
   const filas = (data ?? []) as unknown as {
-    periodo: string
     reserva: {
+      id: string
       codigo: string
-      estado: EstadoReserva
+      huesped_id: string | null
       huesped: { nombre: string; email: string | null } | null
     } | null
   }[]
 
-  let enviados = 0
+  let encolados = 0
   for (const fila of filas) {
-    // El check-in es el inicio del período de la estadía.
-    if (parsearPeriodo(fila.periodo).desde !== manana) continue
-    const h = fila.reserva?.huesped
-    if (!h?.email) continue
+    const r = fila.reserva
+    const h = r?.huesped
+    if (!r || !h?.email) continue
 
-    const r = await enviarPlantilla('recordatorio_checkin', h.email, {
-      nombre: h.nombre,
-      codigo: fila.reserva!.codigo,
-      check_in: formatoFechaCorta(manana),
-      hora_check_in: HORA_CHECK_IN,
+    /*
+      El `discriminante` es la fecha de llegada, y no es un detalle.
+
+      Sin él, la clave sería `recordatorio_checkin:<reserva_id>` y una reserva que
+      se reprograma no volvería a recibir aviso nunca. Con la fecha adentro, cada
+      llegada tiene el suyo — y apretar el botón dos veces el mismo día sigue
+      mandando uno solo, que es lo que hacía falta: antes no tenía idempotencia
+      ninguna y dos clics eran dos correos.
+    */
+    const res = await encolar(supabase, {
+      evento: 'recordatorio_checkin',
+      entidadId: r.id,
+      discriminante: manana,
+      destinatario: h.email,
+      huespedId: r.huesped_id,
+      reservaId: r.id,
+      variables: {
+        nombre: h.nombre,
+        codigo: r.codigo,
+        check_in: formatoFechaCorta(manana),
+        hora_check_in: HORA_CHECK_IN,
+      },
     })
-    if (r.ok) enviados++
+    // `yaEstaba` no suma: es el mismo recordatorio que ya estaba anotado.
+    if (res.ok && !res.yaEstaba) encolados++
   }
 
-  redirect(`/panel/reservas?recordatorios=${enviados}`)
+  redirect(`/panel/reservas?recordatorios=${encolados}`)
 }

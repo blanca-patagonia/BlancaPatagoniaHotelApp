@@ -120,6 +120,12 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // eso y housekeeping menos.
   errores: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  // ── Bandeja de salida de avisos (migración 0075) ──
+  // La lee quien atiende al huésped: si alguien llama diciendo «no me llegó
+  // nada», recepción tiene que poder mirarlo sin pedirle a un admin. Housekeeping
+  // no: lleva el email del huésped y el enlace con su token.
+  notificaciones: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+
   // ── Numeración de comprobantes (migración 0069) ──
   // Sigue la línea de `facturas` desde la 0045: no lleva importes, pero sí qué
   // reserva se quedó con qué número de comprobante, que es información fiscal.
@@ -384,6 +390,29 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar facturas_numeracion: ${error.message}`)
 
       sembradas.push({ tabla: 'facturas_numeracion', columna: 'reserva_id', valor: reservaId })
+    }
+
+    /*
+      ── notificaciones (migración 0075) ───────────────────────────────────────
+
+      Mismo motivo que `errores`: nace vacía, y «housekeeping no la lee» pasaría
+      por tabla vacía en vez de por la política. La fila lleva el email del
+      huésped y el enlace con su token, así que el caso negativo importa.
+
+      Se inserta directo con `service_role` en vez de llamar a `encolar`: esa
+      función consulta consentimiento y calcula el horario, y acá sólo hace falta
+      que exista una fila.
+    */
+    if ((await contar('notificaciones')) === 0) {
+      const clave = `auditoria_rls_${sufijo}`
+      const { error } = await admin.from('notificaciones').insert({
+        evento: 'confirmacion_reserva',
+        clave,
+        destinatario: 'auditoria@example.com',
+      })
+      if (error) throw new Error(`No se pudo sembrar notificaciones: ${error.message}`)
+
+      sembradas.push({ tabla: 'notificaciones', columna: 'clave', valor: clave })
     }
 
     // ── canal_config ──────────────────────────────────────────────────────────

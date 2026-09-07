@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/mantenimiento",
       "schedule": "40 6 * * *"
+    },
+    {
+      "path": "/api/cron/notificaciones",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

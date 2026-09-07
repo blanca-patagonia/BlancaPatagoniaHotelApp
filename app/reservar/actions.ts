@@ -2,7 +2,8 @@
 
 import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { enviarPlantilla } from '@/lib/email'
+import { encolar } from '@/lib/notificaciones'
+import { formatearUSD } from '@/lib/domain/moneda'
 import { urlDelSitio } from '@/lib/env'
 import { formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
@@ -131,17 +132,38 @@ export async function crearReservaPublica(
     .single()
   const token = (full as { token: string } | null)?.token ?? nueva.id
 
-  // La confirmación sale del catálogo de plantillas, no de un texto suelto:
-  // así el mismo correo se puede previsualizar y probar desde Configuración.
-  await enviarPlantilla('confirmacion_reserva', email, {
-    nombre: nombre || apellido,
-    codigo: nueva.codigo,
-    check_in: formatoFechaCorta(checkIn),
-    check_out: formatoFechaCorta(checkOut),
-    hora_check_in: HORA_CHECK_IN,
-    hora_check_out: HORA_CHECK_OUT,
-    total: Number(nueva.total).toLocaleString('es-AR'),
-    enlace: `${urlDelSitio()}/reservar/confirmacion/${token}`,
+  /*
+    La confirmación se **encola**, no se envía acá.
+
+    Antes salía dentro de este mismo request y el resultado se descartaba: si el
+    proveedor fallaba, el correo se perdía sin rastro ni reintento, y el huésped
+    se quedaba sin su confirmación mientras la pantalla decía que todo salió bien.
+    Además una API lenta demoraba el alta de la reserva, que es lo que la persona
+    está esperando del otro lado.
+
+    La bandeja (migración 0075) lo separa: acá se anota qué comunicar y el cron lo
+    manda con reintentos. `confirmacion_reserva` está en los inmediatos, así que
+    no espera al horario permitido — es el mensaje que el huésped aguarda.
+
+    El total va con `formatearUSD` y no con `toLocaleString`, que usa entre 0 y 3
+    decimales y publicaba «USD 726», «USD 290,4» y «USD 40,11» en el mismo lugar.
+  */
+  await encolar(admin, {
+    evento: 'confirmacion_reserva',
+    entidadId: nueva.id,
+    destinatario: email,
+    huespedId,
+    reservaId: nueva.id,
+    variables: {
+      nombre: nombre || apellido,
+      codigo: nueva.codigo,
+      check_in: formatoFechaCorta(checkIn),
+      check_out: formatoFechaCorta(checkOut),
+      hora_check_in: HORA_CHECK_IN,
+      hora_check_out: HORA_CHECK_OUT,
+      total: formatearUSD(Number(nueva.total)),
+      enlace: `${urlDelSitio()}/reservar/confirmacion/${token}`,
+    },
   })
 
   redirect(`/reservar/confirmacion/${token}`)
