@@ -32,6 +32,15 @@ export default function ErrorPublico({
   reset: () => void
 }) {
   useEffect(() => {
+    /*
+      ⚠️ `console` a propósito: esto es un componente de CLIENTE y
+      `lib/registro.ts` es `server-only` —escribe con `service_role`—.
+
+      El lado del servidor ya está cubierto: `instrumentation.ts` captura toda
+      excepción no manejada con su `digest`, que es el mismo que se muestra en
+      pantalla. O sea que el error YA está en `/panel/errores`; esto es la copia
+      del navegador, para quien esté mirando la consola.
+    */
     console.error('Error en una ruta pública:', error)
   }, [error])
 

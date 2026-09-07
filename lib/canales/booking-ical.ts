@@ -1,4 +1,11 @@
 import 'server-only'
+
+/*
+  Los fallos de feed van a `errores` y no a `console` (P1-6): si el feed deja de
+  responder, las reservas de Booking **no llegan**, y el síntoma es que no pasa
+  nada. Son avisos y no errores porque el cron sigue con los demás feeds.
+*/
+import { registrarAviso } from '@/lib/registro'
 import { interpretarIcalBooking } from './ical'
 import { SIN_CAPACIDADES } from '.'
 import type {
@@ -112,7 +119,7 @@ export class ProveedorBookingIcal implements CanalVentaProvider {
    */
   async traerReservas(): Promise<ReservaDeCanal[]> {
     if (this.feeds.length === 0) {
-      console.warn('[canales:booking-ical] no hay feeds configurados en BOOKING_ICAL_FEEDS.')
+      await registrarAviso('canal_sin_feeds', { variable: 'BOOKING_ICAL_FEEDS' })
       return []
     }
 
@@ -126,7 +133,7 @@ export class ProveedorBookingIcal implements CanalVentaProvider {
           })
 
           if (!r.ok) {
-            console.warn(`[canales:booking-ical] ${f.tipoUnidadCodigo} respondió ${r.status}.`)
+            await registrarAviso('canal_feed_http', { tipo: f.tipoUnidadCodigo, estado: r.status })
             return []
           }
 
@@ -134,16 +141,20 @@ export class ProveedorBookingIcal implements CanalVentaProvider {
           const resultado = interpretarIcalBooking(texto, f.tipoUnidadCodigo)
 
           if (resultado.rechazados.length > 0) {
-            console.warn(
-              `[canales:booking-ical] ${f.tipoUnidadCodigo}: ${resultado.rechazados.length} evento(s) descartado(s).`,
-            )
+            // Un evento descartado significa que el formato del feed cambió, o que
+            // trae algo que el lector no entiende: son reservas que NO van a llegar.
+            await registrarAviso('canal_feed_eventos_descartados', {
+              tipo: f.tipoUnidadCodigo,
+              descartados: resultado.rechazados.length,
+            })
           }
 
           return resultado.reservas
         } catch (e) {
-          console.warn(
-            `[canales:booking-ical] no se pudo leer ${f.tipoUnidadCodigo}: ${e instanceof Error ? e.message : e}`,
-          )
+          await registrarAviso('canal_feed_ilegible', {
+            tipo: f.tipoUnidadCodigo,
+            detalle: e instanceof Error ? e.message : String(e),
+          })
           return []
         }
       }),

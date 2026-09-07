@@ -17,6 +17,7 @@ import { redirect } from 'next/navigation'
 import { proveedoresHabilitados, nombreClave } from '@/lib/payments'
 import { firmar } from '@/lib/integraciones/firma-webhook'
 import { urlDelSitio } from '@/lib/env'
+import { registrarError } from '@/lib/registro'
 
 export async function resolverPagoSimulado(formData: FormData): Promise<void> {
   // Misma guarda que la pantalla: sin simulador habilitado, esta acción no hace
@@ -66,14 +67,20 @@ export async function resolverPagoSimulado(formData: FormData): Promise<void> {
 
     if (!res.ok) {
       const detalle = await res.text()
-      console.error(`[pago simulado] el webhook respondió ${res.status}: ${detalle.slice(0, 300)}`)
+      // El simulador es lo que permite recorrer el circuito de cobro en la
+      // defensa de la tesis: si su webhook falla, no se puede demostrar nada y el
+      // motivo tiene que estar a mano.
+      await registrarError('pago_simulado_webhook', {
+        estado: res.status,
+        detalle: detalle.slice(0, 300),
+      })
       redirect(`${volver}?error=pago_simulado`)
     }
   } catch (e) {
     // `redirect` lanza para cortar el flujo: hay que dejarla pasar, o el catch
     // se comería la navegación y la pantalla quedaría en blanco.
     if (esRedirect(e)) throw e
-    console.error(`[pago simulado] no se pudo llamar al webhook: ${mensaje(e)}`)
+    await registrarError('pago_simulado_sin_respuesta', { detalle: mensaje(e) })
     redirect(`${volver}?error=pago_simulado`)
   }
 

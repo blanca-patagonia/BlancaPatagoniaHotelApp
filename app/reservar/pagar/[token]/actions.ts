@@ -17,6 +17,7 @@ import { iniciarCobro, falloElCobro } from '@/lib/payments/servicio'
 import { estadoDeCobro } from '@/lib/reservas/cobro'
 import { motivoNoSeCobra } from '@/lib/domain/cobro'
 import { urlDelSitio } from '@/lib/env'
+import { registrarError } from '@/lib/registro'
 import type { EstadoReserva } from '@/lib/domain/reservas'
 
 /**
@@ -72,7 +73,12 @@ export async function pagarDesdeElPortal(formData: FormData): Promise<void> {
   })
 
   if (falloElCobro(resultado)) {
-    console.error(`[pago portal] ${reserva.codigo}: ${resultado.error}`)
+    // Una venta que no se concreta. Va a `errores`: el huésped ve un mensaje
+    // genérico y se va, y sin esto el hotel no se entera de que pasó.
+    await registrarError('cobro_link_portal', {
+      reserva: reserva.codigo,
+      detalle: resultado.error,
+    })
     redirect(`/reservar/pagar/${token}?error=pasarela`)
   }
 

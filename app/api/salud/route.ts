@@ -42,6 +42,15 @@ export async function GET() {
       ),
     ])
 
+    /*
+      ⚠️ Acá se usa `console` a propósito, y es la única parte del sistema donde
+      corresponde (auditoría 2026-09, P1-6).
+
+      `lib/registro.ts` persiste en una tabla de **esta misma base**. Este endpoint
+      existe justamente para detectar que la base no responde: registrar el fallo
+      ahí sería intentar escribir en lo que se acaba de comprobar que está caído.
+      El chequeo de salud tiene que poder informar sin depender de lo que vigila.
+    */
     if (resultado.error) {
       console.error('[salud] la base respondió con error:', resultado.error.message)
     } else {
