@@ -1,6 +1,16 @@
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { permitirIntento } from '@/lib/limites'
 import { registrarFalla } from '@/lib/acciones'
+/*
+  Va a `errores` y no a `console` (auditoría 2026-09, P1-6).
+
+  Este endpoint publica la ocupación del hotel a las OTAs. Cuando falla responde
+  503 en vez de servir un calendario parcial —uno incompleto no se ve roto, se ve
+  como uno con menos bloqueos, o sea publicando como libres noches llenas (ADR
+  0022)—. Pero el 503 lo ve el canal, no el hotel: sin registrarlo, «Booking dejó
+  de leer el calendario» no tiene dónde consultarse.
+*/
+import { registrarError } from '@/lib/registro'
 import { traerTodo } from '@/lib/paginado'
 import { hoyISO, sumarDias } from '@/lib/fechas'
 import { ESTADOS_ACTIVOS } from '@/lib/domain/reservas'
@@ -86,7 +96,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   // Un fallo de lectura NO es un token inválido, y confundirlos haría que un
   // problema de base se vea como «Booking tiene la URL mal».
   if (eConfig) {
-    console.error('No se pudo verificar el token del feed iCal:', eConfig.message)
+    await registrarError('ical_saliente_config', { detalle: eConfig.message })
     return fallo(503, 'No se pudo generar el calendario en este momento.')
   }
   if (!config) return fallo(404, 'No encontrado.')
@@ -121,7 +131,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       .maybeSingle<{ id: string; nombre: string }>()
 
     if (error) {
-      console.error('No se pudo leer la unidad del feed iCal:', error.message)
+      await registrarError('ical_saliente_unidad', { detalle: error.message })
       return fallo(503, 'No se pudo generar el calendario en este momento.')
     }
     if (!unidad) return fallo(404, 'No encontrado.')
@@ -138,7 +148,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       .maybeSingle<{ id: string; codigo: string; nombre: string }>()
 
     if (eTipo) {
-      console.error('No se pudo leer el tipo de unidad del feed iCal:', eTipo.message)
+      await registrarError('ical_saliente_tipo', { detalle: eTipo.message })
       return fallo(503, 'No se pudo generar el calendario en este momento.')
     }
     if (!tipo) return fallo(404, 'No encontrado.')
@@ -150,7 +160,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       .eq('activo', true)
 
     if (eUnidades) {
-      console.error('No se pudieron leer las unidades del feed iCal:', eUnidades.message)
+      await registrarError('ical_saliente_unidades', { detalle: eUnidades.message })
       return fallo(503, 'No se pudo generar el calendario en este momento.')
     }
 
@@ -191,14 +201,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   )
 
   if (eEstadias) {
-    console.error('No se pudieron leer las estadías del feed iCal:', eEstadias)
+    await registrarError('ical_saliente_estadias', { detalle: eEstadias })
     return fallo(503, 'No se pudo generar el calendario en este momento.')
   }
   if (truncado) {
-    console.error(
-      'El feed iCal quedó truncado: hay más estadías que el techo de paginado. ' +
-        'Servir el calendario parcial publicaría como libres noches que están llenas.',
-    )
+    await registrarError('ical_saliente_truncado', {
+      detalle:
+        'Hay más estadías que el techo de paginado. Servir el calendario parcial ' +
+        'publicaría como libres noches que están llenas (ADR 0022).',
+    })
     return fallo(503, 'No se pudo generar el calendario completo en este momento.')
   }
 

@@ -1,4 +1,5 @@
 import 'server-only'
+import { registrarAviso } from '@/lib/registro'
 import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
 import {
   MONEDA_BASE,
@@ -147,7 +148,19 @@ function construir(
 
   const motivos = validarCotizacion(c)
   if (motivos.length > 0) {
-    console.warn(`[divisas:${fuente}] ${moneda} descartada: ${motivos.join(' ')}`)
+    /*
+      Ésta SÍ va al registro, y las demás de este archivo no.
+
+      Las otras son caídas y 502 de un servicio público: pasan seguido, son
+      transitorias, y el sistema está diseñado para que una cotización vieja nunca
+      bloquee una operación (ADR 0020). Persistir cada una llenaría `errores` de
+      ruido y ahogaría las señales que sí importan.
+
+      Esta es distinta: la fuente **respondió**, y lo que mandó no se puede usar.
+      Significa que cambió el formato, y eso no se arregla solo — mientras tanto
+      el hotel cobra con la cotización de ayer sin que nadie lo sepa.
+    */
+    void registrarAviso('divisas_respuesta_invalida', { fuente, moneda, motivos })
     return null
   }
 

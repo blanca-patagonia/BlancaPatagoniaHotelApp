@@ -4609,3 +4609,58 @@ exactamente la incoherencia que la función viene a evitar, pero ahora con un
 **Verificación:** typecheck 0 · lint 0 · build 0 · 1425 tests puros en verde. El
 caso que importa —un período que pisa otra estadía no cambia **ni el precio ni el
 total**— corre contra la base.
+
+---
+
+## 2026-09-07 — P1-6 cerrado: 67 `console.*` → 15, y los 15 justificados
+
+**Resumen:** el camino del dinero ya se había migrado. Faltaba el resto del
+sistema, y la pregunta no era «cómo convierto 60 llamadas» sino **cuáles merecen
+convertirse**.
+
+### Lo que se migró, y por qué cada uno
+
+| Dónde | Qué pasa si falla y nadie lo ve |
+|---|---|
+| Feed iCal de **salida** | Publica ocupación a las OTAs. Responde 503 en vez de servir un calendario parcial —uno incompleto no se ve roto, se ve como uno con menos bloqueos—, pero ese 503 lo ve el canal, **no el hotel** |
+| Feed iCal de **entrada** | Las reservas de Booking no llegan, y el síntoma es que no pasa nada |
+| Exportación truncada | Un CSV truncado **no se ve truncado**: se ve como uno más corto |
+| Estado de cobro de una reserva | La pantalla del huésped muestra un saldo que no es el suyo, o nada |
+| Servicio de cocina | La pantalla sale vacía y, a las 7 de la mañana, eso parece «no hay nadie alojado» |
+| Link de pago (portal y mostrador) | Una venta que no se concreta |
+| Recuperación de contraseña | **El más invisible de todos**: la pantalla dice «si el correo existe, te mandamos el enlace» —a propósito, para no confirmar qué direcciones están registradas—, así que un fallo acá no lo ve nadie. Alguien se queda sin poder entrar y no hay dónde mirar |
+| Datos de cuenta y login con Google | Reclamos que llegan al mostrador sin diagnóstico |
+| Webhook del pago simulado | Es lo que permite recorrer el circuito de cobro en la defensa |
+
+### Lo que NO se migró, y por qué
+
+Quedan **15**, en ocho archivos, por cuatro razones —y ninguna es «no llegué»:
+
+1. **Circularidad.** `/api/salud` sondea la base; el sink escribe *en esa misma
+   base*. Registrar ahí sería escribir en lo que se acaba de comprobar que está
+   caído. Es el único lugar del sistema donde `console` es lo correcto por diseño.
+2. **Es cliente.** Los tres *error boundaries* y `pwa.tsx` corren en el navegador y
+   `lib/registro.ts` es `server-only`. El lado del servidor ya está cubierto:
+   `instrumentation.ts` captura la excepción con el mismo `digest` que se muestra
+   en pantalla, así que el error **ya está** en `/panel/errores`.
+3. **Es la salida.** El proveedor de correo «consola» escribe el correo en la
+   consola: eso es literalmente lo que hace.
+4. **Volumen.** Las caídas y 502 de la fuente de divisas son frecuentes y
+   transitorias, y el ADR 0020 dice que una cotización vieja **nunca** bloquea una
+   operación. Persistir cada una ahogaría las señales reales. La única que sí se
+   registra es la **respuesta inválida**: ahí la fuente respondió y lo que mandó no
+   sirve, o sea que cambió el formato — y eso no se arregla solo.
+
+### El test-contrato ahora recorre `app/` y `lib/` enteras
+
+Y las excepciones son parte del contrato: cada una lleva su motivo escrito, y el
+test verifica **tres** cosas —que no haya infractores fuera de la lista, que cada
+excepción apunte a un archivo que existe y explique por qué, y que ninguna sobre
+(si un archivo dejó de usar `console`, sale de la lista)—.
+
+Una excepción sin justificar es una regla que se erosiona.
+
+**Se atrapó a sí mismo:** dos entradas decían «Componente de cliente; ídem.» y el
+test las rechazó por cortas. Están escritas.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1428 tests puros en verde.

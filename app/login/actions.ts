@@ -6,6 +6,7 @@ import { permitirIntento } from '@/lib/limites'
 import { mensajeLimite } from '@/lib/domain/limites'
 import { LARGO_MINIMO_PASSWORD } from '@/lib/domain/cuenta'
 import { envPublico, urlDelSitio } from '@/lib/env'
+import { registrarError } from '@/lib/registro'
 
 export interface EstadoLogin {
   error?: string
@@ -98,7 +99,15 @@ export async function pedirRecuperacion(
   })
 
   // El detalle va al log del servidor, nunca a la pantalla: ver arriba.
-  if (error) console.error('[recuperación] no se pudo enviar el enlace:', error.message)
+  /*
+    A `errores` y no a `console`.
+
+    Este es el caso más difícil de diagnosticar del sistema: la pantalla dice
+    «si el correo existe, te mandamos el enlace» —a propósito, para no confirmar
+    qué direcciones están registradas— así que un fallo acá es **completamente
+    invisible** para todos. Alguien se queda sin poder entrar y nadie sabe por qué.
+  */
+  if (error) await registrarError('recuperacion_envio', { detalle: error.message })
 
   return {
     ok: 'Si ese email corresponde a una cuenta del sistema, te llegó un enlace para volver a entrar. Revisá tu casilla.',
@@ -151,7 +160,7 @@ export async function fijarNuevaPassword(
 
   const { error } = await supabase.auth.updateUser({ password: nueva })
   if (error) {
-    console.error('[recuperación] no se pudo fijar la contraseña:', error.message)
+    await registrarError('recuperacion_fijar', { detalle: error.message })
     return { error: 'No se pudo cambiar la contraseña. Probá con otra.' }
   }
 
@@ -252,7 +261,7 @@ export async function iniciarSesionConGoogle(): Promise<void> {
   })
 
   if (error || !data?.url) {
-    console.error('[login] no se pudo iniciar el intercambio con Google:', error?.message)
+    await registrarError('login_google', { detalle: error?.message })
     redirect('/login?error=google')
   }
 

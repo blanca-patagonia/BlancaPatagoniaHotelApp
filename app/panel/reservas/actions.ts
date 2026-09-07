@@ -46,7 +46,7 @@ import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
-import { registrarErrorSync } from '@/lib/registro'
+import { registrarError, registrarErrorSync } from '@/lib/registro'
 import {
   paxQueOcupa,
   validarOcupantes,
@@ -586,7 +586,12 @@ export async function generarLinkDePago(formData: FormData): Promise<void> {
   })
 
   if (falloElCobro(resultado)) {
-    console.error(`[link de pago] ${reserva.codigo}: ${resultado.error}`)
+    // Lo mismo del lado del mostrador: recepción ve el mensaje, pero el motivo
+    // técnico tiene que quedar en algún lado que se pueda consultar después.
+    await registrarError('cobro_link_mostrador', {
+      reserva: reserva.codigo,
+      detalle: resultado.error,
+    })
     redirect(`/panel/reservas/${reservaId}?error=link_pasarela`)
   }
 

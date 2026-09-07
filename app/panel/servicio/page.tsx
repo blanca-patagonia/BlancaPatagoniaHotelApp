@@ -22,6 +22,7 @@ import {
   Tarjeta,
 } from '../_components/ui'
 import { BotonImprimir } from './imprimir'
+import { registrarError } from '@/lib/registro'
 
 /**
  * Servicio de cocina: lista de desayuno del día y resumen de lo vendido.
@@ -140,10 +141,12 @@ export default async function ServicioPage({
   const fallo = estadiasRes.error ?? consumosRes.error
   const truncado = !fallo && (estadiasRes.truncado || consumosRes.truncado)
 
-  // El detalle técnico va al log del servidor, nunca a la pantalla: a quien
-  // arma el desayuno no le sirve un mensaje de PostgREST, y a quien tiene que
-  // arreglarlo no le sirve «no se pudieron leer los datos».
-  if (fallo) console.error('Servicio de cocina: falló la lectura —', fallo)
+  // El detalle técnico va al registro, nunca a la pantalla: a quien arma el
+  // desayuno no le sirve un mensaje de PostgREST, y a quien tiene que arreglarlo
+  // no le sirve «no se pudieron leer los datos». A `errores` y no a `console`
+  // porque la pantalla sale vacía y eso, a las 7 de la mañana, parece «no hay
+  // nadie alojado» en vez de «falló una lectura».
+  if (fallo) await registrarError('servicio_cocina_lectura', { detalle: fallo })
 
   const estadias: EstadiaServicio[] = estadiasRes.filas
     .filter((e) => e.unidad && e.reserva)
@@ -167,7 +170,7 @@ export default async function ServicioPage({
     con aviso es mejor que ninguna a las 7 de la mañana. El error va al log.
   */
   if (extrasRes.error) {
-    console.error('Servicio de cocina: no se pudieron leer los desayunos extra —', extrasRes.error)
+    await registrarError('servicio_desayunos_extra', { detalle: extrasRes.error })
   }
 
   type FilaExtra = {

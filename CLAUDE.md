@@ -249,6 +249,15 @@ Tarifario 2025/2026 (Anexo A).
   factura recibida se carga leyendo su **QR obligatorio**, no con OCR · **ADR 0032**
   el lado saliente del canal: el ARI **se calcula aunque no salga**, y el cron
   responde 200 cuando el proveedor no puede publicar.
+- **Nada del servidor se loguea con `console`** (P1-6). Va por `registrarError` /
+  `registrarAviso` de `lib/registro.ts`, que además de stdout escribe en `errores`
+  y se ve en `/panel/errores` (ADR 0029). `tests/observabilidad-del-dinero.test.ts`
+  recorre `app/` y `lib/` enteras y falla si aparece uno nuevo.
+  ⚠️ Hay **8 excepciones legítimas** declaradas en ese test **con su motivo**, y el
+  test exige que el motivo esté escrito: `/api/salud` (el sink escribe en la misma
+  base que sondea), los 3 *error boundaries* y `pwa.tsx` (son cliente y `registro`
+  es `server-only`), el `EmailProvider` de consola (esa ES su salida) y
+  `lib/divisas` (502 transitorios; persistirlos ahogaría las señales reales).
 - ⚠️ **El precio de la estadía y el total de la reserva se escriben JUNTOS**, con
   `aplicar_precio_reserva` (0085). Reprogramar y recotizar por mudanza lo hacían
   con dos `update` sueltos, y si el segundo fallaba el total contradecía a la

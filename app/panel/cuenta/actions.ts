@@ -3,6 +3,7 @@
 import { requerirSesion } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { registrarError } from '@/lib/registro'
 import {
   LARGO_MINIMO_PASSWORD,
   validarCambioPassword,
@@ -53,7 +54,9 @@ export async function cambiarMiPassword(
   const { error } = await supabase.auth.updateUser({ password: nueva })
   if (error) {
     // El detalle técnico va al log, no a la pantalla.
-    console.error('No se pudo cambiar la contraseña:', error.message)
+    // A `errores`: «cambié la contraseña y no anduvo» es un reclamo que llega al
+    // mostrador, y sin esto no hay dónde ver por qué falló.
+    await registrarError('cuenta_cambio_contrasena', { detalle: error.message })
     return {
       error: `No se pudo cambiar la contraseña. Probá con otra de al menos ${LARGO_MINIMO_PASSWORD} caracteres.`,
     }
@@ -101,7 +104,7 @@ export async function guardarMisDatos(
 
   if (error) {
     // El detalle va al log, nunca a la pantalla.
-    console.error('[cuenta] no se pudieron guardar los datos:', error.message)
+    await registrarError('cuenta_datos', { detalle: error.message })
     return { error: 'No se pudieron guardar tus datos. Quedaron como estaban.' }
   }
 

@@ -1,5 +1,9 @@
 import 'server-only'
 
+// Va a `errores`: si no se puede leer el estado de cobro, la pantalla del huésped
+// muestra un saldo que no es el suyo o no muestra nada, y nadie del hotel se entera.
+import { registrarError } from '@/lib/registro'
+
 /**
  * Estado de cobro de una reserva: cuánto debe, cuánto pagó y qué links tiene
  * vivos.
@@ -76,13 +80,13 @@ export async function estadoDeCobro(
   ])
 
   if (reserva.error || pagos.error || consumos.error || estadias.error) {
-    console.error(
-      `[cobro] no se pudo leer el estado de la reserva ${reservaId}: ` +
-        [reserva.error, pagos.error, consumos.error, estadias.error]
-          .filter(Boolean)
-          .map((e) => e!.message)
-          .join(' · '),
-    )
+    await registrarError('cobro_estado_ilegible', {
+      reservaId,
+      detalle: [reserva.error, pagos.error, consumos.error, estadias.error]
+        .filter(Boolean)
+        .map((e) => e!.message)
+        .join(' · '),
+    })
     return null
   }
   if (!reserva.data) return null

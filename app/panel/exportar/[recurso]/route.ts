@@ -3,6 +3,7 @@ import { puedeAcceder, type Area } from '@/lib/domain/permisos'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { aCsv, respuestaCsv, type Columna } from '@/lib/csv'
 import { traerTodo } from '@/lib/paginado'
+import { registrarAviso } from '@/lib/registro'
 import { parsearPeriodo, mesActual, hoyISO } from '@/lib/fechas'
 import {
   metricasDeMes,
@@ -71,7 +72,10 @@ function simple<T>(
       MAX_FILAS,
     )
     if (truncado) {
-      console.warn(`[exportar] «${tabla}» superó ${MAX_FILAS} filas: el CSV sale incompleto.`)
+      // Aviso y no error: el archivo se entrega igual. Pero va a `errores` porque
+      // un CSV truncado NO se ve truncado —se ve como uno más corto— y quien lo
+      // abre no tiene forma de saber que le faltan filas.
+      await registrarAviso('exportacion_truncada', { recurso: tabla, techo: MAX_FILAS })
     }
     return aCsv(filas, columnas)
   }
@@ -142,7 +146,7 @@ const RECURSOS: Record<string, Definicion> = {
         MAX_FILAS,
       )
       if (truncado) {
-        console.warn(`[exportar] «reservas» superó ${MAX_FILAS} filas: el CSV sale incompleto.`)
+        await registrarAviso('exportacion_truncada', { recurso: 'reservas', techo: MAX_FILAS })
       }
       const filas = crudas
 
