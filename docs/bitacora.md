@@ -4555,3 +4555,57 @@ desde el Bloque A; la auditoría decía que no estaba programado y quedó
 desactualizada.
 
 **Verificación:** typecheck 0 · lint 0 · build 0 · 1405 tests puros en verde.
+
+---
+
+## 2026-09-07 — P1-7, lo que quedaba: el precio y el total, juntos (migración 0085)
+
+**Resumen:** reprogramar y mudar terminaban igual —escribiendo el precio por noche
+en `estadias` y el total en `reservas` con **dos `update` separados**— y el propio
+código lo admitía en los comentarios:
+
+> «Las fechas ya se movieron. Si el total no se actualiza, la reserva queda con el
+> precio de las fechas viejas.»
+>
+> «La mudanza ya se hizo. Si el precio no se recotiza, la reserva queda facturando
+> la unidad anterior.»
+
+Son la misma incoherencia: **`reservas.total` contradiciendo al
+`estadias.precio_noche` de su propia estadía**. Y no se ve: la reserva figura
+normal en la grilla, con un total que no corresponde a lo que se está ocupando. Se
+descubre al facturar, cuando ya hay un comprobante emitido e inmutable.
+
+### Una función para los dos casos
+
+`aplicar_precio_reserva(reserva, precio_noche, total, check_in?, check_out?)`. Lo
+único que distingue a las dos operaciones es que reprogramar **además** mueve el
+período, así que ese parámetro es opcional. Escribir dos funciones casi iguales
+garantizaría que en algún momento una reciba un arreglo que la otra no.
+
+Toma `for update` sobre la estadía, igual que `cambiar_unidad_reserva` (0028): dos
+recepcionistas reprogramando la misma reserva se serializan en vez de pisarse.
+
+### El agujero que casi dejo abierto
+
+La primera versión hacía los dos `update` y comprobaba `FOUND` sólo después del
+segundo. **La función es `security invoker`**: si la política RLS de `estadias` no
+le permite escribir a quien llama, el `update` **no lanza** — afecta cero filas y
+sigue. Habría devuelto `ok: true` con la estadía intacta y el total ya cambiado:
+exactamente la incoherencia que la función viene a evitar, pero ahora con un
+«listo» en pantalla. Ahora se comprueba después de cada uno, y `raise` deshace todo.
+
+### Lo que queda fuera, a propósito
+
+- **La recotización sigue afuera de la transacción de la mudanza.** Esa decisión ya
+  estaba tomada y escrita: si fallara, el huésped ya está mudado —que es lo
+  urgente— y el precio se corrige a mano; revertir una mudanza por un problema de
+  tarifa sería peor. Lo que cambió es que la recotización dejó de poder quedar a
+  medias.
+- **El alta grupal.** Un lote de 5 que consigue 3 es un resultado útil, no una
+  transacción a medias, y está argumentado en `crearReservaGrupal` desde antes.
+
+**Con esto P1-7 queda cerrado.**
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · 1425 tests puros en verde. El
+caso que importa —un período que pisa otra estadía no cambia **ni el precio ni el
+total**— corre contra la base.
