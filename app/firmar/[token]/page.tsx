@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import { fechaHotel, formatoFechaCorta, hoyISO } from '@/lib/fechas'
 import {
   motivoNoFirmable,
   MENSAJES_NO_FIRMABLE,
@@ -127,7 +127,7 @@ export default async function FirmarPage({
           <p className="mt-4 rounded-2xl bg-white px-5 py-4 text-center text-sm text-stone-600 ring-1 ring-stone-200">
             Este contrato ya fue firmado
             {fila.firmante_nombre ? ` por ${fila.firmante_nombre}` : ''} el{' '}
-            {new Date(fila.fecha_firma!).toLocaleDateString('es-AR')}.
+            {fechaHotel(fila.fecha_firma!)}.
           </p>
         ) : motivo ? (
           <p className="mt-4 rounded-2xl bg-white px-5 py-4 text-center text-sm text-stone-600 ring-1 ring-stone-200">

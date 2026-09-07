@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda } from '@/lib/listados'
-import { hoyISO } from '@/lib/fechas'
+import { fechaHoraHotel, hoyISO } from '@/lib/fechas'
 import {
   BarraHerramientas,
   Buscador,
@@ -180,7 +180,7 @@ export default async function ErroresPage({
                 {registros.map((r) => (
                   <tr key={r.id} className={FILA}>
                     <td className={`${TD} tabular whitespace-nowrap text-stone-500`}>
-                      {new Date(r.creado_en).toLocaleString('es-AR')}
+                      {fechaHoraHotel(r.creado_en)}
                     </td>
                     <td className={TD}>
                       <div className="flex flex-wrap items-center gap-1.5">

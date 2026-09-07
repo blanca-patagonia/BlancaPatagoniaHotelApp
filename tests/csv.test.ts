@@ -29,6 +29,29 @@ describe('escapado de campos CSV', () => {
     expect(escaparCampo('@SUM(A1)')).toBe("'@SUM(A1)")
     expect(escaparCampo('-2+3')).toBe("'-2+3")
   })
+
+  it('un importe negativo sigue siendo un número, no texto', () => {
+    // El `-` inicial es el mismo del caso de arriba, pero acá escaparlo rompe el
+    // archivo: con el apóstrofo, Excel deja de sumar la celda. Todo saldo a
+    // favor, nota de crédito y diferencia contra un canal se escribe así, y el
+    // total de la columna quedaría mal sin que nada lo delate.
+    expect(escaparCampo('-50.00')).toBe('-50.00')
+    expect(escaparCampo(-1234.5)).toBe('-1234.5')
+    expect(escaparCampo('-0.01')).toBe('-0.01')
+  })
+
+  it('la excepción no le abre la puerta a ninguna fórmula', () => {
+    // El permiso es solo para un decimal escrito entero. Cualquier otra cosa que
+    // empiece con un carácter peligroso se sigue escapando.
+    expect(escaparCampo('-1-1')).toBe("'-1-1")
+    expect(escaparCampo('-1e9')).toBe("'-1e9")
+    expect(escaparCampo('-cmd|calc')).toBe("'-cmd|calc")
+    expect(escaparCampo('+50')).toBe("'+50")
+    expect(escaparCampo('=-5')).toBe("'=-5")
+    // `Number('\t')` da 0: si la excepción se hubiera escrito con `Number`, un
+    // campo que empieza con tabulador se habría colado como «número».
+    expect(escaparCampo('\t')).toBe("'\t")
+  })
 })
 
 describe('armado del CSV', () => {

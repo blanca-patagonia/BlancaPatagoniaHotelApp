@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { crearClienteNavegador } from '@/lib/supabase/client'
 import { agrupaConAnterior } from '@/lib/domain/conversaciones'
 import { enviarMensaje } from './actions'
+import { horaHotel } from '@/lib/fechas'
 
 /**
  * Panel de mensajes de un canal, con actualización en vivo.
@@ -31,7 +32,7 @@ interface Props {
 }
 
 function hora(iso: string): string {
-  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  return horaHotel(iso, { hour: '2-digit', minute: '2-digit' })
 }
 
 export function Chat({ canalId, usuarioId, iniciales, nombres }: Props) {

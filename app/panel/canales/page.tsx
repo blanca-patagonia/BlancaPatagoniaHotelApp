@@ -5,7 +5,7 @@ import { obtenerProveedorCanal } from '@/lib/canales'
 import { describirUltimaLectura } from '@/lib/canales/ical-saliente'
 import { MONEDAS_EXTRANJERAS } from '@/lib/domain/divisas'
 import { urlDelSitio } from '@/lib/env'
-import { formatoFechaCorta, hoyISO } from '@/lib/fechas'
+import { fechaHoraHotel, fechaHotel, formatoFechaCorta, horaHotel, hoyISO } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
@@ -764,7 +764,7 @@ export default async function CanalesPage({
                 <p className="text-stone-600">
                   Última sincronización:{' '}
                   <strong className="text-stone-900">
-                    {new Date(ultima.corrida_en).toLocaleString('es-AR')}
+                    {fechaHoraHotel(ultima.corrida_en)}
                   </strong>
                 </p>
                 <p className="mt-1 text-xs text-stone-600">
@@ -1566,7 +1566,7 @@ export default async function CanalesPage({
                         {m.entrante
                           ? `${m.entrante.huesped_apellido} · llega ${formatoFechaCorta(m.entrante.check_in)} · `
                           : ''}
-                        {new Date(m.recibido_en).toLocaleDateString('es-AR')}
+                        {fechaHotel(m.recibido_en)}
                       </p>
                       {m.atendido && (
                         <Etiqueta tono="exito">Atendido</Etiqueta>
@@ -1947,7 +1947,7 @@ export default async function CanalesPage({
               <div className="space-y-2 text-sm text-stone-700">
                 <p>
                   <strong>{formatoFechaCorta(ultimaSalida.corrida_en.slice(0, 10))}</strong> ·{' '}
-                  {new Date(ultimaSalida.corrida_en).toLocaleTimeString('es-AR')} · proveedor{' '}
+                  {horaHotel(ultimaSalida.corrida_en)} · proveedor{' '}
                   {ultimaSalida.proveedor}
                 </p>
                 <p className="tabular">

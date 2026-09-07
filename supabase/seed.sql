@@ -115,7 +115,9 @@ join tipos_unidad tu on tu.codigo = v.tipo_codigo;
 -- > 14 días: sin cargo · 14–7 días: primera noche · < 7 días: 100% · no-show: 100%.
 insert into politicas_cancelacion (codigo, nombre, reembolsable, reglas) values
   ('estandar', 'Política estándar Blanca Patagonia', true,
-   '[{"desde_dias":14,"cargo":"ninguno"},
+   -- 15 y no 14: el umbral es inclusivo y el Tarifario dice «MÁS de 14 días sin
+   -- cargo», así que el día 14 ya cobra la primera noche (migración 0083).
+   '[{"desde_dias":15,"cargo":"ninguno"},
      {"desde_dias":7,"cargo":"primera_noche"},
      {"desde_dias":0,"cargo":"total"}]');
 

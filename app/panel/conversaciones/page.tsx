@@ -15,6 +15,7 @@ import {
 } from '../_components/ui'
 import { Chat, type MensajeVista } from './chat'
 import { marcarConsultaRespondida } from './actions'
+import { fechaHoraHotel } from '@/lib/fechas'
 
 /** Cuántos mensajes se cargan del historial al abrir un canal. */
 const HISTORIAL = 50
@@ -165,7 +166,7 @@ export default async function ConversacionesPage({
                         {c.pregunta}
                       </p>
                       <p className="text-xs text-stone-600">
-                        {new Date(c.creado_en).toLocaleString('es-AR')}
+                        {fechaHoraHotel(c.creado_en)}
                         {c.contacto && ` · ${c.contacto}`}
                       </p>
                     </div>

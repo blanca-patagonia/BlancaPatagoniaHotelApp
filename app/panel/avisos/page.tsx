@@ -17,6 +17,7 @@ import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
 import { FormularioAviso } from './formulario'
 import { borrarAviso, alternarFijado } from './actions'
+import { fechaHotel } from '@/lib/fechas'
 
 interface Aviso {
   id: string
@@ -34,7 +35,7 @@ function cuando(iso: string): string {
   if (minutos < 1) return 'recién'
   if (minutos < 60) return `hace ${minutos} min`
   if (minutos < 60 * 24) return `hace ${Math.floor(minutos / 60)} h`
-  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+  return fechaHotel(fecha, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 /**

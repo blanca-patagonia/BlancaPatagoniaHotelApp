@@ -97,7 +97,7 @@ columnas, conciliar la factura e importar reseñas.
   `tests/rls-escritura-por-rol.test.ts` cubre casos elegidos por consecuencia
   (escalada de privilegio, dinero, inventario, borde público, borrado). Lo que no
   está, no está auditado — y el archivo lo dice.
-  La de **lectura** sí es exhaustiva: 43 tablas × 4 roles, con la lista traída de la
+  La de **lectura** sí es exhaustiva: 51 tablas × 4 roles, con la lista traída de la
   base para que una tabla nueva sin declarar haga fallar el test. Y hay un guardián
   que reporta los casos negativos que pasaron «por tabla vacía» en vez de darlos por
   verificados.

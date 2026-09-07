@@ -74,7 +74,16 @@ if (error) {
     process.exit(1)
   }
   userId = existente.id
-  await db.auth.admin.updateUserById(userId, { password, user_metadata: { nombre } })
+  // Sin mirar el error, el script imprimía «se actualizó la contraseña» aunque no
+  // se hubiera actualizado: después no se puede entrar y nada indica por qué.
+  const { error: errClave } = await db.auth.admin.updateUserById(userId, {
+    password,
+    user_metadata: { nombre },
+  })
+  if (errClave) {
+    console.error(`✗ El usuario existe pero no se pudo actualizar su contraseña: ${errClave.message}`)
+    process.exit(1)
+  }
   console.log('• Usuario ya existente: se actualizó la contraseña.')
 }
 

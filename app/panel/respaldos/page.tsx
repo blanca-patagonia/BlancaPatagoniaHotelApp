@@ -25,6 +25,7 @@ import {
   Tarjeta,
   botonClases,
 } from '../_components/ui'
+import { fechaHoraHotel } from '@/lib/fechas'
 
 /**
  * Respaldos.
@@ -269,7 +270,7 @@ export default async function RespaldosPage() {
                   {respaldos.map((r) => (
                     <tr key={r.id} className={FILA}>
                       <td className={`${TD} tabular whitespace-nowrap text-stone-700`}>
-                        {new Date(r.generado_en).toLocaleString('es-AR')}
+                        {fechaHoraHotel(r.generado_en)}
                       </td>
                       <td className={`${TD} text-stone-600`}>{r.perfil?.nombre ?? '—'}</td>
                       <td className={`${TD} tabular text-right text-stone-600`}>

@@ -33,7 +33,7 @@ import type { Rol } from '@/lib/domain/roles'
  *
  * ── Por qué es dirigido y no exhaustivo, dicho de frente ─────────────────────
  *
- * Una matriz completa sería 40 tablas × 4 roles × 3 operaciones = 480 casos, y cada
+ * Una matriz completa sería 51 tablas × 4 roles × 3 operaciones = 612 casos, y cada
  * `insert` necesita una fila válida para *esa* tabla (claves foráneas, `not null`,
  * enums). Sería mucho andamiaje frágil para cubrir sobre todo tablas de catálogo
  * donde el peor caso es que alguien cargue una promoción de más.

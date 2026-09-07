@@ -32,7 +32,7 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 | **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | verificado, exit 0 |
 | Lint | `npm run lint` | verificado, exit 0 |
 | Typecheck | `npm run typecheck` | verificado, exit 0 |
-| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **1446 pasan / 0 saltean** con base y las 3 variables |
+| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **1914 pasan · 0 saltean** con base y las 3 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
 | Base local **(solo para tests)** | `npx supabase start` · `npx supabase db reset` | necesita Docker |
@@ -55,7 +55,7 @@ app/rutas ──124──> app/panel/_components (UI compartida)
           ───89──> lib/{auth,pricing,payments,email,firma,facturacion,availability,canales,divisas}
           ───60──> lib/supabase        ← puentea la capa de datos (deuda conocida)
 lib/servicios ──> lib/domain ──> lib/fechas
-lib/supabase ──> Postgres + RLS (90 políticas sobre 43 tablas)
+lib/supabase ──> Postgres + RLS (103 políticas sobre 51 tablas)
 ```
 
 Reglas de dependencia, verificables con `rg`:

@@ -13,7 +13,7 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**1446 tests en verde** (89 archivos, cero salteados contra la base local) · typecheck,
+**1914 tests en verde** (118 archivos, cero salteados contra la base local) · typecheck,
 lint y build limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
@@ -43,7 +43,7 @@ La integridad crítica no depende de la aplicación:
 
 - **Anti-overbooking** — restricción de exclusión GiST sobre `estadias`; dos
   reservas no pueden solapar la misma unidad aunque la app falle ([ADR 0002](docs/decisiones/0002-motor-de-disponibilidad.md)).
-- **RLS activado en las 43 tablas** (90 políticas), con lectura pública solo del catálogo.
+- **RLS activado en las 51 tablas** (103 políticas), con lectura pública solo del catálogo.
 - **Auditoría *append-only*** por trigger genérico: el staff lee, no escribe.
 - **Límite de tasa** en las entradas públicas, atómico (inserta y después cuenta).
 
@@ -72,9 +72,9 @@ no cada tres horas.
 
 Tres pendientes técnicos, anotados donde viven y no solo acá:
 
-- **Auditar las 90 políticas RLS una por una.** Que estén activadas en las 43
+- **Auditar las 103 políticas RLS una por una.** Que estén activadas en las 51
   tablas no dice qué permite cada una. La matriz de **lectura** ya es exhaustiva
-  (43 tablas × 4 roles, `tests/rls-por-rol.test.ts`); la de **escritura** es
+  (51 tablas × 4 roles, `tests/rls-por-rol.test.ts`); la de **escritura** es
   dirigida, no exhaustiva, y está declarado en el propio archivo.
 - **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
   de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
@@ -189,9 +189,9 @@ app/            # Next.js App Router
   portal/       #   portal de agencias y proveedores por token
   api/          #   route handlers, webhooks y cron
 lib/            # dominio puro, disponibilidad, pagos, canales, divisas, clientes Supabase
-supabase/       # 57 migraciones SQL numeradas + seed
+supabase/       # 83 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 1446 tests (Vitest)
+tests/          # 1914 tests (Vitest)
 ```
 
 ## Scripts
@@ -209,7 +209,7 @@ tests/          # 1446 tests (Vitest)
 El test de integración anti-overbooking necesita la base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.
 
-Para correr los 1446 en local hay que exportar las tres variables — vitest no lee
+Para correr los 1914 en local hay que exportar las tres variables — vitest no lee
 `.env.local`, y sin la clave publicable los 4 tests del borde público saltean sin
 avisar aunque `EXIGIR_DB=1` esté puesto:
 

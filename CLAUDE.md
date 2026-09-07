@@ -178,8 +178,8 @@ Tarifario 2025/2026 (Anexo A).
   (`tests/funciones-sin-public.test.ts`) para que ninguna función nazca abierta.
   ⚠️ **No hacer `cotizar_estadia` `security definer`**: ahí `current_user` es el
   dueño de la función y la guarda quedaría siempre en verdadero.
-  **Pendiente:** auditar las ~75 políticas RLS una por una — que estén activadas en
-  las 40 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
+  **Pendiente:** auditar las 103 políticas RLS una por una — que estén activadas en
+  las 51 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
   tablas y 14 políticas** a ese pendiente (`cotizaciones`, `canal_reservas`,
   `canal_sincronizaciones`, `canal_mensajes`, `canal_resenas`, `departamentos`,
   `respaldos`); todas revocan `select` a `anon` explícitamente, pero eso no
@@ -371,8 +371,8 @@ Tarifario 2025/2026 (Anexo A).
      la caché devolvería JavaScript viejo.
   4. **Cero escrituras diferidas.** Sin background sync: una escritura reproducida
      más tarde se aplicaría sobre una realidad distinta de la que la originó.
-- **1575 tests verdes** (95 archivos), **cero salteados**, verificados contra la base
-  local con las **67** migraciones aplicadas en orden. El feed iCal de salida (B7,
+- **1914 tests verdes** (118 archivos), **cero salteados**, verificados contra la base
+  local con las **83** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
   0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos
   migraciones con el mismo número **no conviven**: Supabase registra la versión por
@@ -413,6 +413,22 @@ Tarifario 2025/2026 (Anexo A).
   `lib/domain/catalogo.ts`, o publica un número más bajo del que después cobra.
   Y los rangos de temporada son `[desde, hasta)` con el **fin excluido**: para
   mostrarlos va `textoRango()`, que resta el día.
+- **Fechas y horas en pantalla — OBLIGATORIO:** un `timestamptz` **nunca** se
+  formatea con `new Date(iso).toLocaleDateString('es-AR')` pelado. Sin `timeZone`
+  toma la del proceso, que en Vercel es UTC: entre las 21:00 y la medianoche de
+  El Calafate la fecha se corre un día y toda hora sale tres horas adelantada.
+  Van `fechaHotel()`, `fechaHoraHotel()` y `horaHotel()` de `lib/fechas.ts`, que
+  fijan `ZONA_HOTEL`. Es el mismo error que `hoyISO()` arregló del lado de lo que
+  el sistema **opera**, y estaba en 14 pantallas del lado de lo que **muestra**
+  (entre ellas la fecha de firma de un contrato, la emisión de una nota de
+  crédito y la auditoría). Esos helpers además fijan **reloj de 24 horas**: el
+  ICU de Node formatea `es-AR` en 12 y `toLocaleString` no le pone el a. m./p. m.,
+  así que las 21:30 salían «09:30:00», iguales a las de la mañana.
+- **Exportaciones CSV:** `escaparCampo()` de `lib/csv.ts` antepone un apóstrofo a
+  lo que empiece con `= + - @` (inyección de fórmulas), **salvo** un decimal
+  escrito entero (`-50.00`). Sin esa excepción todo importe negativo —saldo a
+  favor, nota de crédito, diferencia contra un canal— llegaba a Excel como texto
+  y la columna sumaba mal sin que nada lo delatara.
 - **Filtros `or` de PostgREST:** el término del usuario **nunca** se interpola
   pelado (la coma separa condiciones y los paréntesis agrupan: `x,id.gt.0` cambia
   el filtro). Va `patronOr()` de `lib/listados.ts`, que lo encierra entre comillas

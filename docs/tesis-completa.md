@@ -572,7 +572,7 @@ en línea.
 | OE-2 | Sustituir la verificación manual de disponibilidad | Consulta en línea por tipo de alojamiento y rango de fechas, desde el mostrador y desde el portal | Cumplido |
 | OE-3 | Registrar los consumos en el sistema y no en papel | Toda venta queda asociada a la estadía con el precio congelado al momento de la carga | Cumplido |
 | OE-4 | Cerrar la cuenta con un comprobante calculado | La factura consolida alojamiento y consumos, discrimina el IVA y deriva la letra del comprobante | Cumplido con autorización simulada |
-| OE-5 | Separar el acceso por puesto de trabajo | Cuatro roles con permisos por área, verificados en cada pantalla y en cada escritura, y respaldados por 90 políticas de seguridad de fila | Cumplido |
+| OE-5 | Separar el acceso por puesto de trabajo | Cuatro roles con permisos por área, verificados en cada pantalla y en cada escritura, y respaldados por 103 políticas de seguridad de fila | Cumplido |
 | OE-6 | Dar al hotel un canal de venta propio | Portal público operativo: búsqueda, cotización, reserva y confirmación por código | Cumplido |
 | OE-7 | Entregar los indicadores sin trabajo manual | Ocupación, tarifa promedio diaria, ingreso por habitación disponible, ranking y rentabilidad por canal, y satisfacción del huésped | Cumplido |
 | OE-8 | Reflejar en el panel las reservas de Booking | Las reservas del canal aterrizan en una zona de recepción y se incorporan bajo control de un operador | Cumplido, de solo lectura |
@@ -657,7 +657,7 @@ la contabilidad general.
 | Migración de datos históricos | Pendiente | Tarea de puesta en marcha |
 | Exención de IVA al turista del exterior | No implementada | Anotada como consecuencia diferida al modelar la estructura tarifaria |
 | Política de contenido en el navegador | No aplicada | Una política mal calibrada rompe la aplicación de forma difícil de diagnosticar |
-| Revisión individual de las 90 políticas de seguridad de fila | Pendiente | Que estén activas en las 43 tablas no dice qué permite cada una |
+| Revisión individual de las 103 políticas de seguridad de fila | Pendiente | Que estén activas en las 51 tablas no dice qué permite cada una |
 | Atomicidad de los flujos de varios pasos de reservas | Parcial | Un fallo a mitad de camino avisa, pero deja datos incompletos |
 
 ## 4.6 Supuestos y restricciones
@@ -826,7 +826,7 @@ fuera de la lista de roles válidos, de modo que la sesión se descarta.
 
 | ID | Categoría | Requerimiento | Cómo está resuelto |
 |---|---|---|---|
-| RNF-01 | Seguridad | Ningún dato personal accesible sin autorización | Seguridad de fila activa en las 43 tablas, con 90 políticas. Sin sesión solo se ve el catálogo |
+| RNF-01 | Seguridad | Ningún dato personal accesible sin autorización | Seguridad de fila activa en las 51 tablas, con 103 políticas. Sin sesión solo se ve el catálogo |
 | RNF-02 | Seguridad | El precio neto de agencia no puede verse desde internet | Dos funciones de cotización; a la que conoce el neto se le revocó la ejecución para el rol público, y el privilegio sobre esa columna |
 | RNF-03 | Seguridad | La autorización se verifica en el servidor | Guarda de acceso por área en cada pantalla y en cada escritura. Entrar a la dirección a mano no sirve |
 | RNF-04 | Seguridad | La credencial privilegiada nunca llega al navegador | El cliente que la usa está marcado como exclusivo de servidor |
@@ -846,7 +846,7 @@ fuera de la lista de roles válidos, de modo que la sesión se descarta.
 | RNF-18 | Accesibilidad | Se respeta la preferencia de movimiento reducido | Las transiciones se anulan cuando el sistema operativo lo indica |
 | RNF-19 | Mantenibilidad | Las reglas se prueban sin base de datos | 48 módulos de reglas puras sin dependencias de infraestructura |
 | RNF-20 | Mantenibilidad | Los bordes con terceros son reemplazables | Siete adaptadores con interfaz estable e implementación elegida por configuración |
-| RNF-21 | Mantenibilidad | El esquema evoluciona de forma reproducible | 57 migraciones numeradas que no se editan una vez aplicadas |
+| RNF-21 | Mantenibilidad | El esquema evoluciona de forma reproducible | 82 migraciones numeradas que no se editan una vez aplicadas |
 | RNF-22 | Mantenibilidad | Cada cambio queda verificado | Un comando corre estilo, tipos, pruebas y compilación; el pipeline lo repite |
 | RNF-23 | Disponibilidad | Se puede saber si el sistema está en pie | Punto de consulta de salud que responde según si la base contesta |
 | RNF-24 | Disponibilidad | Una cotización vencida no bloquea el cobro | Cadena de respaldo de cuatro niveles; el valor viejo se usa avisando |
@@ -925,7 +925,7 @@ flowchart TB
     subgraph DAT["CAPA DE DATOS"]
         direction LR
         CLI["Clientes de acceso<br/>servidor · navegador · privilegiado"]
-        PG["PostgreSQL 17<br/>43 tablas · 90 políticas<br/>restricción anti-sobreventa"]
+        PG["PostgreSQL 17<br/>51 tablas · 103 políticas<br/>restricción anti-sobreventa"]
     end
     EXT["SERVICIOS EXTERNOS<br/>pagos · correo · facturación<br/>canal de venta · cotización · firma"]
 
@@ -1014,7 +1014,7 @@ al 0021 más el 0023. El número 0022 no existe; es un salto en la numeración.
 
 ## 6.3 Modelo de datos
 
-El esquema tiene 43 tablas construidas por 57 migraciones numeradas. El diagrama
+El esquema tiene 51 tablas construidas por 82 migraciones numeradas. El diagrama
 muestra las entidades del circuito central; se omiten las de soporte (auditoría,
 avisos, encuestas, mantenimiento, fidelidad, respaldos, límites y mensajería).
 
@@ -1400,7 +1400,7 @@ flowchart TB
         L5["lib/fechas · acciones · env"]
     end
     subgraph DB["supabase — datos"]
-        D1["migrations<br/>43 tablas · 90 políticas<br/>28 funciones · 12 disparadores"]
+        D1["migrations<br/>51 tablas · 103 políticas<br/>28 funciones · 12 disparadores"]
     end
 
     A1 --> A5
@@ -3334,7 +3334,7 @@ flowchart LR
 
 | # | Paso | Estado |
 |---|---|---|
-| 1 | Crear el proyecto de base de datos y aplicar las 57 migraciones | Pendiente |
+| 1 | Crear el proyecto de base de datos y aplicar las 82 migraciones | Pendiente |
 | 2 | Sembrar el usuario administrador y los datos del tarifario | Script disponible |
 | 3 | Cargar las variables de entorno obligatorias | Documentadas |
 | 4 | Conectar el repositorio a la plataforma de aplicación | Pendiente |
@@ -3437,7 +3437,7 @@ instalar nada, que es la diferencia central con Winpax.
 flowchart TB
     A["1 · BORDE PÚBLICO<br/>límite por origen · encabezados de protección<br/>token opaco en lugar de identificador"]
     B["2 · APLICACIÓN<br/>guarda de acceso por área en cada pantalla<br/>y en cada operación de escritura"]
-    C["3 · BASE DE DATOS<br/>43 tablas con seguridad de fila<br/>90 políticas · privilegios por columna"]
+    C["3 · BASE DE DATOS<br/>51 tablas con seguridad de fila<br/>103 políticas · privilegios por columna"]
     D["4 · INTEGRIDAD<br/>restricción anti-sobreventa · unicidad de factura<br/>unicidad del aviso de pago · disparadores"]
     E["5 · AUDITORÍA<br/>registro de solo agregado sobre pagos,<br/>tarifas y estados de reserva"]
     A --> B --> C --> D --> E
@@ -3456,7 +3456,7 @@ no entrega datos fuera de rol.
 | **Autorización** | Mapa de permisos por área en el dominio, consumido por la guarda del servidor y por el menú. 21 áreas × 4 roles |
 | **Alta sin privilegios** | El usuario nace sin rol y desactivado, y ese valor queda fuera de la lista de roles válidos, de modo que la sesión se descarta |
 | **Baja efectiva** | Dar de baja revoca el acceso en la base, no solo en la aplicación |
-| **Seguridad de datos** | Seguridad de fila activa en las 43 tablas, con 90 políticas. Lectura pública limitada al catálogo |
+| **Seguridad de datos** | Seguridad de fila activa en las 51 tablas, con 103 políticas. Lectura pública limitada al catálogo |
 | **Información comercial** | El precio neto de agencia está fuera del alcance del rol público por dos caminos: permiso de ejecución revocado sobre la función que lo conoce, y privilegio revocado sobre la columna |
 | **Credencial privilegiada** | Marcada como exclusiva de servidor; se usa en los tres lugares donde un actor sin cuenta necesita leer o escribir algo propio |
 | **Límite de volumen** | Por dirección de origen, resuelto en la base con una función atómica que inserta y cuenta en la misma llamada |
@@ -3500,8 +3500,8 @@ La auditoría de seguridad se hizo en fases, con numeración propia.
 
 **Pendiente, y declarado:**
 
-- **Revisar las 90 políticas de seguridad de fila una por una.** Que estén activas
-  en las 43 tablas no dice qué permite cada una. Exige ejecutarlas contra una base
+- **Revisar las 103 políticas de seguridad de fila una por una.** Que estén activas
+  en las 51 tablas no dice qué permite cada una. Exige ejecutarlas contra una base
   con los cuatro roles.
 - **Política de contenido en el navegador.** No se aplicó: una política mal
   calibrada rompe la aplicación de formas difíciles de diagnosticar. Hacerla bien

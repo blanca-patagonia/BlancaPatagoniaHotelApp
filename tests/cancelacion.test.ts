@@ -7,9 +7,17 @@ import {
   type ReglaCancelacion,
 } from '@/lib/domain/cancelacion'
 
-// Política estándar del Tarifario Blanca Patagonia.
+/*
+  Política estándar del Tarifario Blanca Patagonia, tal como la carga el seed
+  (y como la corrige la migración 0083).
+
+  El umbral es **inclusivo** —`cargoPorCancelacion` aplica la primera regla con
+  `diasAntes >= desde_dias`—, así que «más de 14 días sin cargo» se escribe con
+  **15**. Con 14 acá, cancelar a exactamente 14 días salía gratis cuando el
+  Tarifario lo pone en el tramo que cobra la primera noche.
+*/
 const reglas: ReglaCancelacion[] = [
-  { desde_dias: 14, cargo: 'ninguno' },
+  { desde_dias: 15, cargo: 'ninguno' },
   { desde_dias: 7, cargo: 'primera_noche' },
   { desde_dias: 0, cargo: 'total' },
 ]
@@ -17,8 +25,17 @@ const reglas: ReglaCancelacion[] = [
 describe('cargoPorCancelacion', () => {
   it('no cobra si se cancela con más de 14 días', () => {
     expect(cargoPorCancelacion(reglas, 20)).toBe('ninguno')
-    expect(cargoPorCancelacion(reglas, 14)).toBe('ninguno')
+    expect(cargoPorCancelacion(reglas, 15)).toBe('ninguno')
   })
+
+  it('el día 14 exacto ya cobra: «más de 14» son 15', () => {
+    // El borde que estaba mal. El título del test de arriba decía «más de 14
+    // días» y a continuación verificaba el 14, que no es más de 14: la
+    // afirmación y la comprobación no eran la misma cosa, y por eso el error
+    // sobrevivió. El Tarifario pone los 14 días en el tramo que cobra.
+    expect(cargoPorCancelacion(reglas, 14)).toBe('primera_noche')
+  })
+
   it('cobra la primera noche entre 14 y 7 días', () => {
     expect(cargoPorCancelacion(reglas, 10)).toBe('primera_noche')
     expect(cargoPorCancelacion(reglas, 7)).toBe('primera_noche')

@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
+import { registrarFalla } from '@/lib/acciones'
 import { diasEntre } from '@/lib/fechas'
 import type { TarifaTipo } from '@/lib/domain/precios'
 import {
@@ -61,11 +62,25 @@ export async function crearReservaEnUnidadLibre(
   p: ParamsReserva,
 ): Promise<ResultadoReserva> {
   // 1) Buscar una unidad libre del tipo elegido.
-  const { data: libres } = await client.rpc('unidades_disponibles', {
+  //
+  // El error de la consulta se mira antes de interpretar el resultado. Sin eso,
+  // una base caída devolvía `libres` en `undefined`, el `?? []` lo convertía en
+  // «no encontré ninguna» y el sistema respondía **«no hay unidades
+  // disponibles»**: la misma frase que cuando el hotel está lleno de verdad.
+  // Las dos situaciones piden lo contrario —una es esperar, la otra reintentar—
+  // y llegan a gente que no puede distinguirlas: al huésped en `/reservar`, y a
+  // recepción en la zona de canales, donde el motivo queda escrito en la fila
+  // pendiente (`lib/canales/servicio.ts`) y manda a buscar un overbooking que
+  // nunca existió.
+  const { data: libres, error: eLibres } = await client.rpc('unidades_disponibles', {
     desde: p.checkIn,
     hasta: p.checkOut,
     p_categoria: null,
   })
+  if (eLibres) {
+    registrarFalla(eLibres, 'consulta de unidades libres al crear una reserva')
+    return { ok: false, error: 'No se pudo consultar la disponibilidad. Volvé a intentar.' }
+  }
   const unidad = ((libres ?? []) as { id: string; tipo_unidad_id: string }[]).find(
     (u) => u.tipo_unidad_id === p.tipoUnidadId,
   )

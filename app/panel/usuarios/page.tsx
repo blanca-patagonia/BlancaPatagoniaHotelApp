@@ -21,6 +21,7 @@ import {
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { cambiarRolUsuario, alternarActivoUsuario } from './actions'
+import { fechaHotel } from '@/lib/fechas'
 
 interface Perfil {
   id: string
@@ -36,7 +37,7 @@ function ultimoAcceso(iso: string | undefined): string {
   if (dias === 0) return 'hoy'
   if (dias === 1) return 'ayer'
   if (dias < 30) return `hace ${dias} días`
-  return new Date(iso).toLocaleDateString('es-AR')
+  return fechaHotel(iso)
 }
 
 /**
