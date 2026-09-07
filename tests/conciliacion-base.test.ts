@@ -15,14 +15,79 @@ describe.skipIf(!hayDB)('movimientos externos · lo que garantiza la base', () =
   let db: SupabaseClient
   const sufijo = sufijoUnico()
   const prefijo = `test-conc-${sufijo}`
+  const creados: { reservaId: string; huespedId: string }[] = []
 
   beforeAll(() => {
     db = clienteDePrueba()
   })
 
   afterAll(async () => {
+    // El orden importa: los movimientos apuntan al pago, el pago a la reserva y la
+    // reserva al huésped. Al revés, las FK rechazan el borrado.
     await db.from('movimientos_externos').delete().like('external_id', `${prefijo}%`)
+    for (const c of creados) {
+      await db.from('pagos').delete().eq('reserva_id', c.reservaId)
+      await db.from('reservas').delete().eq('id', c.reservaId)
+      await db.from('huespedes').delete().eq('id', c.huespedId)
+    }
   })
+
+  /**
+   * Crea un pago propio para este test.
+   *
+   * Se monta la cadena entera —huésped, reserva, pago— porque `pagos.reserva_id`
+   * es obligatorio. Las fechas van en 2031 para no chocar contra la restricción de
+   * exclusión de `estadias` con ninguna reserva de otro test.
+   */
+  async function sembrarPago(): Promise<string> {
+    const { data: unidad, error: eUnidad } = await db
+      .from('unidades')
+      .select('id, tipo_unidad_id')
+      .order('nombre')
+      .limit(1)
+      .single<{ id: string; tipo_unidad_id: string }>()
+    if (eUnidad) throw new Error(`no hay unidades para sembrar: ${eUnidad.message}`)
+
+    const { data: h, error: eH } = await db
+      .from('huespedes')
+      .insert({ apellido: `CONC-${sufijo}`, nombre: 'Prueba' })
+      .select('id')
+      .single<{ id: string }>()
+    if (eH) throw new Error(`no se pudo crear el huésped: ${eH.message}`)
+
+    const { data: r, error: eR } = await db.rpc('crear_reserva', {
+      p_huesped_id: h.id,
+      p_unidad_id: unidad.id,
+      p_tipo_unidad_id: unidad.tipo_unidad_id,
+      p_check_in: '2031-04-10',
+      p_check_out: '2031-04-12',
+      p_huespedes: 1,
+      p_precio_noche: 50,
+      p_total: 100,
+      p_canal: 'directo',
+      p_tarifa_tipo: 'rack',
+      p_estado: 'confirmada',
+    })
+    if (eR) throw new Error(`no se pudo crear la reserva: ${eR.message}`)
+    const reservaId = (r as { id: string }).id
+    creados.push({ reservaId, huespedId: h.id })
+
+    const { data: p, error: eP } = await db
+      .from('pagos')
+      .insert({
+        reserva_id: reservaId,
+        medio: 'efectivo',
+        tipo: 'senia',
+        monto: 100,
+        moneda: 'USD',
+        estado: 'aprobado',
+      })
+      .select('id')
+      .single<{ id: string }>()
+    if (eP) throw new Error(`no se pudo crear el pago: ${eP.message}`)
+
+    return p.id
+  }
 
   const movimiento = (over: Record<string, unknown> = {}) => ({
     origen: 'banco',
@@ -65,18 +130,14 @@ describe.skipIf(!hayDB)('movimientos externos · lo que garantiza la base', () =
 
       Lo impide un índice único parcial —parcial porque `pago_id` es nulo mientras
       el movimiento no se concilió, y ahí no hay nada que unificar—.
-    */
-    const { data: pago } = await db
-      .from('pagos')
-      .select('id')
-      .limit(1)
-      .maybeSingle<{ id: string }>()
 
-    if (!pago) {
-      // Sin pagos en la base no hay nada que probar, pero no se puede pasar en
-      // silencio: sería un caso que dice verificar algo y no lo verifica.
-      throw new Error('No hay ningún pago en la base para probar la conciliación doble.')
-    }
+      ⚠️ El pago se **siembra acá**. La primera versión tomaba uno cualquiera de la
+      base y cortaba si no había: en CI la base nace limpia, así que el caso
+      reventaba culpando a los datos en vez de verificar la restricción. La
+      alternativa —saltearlo cuando no hay pagos— era peor: un caso que dice
+      comprobar algo y no lo comprueba queda registrado como verificado.
+    */
+    const pagoId = await sembrarPago()
 
     const a = `${prefijo}-doble-a`
     const b = `${prefijo}-doble-b`
@@ -89,13 +150,13 @@ describe.skipIf(!hayDB)('movimientos externos · lo que garantiza la base', () =
 
     const { error: e1 } = await db
       .from('movimientos_externos')
-      .update({ estado: 'conciliado', pago_id: pago.id })
+      .update({ estado: 'conciliado', pago_id: pagoId })
       .eq('external_id', a)
     expect(e1, `la primera conciliación tendría que entrar: ${e1?.message}`).toBeNull()
 
     const { error: e2 } = await db
       .from('movimientos_externos')
-      .update({ estado: 'conciliado', pago_id: pago.id })
+      .update({ estado: 'conciliado', pago_id: pagoId })
       .eq('external_id', b)
     expect(e2?.code, 'el mismo pago se concilió contra dos movimientos').toBe('23505')
   })
