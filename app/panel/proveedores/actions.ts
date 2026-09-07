@@ -4,6 +4,9 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirAcceso } from '@/lib/auth/session'
+import { movimientoEnMoneda } from '@/lib/domain/cuentas'
+import { esMonedaExtranjera } from '@/lib/domain/divisas'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoProveedor {
@@ -44,24 +47,49 @@ export async function crearProveedor(
  *
  * El **vencimiento** solo tiene sentido en los cargos: es lo que alimenta el
  * reporte de antigüedad de saldos. Un pago se marca como saldado en el acto.
+ *
+ * ── La moneda (auditoría 2026-09, P1-3) ─────────────────────────────────────
+ *
+ * Es el caso más frecuente del hallazgo: **el proveedor local factura en pesos**.
+ * Quien carga la factura de la lavandería escribe «185000», porque es lo que dice
+ * el papel, y hasta esta corrección eso entraba como USD 185.000 al saldo, al
+ * KPI de deuda del panel y al aging report.
+ *
+ * Ahora el importe se ingresa en la moneda del comprobante y se guardan las dos
+ * cosas: `monto` en USD —lo único que suma el saldo— y `monto_origen`, que es el
+ * número contra el que se concilia el papel.
  */
 export async function registrarMovimientoProveedor(formData: FormData): Promise<void> {
   await exigirGestion()
   const proveedorId = String(formData.get('proveedor_id') ?? '')
   const tipo = String(formData.get('tipo') ?? '')
-  const monto = Number(formData.get('monto') ?? 0)
+  const montoIngresado = Number(formData.get('monto') ?? 0)
+  const moneda = String(formData.get('moneda') ?? 'USD')
   const concepto = String(formData.get('concepto') ?? '').trim()
   const vencimiento = String(formData.get('vencimiento') ?? '')
   const comprobante = String(formData.get('comprobante') ?? '').trim()
 
-  if (proveedorId && ['cargo', 'pago'].includes(tipo) && monto > 0) {
+  if (proveedorId && ['cargo', 'pago'].includes(tipo) && montoIngresado > 0) {
+    if (moneda !== 'USD' && !esMonedaExtranjera(moneda)) {
+      redirect(`/panel/proveedores/${proveedorId}?error=moneda`)
+    }
+
+    const vigente = moneda === 'USD' ? null : await cotizacionVigente(moneda)
+    const mov = movimientoEnMoneda(montoIngresado, moneda, vigente?.venta ?? null)
+    // Sin cotización no se inventa una: la deuda con un proveedor real se movería
+    // con un tipo de cambio que después nadie puede justificar.
+    if (!mov) redirect(`/panel/proveedores/${proveedorId}?error=sin_cotizacion`)
+
     const esCargo = tipo === 'cargo'
     const supabase = await crearClienteServidor()
     // Un cargo o un pago que no se registra descuadra lo que el hotel debe.
     const { error } = await supabase.from('movimientos_proveedor').insert({
       proveedor_id: proveedorId,
       tipo,
-      monto,
+      monto: mov.monto,
+      moneda: mov.moneda,
+      monto_origen: mov.montoOrigen,
+      cotizacion: mov.cotizacion,
       concepto,
       comprobante: comprobante || null,
       vencimiento: esCargo && vencimiento ? vencimiento : null,

@@ -12,6 +12,11 @@ import {
   ETIQUETAS_TRAMO,
   type EstadoComprobante,
 } from '@/lib/domain/antiguedad'
+import {
+  MONEDAS_EXTRANJERAS,
+  esMonedaExtranjera,
+  formatearLocal,
+} from '@/lib/domain/divisas'
 import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
 import { Encabezado, Etiqueta, Mensaje, Pagina, botonClases } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
@@ -30,7 +35,11 @@ interface Proveedor {
 interface MovRow {
   id: string
   tipo: TipoMovimiento
+  /** SIEMPRE en USD (migración 0078). Es lo que entra al saldo y al aging. */
   monto: number | string
+  moneda: string
+  /** Importe de la factura del proveedor en `moneda`. Nulo si fue en USD. */
+  monto_origen: number | string | null
   concepto: string
   fecha: string
   estado: EstadoComprobante
@@ -47,6 +56,9 @@ interface MovRow {
  */
 const MENSAJES_ERROR: Record<string, string> = {
   movimiento: 'No se pudo registrar el movimiento. Lo que el hotel debe quedó sin cambios.',
+  moneda: 'Esa moneda no está entre las que el sistema sabe convertir.',
+  sin_cotizacion:
+    'No hay cotización disponible para esa moneda, así que la deuda en dólares sería inventada. Cargá una a mano en Configuración o registrá el comprobante en USD.',
   pagado: 'No se pudo marcar el comprobante como pagado. Sigue figurando como pendiente.',
   datos: 'No se pudieron guardar los datos del proveedor.',
   activo: 'No se pudo cambiar el estado del proveedor.',
@@ -78,7 +90,9 @@ export default async function ProveedorDetallePage({
     supabase.from('proveedores').select('id, nombre, rubro, cuit, email, telefono, activo').eq('id', id).single(),
     supabase
       .from('movimientos_proveedor')
-      .select('id, tipo, monto, concepto, fecha, estado, vencimiento, comprobante')
+      .select(
+        'id, tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento, comprobante',
+      )
       .eq('proveedor_id', id)
       .order('fecha', { ascending: false })
       .order('creado_en', { ascending: false }),
@@ -154,8 +168,31 @@ export default async function ProveedorDetallePage({
               <option value="pago">Pago</option>
             </select>
           </label>
+          {/*
+            Moneda del comprobante.
+
+            Es el caso más frecuente del hallazgo P1-3: el proveedor local
+            factura en pesos. Quien carga escribe «185000» porque es lo que dice
+            el papel, y sin este campo eso entraba como USD 185.000 a la deuda del
+            hotel. El saldo de arriba sigue estando en dólares.
+          */}
           <label className="flex flex-col gap-1 text-xs">
-            <span className="text-stone-500">Monto (USD)</span>
+            <span className="text-stone-500">Moneda</span>
+            <select
+              name="moneda"
+              defaultValue="USD"
+              className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+            >
+              <option value="USD">USD</option>
+              {MONEDAS_EXTRANJERAS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Monto</span>
             <input name="monto" type="number" step="0.01" min="0" className="w-28 rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
           </label>
           <label className="flex flex-col gap-1 text-xs">
@@ -235,6 +272,13 @@ export default async function ProveedorDetallePage({
                   {m.concepto || (m.tipo === 'cargo' ? 'Factura' : 'Pago')}
                   {m.comprobante && (
                     <span className="ml-1.5 text-xs text-stone-600">{m.comprobante}</span>
+                  )}
+                  {/* El número que figura en el papel, cuando no fue en dólares:
+                      es contra ése que se concilia la factura del proveedor. */}
+                  {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
+                    <span className="block text-xs text-stone-500">
+                      {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
+                    </span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-stone-500">

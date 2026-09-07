@@ -369,6 +369,42 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
+    area: 'conciliacion',
+    resumen: 'Cruzar lo que el sistema dice que se cobró contra lo que de verdad entró.',
+    pasos: [
+      {
+        titulo: 'Para qué sirve',
+        detalle:
+          'El sistema sabe lo que tendría que haber cobrado. Esta pantalla trae lo que realmente entró a la cuenta —del banco y de MercadoPago— y las cruza. Es donde se ve un cobro que la pasarela hizo y el sistema no registró, una comisión que salió más cara de lo pactado, y en qué se fue la plata cada mes.',
+      },
+      {
+        titulo: 'El extracto del banco se sube a mano',
+        detalle:
+          'El banco no tiene una forma automática de mandarnos los movimientos, así que hay que entrar al Home Banking, exportar el extracto en CSV y subirlo acá. Subir dos veces el mismo archivo no duplica nada: el sistema reconoce los movimientos que ya tenía.',
+      },
+      {
+        titulo: 'MercadoPago sí se trae solo',
+        detalle:
+          'Con el botón "Traer de MercadoPago". La primera vez el sistema le pide el reporte a MercadoPago y hay que volver a apretar en unos minutos, porque del otro lado tarda en armarlo. El reporte trae lo que MercadoPago acreditó de verdad, ya descontada su comisión, que no es lo mismo que lo que cobró.',
+      },
+      {
+        titulo: 'Lo que se concilia solo y lo que no',
+        detalle:
+          'Cuando el movimiento trae la referencia del cobro, el sistema lo cierra solo: no hay dudas posibles. Cuando sólo coinciden el importe y la fecha, se muestra como sugerencia y decide una persona. Es a propósito: dos huéspedes que pagan la misma seña el mismo día es lo más común del mundo, y casarlo con la reserva equivocada deja a uno figurando impago y al otro pagado sin haber pagado.',
+      },
+      {
+        titulo: 'Ignorar no es esconder',
+        detalle:
+          'Un movimiento sin contrapartida en el sistema —un gasto, una transferencia entre cuentas propias— se marca "Ignorado" con una nota. Deja de aparecer como pendiente pero sigue contando en los gastos del mes.',
+      },
+      {
+        titulo: 'Los gastos del mes',
+        detalle:
+          'Se calculan sobre los movimientos que salieron de la cuenta, agrupados por mes y por concepto. Cada moneda se muestra por separado: sumar pesos con dólares daría un total que no significa nada.',
+      },
+    ],
+  },
+  {
     area: 'avisos',
     resumen: 'La cartelera interna del hotel.',
     pasos: [

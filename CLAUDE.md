@@ -214,9 +214,15 @@ Tarifario 2025/2026 (Anexo A).
   mienta**, porque sus fuentes son públicas y sin credenciales. El respaldo de
   divisas es `manual` (no inventa: usa lo que un admin cargó) y el de canales es
   `simulado` (ése sí no habla con nadie).
+  **El octavo es `ExtractoProvider`** (`lib/conciliacion/`, ADR 0030) y rompe el
+  patrón a propósito: **no tiene variable de entorno**. No se elige una fuente —el
+  hotel usa el banco y MercadoPago a la vez, como `PAGO_PROVIDER`— y su respaldo
+  (`archivo`) no es un simulador sino la implementación real y única para un banco
+  sin API. Se arma con `fuentesDeExtracto()`; MercadoPago se suma solo si hay
+  `MERCADOPAGO_ACCESS_TOKEN`, que es el mismo del cobro.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 29 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 30 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -236,7 +242,27 @@ Tarifario 2025/2026 (Anexo A).
   pantallas autenticadas, sin escrituras diferidas y con el interruptor de apagado
   escrito antes de encender · **ADR 0029** los errores del servidor se guardan en
   una tabla de Postgres (`errores`, migración 0068), no en un tercero: los datos de
-  huéspedes no salen del sistema y el hotel no depende de mirar el log de Vercel.
+  huéspedes no salen del sistema y el hotel no depende de mirar el log de Vercel ·
+  **ADR 0030** conciliación: el extracto del banco entra por archivo (**no se raspa
+  el home banking**), MercadoPago por su API de liquidaciones —el **neto**, no el
+  bruto—, y **sólo la referencia de la pasarela concilia sola**.
+- **Conciliación y gastos (Bloque C, 2026-09-07).** Área nueva `/panel/conciliacion`
+  (admin y gerencia). Migraciones **0077** (`movimientos_externos`), **0078**
+  (moneda real en cuentas corrientes) y **0079** (cerrar la conciliación del canal).
+  ⚠️ Tres cosas antes de tocarlo:
+  1. **`movimientos_externos.monto` va CON SIGNO** y no hay columna `tipo`. Un
+     `tipo` aparte obliga a recordar el signo en cada suma, y ése es el error que
+     aparece después como un total que no cierra.
+  2. **`movimientos_cuenta.monto` y `movimientos_proveedor.monto` están SIEMPRE en
+     USD**, igual que `pagos` (ADR 0027). El importe del comprobante va en
+     `monto_origen` + `moneda` + `cotizacion`, y la 0078 tiene los `check`. Antes
+     ninguna acción escribía `moneda`: una factura de ARS 185.000 entraba como
+     USD 185.000. **Las cuentas corrientes anteriores al 2026-09-07 hay que
+     revisarlas contra el papel** — no hay backfill posible.
+  3. **Coincidir en importe y fecha NO alcanza para conciliar solo.** Dos huéspedes
+     que pagan la misma seña el mismo día es lo más común del mundo, y casarlo mal
+     deja a uno impago y al otro pagado sin haber pagado. Sólo cierra sola la
+     referencia de la pasarela, y sólo si es única.
 - **Auditoría técnica — Fases 1 a 5 (2026-09-01).** Cinco riesgos de una auditoría
   externa, verificados ejecutando y no leyendo. **F1** `hoyISO()` calculaba «hoy» en
   UTC y el hotel está en UTC−3: bug activo cada noche (housekeeping, punto de venta,

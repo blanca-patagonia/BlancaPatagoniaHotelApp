@@ -13,6 +13,10 @@ import { guardarEntrantes, importarEntrante } from '@/lib/canales/servicio'
 import { interpretarCsvResenas } from '@/lib/canales/resenas-csv'
 import { guardarResenas } from '@/lib/canales/resenas-servicio'
 import { saldarSiCorresponde } from '@/lib/reservas/saldar'
+import { motivoNoConciliar } from '@/lib/domain/canales-costos'
+import { movimientoEnMoneda } from '@/lib/domain/cuentas'
+import { esMonedaExtranjera } from '@/lib/domain/divisas'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { hoyISO, sumarDias } from '@/lib/fechas'
 import {
   MODALIDADES_COBRO,
@@ -631,12 +635,16 @@ export async function registrarFacturaComision(formData: FormData): Promise<void
 
   const comprobante = String(formData.get('comprobante') ?? '').trim().slice(0, 60)
   const monto = Number(formData.get('monto'))
+  const moneda = String(formData.get('moneda') ?? 'USD')
   const periodo = String(formData.get('periodo') ?? '').trim()
   const vencimiento = String(formData.get('vencimiento') ?? '').trim()
 
   if (!comprobante) redirect(`${DESTINO}?vista=costos&error=factura_comprobante`)
   if (!Number.isFinite(monto) || monto <= 0) {
     redirect(`${DESTINO}?vista=costos&error=factura_monto`)
+  }
+  if (moneda !== 'USD' && !esMonedaExtranjera(moneda)) {
+    redirect(`${DESTINO}?vista=costos&error=factura_moneda`)
   }
   // `periodo` llega como `YYYY-MM` de un `<input type="month">`: se normaliza al
   // primer día, que es con qué la vista de conciliación agrupa (`date_trunc`).
@@ -654,6 +662,27 @@ export async function registrarFacturaComision(formData: FormData): Promise<void
   cortarSiFalla(eConfig, `${DESTINO}?vista=costos`, 'factura_config')
   if (!config?.proveedor_id) redirect(`${DESTINO}?vista=costos&error=factura_sin_proveedor`)
 
+  /*
+    La moneda de la factura del canal (auditoría 2026-09, P1-3).
+
+    Booking no factura en dólares: emite en euros o en pesos según el contrato, y
+    hasta esta corrección el importe entraba tal cual a `movimientos_proveedor`,
+    que suma en USD. Una comisión de EUR 1.200 se convertía en una deuda de USD
+    1.200 con el canal.
+
+    ⚠️ Las dos tablas guardan la moneda con convenciones DISTINTAS, y es a
+    propósito:
+      · `canal_cargos.monto` está en `moneda` y la conversión va en `monto_usd`
+        (0049), porque es un libro auxiliar que tiene que poder mostrar el número
+        del archivo del canal sin tocarlo.
+      · `movimientos_proveedor.monto` está en USD (0078), porque es el libro mayor
+        y ahí el saldo se suma plano.
+    Mezclarlas es escribir un cargo cien veces más grande sin ningún error.
+  */
+  const vigente = moneda === 'USD' ? null : await cotizacionVigente(moneda)
+  const mov = movimientoEnMoneda(monto, moneda, vigente?.venta ?? null)
+  if (!mov) redirect(`${DESTINO}?vista=costos&error=factura_sin_cotizacion`)
+
   // 1) El asiento del libro mayor. Va primero: si falla, no queda una línea de
   //    cargo sin contrapartida contable.
   const { data: movimiento, error: eMov } = await supabase
@@ -661,7 +690,10 @@ export async function registrarFacturaComision(formData: FormData): Promise<void
     .insert({
       proveedor_id: config.proveedor_id,
       tipo: 'cargo',
-      monto,
+      monto: mov.monto,
+      moneda: mov.moneda,
+      monto_origen: mov.montoOrigen,
+      cotizacion: mov.cotizacion,
       concepto: `Comisión Booking ${periodo}`,
       comprobante,
       vencimiento: vencimiento || null,
@@ -679,6 +711,9 @@ export async function registrarFacturaComision(formData: FormData): Promise<void
     concepto: 'comision',
     origen: 'factura_comision',
     monto,
+    moneda,
+    monto_usd: mov.monto,
+    tipo_cambio: mov.cotizacion,
     imputado_el: imputadoEl,
     movimiento_proveedor_id: movimiento?.id ?? null,
     clave_idempotencia: `factura_comision:comision:${comprobante}`,
@@ -697,6 +732,76 @@ export async function registrarFacturaComision(formData: FormData): Promise<void
 
   revalidatePath(DESTINO)
   redirect(`${DESTINO}?vista=costos&ok=factura`)
+}
+
+/**
+ * Cierra —o reabre— la revisión de un cargo del canal.
+ *
+ * ── El agujero que tapa (auditoría 2026-09, P1-4) ───────────────────────────
+ *
+ * `estado_conciliacion` existía desde la migración 0049 con sus tres valores, su
+ * índice y su columna en pantalla, y **ninguna parte de la aplicación lo
+ * escribía**. Todos los cargos quedaban «devengado» para siempre: la pantalla
+ * comparaba bien lo devengado contra lo facturado, y después no había forma de
+ * dejar registrado que esa comparación ya se hizo.
+ *
+ * Sin esto, cada mes se vuelve a revisar todo desde cero.
+ *
+ * ── Por qué es de gerencia ──────────────────────────────────────────────────
+ *
+ * Aceptar una diferencia contra el canal es aceptar un costo, y disputarla es
+ * abrir un reclamo. Ninguna de las dos es una tarea de mostrador, aunque el área
+ * `canales` sí alcance a recepción para lo operativo.
+ */
+export async function conciliarCargo(formData: FormData): Promise<void> {
+  const sesion = await exigirAcceso()
+
+  if (sesion.rol !== 'admin' && sesion.rol !== 'gerencia') {
+    redirect(`${DESTINO}?vista=costos&error=conciliar_rol`)
+  }
+
+  const id = String(formData.get('cargo_id') ?? '')
+  const nuevo = String(formData.get('estado') ?? '')
+  const nota = String(formData.get('nota') ?? '').slice(0, 500)
+  if (!id) redirect(`${DESTINO}?vista=costos`)
+
+  const supabase = await crearClienteServidor()
+
+  const { data: cargo, error: eLectura } = await supabase
+    .from('canal_cargos')
+    .select('estado_conciliacion')
+    .eq('id', id)
+    .maybeSingle<{ estado_conciliacion: string }>()
+
+  cortarSiFalla(eLectura, `${DESTINO}?vista=costos`, 'conciliar_lectura')
+  if (!cargo) redirect(`${DESTINO}?vista=costos&error=conciliar_inexistente`)
+
+  const motivo = motivoNoConciliar({ actual: cargo.estado_conciliacion, nuevo, nota })
+  if (motivo) redirect(`${DESTINO}?vista=costos&error=conciliar_${motivo}`)
+
+  /*
+    Volver a `devengado` limpia la firma y el motivo.
+
+    Es lo que la migración 0079 exige (`canal_cargos_cierre_con_firma`), y además
+    es lo correcto: dejar el nombre de quien concilió sobre un cargo que ya no está
+    conciliado le atribuye una decisión que se dio de baja.
+  */
+  const vuelveADevengado = nuevo === 'devengado'
+
+  const { error } = await supabase
+    .from('canal_cargos')
+    .update({
+      estado_conciliacion: nuevo,
+      conciliado_por: vuelveADevengado ? null : sesion.userId,
+      conciliado_en: vuelveADevengado ? null : new Date().toISOString(),
+      nota_conciliacion: vuelveADevengado ? null : nota.trim() || null,
+    })
+    .eq('id', id)
+
+  cortarSiFalla(error, `${DESTINO}?vista=costos`, 'conciliar')
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=costos&ok=conciliar`)
 }
 
 /** Carga a mano una reseña publicada en el canal. */

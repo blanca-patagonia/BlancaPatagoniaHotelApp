@@ -130,6 +130,14 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // Misma línea que `facturas`: la ve quien factura. Housekeeping no.
   notas_credito: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
 
+  // ── Movimientos externos (migración 0077) ──
+  //
+  // Más restrictiva que `facturas`, y a propósito: es el **extracto bancario del
+  // hotel**. Trae sueldos, pagos a proveedores y todo lo que pasó por la cuenta, no
+  // sólo lo que tiene que ver con las reservas. Recepción concilia cobros de
+  // huéspedes desde la ficha de la reserva, no desde acá.
+  movimientos_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
   // ── Numeración de comprobantes (migración 0069) ──
   // Sigue la línea de `facturas` desde la 0045: no lleva importes, pero sí qué
   // reserva se quedó con qué número de comprobante, que es información fiscal.
@@ -446,6 +454,29 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
 
         sembradas.push({ tabla: 'notas_credito', columna: 'motivo', valor: `auditoria rls ${sufijo}` })
       }
+    }
+
+    /*
+      ── movimientos_externos (migración 0077) ─────────────────────────────────
+
+      Nace vacía —los movimientos entran cuando alguien sube un extracto— así que
+      sin sembrar, los DOS casos negativos (recepción y housekeeping) pasarían por
+      tabla vacía en vez de por la política. Es el extracto bancario del hotel: es
+      justo la tabla donde un falso positivo sale caro.
+    */
+    if ((await contar('movimientos_externos')) === 0) {
+      const externalId = `auditoria-rls-${sufijo}`
+      const { error } = await admin.from('movimientos_externos').insert({
+        origen: 'banco',
+        external_id: externalId,
+        fecha: '2026-01-02',
+        descripcion: 'fila de prueba de la matriz RLS',
+        monto: -1,
+        moneda: 'ARS',
+      })
+      if (error) throw new Error(`No se pudo sembrar movimientos_externos: ${error.message}`)
+
+      sembradas.push({ tabla: 'movimientos_externos', columna: 'external_id', valor: externalId })
     }
 
     // ── canal_config ──────────────────────────────────────────────────────────

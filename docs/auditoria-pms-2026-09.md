@@ -42,13 +42,13 @@ configuración» **no tiene un solo llamador**, así que hoy esa promesa no se c
 | 1 | Integración con Booking y canales | 🔴 **Directa: imposible.** Vía channel manager: arquitectura lista a medias (falta el lado saliente) |
 | 2 | Prevención real de overbooking | 🟡 La garantía de la base es **sólida y sin agujeros**. El riesgo real entra por las OTAs de solo lectura, y por el bug P0-1 |
 | 3 | Sincronización de reservas/disponibilidad/tarifas/estados | 🔴 Solo entrada, solo reservas. Disponibilidad/tarifas/restricciones: **cero salida** |
-| 4 | Análisis y conciliación de facturas | 🟡 Comisiones de canal sí; `estado_conciliacion` **nunca se escribe**; conciliación bancaria no existe |
+| 4 | Análisis y conciliación de facturas | 🟢 **Cerrado (Bloque C, ADR 0030).** Comisiones de canal, conciliación bancaria y de pasarela, `estado_conciliacion` escribible con firma y motivo |
 | 5 | Registro y confirmación de pagos | 🟡 Cobro en línea real y bien hecho. **Reembolsos rotos** (P0-2), mostrador sin idempotencia (P0-6) |
 | 6 | Recordatorios automáticos | 🔴 **No existe.** Un simulador y cuatro plantillas |
 | 7 | Avisos ante pagos o cambios de estado | 🔴 **No existe.** El webhook que confirma el pago no notifica a nadie |
 | 8 | Operación diaria (recepción, HK, mantenimiento, gerencia) | 🟢 **Es lo más maduro del sistema.** Cubierto y testeado |
 | 9 | Foto de factura → datos en Excel | 🔴 No existe. Buildable sin bloqueos externos |
-| 10 | MercadoPago + Santander, gastos mensuales | 🟡 **MercadoPago: API pública y documentada, sí.** Santander AR: no hay API pública; se resuelve por importación de extracto |
+| 10 | MercadoPago + Santander, gastos mensuales | 🟢 **Cerrado (Bloque C, ADR 0030).** MercadoPago por su API de liquidaciones; Santander por importación del extracto —no publica API y **no se raspa el home banking**—; gastos por mes y por concepto en `/panel/conciliacion` |
 | 11 | Trazabilidad, auditoría, seguridad, recuperación | 🟢 Auditoría y RLS son fuertes. 🟡 Observabilidad recién nacida: **67 `console.*` crudos**, los webhooks de pago invisibles en el panel |
 
 ---
@@ -200,8 +200,8 @@ código: hay que consultar `cron.job` contra la base.
 |---|---|---|
 | **P1-1** | El puerto de salida ARI **no tiene llamadores**. `publicarDisponibilidad`, `interpretarWebhook` y `confirmarRecepcion` solo aparecen en `lib/canales/*` y sus tests. No hay ruta de webhook de canales | el ADR 0021 promete que enchufar un CM es configuración; hoy no lo es |
 | **P1-2** | **Cero notificaciones reales.** Único `EmailProvider`: `consola`. Sin registro de envíos, sin reintentos, sin idempotencia, sin consentimiento | `lib/email/index.ts:82` |
-| **P1-3** | `movimientos_cuenta` y `movimientos_proveedor` tienen columna `moneda` **que ninguna acción escribe**, y `saldoCuenta` suma sin mirarla | el mismo bug que la 0067 arregló en `pagos`, acá sin `check` |
-| **P1-4** | `estado_conciliacion` **solo se lee**; no hay ninguna escritura de `conciliado`/`en_disputa` en toda la app | queda en `devengado` para siempre |
+| ~~**P1-3**~~ | ✅ **corregido (0078)** · `movimientos_cuenta` y `movimientos_proveedor` tenían columna `moneda` **que ninguna acción escribía**, y `saldoCuenta` suma sin mirarla | el mismo bug que la 0067 arregló en `pagos`, acá sin `check` |
+| ~~**P1-4**~~ | ✅ **corregido (0079)** · `estado_conciliacion` **solo se leía**; no había ninguna escritura de `conciliado`/`en_disputa` en toda la app | quedaba en `devengado` para siempre |
 | **P1-5** | `linkReutilizable` no filtra por `medio`: quien elige MercadoPago/pesos puede recibir el link de Stripe en USD | `lib/payments/servicio.ts:211-217` |
 | **P1-6** | **67 `console.error/warn` crudos**; solo 5 archivos usan `registrarError`. Toda la verificación de firma de los webhooks de pago queda en stdout, invisible en `/panel/errores` | `route.ts:63,66,129,187,210`, `mercadopago.ts` (8), `stripe.ts` (7) |
 | **P1-7** | **9 flujos sin atomicidad** con consecuencia concreta (reserva de agencia sin `agencia_id` → no se le factura a nadie; mudanza que factura la unidad anterior; reprogramación con precio viejo) | `actions.ts:222,315,890,1086,1167,1243`; `saldar.ts:137`; `servicio.ts:130` |
@@ -364,13 +364,30 @@ Cada uno es independiente, reversible y con su test. **Ninguno mezcla áreas.**
 | B4 | consentimiento, horarios y preferencias del huésped | 0079 |
 | B5 | WhatsApp Cloud API | — |
 
-**Bloque C — conciliación (objetivos 4 y 10)**
+**Bloque C — conciliación (objetivos 4 y 10) — ✅ hecho el 2026-09-06**
 
-| C1 | `moneda` en cuentas corrientes + `check` | 0080 |
-| C2 | `estado_conciliacion` escribible | — |
-| C3 | `ExtractoBancarioProvider` + importador CSV/Excel | 0081 |
-| C4 | MercadoPago Reports API + conciliación | 0082 |
-| C5 | gastos mensuales (pantalla) | — |
+Los números de migración quedaron corridos respecto de lo planificado, porque los
+bloques A, B y las notas de crédito ocuparon del 0074 al 0076. **ADR 0030.**
+
+| C1 | `moneda` + `monto_origen` + `cotizacion` en cuentas corrientes, con los mismos `check` que la 0067 | **0078** ✅ |
+| C2 | `estado_conciliacion` escribible, con firma y motivo obligatorios | **0079** ✅ |
+| C3 | `ExtractoProvider` + importador CSV del extracto bancario | **0077** ✅ |
+| C4 | MercadoPago *settlement report* por API + conciliación automática por referencia | — ✅ |
+| C5 | gastos mensuales por moneda y por concepto (pantalla `/panel/conciliacion`) | — ✅ |
+
+Tres cosas que salieron distintas de lo planificado, y por qué:
+
+- **C1 no era sólo agregar un `check`.** La columna `moneda` ya existía en las dos
+  tablas desde el primer día; el defecto era que **ninguna acción la escribía** y
+  todas las filas decían USD. Se agregaron `monto_origen` y `cotizacion` —la misma
+  forma que `pagos` (0067)— y se corrigieron los **tres** `insert` que existen:
+  agencias, proveedores y la factura de comisión de canales.
+- **C2 pedía más que un `update`.** Aceptar una diferencia contra el canal es
+  aceptar un costo; sin quién y sin por qué, la revisión siguiente no puede
+  reconstruir si se aceptó por buena o por cansancio. La 0079 agrega firma, fecha y
+  motivo, con dos `check` que lo imponen desde la base.
+- **La conciliación NO se cierra sola salvo por referencia exacta.** Está explicado
+  en el ADR 0030 §4; es la decisión de diseño más importante del bloque.
 
 **Bloque D — fiscal** · notas de crédito (0083), campos de `SolicitudCae`, moneda en
 `facturas`, adapter WSAA/WSFEv1. **Requiere certificado y decisiones del contador.**

@@ -3,6 +3,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerProveedorCanal } from '@/lib/canales'
 import { describirUltimaLectura } from '@/lib/canales/ical-saliente'
+import { MONEDAS_EXTRANJERAS } from '@/lib/domain/divisas'
 import { urlDelSitio } from '@/lib/env'
 import { formatoFechaCorta, hoyISO } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
@@ -31,6 +32,7 @@ import { ImportarResenas } from './importar-resenas'
 import {
   cargarMensaje,
   cargarResena,
+  conciliarCargo,
   ignorarEntrante,
   importarUna,
   marcarMensajeAtendido,
@@ -45,6 +47,8 @@ import {
 import { formatearUSD, importe } from '@/lib/domain/moneda'
 import {
   conciliarDevengoContraFactura,
+  ESTADOS_CONCILIACION,
+  MENSAJES_NO_CONCILIAR,
   ETIQUETAS_CONCEPTO,
   ETIQUETAS_CONCILIACION,
   ETIQUETAS_ORIGEN,
@@ -130,6 +134,9 @@ const MENSAJES_ERROR: Record<string, string> = {
   factura_rol: 'Registrar la factura del canal es de administración o gerencia: mueve la cuenta corriente del proveedor.',
   factura_comprobante: 'Poné el número de la factura: es con lo que después se coteja contra el papel.',
   factura_monto: 'El importe de la factura tiene que ser mayor que cero.',
+  factura_moneda: 'Esa moneda no está entre las que el sistema sabe convertir.',
+  factura_sin_cotizacion:
+    'No hay cotización para esa moneda, así que la deuda en dólares sería inventada. Cargá una a mano en Configuración o registrá la factura en USD.',
   factura_periodo: 'Elegí el mes que factura el canal.',
   factura_config:
     'No se pudo leer la configuración del canal. Probá de nuevo; si sigue, avisá a administración.',
@@ -139,6 +146,14 @@ const MENSAJES_ERROR: Record<string, string> = {
   factura_cargo:
     'La deuda con el proveedor SÍ se registró, pero no se pudo guardar la línea comparable contra lo devengado. Revisá el movimiento en Proveedores.',
   factura_repetida: 'Ya hay una factura cargada con ese número de comprobante.',
+  conciliar_rol:
+    'Cerrar la conciliación es de administración o gerencia: aceptar una diferencia es aceptar un costo.',
+  conciliar_lectura: 'No se pudo leer el cargo. Probá de nuevo.',
+  conciliar_inexistente: 'Ese cargo ya no existe. Recargá la pantalla.',
+  conciliar_estado: MENSAJES_NO_CONCILIAR.estado,
+  conciliar_sin_cambio: MENSAJES_NO_CONCILIAR.sin_cambio,
+  conciliar_motivo_corto: MENSAJES_NO_CONCILIAR.motivo_corto,
+  conciliar: 'No se pudo guardar el estado de conciliación. El cargo quedó como estaba.',
   transf_referencia: 'Poné la referencia de la liquidación: es lo que evita registrar dos veces la misma transferencia.',
   transf_monto: 'El importe de la transferencia tiene que ser mayor que cero.',
   transf_lectura: 'No se pudo leer la reserva. Probá de nuevo.',
@@ -221,6 +236,8 @@ interface CargoRow {
   monto_usd: number | string | null
   imputado_el: string | null
   estado_conciliacion: string
+  /** Por qué se disputó, o qué se anotó al cerrar la revisión (migración 0079). */
+  nota_conciliacion: string | null
   detalle: string
   /** Nulo cuando el cargo no se pudo atribuir a ninguna reserva del canal. */
   entrante: { huesped_apellido: string; external_id: string } | null
@@ -241,8 +258,18 @@ export default async function CanalesPage({
     rechazadas?: string
   }>
 }) {
-  await requerirAcceso('canales')
+  const sesion = await requerirAcceso('canales')
   const sp = await searchParams
+
+  /*
+    Cerrar la conciliación es de gerencia (P1-4).
+
+    El área `canales` alcanza también a recepción para lo operativo —importar,
+    convertir una entrante, atender un mensaje—, pero aceptar una diferencia
+    contra el canal es aceptar un costo y disputarla es abrir un reclamo. La
+    acción lo verifica igual; acá se decide si mostrar el control.
+  */
+  const puedeConciliarCargos = sesion.rol === 'admin' || sesion.rol === 'gerencia'
 
   const vista: Vista = (VISTAS as readonly string[]).includes(sp.vista ?? '')
     ? (sp.vista as Vista)
@@ -298,7 +325,7 @@ export default async function CanalesPage({
       supabase
         .from('canal_cargos')
         .select(
-          'id, concepto, origen, monto, moneda, monto_usd, imputado_el, estado_conciliacion, detalle, entrante:canal_reservas(huesped_apellido, external_id), reserva:reservas(codigo)',
+          'id, concepto, origen, monto, moneda, monto_usd, imputado_el, estado_conciliacion, nota_conciliacion, detalle, entrante:canal_reservas(huesped_apellido, external_id), reserva:reservas(codigo)',
         )
         .order('imputado_el', { ascending: false, nullsFirst: false })
         .limit(200),
@@ -527,6 +554,15 @@ export default async function CanalesPage({
       {sp.ok === 'mensaje' && <Mensaje tono="ok">Mensaje guardado.</Mensaje>}
       {sp.ok === 'resena' && <Mensaje tono="ok">Reseña guardada.</Mensaje>}
       {sp.ok === 'respuesta' && <Mensaje tono="ok">Respuesta guardada.</Mensaje>}
+      {sp.ok === 'conciliar' && (
+        <Mensaje tono="ok">Estado de conciliación guardado, con tu nombre y la fecha.</Mensaje>
+      )}
+      {sp.ok === 'factura' && (
+        <Mensaje tono="ok">
+          Factura registrada: quedó la deuda con el proveedor y la línea comparable contra lo
+          devengado.
+        </Mensaje>
+      )}
 
       {/* ── La advertencia que no puede faltar ────────────────────────────────
           Sin esto alguien va a creer que está cubierto porque «el sistema
@@ -1227,7 +1263,7 @@ export default async function CanalesPage({
             titulo="Cargar la factura de comisión"
             descripcion="La que Booking emite por mes, desde Finanzas → Facturas del extranet."
           >
-            <form action={registrarFacturaComision} className="grid gap-3 sm:grid-cols-5">
+            <form action={registrarFacturaComision} className="grid gap-3 sm:grid-cols-6">
               <Campo etiqueta="N.º de comprobante">
                 <input
                                     name="comprobante"
@@ -1240,7 +1276,20 @@ export default async function CanalesPage({
               <Campo etiqueta="Mes que factura">
                 <input id="periodo" name="periodo" type="month" required className={CAMPO} />
               </Campo>
-              <Campo etiqueta="Importe (USD)">
+              {/* Booking no factura en dólares: emite en euros o en pesos según el
+                  contrato. Sin este campo el importe entraba como USD al libro
+                  mayor (auditoría 2026-09, P1-3). */}
+              <Campo etiqueta="Moneda" ayuda="La de la factura del canal.">
+                <select name="moneda" defaultValue="USD" className={CAMPO}>
+                  <option value="USD">USD</option>
+                  {MONEDAS_EXTRANJERAS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <Campo etiqueta="Importe">
                 <input
                                     name="monto"
                   type="number"
@@ -1287,6 +1336,7 @@ export default async function CanalesPage({
                       <th className={`${TH} ${COL_SECUNDARIA}`}>Imputado</th>
                       <th className={TH}>Importe</th>
                       <th className={TH}>Estado</th>
+                      {puedeConciliarCargos && <th className={TH}>Cerrar la revisión</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -1352,7 +1402,69 @@ export default async function CanalesPage({
                             {ETIQUETAS_CONCILIACION[c.estado_conciliacion as EstadoConciliacion] ??
                               c.estado_conciliacion}
                           </Etiqueta>
+                          {c.nota_conciliacion && (
+                            <span className="mt-1 block text-xs text-stone-500">
+                              {c.nota_conciliacion}
+                            </span>
+                          )}
                         </td>
+                        {/*
+                          Cerrar la revisión (P1-4).
+
+                          Hasta la migración 0079 la columna de al lado decía
+                          «Devengado» en todas las filas para siempre: el estado
+                          existía y nada lo escribía, así que cada mes había que
+                          revisar de nuevo lo ya revisado.
+
+                          Solo lo ve gerencia: aceptar una diferencia es aceptar un
+                          costo y disputarla es abrir un reclamo.
+                        */}
+                        {puedeConciliarCargos && (
+                          <td className={TD}>
+                            <form
+                              action={conciliarCargo}
+                              className="flex flex-wrap items-end gap-1.5"
+                            >
+                              <input type="hidden" name="cargo_id" value={c.id} />
+                              <label className="flex flex-col gap-1 text-xs">
+                                <span className="sr-only">
+                                  Estado de conciliación del cargo
+                                </span>
+                                <select
+                                  name="estado"
+                                  defaultValue={
+                                    c.estado_conciliacion === 'devengado'
+                                      ? 'conciliado'
+                                      : 'devengado'
+                                  }
+                                  className={CAMPO}
+                                >
+                                  {ESTADOS_CONCILIACION.filter(
+                                    (e) => e !== c.estado_conciliacion,
+                                  ).map((e) => (
+                                    <option key={e} value={e}>
+                                      {ETIQUETAS_CONCILIACION[e]}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="flex flex-col gap-1 text-xs">
+                                <span className="sr-only">
+                                  Motivo (obligatorio para disputar)
+                                </span>
+                                <input
+                                  name="nota"
+                                  maxLength={500}
+                                  placeholder="Motivo (si disputás)"
+                                  className={`${CAMPO} w-44`}
+                                />
+                              </label>
+                              <BotonEnvio variante="secundario" cargando="Guardando…">
+                                Guardar
+                              </BotonEnvio>
+                            </form>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

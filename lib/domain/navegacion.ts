@@ -48,7 +48,9 @@ export const GRUPOS: readonly GrupoNavegacion[] = [
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
   { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
   { titulo: 'Equipo', areas: ['avisos', 'conversaciones'] },
-  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
+  // `conciliacion` va en Administración y no en Comercial: no se toca con un
+  // tercero enfrente, se mira a fin de mes con el extracto del banco al lado.
+  { titulo: 'Administración', areas: ['reportes', 'conciliacion', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
   { titulo: null, areas: ['ayuda'] },
 ]
 
@@ -106,6 +108,7 @@ export const RUTA_AREA: Record<Area, string> = {
   proveedores: '/panel/proveedores',
   contratos: '/panel/contratos',
   canales: '/panel/canales',
+  conciliacion: '/panel/conciliacion',
   auditoria: '/panel/auditoria',
   errores: '/panel/errores',
   reportes: '/panel/reportes',

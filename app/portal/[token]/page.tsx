@@ -13,6 +13,8 @@ import {
   ETIQUETAS_ESTADO_COMPROBANTE,
   type EstadoComprobante,
 } from '@/lib/domain/antiguedad'
+import { esMonedaExtranjera, formatearLocal } from '@/lib/domain/divisas'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
 import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
 
 /**
@@ -48,7 +50,11 @@ interface ContratoRow {
 
 interface MovRow {
   tipo: 'cargo' | 'pago'
+  /** SIEMPRE en USD (migración 0078): es la moneda en la que cierra el saldo. */
   monto: number | string
+  moneda: string
+  /** Importe del comprobante en `moneda`. Nulo si el movimiento fue en USD. */
+  monto_origen: number | string | null
   concepto: string
   fecha: string
   estado?: EstadoComprobante
@@ -120,12 +126,12 @@ export default async function PortalSocioPage({
     esAgencia
       ? admin
           .from('movimientos_cuenta')
-          .select('tipo, monto, concepto, fecha')
+          .select('tipo, monto, moneda, monto_origen, concepto, fecha')
           .eq('agencia_id', socio.id)
           .order('fecha', { ascending: false })
       : admin
           .from('movimientos_proveedor')
-          .select('tipo, monto, concepto, fecha, estado, vencimiento')
+          .select('tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento')
           .eq('proveedor_id', socio.id)
           .order('fecha', { ascending: false }),
   ])
@@ -213,7 +219,7 @@ export default async function PortalSocioPage({
               <span
                 className={`tabular font-semibold ${saldo > 0 ? 'text-red-600' : 'text-emerald-700'}`}
               >
-                USD {saldo.toLocaleString('es-AR')}
+                {formatearUSD(saldo)}
               </span>
             </span>
           </header>
@@ -250,12 +256,26 @@ export default async function PortalSocioPage({
                             {m.estado && m.estado !== 'pagado' && ` · ${ETIQUETAS_ESTADO_COMPROBANTE[m.estado]}`}
                           </span>
                         )}
+                        {/*
+                          El importe del comprobante en su moneda. Las dos columnas
+                          de la derecha están en USD, que es donde cierra el saldo;
+                          el socio necesita reconocer el número de su factura o el
+                          estado de cuenta le parece equivocado.
+                        */}
+                        {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
+                          <span className="block text-xs text-stone-400">
+                            {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
+                          </span>
+                        )}
                       </td>
+                      {/* Por `importe()` y no por `toLocaleString`: éste usa entre 0
+                          y 3 decimales, así que la misma columna publicaba «726»,
+                          «290,4» y «40,11». */}
                       <td className="tabular px-5 py-2 text-right text-stone-800">
-                        {m.tipo === 'cargo' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                        {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
                       </td>
                       <td className="tabular px-5 py-2 text-right text-emerald-700">
-                        {m.tipo === 'pago' ? Number(m.monto).toLocaleString('es-AR') : ''}
+                        {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
                       </td>
                     </tr>
                   ))}

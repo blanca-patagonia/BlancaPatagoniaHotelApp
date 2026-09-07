@@ -5,7 +5,9 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirRol } from '@/lib/auth/session'
 import { puedeAvanzar, type EtapaComercial } from '@/lib/domain/comercial'
-import { TIPOS_CUENTA } from '@/lib/domain/cuentas'
+import { TIPOS_CUENTA, movimientoEnMoneda } from '@/lib/domain/cuentas'
+import { esMonedaExtranjera } from '@/lib/domain/divisas'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoAgencia {
@@ -50,24 +52,50 @@ export async function crearAgencia(
  * `lib/domain/permisos.ts` también alcanza a recepción: esa matriz gobierna
  * quién *ve* la sección, mientras que escribir sobre una cuenta corriente es
  * competencia de gerencia.
+ *
+ * ── La moneda (auditoría 2026-09, P1-3) ─────────────────────────────────────
+ *
+ * El importe se ingresa **en la moneda del comprobante** y se guarda en las dos:
+ * `monto` en USD, que es lo único que suma `saldoCuenta`, y `monto_origen` con
+ * el número que la agencia tiene en el papel.
+ *
+ * Antes esta acción no mandaba `moneda`, así que la columna caía en su default
+ * `'USD'` para todas las filas. Una agencia argentina a la que se le carga un
+ * cargo de ARS 185.000 quedaba debiendo USD 185.000.
  */
 export async function registrarMovimiento(formData: FormData): Promise<void> {
   await requerirRol('admin', 'gerencia')
 
   const agenciaId = String(formData.get('agencia_id') ?? '')
   const tipo = String(formData.get('tipo') ?? '')
-  const monto = Number(formData.get('monto') ?? 0)
+  const montoIngresado = Number(formData.get('monto') ?? 0)
+  const moneda = String(formData.get('moneda') ?? 'USD')
   const concepto = String(formData.get('concepto') ?? '').trim()
-  if (!agenciaId || !['cargo', 'pago'].includes(tipo) || !(monto > 0)) {
-    redirect(`/panel/agencias/${agenciaId}`)
+  if (!agenciaId || !['cargo', 'pago'].includes(tipo) || !(montoIngresado > 0)) {
+    redirect(`/panel/agencias/${agenciaId}?error=movimiento_datos`)
   }
+  if (moneda !== 'USD' && !esMonedaExtranjera(moneda)) {
+    redirect(`/panel/agencias/${agenciaId}?error=moneda`)
+  }
+
+  // `venta` es la que se aplica: cuántas unidades de la moneda cuesta comprar un
+  // dólar (ADR 0020). Usar la de compra le regalaría el spread a la agencia.
+  const vigente = moneda === 'USD' ? null : await cotizacionVigente(moneda)
+  const mov = movimientoEnMoneda(montoIngresado, moneda, vigente?.venta ?? null)
+  // Sin cotización no se inventa una: el saldo de un socio real se movería con un
+  // tipo de cambio que nadie puede justificar después.
+  if (!mov) redirect(`/panel/agencias/${agenciaId}?error=sin_cotizacion`)
+
   const supabase = await crearClienteServidor()
   // Un movimiento de cuenta corriente que no se registra y no avisa descuadra el
   // saldo de la agencia sin que nadie lo note.
   const { error } = await supabase.from('movimientos_cuenta').insert({
     agencia_id: agenciaId,
     tipo,
-    monto,
+    monto: mov.monto,
+    moneda: mov.moneda,
+    monto_origen: mov.montoOrigen,
+    cotizacion: mov.cotizacion,
     concepto,
   })
   cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'movimiento')

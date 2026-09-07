@@ -3942,3 +3942,151 @@ importando el extracto.
 **Verificación:** 1637 tests / 100 archivos / 0 salteados · lint 0 · typecheck 0 ·
 build 0. Migración 0074 aplicada. Cada arreglo entró con un test que **falla sin
 él**, comprobado revirtiendo.
+
+---
+
+## 2026-09-06 — Bloque B: el sistema empieza a comunicarse (objetivos 6 y 7)
+
+**Resumen:** hasta hoy el único `EmailProvider` era `consola`. Los objetivos 6
+(«recordatorios automáticos») y 7 («avisos ante pagos o cambios de estado») del
+pedido no existían: había cuatro plantillas y un simulador que escribía en stdout.
+
+**Qué se construyó**
+
+- **Migración 0075 — bandeja de salida (`notificaciones`).** Patrón *outbox*: la
+  acción que origina el aviso **encola** y no envía. Encolar es una escritura
+  local que no puede fallar por una API caída, y el envío se reintenta aparte.
+  Idempotencia por `clave` única —el mismo evento sobre la misma entidad no se
+  manda dos veces— y estado, intentos, `proximo_en` y error.
+- **Consentimiento en la base**: `huespedes.acepta_avisos` (default `true`,
+  transaccional: la confirmación de la reserva no es publicidad) y
+  `acepta_promociones` (default `false`, comercial). Son dos permisos distintos y
+  mezclarlos es lo que convierte un sistema útil en spam.
+- **`lib/domain/notificaciones.ts`** — reglas puras: reintentos con escala
+  `[1, 5, 30, 120, 360]` minutos y tope de 5 intentos; ventana horaria del hotel
+  (9 a 21, en `ZONA_HOTEL`); `claveDeNotificacion`.
+- **`lib/notificaciones/`** — `encolar()` y `despachar()`, más el cron
+  `/api/cron/notificaciones` cada 5 minutos.
+- **Adapter Resend real** (`lib/email/resend.ts`), por HTTP y sin SDK, con
+  `Idempotency-Key` y `AbortSignal.timeout`. **No reintenta**: de eso se ocupa la
+  bandeja, y dos capas de reintento se multiplican.
+
+**La trampa que costó una tarde**
+
+`despachar()` tomaba 0 filas de forma intermitente. No era un test *flaky*: era
+**desfasaje de reloj** entre el contenedor de Docker y el host. La consulta
+comparaba `proximo_en` contra un `new Date().toISOString()` calculado en Node.
+Ahora usa el literal `'now'` de Postgres, así el «ahora» lo pone la base y no la
+aplicación. Verificado estable en tres corridas seguidas, con un test de
+regresión propio.
+
+**Decisión:** la plantilla `confirmacion_reserva` **dejó de decir que la reserva
+está confirmada**. Una reserva de la web nace `pendiente` y se libera a los 5 días
+sin seña; el correo decía lo contrario, y eso es prometerle al huésped una
+habitación que el sistema va a revender.
+
+---
+
+## 2026-09-06 — Notas de crédito: una factura mal emitida ya se puede corregir
+
+**Resumen:** `facturas` es inmutable (0034), hay una sola por reserva (0045) y el
+enum de comprobantes solo tenía A, B y C. O sea: **una factura mal emitida no
+tenía ningún camino de corrección**. Con CAE real eso no es un inconveniente, es
+un problema fiscal: el comprobante ya está informado a ARCA.
+
+**Migración 0076** — tabla `notas_credito` con dos triggers que la base impone:
+
+1. `nota_credito_hereda_letra` — la letra de la nota **sigue** a la de la factura.
+   Dejarlo a criterio de quien la emite es el error que después hay que corregir
+   con otra nota.
+2. `nota_credito_no_supera_factura` — con `for update` sobre la fila de la
+   factura, así dos notas simultáneas no pueden sumar más que el total. Acreditar
+   de más es devolver IVA que nunca se cobró.
+
+Más `siguiente_numero_nota_credito()` y `puntos_venta.ultimo_nc`: **la numeración
+de notas es propia y no toca la de facturas**. Verificado con un test que mide que
+`ultimo_numero` no se mueve.
+
+`SolicitudCae` ganó `esNotaCredito` y `numeroAsociado`. No es cosmético: en WSFEv1
+las notas de crédito son los tipos 3, 8 y 13 —contra 1, 6 y 11 de las facturas— y
+un adapter real que ignore la bandera **emitiría una factura por el importe que se
+quería devolver**.
+
+---
+
+## 2026-09-07 — Bloque C: conciliación y gastos (objetivos 4 y 10, ADR 0030)
+
+**Resumen:** el sistema sabía lo que **debería** haber cobrado y no tenía ninguna
+forma de contrastarlo contra lo que de verdad entró a la cuenta. Cierra los dos
+objetivos del pedido que quedaban sin tocar.
+
+**Lo que se corrigió (dos hallazgos de la auditoría)**
+
+- **P1-3 · la moneda que nadie escribía.** `movimientos_cuenta` (0012) y
+  `movimientos_proveedor` (0016) tenían columna `moneda` desde el primer día, y
+  **ninguno de los tres `insert` de la aplicación la pasaba**: todas las filas
+  decían USD. El proveedor local factura en pesos, así que una factura de
+  lavandería de ARS 185.000 entraba como una deuda de **USD 185.000** —al saldo,
+  al KPI de deuda del panel y al aging report—. **Migración 0078**: `monto_origen`
+  + `cotizacion` + los mismos `check` de coherencia que la 0067 puso en `pagos`, y
+  los tres formularios con selector de moneda.
+  ⚠️ **No hay backfill posible**: el dato de la moneda real nunca existió. Las
+  cuentas corrientes anteriores a hoy hay que revisarlas contra el papel.
+- **P1-4 · la conciliación que no se podía cerrar.**
+  `canal_cargos.estado_conciliacion` existía desde la 0049 con sus tres valores,
+  su índice parcial y su columna en pantalla, y **ninguna parte de la aplicación
+  lo escribía**. Todos los cargos quedaban `devengado` para siempre, así que cada
+  mes había que volver a revisar lo ya revisado. **Migración 0079**: firma, fecha
+  y motivo, con dos `check` — disputar exige escribir por qué, y salir de
+  `devengado` exige decir quién y cuándo.
+
+**Lo que se construyó**
+
+- **Migración 0077 — `movimientos_externos`.** Una tabla para las dos fuentes: el
+  extracto del banco y la liquidación de la pasarela son la misma clase de cosa.
+  El importe va **con signo** y **no** hay columna `tipo`: un `tipo` aparte obliga
+  a recordar el signo en cada suma. Idempotencia por `(origen, external_id)`, e
+  índice único parcial para que **un pago no se concilie contra dos movimientos**.
+- **Puerto `ExtractoProvider`** (`lib/conciliacion/`), el octavo adapter. Declara
+  `capacidades()`: el proveedor de banco dice `puedeConsultar: false` y responde
+  `noSoportado`, que distingue «el banco no tiene API» de «la API del banco no
+  respondió». Sin esa distinción la pantalla mostraría un error rojo permanente
+  sobre algo que funciona exactamente como tiene que funcionar.
+- **Importador del extracto** (`extracto-csv.ts`), con los tres problemas reales
+  del formato resueltos y probados: el preámbulo del banco antes de la tabla, las
+  dos formas de expresar el importe (`Importe` con signo contra `Débito`/`Crédito`
+  en positivo — leer una como la otra invierte el mes entero) y el formato local
+  de los números.
+- **MercadoPago por API** (`mercadopago-reportes.ts`): el *settlement report*, con
+  los endpoints verificados contra la documentación oficial. Se guarda el **neto
+  liquidado** y no el bruto: conciliar contra el bruto dejaría siempre una
+  diferencia igual a la comisión.
+- **Pantalla `/panel/conciliacion`** (área nueva, admin y gerencia), con los
+  gastos del mes por moneda y por concepto.
+
+**Decisiones (ADR 0030)**
+
+1. **No se raspa el home banking.** Santander Argentina no publica API de
+   movimientos para clientes. Guardar la clave del banco para automatizar la
+   descarga sería una violación de sus términos y el peor secreto que este sistema
+   podría almacenar. El extracto se sube a mano y la pantalla lo dice.
+2. **La conciliación propone; sólo cierra sola lo que no admite duda.** Únicamente
+   la referencia de la pasarela concilia automáticamente. El importe y la fecha
+   son una sugerencia: dos huéspedes que pagan la misma seña el mismo día es lo
+   más común del mundo, y casar el cobro con la reserva equivocada deja a uno
+   figurando impago y al otro pagado sin haber pagado — y eso **no lo revisa nadie
+   después**.
+3. **Los gastos se agrupan por moneda.** Sumar pesos con dólares da un número que
+   no significa nada, y con la inflación argentina el error ni siquiera se ve raro.
+
+**Un detalle de honestidad en la interfaz.** El importador numera las filas
+descartadas por su posición en el archivo **sin contar las líneas en blanco**, y
+lo dice así en pantalla. La primera versión prometía «el número de línea que ves
+en Excel», y no es cierto: `partirCsv` descarta las filas vacías, así que una
+línea en blanco en el medio corre la numeración y manda a mirar la fila
+equivocada. Hay un test que fija esa diferencia.
+
+**Pendiente / próximo paso:** correr el gate completo contra la base local — hoy
+`com.docker.service` está detenido y no arranca sin elevación, así que los 25
+archivos de tests con base quedaron salteados. La suite pura está en verde
+(1314 pasan, 0 fallan). El objetivo 9 —foto de factura → datos— es lo que sigue.

@@ -81,6 +81,57 @@ export const ETIQUETAS_CONCILIACION: Record<EstadoConciliacion, string> = {
   en_disputa: 'En disputa',
 }
 
+/** Qué significa cada estado, para quien tiene que elegir uno. */
+export const DESCRIPCION_CONCILIACION: Record<EstadoConciliacion, string> = {
+  devengado: 'Se registró el costo. Todavía nadie lo revisó contra la factura del canal.',
+  conciliado: 'Revisado y aceptado: lo que el canal cobró coincide con lo que corresponde.',
+  en_disputa: 'Revisado y NO aceptado: se le reclama al canal. Exige escribir el motivo.',
+}
+
+/** Mínimo de caracteres del motivo de una disputa. */
+export const MOTIVO_DISPUTA_MINIMO = 5
+
+export type MotivoNoConciliar = 'estado' | 'sin_cambio' | 'motivo_corto'
+
+export const MENSAJES_NO_CONCILIAR: Record<MotivoNoConciliar, string> = {
+  estado: 'Ese no es un estado de conciliación válido.',
+  sin_cambio: 'El cargo ya está en ese estado.',
+  motivo_corto:
+    'Escribí por qué se disputa. Es el reclamo que después hay que sostener ante el canal, y sin motivo no se puede.',
+}
+
+/**
+ * Por qué NO se puede mover este cargo a ese estado. `null` = se puede.
+ *
+ * ── Por qué las tres transiciones son libres ────────────────────────────────
+ *
+ * No hay una máquina de estados como la de `pagos` o la de `reservas`, y es a
+ * propósito: los tres valores describen **en qué punto de la revisión está** un
+ * cargo, no una secuencia irreversible. Un cargo conciliado por error tiene que
+ * poder volver a disputa cuando aparece la liquidación que lo desmiente, y una
+ * disputa que el canal reconoce vuelve a `devengado` si va a re-facturarse.
+ * Trabar esos caminos obligaría a corregir la base a mano, que es peor.
+ *
+ * Lo único que sí se exige —y lo exige también la base, en la 0079— es el motivo
+ * al disputar. Una disputa sin explicación es un reclamo que nadie puede sostener
+ * meses después, cuando el canal conteste.
+ */
+export function motivoNoConciliar(entrada: {
+  actual: string
+  nuevo: string
+  nota: string
+}): MotivoNoConciliar | null {
+  if (!(ESTADOS_CONCILIACION as readonly string[]).includes(entrada.nuevo)) return 'estado'
+  if (entrada.actual === entrada.nuevo) return 'sin_cambio'
+  if (
+    entrada.nuevo === 'en_disputa' &&
+    entrada.nota.trim().length < MOTIVO_DISPUTA_MINIMO
+  ) {
+    return 'motivo_corto'
+  }
+  return null
+}
+
 function redondear(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }

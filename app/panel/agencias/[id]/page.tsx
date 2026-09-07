@@ -12,6 +12,11 @@ import {
   type TipoMovimiento,
   type Movimiento,
 } from '@/lib/domain/cuentas'
+import {
+  MONEDAS_EXTRANJERAS,
+  esMonedaExtranjera,
+  formatearLocal,
+} from '@/lib/domain/divisas'
 import { registrarMovimiento, regenerarEnlacePortal, revocarEnlacePortal } from '../actions'
 import { type CondicionIva } from '@/lib/domain/facturacion'
 import { Encabezado, Mensaje, Pagina, botonClases } from '../../_components/ui'
@@ -33,7 +38,11 @@ interface Agencia {
 interface MovRow {
   id: string
   tipo: TipoMovimiento
+  /** SIEMPRE en USD (migración 0078). Es lo único que entra al saldo. */
   monto: number | string
+  moneda: string
+  /** Importe del comprobante en `moneda`. Nulo si el movimiento fue en USD. */
+  monto_origen: number | string | null
   concepto: string
   fecha: string
   reserva: { codigo: string } | null
@@ -48,6 +57,10 @@ interface MovRow {
  */
 const MENSAJES_ERROR: Record<string, string> = {
   movimiento: 'No se pudo registrar el movimiento. El saldo de la cuenta quedó sin cambios.',
+  movimiento_datos: 'Revisá el tipo y el importe: el monto tiene que ser mayor que cero.',
+  moneda: 'Esa moneda no está entre las que el sistema sabe convertir.',
+  sin_cotizacion:
+    'No hay cotización disponible para esa moneda, así que el importe en dólares sería inventado. Cargá una a mano en Configuración o registrá el movimiento en USD.',
   datos: 'No se pudieron guardar los datos de la agencia.',
   activo: 'No se pudo cambiar el estado de la cuenta.',
   enlace: 'No se pudo actualizar el enlace del portal. El anterior sigue vigente.',
@@ -87,7 +100,7 @@ export default async function AgenciaDetallePage({
     supabase.from('agencias').select('id, nombre, tipo, cuit, email, telefono, descuento_pct, activo, condicion_iva').eq('id', id).single(),
     supabase
       .from('movimientos_cuenta')
-      .select('id, tipo, monto, concepto, fecha, reserva:reservas(codigo)')
+      .select('id, tipo, monto, moneda, monto_origen, concepto, fecha, reserva:reservas(codigo)')
       .eq('agencia_id', id)
       .order('fecha', { ascending: false })
       .order('creado_en', { ascending: false }),
@@ -156,7 +169,9 @@ export default async function AgenciaDetallePage({
           <p className={`text-2xl font-semibold ${saldo > 0 ? 'text-red-600' : 'text-stone-900'}`}>
             {formatearUSD(saldo)}
           </p>
-          <p className="text-xs text-stone-600">{saldo > 0 ? 'adeuda al hotel' : 'sin deuda'}</p>
+          <p className="text-xs text-stone-600">
+            {saldo > 0 ? 'adeuda al hotel' : 'sin deuda'} · en dólares
+          </p>
         </div>
         <form action={registrarMovimiento} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="agencia_id" value={agencia.id} />
@@ -167,8 +182,31 @@ export default async function AgenciaDetallePage({
               <option value="pago">Pago</option>
             </select>
           </label>
+          {/*
+            Moneda del comprobante, no del saldo.
+
+            El saldo de la cuenta vive en USD y sigue viviendo ahí; lo que se
+            elige acá es en qué moneda está el papel que se está cargando. Sin
+            este campo, un cargo de ARS 185.000 entraba como USD 185.000
+            (auditoría 2026-09, P1-3).
+          */}
           <label className="flex flex-col gap-1 text-xs">
-            <span className="text-stone-500">Monto (USD)</span>
+            <span className="text-stone-500">Moneda</span>
+            <select
+              name="moneda"
+              defaultValue="USD"
+              className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+            >
+              <option value="USD">USD</option>
+              {MONEDAS_EXTRANJERAS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Monto</span>
             <input
               name="monto"
               type="number"
@@ -273,6 +311,17 @@ export default async function AgenciaDetallePage({
                 <td className="px-4 py-2 text-stone-700">
                   {m.concepto || ETIQUETAS_MOVIMIENTO[m.tipo]}
                   {m.reserva && <span className="ml-2 text-xs text-stone-600">{m.reserva.codigo}</span>}
+                  {/*
+                    Lo que decía el comprobante, cuando no fue en dólares. Las dos
+                    columnas de la derecha están en USD porque el saldo vive ahí;
+                    sin esta línea, quien concilia contra el papel no encuentra el
+                    número que está buscando.
+                  */}
+                  {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
+                    <span className="block text-xs text-stone-500">
+                      {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right text-stone-800">
                   {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
