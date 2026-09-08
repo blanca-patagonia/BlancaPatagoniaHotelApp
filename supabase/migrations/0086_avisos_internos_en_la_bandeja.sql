@@ -143,11 +143,21 @@ create index avisos_automatico_idx on avisos (automatico, creado_en desc);
 */
 drop policy "avisos: staff lee" on avisos;
 
+/*
+  ⚠️ `rol_actual()` devuelve el enum `rol_usuario` y `avisos.rol` es `text`, así
+  que la comparación necesita el cast explícito: sin él Postgres corta con
+  «operator does not exist: text = rol_usuario» y la migración no aplica.
+
+  La columna es `text` con `check` y no el enum a propósito. `rol_usuario`
+  incluye `sin_rol` (0032), que existe para que un alta sin aprovisionar no
+  habilite nada: un aviso ruteado a `sin_rol` no lo vería nadie, y el enum lo
+  aceptaría sin protestar. El `check` de arriba nombra los cuatro roles reales.
+*/
 create policy "avisos: staff lee los suyos"
   on avisos for select
   using (
     rol_actual() in ('admin', 'gerencia')
-    or (rol_actual() is not null and (rol is null or rol = rol_actual()))
+    or (rol_actual() is not null and (rol is null or rol = rol_actual()::text))
   );
 
 /*
