@@ -262,6 +262,21 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   catálogos distintos. La `0034` intentó eso sobre `firmas.token` y el privilegio sigue ahí
   (verificable con `has_column_privilege`). Para que surta efecto hay que revocar el de tabla y
   reponer por columna — y eso rompe a quien lea esa columna con el cliente del usuario.
+- **`revoke select ... from anon` tampoco cierra la ESCRITURA.** Es la misma trampa una capa
+  más allá, y estuvo puesta hasta la `0089`: la `0072` le revocó a `anon` el `select` sobre todo
+  lo que no es catálogo y nadie miró el `insert/update/delete`, que venía de los privilegios por
+  omisión de la **plataforma** (la `0006` sólo le da `select`). Sobre las seis tablas de catálogo
+  el grant de escritura estaba a la vista; sobre el resto también, sólo que **no se nota**: sin
+  `select`, PostgREST no expone la tabla al rol y responde «no existe» antes de llegar a la base,
+  así que la barrera que actúa ahí no es el permiso. Exposición real era cero —RLS acota la
+  escritura a admin y gerencia— pero es exactamente la forma del hallazgo de `cotizar_estadia`.
+  Lo cierra la `0089` con un `revoke` en bloque **más** `alter default privileges`, sin lo cual
+  el arreglo duraría hasta el próximo `create table`. Test de contrato:
+  `tests/anon-no-escribe.test.ts`, apoyado en `privilegios_de_escritura(rol)`.
+  ⚠️ **Ese test pregunta `has_table_privilege`, no sondea con un `insert`.** La primera versión
+  sondeaba y leía el código de error, y tiene dos falsos negativos invisibles: una **vista**
+  responde `55000` y una tabla con **trigger BEFORE INSERT** responde lo que lance el trigger —
+  en los dos casos el error no es de permiso y se lee como si la barrera hubiera actuado.
 - **`revoke execute ... from anon` NO cierra una función: Postgres se la concede a PUBLIC.**
   Al crear una función, el EXECUTE va a `PUBLIC` por omisión, y `anon` / `authenticated` son
   miembros de PUBLIC. Un `revoke` dirigido a `anon` no quita nada —nunca tuvo grant propio— y

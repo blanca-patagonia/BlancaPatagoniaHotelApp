@@ -178,6 +178,15 @@ Tarifario 2025/2026 (Anexo A).
   (`tests/funciones-sin-public.test.ts`) para que ninguna función nazca abierta.
   ⚠️ **No hacer `cotizar_estadia` `security definer`**: ahí `current_user` es el
   dueño de la función y la guarda quedaría siempre en verdadero.
+  **Fase 5 ✅ (2026-09-08) — el borde público en ESCRITURA, exhaustivo.**
+  `tests/anon-no-escribe.test.ts` audita tabla por tabla que `anon` no tenga
+  `insert/update/delete`, con la lista traída de la base. La primera corrida
+  encontró que **sí los tenía**: no por una migración de este proyecto —la 0006
+  le da sólo `select`— sino por los privilegios por omisión de la plataforma, que
+  la 0072 no miró. Exposición real cero (RLS acota a admin/gerencia), pero es la
+  forma exacta del hallazgo de `cotizar_estadia`. Lo cierra la **0089**, que
+  revoca en bloque y toca los `default privileges` — sin eso el arreglo duraría
+  hasta el próximo `create table`.
   **Pendiente:** auditar las 103 políticas RLS una por una — que estén activadas en
   las 51 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
   tablas y 14 políticas** a ese pendiente (`cotizaciones`, `canal_reservas`,
