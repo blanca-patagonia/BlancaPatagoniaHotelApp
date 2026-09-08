@@ -4664,3 +4664,147 @@ Una excepción sin justificar es una regla que se erosiona.
 test las rechazó por cortas. Están escritas.
 
 **Verificación:** typecheck 0 · lint 0 · build 0 · 1428 tests puros en verde.
+
+## 2026-09-08 — Tres pedidos del cliente: arrastrar reservas, venta por categoría e informes por separado
+
+**Origen:** audio y captura que mandó Franco el 2026-09-07, más una nota
+reenviada con dos renglones. Los tres pedidos son de la misma familia: cosas que
+hacía WinPAX y que el sistema no hacía, o hacía peor.
+
+### 1. Arrastrar una reserva en la grilla (ADR 0033)
+
+El audio, textual: *«que puedas agarrar las reservas con el mouse, la
+seleccionás y la puedas mover»*, sobre la grilla mensual.
+
+**Lo importante es lo que NO hubo que escribir.** La mudanza ya existía entera:
+`cambiar_unidad_reserva` (migración 0028) mueve la estadía y ensucia la unidad
+liberada en una transacción, y si el destino está ocupado la rechaza la
+restricción de exclusión (ADR 0002). Lo que faltaba era la forma de pedirla.
+
+**La decisión que había que tomar** es que en una grilla el arrastre tiene dos
+ejes y significan cosas distintas: vertical es cambiar de habitación, horizontal
+es correr las fechas —y correr fechas **recotiza**, o sea que cambia lo que el
+huésped paga—. Se implementó **sólo el eje vertical**. Un arrastre es un gesto
+de bajo costo y alto error: que un resbalón cambie de habitación se revierte
+arrastrando de vuelta; que un resbalón cambie el total de una reserva ya
+facturada, no. Está argumentado en el ADR 0033, con las alternativas que se
+descartaron.
+
+Cómo quedó:
+
+| Pieza | Qué hace |
+|---|---|
+| `lib/domain/arrastre-grilla.ts` | Regla pura: si el bloque se puede soltar ahí. **Llama** a `mudanzas.ts`, no reimplementa sus reglas |
+| `app/panel/ocupacion/arrastre.tsx` | Envoltorio de cliente. La tabla la sigue dibujando el servidor |
+| `lib/retorno.ts` | A dónde vuelve la mudanza, con la lista blanca. Puro y testeado |
+
+**Por qué es un envoltorio y no una grilla de cliente:** son cuarenta filas por
+treinta días con datos de huéspedes. Mandarlas al navegador para poder
+arrastrarlas sería pagar el peso de la grilla entera por un gesto que se usa unas
+pocas veces al día. Los eventos de arrastre **burbujean**, así que el envoltorio
+escucha `dragstart`, `dragover` y `drop` desde cualquier celda y lo único
+que la tabla aporta son atributos `data-*`.
+
+⚠️ **Cuatro cosas de este trabajo que hay que saber antes de tocarlo:**
+
+1. **La validación del navegador NO es la garantía.** Marca la fila en rojo con
+   lo que ya está en pantalla, para no dejar soltar sobre una habitación
+   vendida. Entre que se dibujó la grilla y se soltó el bloque, otra
+   recepcionista pudo venderla. La garantía sigue siendo el ADR 0002, y la
+   pantalla sabe mostrar el `23P01`.
+2. **Pero hay un caso en que sí alcanza, y se demostró.** La grilla trae las
+   estadías que **se solapan con la ventana visible**: si el bloque arrastrado
+   entra entero en la ventana, cualquier choque posible se solapa con él y por lo
+   tanto ya está en pantalla. Cuando el bloque se sale por un costado, deja de
+   alcanzar — y ahí el diálogo lo dice en vez de afirmar algo que no verificó
+   (`ventanaAlcanza`, con sus cuatro tests).
+3. **La ruta de retorno viaja como token de lista blanca, no como URL.** Un campo
+   de formulario con «volvé acá» es un redirect abierto. Los filtros de la grilla
+   se vuelven a armar en el servidor con `construirQuery`. Está en `lib/retorno.ts`
+   y **no** dentro de la acción: el test de la acción sólo corre con Docker, y lo
+   que hay que poder verificar sin base es justamente la decisión. Hay 11 tests,
+   entre ellos los intentos de redirect abierto.
+4. **El arrastre es un atajo, no una puerta.** No existe con el dedo ni con
+   teclado, así que el bloque **sigue siendo un enlace** a la ficha y el camino
+   de siempre no se movió. La leyenda aclara que es con mouse: una instrucción
+   que no funciona en el dispositivo que tenés en la mano es peor que no darla.
+
+**`preventDefault` en CADA `dragover`**, no sólo al cambiar de fila: el
+navegador da la zona por rechazada apenas un evento pasa sin él, y entonces el
+`drop` no llega nunca. Está escrito al lado del código, porque el síntoma
+—«a veces no me deja soltar»— no apunta a la causa.
+
+### 2. Informe de venta por categoría
+
+Pedido reenviado: «informe de venta x categoría». Es la columna **Tipo Hab** de
+la captura de WinPAX (STD, SUP, TRI, CA2…), y era un hueco real: había
+rentabilidad por canal, ocupación, NPS y estados, y **nada por tipo de
+alojamiento**.
+
+**No hubo migración, y es a propósito.** La cuenta por tipo es exactamente la del
+mes entero aplicada a un subconjunto de estadías y de unidades, así que
+`ventaPorTipo` reusa `metricasDeMes` en vez de reescribir la aritmética en
+SQL. Con una vista nueva habría dos definiciones de ocupación y ADR en el
+sistema, y el día que cambie cómo se cuenta una noche se moverían de a una.
+
+⚠️ Tres decisiones que están en los tests:
+
+1. **Se agrupa por `estadias.tipo_unidad_id`, no por el tipo de la unidad
+   actual.** Después de una mudanza entre tipos son distintos —la 0028 actualiza
+   el tipo de la estadía justamente para no mentir sobre qué se vendió—, y un
+   informe de venta tiene que decir qué se vendió.
+2. **Un tipo sin unidades activas muestra «—», no «0 %».** No está vacío: no
+   tiene denominador. Mostrar 0 % haría ver como desocupado un tipo que quizá se
+   vendió entero antes de darlo de baja. Mismo criterio que `costoAdquisicion`.
+3. **El ADR del total NO es el promedio de los ADR de cada tipo.** Es el ingreso
+   sobre las noches. Promediar promedios le da el mismo peso a una cabaña que
+   vendió dos noches que a una standard que vendió cincuenta — hay un test que
+   fija los dos números (300 mal, 166,67 bien).
+
+Un tipo que ya no está en el catálogo pero vendió en el mes entra igual, marcado:
+si se descartara, la columna de ingresos no cerraría con el total y nadie sabría
+por qué faltan dólares.
+
+### 3. «Poder usar múltiples informes sin cerrar las ventanas»
+
+Esa es una limitación de **WinPAX**, no nuestra: Oracle Forms abre ventanas
+modales. Pero el problema equivalente sí estaba, y era peor de lo que parecía:
+los seis informes vivían en **una sola pantalla con un solo filtro de mes**, así
+que no se podía mirar la venta por categoría de agosto al lado de la rentabilidad
+por canal de septiembre.
+
+Se partió en un índice (`/panel/reportes`) más **cinco pantallas propias**:
+`ocupacion`, `categorias`, `canales`, `satisfaccion` y `estados`. Cada
+una con su dirección, sus filtros y un botón visible **«Abrir aparte»** — botón y
+no ctrl+clic, porque quien usa el sistema no tiene por qué conocer el atajo.
+
+Dos cosas que se ganaron de paso:
+
+- **Menos lecturas.** Antes la pantalla traía seis tablas completas aunque sólo
+  se quisiera mirar el NPS. Ahora cada informe pide lo suyo (`reportes/datos.ts`).
+- **Los históricos no llevan selector de mes.** NPS y distribución por estados son
+  del historial completo: ponerles un selector que no cambia nada haría creer que
+  el número es el de ese mes.
+
+El catálogo vive en `lib/domain/informes.ts` y no dentro de la pantalla, porque
+lo usan el índice y el capítulo de Ayuda. Hay un **test-contrato en los dos
+sentidos**: todo informe declarado tiene su `page.tsx` en disco, y toda carpeta
+de informe está declarada —una pantalla sin declarar es un informe al que sólo se
+llega escribiendo la dirección a mano—.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (las cinco rutas nuevas aparecen en el manifiesto).
+**1467 tests en verde y ninguno en rojo**, con 500 salteados por falta de base
+local (Docker); entre ellos ninguno de los 50 que se agregaron acá, que son de
+dominio puro: 17 del arrastre, 13 de venta por categoría y 9 del catálogo de
+informes.
+
+⚠️ Los 500 salteados **no** están verificados en esta pasada. Antes de dar el
+trabajo por cerrado hay que correr la suite contra la base local con las tres
+variables (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`), o esperar al CI.
+
+**Lo que no se puede verificar leyendo:** el gesto mismo. El arrastre se probó
+por sus reglas y por el tipado, no moviendo un bloque en un navegador. Queda para
+la primera corrida con `npm run dev`.

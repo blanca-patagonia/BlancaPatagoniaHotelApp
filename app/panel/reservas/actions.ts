@@ -46,6 +46,7 @@ import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
+import { origenDeMudanza, rutaDeRetorno, filtrosDeGrilla } from '@/lib/retorno'
 import { registrarError, registrarErrorSync } from '@/lib/registro'
 import {
   paxQueOcupa,
@@ -1449,6 +1450,22 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
 }
 
 /**
+ * A dónde vuelve la mudanza cuando termina.
+ *
+ * La decisión —y la lista blanca que evita el redirect abierto— vive en
+ * `lib/retorno.ts`, que es una función pura y tiene sus propios tests. Acá queda
+ * sólo la lectura del formulario.
+ */
+function retornoDeMudanza(
+  formData: FormData,
+  reservaId: string,
+): (extra?: Record<string, string>) => string {
+  const origen = origenDeMudanza(formData.get('volver'))
+  const filtros = filtrosDeGrilla((clave) => formData.get(clave))
+  return (extra = {}) => rutaDeRetorno(origen, reservaId, filtros, extra)
+}
+
+/**
  * Muda una reserva a otra unidad.
  *
  * Recepción lo necesita cuando se rompe algo, cuando el huésped pide cambio o
@@ -1466,7 +1483,8 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
     formData.get('politica_tarifa') === 'recotizar' ? 'recotizar' : 'mantener'
 
   if (!id) redirect('/panel/reservas')
-  if (!unidadDestino) redirect(`/panel/reservas/${id}?error=sin_destino`)
+  const volverA = retornoDeMudanza(formData, id)
+  if (!unidadDestino) redirect(volverA({ error: 'sin_destino' }))
 
   const supabase = await crearClienteServidor()
   const { data: estadia } = await supabase
@@ -1474,7 +1492,7 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
     .select('unidad_id, estado, periodo')
     .eq('reserva_id', id)
     .maybeSingle()
-  if (!estadia) redirect(`/panel/reservas/${id}?error=sin_estadia`)
+  if (!estadia) redirect(volverA({ error: 'sin_estadia' }))
 
   // Se valida en el dominio ANTES de ir a la base: da un mensaje claro y evita
   // una llamada inútil. La función SQL vuelve a comprobarlo porque la
@@ -1484,7 +1502,7 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
     estadia.unidad_id as string,
     unidadDestino,
   )
-  if (rechazo) redirect(`/panel/reservas/${id}?error=${rechazo}`)
+  if (rechazo) redirect(volverA({ error: rechazo }))
 
   const { data, error } = await supabase.rpc('cambiar_unidad_reserva', {
     p_reserva_id: id,
@@ -1492,7 +1510,7 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
     p_motivo: motivo,
   })
   if (error) {
-    redirect(`/panel/reservas/${id}?error=${error.code === '23P01' ? 'ocupada' : 'mudanza'}`)
+    redirect(volverA({ error: error.code === '23P01' ? 'ocupada' : 'mudanza' }))
   }
 
   const resultado = data as {
@@ -1501,7 +1519,7 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
     tipo_destino?: string
     cambio_de_tipo?: boolean
   }
-  if (!resultado.ok) redirect(`/panel/reservas/${id}?error=${resultado.motivo ?? 'mudanza'}`)
+  if (!resultado.ok) redirect(volverA({ error: resultado.motivo ?? 'mudanza' }))
 
   // La recotización va aparte y DESPUÉS de la mudanza, no dentro de la
   // transacción: si fallara, el huésped ya está mudado —que es lo urgente— y el
@@ -1542,16 +1560,16 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
         'aplicar_precio_reserva',
         { p_reserva_id: id, p_precio_noche: precioNoche, p_total: cot.resumen.total },
       )
-      cortarSiFalla(eRecotizar, `/panel/reservas/${id}`, 'total')
+      cortarSiFalla(eRecotizar, volverA(), 'total')
       if (!(recotizado as { ok: boolean } | null)?.ok) {
-        cortarSiFalla({ message: 'no se pudo recotizar' }, `/panel/reservas/${id}`, 'total')
+        cortarSiFalla({ message: 'no se pudo recotizar' }, volverA(), 'total')
       }
     } else {
-      redirect(`/panel/reservas/${id}?error=tarifa_destino`)
+      redirect(volverA({ error: 'tarifa_destino' }))
     }
   }
 
-  redirect(`/panel/reservas/${id}?ok=mudanza`)
+  redirect(volverA({ ok: 'mudanza' }))
 }
 
 /**

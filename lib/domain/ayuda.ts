@@ -136,6 +136,11 @@ export const CAPITULOS: Capitulo[] = [
         detalle:
           'Las flechas de arriba corren la ventana de días. Sirve para ver si conviene aceptar una reserva larga.',
       },
+      {
+        titulo: 'Cambiar a alguien de habitación',
+        detalle:
+          'Con el mouse, arrastrá el bloque de la reserva hasta la fila de la habitación nueva y soltalo: se abre una ventanita que dice qué va a pasar antes de hacerlo. Las fechas no se tocan, sólo la habitación. Si la fila se pone roja es porque esa habitación ya está ocupada esas noches. Desde una tablet o el celular no se puede arrastrar: ahí se hace abriendo la reserva y usando "Cambiar unidad", que es el camino de siempre.',
+      },
     ],
   },
   {
@@ -504,6 +509,16 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Qué miran los números',
         detalle:
           'La ocupación es cuántas habitaciones se vendieron; el ADR, a qué precio promedio; el RevPAR combina las dos y es el que mejor resume el mes.',
+      },
+      {
+        titulo: 'Venta por categoría',
+        detalle:
+          'Muestra qué vendió cada tipo de habitación y de cabaña en el mes: noches, plata, tarifa promedio y qué parte del ingreso explica cada uno. Sirve para saber cuál conviene empujar. Un guion en vez de un número quiere decir que ese dato no existe, no que sea cero.',
+      },
+      {
+        titulo: 'Ver dos informes a la vez',
+        detalle:
+          'Cada informe tiene su propia pantalla y su propio mes. Con el botón "Abrir aparte" se abre en otra pestaña, así se puede comparar un mes contra otro, o la venta por categoría contra los canales, sin cerrar ninguno.',
       },
       {
         titulo: 'Bajar los datos',

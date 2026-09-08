@@ -29,6 +29,8 @@ import {
   formatoFechaCorta,
 } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
+import { MENSAJES_RECHAZO_ARRASTRE } from '@/lib/domain/arrastre-grilla'
+import { ArrastreDeReservas, type TramoDeUnidad } from './arrastre'
 import { Icono } from '../_components/iconos'
 import {
   BarraHerramientas,
@@ -37,6 +39,7 @@ import {
   EstadoUnidad,
   EstadoVacio,
   Kpi,
+  Mensaje,
   Pagina,
   Tarjeta,
   botonClases,
@@ -106,6 +109,29 @@ const FILAS_RESUMEN: readonly {
   { clave: 'ocupacion', titulo: '% ocupación', valor: (r) => r.ocupacionPct },
 ]
 
+/**
+ * Lo que la grilla puede recibir en `?error=` después de una mudanza.
+ *
+ * Los rechazos se reusan del dominio en lugar de reescribirlos: son los mismos
+ * que muestra el arrastre antes de soltar, y con dos copias del texto es
+ * cuestión de tiempo que digan cosas distintas de lo mismo. Acá sólo se suman
+ * los que el dominio no conoce, que son fallas de escritura.
+ *
+ * Hay fallback en el render, así que un motivo nuevo sin mapear igual muestra
+ * algo (Fase 20).
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  ...MENSAJES_RECHAZO_ARRASTRE,
+  sin_destino: 'No se indicó a qué habitación mudar la reserva.',
+  sin_estadia: 'Esa reserva no tiene una estadía para mudar.',
+  destino_inexistente: 'La habitación de destino ya no existe.',
+  mudanza: 'No se pudo cambiar la habitación. Probá de nuevo.',
+  tarifa_destino:
+    'La habitación cambió, pero no hay tarifa cargada para el tipo nuevo: revisá el total en la ficha.',
+  total:
+    'La habitación cambió, pero no se pudo actualizar el total. Revisalo en la ficha de la reserva.',
+}
+
 function esFinDeSemana(iso: string): boolean {
   const d = new Date(iso + 'T00:00:00Z').getUTCDay()
   return d === 0 || d === 6
@@ -121,6 +147,8 @@ export default async function OcupacionPage({
     bloque?: string
     piso?: string
     hk?: string
+    error?: string
+    ok?: string
   }>
 }) {
   await requerirAcceso('ocupacion')
@@ -188,8 +216,28 @@ export default async function OcupacionPage({
 
   // unidad_id -> (día -> estadía)
   const porUnidad = new Map<string, Map<string, EstadiaRow>>()
+  /*
+    Dos estructuras más que salen del MISMO recorrido, para el arrastre.
+
+    `rangoDeEstadia` guarda el período ya parseado: una estadía de diez noches
+    ocupa diez celdas, y cada una necesita las fechas del bloque ENTERO para
+    poder anunciarlas al arrastrarlo. Sin esto se volvería a parsear el mismo
+    `daterange` una vez por celda.
+
+    `ocupacionPorUnidad` es lo que le permite al navegador contestar «esa
+    habitación ya está ocupada» sin ir al servidor. Son los mismos datos que ya
+    se trajeron para dibujar la grilla: no hay una consulta más.
+  */
+  const rangoDeEstadia = new Map<EstadiaRow, { desde: string; hasta: string }>()
+  const ocupacionPorUnidad: Record<string, TramoDeUnidad[]> = {}
   for (const e of estadias) {
     const p = parsearPeriodo(e.periodo)
+    rangoDeEstadia.set(e, p)
+    ;(ocupacionPorUnidad[e.unidad_id] ??= []).push({
+      reservaId: e.reserva?.id ?? '',
+      desde: p.desde,
+      hasta: p.hasta,
+    })
     const mapa = porUnidad.get(e.unidad_id) ?? new Map<string, EstadiaRow>()
     for (const dia of dias) if (contieneDia(p, dia)) mapa.set(dia, e)
     porUnidad.set(e.unidad_id, mapa)
@@ -225,6 +273,17 @@ export default async function OcupacionPage({
   // Los filtros que pueden dejar la grilla sin ninguna unidad. La fecha y la
   // ventana no cuentan: mueven los días, no achican el listado.
   const hayFiltrosDeUnidad = Boolean(categoria || bloque || piso || estadoHk)
+
+  // Lo mínimo que el diálogo de mudanza necesita saber de cada unidad.
+  // `activa` es siempre `true` porque la consulta ya filtra por `activo`; se manda
+  // igual para que quien decida siga siendo la regla de dominio y no esta consulta.
+  const unidadesArrastre = unidades.map((u) => ({
+    id: u.id,
+    nombre: u.nombre,
+    tipoCodigo: u.tipo?.codigo ?? '',
+    tipoNombre: u.tipo?.nombre ?? '',
+    activa: true,
+  }))
 
   const vigentes = {
     desde: sp.desde,
@@ -266,6 +325,13 @@ export default async function OcupacionPage({
           </>
         }
       />
+
+      {sp.error && (
+        <Mensaje tono="error">
+          {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+        </Mensaje>
+      )}
+      {sp.ok === 'mudanza' && <Mensaje tono="ok">La reserva cambió de habitación.</Mensaje>}
 
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi
@@ -460,6 +526,12 @@ export default async function OcupacionPage({
           )
         ) : (
           <>
+        <ArrastreDeReservas
+          unidades={unidadesArrastre}
+          ocupacion={ocupacionPorUnidad}
+          ventana={{ desde, hasta }}
+          filtros={vigentes}
+        >
         {/*
           La grilla scrollea adentro suyo, con techo. No es un capricho: es lo que
           hace que las filas pegajosas funcionen.
@@ -539,7 +611,15 @@ export default async function OcupacionPage({
               {unidades.map((u) => {
                 const mapa = porUnidad.get(u.id)
                 return (
-                  <tr key={u.id} className="border-b border-stone-100 last:border-0">
+                  /* La zona donde se suelta es la FILA, no la celda: el
+                     arrastre cambia de habitación y no de fechas, así que
+                     apuntar a un día concreto sería pedir una puntería que
+                     no cambia el resultado. */
+                  <tr
+                    key={u.id}
+                    data-fila-unidad={u.id}
+                    className="border-b border-stone-100 transition-colors last:border-0"
+                  >
                     {/*
                       La columna congelada tiene techo en pantalla chica.
 
@@ -645,9 +725,26 @@ export default async function OcupacionPage({
                       return (
                         <td key={dia} className="px-0.5 py-1.5" title={etiqueta}>
                           {e.reserva ? (
+                            /* Sigue siendo un enlace a la ficha: con el dedo
+                               y con teclado no hay arrastre, y ése es el
+                               camino que queda. Los data-* los lee el
+                               envoltorio ArrastreDeReservas cuando el bloque
+                               se agarra con el mouse; el período es el de la
+                               ESTADÍA entera y no el de esta noche, porque lo
+                               que se muda es la reserva completa. */
                             <Link
                               href={`/panel/reservas/${e.reserva.id}`}
-                              className="block transition hover:opacity-80"
+                              draggable
+                              data-bloque=""
+                              data-reserva={e.reserva.id}
+                              data-unidad={u.id}
+                              data-estado={e.estado}
+                              data-desde={rangoDeEstadia.get(e)?.desde}
+                              data-hasta={rangoDeEstadia.get(e)?.hasta}
+                              data-codigo={e.reserva.codigo}
+                              data-huesped={apellido}
+                              data-tipo={u.tipo?.codigo ?? ''}
+                              className="block cursor-grab transition hover:opacity-80 active:cursor-grabbing"
                             >
                               {bloque}
                             </Link>
@@ -717,6 +814,7 @@ export default async function OcupacionPage({
             </tfoot>
           </table>
         </div>
+        </ArrastreDeReservas>
           </>
         )}
       </Tarjeta>
@@ -747,6 +845,12 @@ export default async function OcupacionPage({
           Completo
         </span>
         <span className="text-stone-600">· Clic en una celda libre para crear la reserva</span>
+        {/* Se aclara que es con el mouse: en una tablet el gesto no existe, y
+            una instrucción que no funciona es peor que no darla. El camino de
+            siempre —abrir la reserva y cambiar la unidad— no se movió. */}
+        <span className="text-stone-600">
+          · Arrastrá una reserva con el mouse a otra fila para cambiarla de habitación
+        </span>
       </div>
     </Pagina>
   )
