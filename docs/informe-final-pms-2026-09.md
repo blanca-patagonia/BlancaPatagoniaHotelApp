@@ -1,12 +1,17 @@
 # Informe final — camino a PMS productivo
 
-- **Fecha:** 2026-09-07
+- **Fecha:** 2026-09-07, con una **segunda pasada el 2026-09-08** (§9).
 - **Alcance:** los 11 objetivos del pedido, ejecutados sobre la auditoría de
   `docs/auditoria-pms-2026-09.md`.
-- **Verificación:** **1928 tests / 120 archivos / 0 salteados**, con las **85
-  migraciones** aplicadas en orden, en CI (Docker + `EXIGIR_DB=1`). Lint 0,
-  typecheck 0, build 0.
+- **Verificación:** en CI (Docker + `EXIGIR_DB=1`), con las **88 migraciones**
+  aplicadas en orden. Lint 0, typecheck 0, build 0.
 - **Mergeado en `main`:** PR #35 (los once objetivos), #37 y #38 (P1-7), #39 (P1-6).
+  **Abierto:** PR #42 (la segunda pasada).
+
+> ⚠️ **La tabla del §2 se corrigió el 08.** Los objetivos 6 y 7 figuraban como
+> cerrados y no lo estaban: el catálogo tenía cuatro plantillas, cuatro de ellas
+> no las disparaba nadie, y la tabla `notificaciones` existía sin que nadie
+> pudiera verla. El detalle, y qué se hizo, está en §9.
 
 ---
 
@@ -39,15 +44,15 @@ El sistema pasó de:
 |---|---|---|
 | 1 | Booking / canales | 🟡 **Directa: imposible**, y no es de ingeniería (§3 de la auditoría). Vía channel manager: **el sistema ya está completo de su lado** (ADR 0032); falta el adapter, que depende de contratarlo |
 | 2 | Prevención de overbooking | 🟡 La garantía de la base es sólida y sin agujeros; P0-1 corregido. **El riesgo residual es una contratación**, no un bug |
-| 3 | Sincronización | 🟡 Entrada completa. Salida: cupo, tarifas, mínimo de noches y cierres se calculan a diario y se registran; hoy no salen porque el proveedor es de solo lectura, y la pantalla lo dice |
+| 3 | Sincronización | 🟡 Entrada completa, y desde el 08 también **las modificaciones**: una reserva que el canal cambia después de importarla ya no es invisible (0088). Salida: cupo, tarifas, mínimo de noches, cierres y **restricciones por fecha** (0087) se calculan a diario y se registran; no salen porque el proveedor es de solo lectura, y la pantalla lo dice |
 | 4 | Conciliación de facturas | 🟢 **Cerrado** (ADR 0030) |
 | 5 | Registro y confirmación de pagos | 🟢 **Cerrado** — reembolsos, idempotencia de mostrador y el link que ya no cruza pasarelas |
-| 6 | Recordatorios automáticos | 🟢 **Cerrado** — falta contratar la cuenta de correo |
-| 7 | Avisos ante pagos o cambios de estado | 🟢 **Cerrado** |
+| 6 | Recordatorios automáticos | 🟢 **Cerrado de verdad desde el 2026-09-08** (§9). El 07 estaba marcado así con 4 plantillas y ningún disparador automático: hoy son 22 eventos, con cron propio |
+| 7 | Avisos ante pagos o cambios de estado | 🟢 **Cerrado de verdad desde el 2026-09-08** (§9). Faltaban los avisos internos, los cinco estados y la pantalla que los muestra |
 | 8 | Operación diaria | 🟢 Ya era lo más maduro del sistema |
 | 9 | Foto de factura → Excel | 🟢 **Cerrado** (ADR 0031) |
 | 10 | MercadoPago + Santander, gastos mensuales | 🟢 **Cerrado** (ADR 0030) |
-| 11 | Trazabilidad y seguridad | 🟢 Auditoría y RLS fuertes; el camino del dinero ya se ve en `/panel/errores`. 🟡 Queda **restaurar un backup**, que no se cierra desde el código |
+| 11 | Trazabilidad y seguridad | 🟢 Auditoría y RLS fuertes; el camino del dinero se ve en `/panel/errores` y lo comunicado en `/panel/notificaciones`. El **borde público en escritura** pasó a auditarse tabla por tabla (§9). 🟡 Queda **restaurar un backup**, que no se cierra desde el código |
 
 ---
 
@@ -242,3 +247,108 @@ silencio.
 | `/api/cron/mantenimiento` | 06:40 |
 | `/api/cron/notificaciones` | cada 5 min |
 | `/api/cron/salud` | cada 15 min |
+
+
+---
+
+## 9. Segunda pasada — 2026-09-08
+
+> Esta sección se agregó un día después. **Corrige dos afirmaciones de la tabla
+> del §2**, que es el motivo por el que existe: los objetivos 6 y 7 figuraban
+> como cerrados y no lo estaban.
+
+### 9.1 Lo que estaba mal declarado
+
+El informe del 07 daba por cerrados los recordatorios y los avisos. La revisión
+del día siguiente encontró tres cosas que lo desmienten:
+
+1. **El catálogo tenía cuatro plantillas.** Para un sistema que reserva, cobra,
+   factura, cancela y reprograma. No había nada que avisara que una reserva se
+   confirmó, que un pago se rechazó, que una reserva pendiente está por
+   liberarse ni que la salida es mañana.
+2. **La tabla `notificaciones` existía desde la 0075 y nadie podía verla.** Es
+   exactamente el defecto que la Fase 2 de la auditoría corrigió con
+   `/panel/errores`: un dato que se guarda y nadie mira no sirve, y encima da la
+   sensación de que el problema está resuelto.
+3. **Cuatro de esas plantillas no las disparaba nadie.** Existían y no se
+   mandaban nunca — que es peor que no tenerlas, porque dan por hecho que el
+   hotel avisa.
+
+Ninguna de las tres se veía desde afuera. Las tres se ven abriendo el código.
+
+### 9.2 Lo que entró
+
+| Qué | Dónde |
+|---|---|
+| Catálogo de **4 → 22 eventos**, seis de ellos internos | `lib/domain/plantillas.ts` |
+| Los **cinco estados** del pedido (faltaban `entregada` y `leida`) | migración **0086** |
+| **Cartelera interna** con ruteo por rol | migración **0086**, `avisos.rol` |
+| **`/panel/notificaciones`** — el registro de envíos | área nueva del panel |
+| Un **disparador por evento**, enchufado en los flujos que ya existían | `lib/notificaciones/eventos.ts` |
+| **Cron de recordatorios** a las 9 del hotel | `/api/cron/recordatorios` |
+| **Webhook de entrega** de correo, con firma Svix | `/api/webhooks/email/[proveedor]` |
+| **WhatsApp** por la Cloud API oficial de Meta | `lib/whatsapp/` |
+| **Restricciones por fecha** para el canal | migración **0087** |
+| La reserva que **el canal modifica** después de importarla | migración **0088** |
+| El **borde público en escritura**, tabla por tabla | `tests/anon-no-escribe.test.ts` |
+| **Despliegue, vuelta atrás y variables** (entregables 8, 15 y 16) | `docs/despliegue.md` |
+
+### 9.3 Las decisiones que conviene discutir
+
+**`enviada` no es `entregada`.** El proveedor acepta el mensaje y responde 200
+mucho antes de saber si el servidor del destinatario lo aceptó. Entre las dos
+cosas está el rebote, que es el caso que el hotel de verdad necesita ver: un
+huésped con la dirección mal cargada **figuraba avisado**. Y `leida` es la más
+imprecisa de las cinco —un cliente de correo que bloquea imágenes nunca la
+reporta—, así que su ausencia no prueba nada y la pantalla lo dice con esas
+palabras.
+
+**El canal modifica y el sistema no reprograma solo.** Es la misma decisión que
+la 0074 tomó con las cancelaciones y con un motivo más: mover el período va
+contra la restricción de exclusión del ADR 0002 —si pisa otra estadía falla
+igual, pero de madrugada— y el precio **no se recotiza solo**, así que la reserva
+quedaría cobrando la tarifa de otras fechas. Se detecta, se muestra en rojo y
+alguien corrige.
+
+**WhatsApp por la API oficial, con lo que eso cuesta.** Un puente sobre WhatsApp
+Web funciona hasta que Meta bloquea el número, y el número es el del hotel, el
+publicado en su web y en Booking. El costo es la **ventana de 24 horas**: fuera
+de ella sólo se pueden mandar plantillas aprobadas por Meta, así que los cuerpos
+del catálogo no sirven tal cual y hay que hacer aprobar una plantilla por evento.
+Son cuatro, y el trámite es del hotel.
+
+### 9.4 Dónde me equivoqué, otra vez
+
+**Dos errores en la migración 0086 que encontró el CI, no yo.** Un índice sobre
+`creada_en` cuando la columna se llama `creado_en`, y una comparación de
+`avisos.rol` (text) contra `rol_actual()` (enum `rol_usuario`) sin cast. Las dos
+cortan el `db reset` en seco y **no aplican nada de lo que sigue**. Las dos son
+del tipo que sólo se ve ejecutando, y por eso el gate con base corre en el CI del
+PR y no en mi máquina, donde Docker no levanta.
+
+**Y un hueco que apareció revisando el segundo.** El trigger `solo_fijar_aviso`
+(0017) congela `mensaje`, `autor_id` y `creado_en` —las únicas columnas que había
+entonces— y las tres nuevas quedaban fuera. Como `authenticated` tiene UPDATE a
+nivel de tabla desde la 0006, cualquiera del staff podía cambiarle el rol a un
+aviso para sacárselo de encima, o desmarcar `automatico` y hacer pasar uno del
+sistema por uno escrito por una persona. Ninguna rompe nada grave; las dos rompen
+lo que la cartelera promete, que es poder distinguir quién dijo qué.
+
+### 9.5 Lo que apareció y no era mío
+
+**Un RCE crítico sin autenticar en Next.js** (16.0.0–16.3.2, GHSA-p293-qw3h-jr36
+y GHSA-2xp9-vwfh-vxw4), más dos vulnerabilidades altas en `js-yaml` y `sharp`. Lo
+destapó el `npm audit` del CI. Se subió a **16.3.4** y el árbol quedó en cero
+vulnerabilidades. No es una dependencia nueva: es un parche de una que ya estaba,
+y la alternativa era desplegar con un RCE conocido.
+
+### 9.6 Lo que sigue sin cerrarse desde el código
+
+Sin cambios respecto del §7, más dos que son nuevos:
+
+- **Las plantillas de WhatsApp las aprueba Meta**, con la cuenta del hotel, y
+  tarda. Sin eso el canal no se ofrece y todo sale por correo — que es el
+  comportamiento correcto, no una falla.
+- **El envío real de correo** necesita `RESEND_API_KEY`, un dominio verificado y
+  el secreto del webhook de entrega. Sin ese último, los rebotes siguen siendo
+  invisibles.
