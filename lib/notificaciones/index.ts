@@ -3,6 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
 import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
+import { canalDelAviso, telefonoParaWhatsApp } from '@/lib/domain/whatsapp'
+import { enviarPorWhatsApp, whatsappActivo } from '@/lib/whatsapp'
 import {
   agotoIntentos,
   claveDeNotificacion,
@@ -43,6 +45,14 @@ export interface PedidoDeNotificacion {
    */
   destinatario?: string | null
   variables: Record<string, string | number>
+  /**
+   * Teléfono del huésped, si se conoce.
+   *
+   * Cuando el hotel tiene WhatsApp enchufado y el evento tiene plantilla
+   * aprobada, el aviso sale por ahí en vez de por correo (ver `canalDelAviso`).
+   * Sin teléfono, todo sigue como antes.
+   */
+  telefono?: string | null
   huespedId?: string | null
   reservaId?: string | null
   /**
@@ -77,10 +87,37 @@ export async function encolar(
     ve gerencia» obliga a encontrarlos todos. Acá hay uno solo: `ROL_DEL_AVISO`.
   */
   const rol = rolDelAviso(p.evento)
-  const destinatario = rol ?? p.destinatario
+
+  /*
+    Por dónde sale.
+
+    La decisión vive en el dominio (`canalDelAviso`) y devuelve **un solo** canal:
+    mandar el mismo aviso por correo y por WhatsApp le duplica el mensaje al
+    huésped y además rompe la idempotencia, cuya clave no incluye el canal —las
+    dos filas chocarían contra el `unique` y una se descartaría en silencio—.
+  */
+  const canal = canalDelAviso(p.evento, {
+    telefono: p.telefono,
+    whatsappActivo: whatsappActivo(),
+  })
+
+  const destinatario =
+    canal === 'interno'
+      ? rol
+      : canal === 'whatsapp'
+        ? telefonoParaWhatsApp(p.telefono)
+        : p.destinatario
 
   if (!destinatario) {
-    return { ok: false, motivo: 'El huésped no tiene email cargado.' }
+    // El motivo nombra el canal: «no tiene email» sobre un aviso que iba a salir
+    // por WhatsApp manda a revisar el campo equivocado.
+    return {
+      ok: false,
+      motivo:
+        canal === 'whatsapp'
+          ? 'El huésped no tiene un teléfono usable para WhatsApp.'
+          : 'El huésped no tiene email cargado.',
+    }
   }
 
   // Consentimiento. Se consulta acá y no al despachar: si el huésped pidió no
@@ -100,7 +137,7 @@ export async function encolar(
 
   const { error } = await client.from('notificaciones').insert({
     evento: p.evento,
-    canal: rol ? 'interno' : 'email',
+    canal,
     clave: claveDeNotificacion(p.evento, p.entidadId, p.discriminante),
     destinatario,
     variables: p.variables,
@@ -143,6 +180,8 @@ export interface ResumenDespacho {
 interface Entrega {
   ok: boolean
   detalle: string
+  /** Id del envío en el proveedor, cuando lo hay. Ver `ResultadoEnvio`. */
+  proveedorId?: string
 }
 
 /**
@@ -239,9 +278,20 @@ export async function despachar(
   for (const n of pendientes) {
     const interno = n.canal === 'interno'
 
+    /*
+      Tres destinos posibles, uno por canal. La fila ya trae decidido cuál: la
+      elección se hizo al encolar (`canalDelAviso`) y **no se rehace acá**.
+
+      Si se recalculara al despachar, un aviso encolado como correo podría salir
+      por WhatsApp porque entre medio alguien configuró el canal —o al revés, si
+      se cayó el token—, y el `destinatario` guardado en la fila sería del canal
+      equivocado: se le mandaría un correo a un número de teléfono.
+    */
     const r: Entrega = interno
       ? await publicarEnCartelera(client, n)
-      : await enviarPlantilla(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
+      : n.canal === 'whatsapp'
+        ? await enviarPorWhatsApp(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
+        : await enviarPlantilla(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
 
     if (r.ok) {
       const ahora = new Date().toISOString()
@@ -264,6 +314,14 @@ export async function despachar(
           estado: interno ? 'entregada' : 'enviada',
           enviada_en: ahora,
           ...(interno ? { entregada_en: ahora } : {}),
+          /*
+            El id del proveedor, cuando lo hay. Es con lo que el webhook de
+            entrega encuentra esta fila para marcarla entregada, leída o rebotada.
+
+            Sólo se escribe si vino: pisarlo con `null` en un reintento del
+            proveedor de consola borraría el id del envío real anterior.
+          */
+          ...(r.proveedorId ? { proveedor_id: r.proveedorId } : {}),
           error: null,
         })
         .eq('id', n.id)

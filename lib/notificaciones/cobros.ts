@@ -53,7 +53,7 @@ async function contextoDelCobro(
     .from('reservas')
     .select(
       `id, codigo, total, huesped_id,
-       huesped:huespedes!reservas_huesped_id_fkey(nombre, apellido, email),
+       huesped:huespedes!reservas_huesped_id_fkey(nombre, apellido, email, telefono),
        estadia:estadias(check_in, check_out)`,
     )
     .eq('id', reservaId)
@@ -70,7 +70,7 @@ async function contextoDelCobro(
     codigo: string
     total: number
     huesped_id: string | null
-    huesped: { nombre: string; apellido: string; email: string | null } | null
+    huesped: { nombre: string; apellido: string; email: string | null; telefono: string | null } | null
     // ⚠️ PostgREST tipa el embed como arreglo aunque la relación sea a-uno.
     estadia: { check_in: string; check_out: string }[] | null
   }
@@ -105,6 +105,7 @@ async function contextoDelCobro(
       reservaId: r.id,
       huespedId: r.huesped_id,
       email: r.huesped?.email ?? null,
+      telefono: r.huesped?.telefono ?? null,
       // El nombre de pila para saludar; el completo, para la cartelera interna.
       nombre: nombre || apellido,
       codigo: r.codigo,

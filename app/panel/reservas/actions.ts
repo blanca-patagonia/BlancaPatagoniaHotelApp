@@ -321,7 +321,7 @@ interface ReservaParaAvisar {
   codigo: string
   tarifa_tipo: string
   huesped_id: string | null
-  huesped: { nombre: string; email: string | null } | null
+  huesped: { nombre: string; email: string | null; telefono: string | null } | null
   // ⚠️ PostgREST tipa el embed como arreglo aunque la relación sea a-uno.
   estadia: { check_in: string; check_out: string; unidad: { tipo_unidad_id: string } | null }[] | null
 }
@@ -350,6 +350,7 @@ async function avisarDelFinal(
     reservaId,
     huespedId: r.huesped_id,
     email: r.huesped?.email ?? null,
+    telefono: r.huesped?.telefono ?? null,
     nombre: r.huesped?.nombre ?? '',
     codigo: r.codigo,
   }
@@ -395,7 +396,7 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
     .from('reservas')
     .select(
       `estado, total, codigo, tarifa_tipo, huesped_id,
-       huesped:huespedes!reservas_huesped_id_fkey(nombre, email),
+       huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono),
        estadia:estadias(check_in, check_out, unidad:unidades(tipo_unidad_id))`,
     )
     .eq('id', id)
@@ -1533,7 +1534,7 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   const { data: reserva } = await supabase
     .from('reservas')
     .select(
-      'tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email)',
+      'tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono)',
     )
     .eq('id', id)
     .single()
@@ -1585,13 +1586,18 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
     El aviso va después del RPC y no antes: si el período pisaba otra estadía, la
     reprogramación no ocurrió y el correo habría anunciado un cambio inexistente.
   */
-  const h = reserva.huesped as unknown as { nombre: string; email: string | null } | null
+  const h = reserva.huesped as unknown as {
+    nombre: string
+    email: string | null
+    telefono: string | null
+  } | null
   await avisarReservaReprogramada(
     supabase,
     {
       reservaId: id,
       huespedId: reserva.huesped_id as string | null,
       email: h?.email ?? null,
+      telefono: h?.telefono ?? null,
       nombre: h?.nombre ?? '',
       codigo: reserva.codigo as string,
     },

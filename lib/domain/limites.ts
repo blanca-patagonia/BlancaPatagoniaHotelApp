@@ -17,6 +17,7 @@ export type AccionLimitada =
   | 'recuperar_password'
   | 'ical'
   | 'webhook_pago'
+  | 'webhook_email'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -127,6 +128,24 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 20,
     minutos: 60,
     motivo: 'Martilleo del webhook de pagos por parte de quien no tiene el secreto.',
+  },
+
+  /*
+    El webhook de entrega de correo, con el mismo criterio y por el mismo motivo:
+    el contador se incrementa **después** de rechazar la firma, nunca antes.
+
+    Un evento legítimo llega firmado con el secreto que sólo tiene el proveedor,
+    así que no pasa por acá jamás. Y descartar eventos buenos por volumen sería
+    perder justamente los rebotes: el hotel volvería a creer que un correo llegó
+    cuando no llegó, que es lo que este webhook viene a corregir.
+
+    El techo es más alto que el de pagos porque el volumen legítimo también lo es
+    —cada correo genera hasta cuatro eventos—, aunque los legítimos no cuenten.
+  */
+  webhook_email: {
+    maximo: 40,
+    minutos: 60,
+    motivo: 'Martilleo del webhook de correo por parte de quien no tiene el secreto.',
   },
 }
 

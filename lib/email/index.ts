@@ -26,6 +26,17 @@ export interface ResultadoEnvio {
   ok: boolean
   /** Detalle para mostrar en pantalla (motivo del rechazo o confirmación). */
   detalle: string
+  /**
+   * Id que le dio el proveedor al mensaje.
+   *
+   * Es con lo que el webhook de entrega (`/api/webhooks/email/[proveedor]`) casa
+   * el evento contra la fila de la bandeja: sin él, un rebote no tiene a qué
+   * imputarse y el estado se queda en `enviada` para siempre — que es
+   * indistinguible de «salió bien y todavía no informaron».
+   *
+   * Opcional porque el proveedor de consola no manda nada y no tiene ninguno.
+   */
+  proveedorId?: string
 }
 
 export interface EmailProvider {

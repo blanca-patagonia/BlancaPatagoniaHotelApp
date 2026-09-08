@@ -61,19 +61,20 @@ interface FilaReserva {
   total: number
   huesped_id: string | null
   creado_en?: string
-  huesped: { nombre: string; apellido: string; email: string | null } | null
+  huesped: { nombre: string; apellido: string; email: string | null; telefono: string | null } | null
   // ⚠️ PostgREST tipa el embed como arreglo aunque la relación sea a-uno.
   estadia?: { check_in: string; check_out: string }[] | null
 }
 
 const CAMPOS = `id, codigo, total, huesped_id, creado_en,
-  huesped:huespedes!reservas_huesped_id_fkey(nombre, apellido, email)`
+  huesped:huespedes!reservas_huesped_id_fkey(nombre, apellido, email, telefono)`
 
 function destinoDe(r: FilaReserva): DestinoHuesped {
   return {
     reservaId: r.id,
     huespedId: r.huesped_id,
     email: r.huesped?.email ?? null,
+    telefono: r.huesped?.telefono ?? null,
     nombre: r.huesped?.nombre || (r.huesped?.apellido ?? ''),
     codigo: r.codigo,
   }
@@ -169,13 +170,19 @@ async function recordarLlegadas(client: SupabaseClient, manana: string): Promise
   let n = 0
   for (const fila of (data ?? []) as unknown as { reserva: FilaReserva | null }[]) {
     const r = fila.reserva
-    if (!r?.huesped?.email) continue
+    /*
+      Alcanza con que exista la ficha del huésped: `encolar` decide el canal y
+      devuelve el motivo si no hay por dónde. Exigir email acá dejaría afuera a
+      quien cargó sólo el teléfono, que con WhatsApp enchufado sí es alcanzable.
+    */
+    if (!r?.huesped) continue
 
     const res = await encolar(client, {
       evento: 'recordatorio_checkin',
       entidadId: r.id,
       discriminante: manana,
       destinatario: r.huesped.email,
+      telefono: r.huesped.telefono,
       huespedId: r.huesped_id,
       reservaId: r.id,
       variables: {
@@ -203,7 +210,12 @@ async function recordarSaldos(client: SupabaseClient, enUnaSemana: string): Prom
   let n = 0
   for (const fila of (data ?? []) as unknown as { reserva: FilaReserva | null }[]) {
     const r = fila.reserva
-    if (!r?.huesped?.email) continue
+    /*
+      Alcanza con que exista la ficha del huésped: `encolar` decide el canal y
+      devuelve el motivo si no hay por dónde. Exigir email acá dejaría afuera a
+      quien cargó sólo el teléfono, que con WhatsApp enchufado sí es alcanzable.
+    */
+    if (!r?.huesped) continue
 
     const saldo = await saldoDe(client, r.id, r.total)
     // Sin saldo no hay nada que recordar. Mandar «saldo: 0» hace que alguien
@@ -233,7 +245,12 @@ async function recordarSalidas(client: SupabaseClient, manana: string): Promise<
   let n = 0
   for (const fila of (data ?? []) as unknown as { reserva: FilaReserva | null }[]) {
     const r = fila.reserva
-    if (!r?.huesped?.email) continue
+    /*
+      Alcanza con que exista la ficha del huésped: `encolar` decide el canal y
+      devuelve el motivo si no hay por dónde. Exigir email acá dejaría afuera a
+      quien cargó sólo el teléfono, que con WhatsApp enchufado sí es alcanzable.
+    */
+    if (!r?.huesped) continue
 
     const res = await avisarCheckoutProximo(client, destinoDe(r), {
       checkOut: manana,
@@ -262,7 +279,7 @@ async function avisarLasQueVencen(client: SupabaseClient, creadaAntesDe: string)
 
   let n = 0
   for (const r of (data ?? []) as unknown as FilaReserva[]) {
-    if (!r.huesped?.email) continue
+    if (!r.huesped) continue
     const estadia = r.estadia?.[0]
     if (!estadia) continue
 
@@ -318,7 +335,12 @@ async function pedirResenas(client: SupabaseClient, salidaHaceDias: string): Pro
   let n = 0
   for (const fila of filas) {
     const r = fila.reserva
-    if (!r?.huesped?.email) continue
+    /*
+      Alcanza con que exista la ficha del huésped: `encolar` decide el canal y
+      devuelve el motivo si no hay por dónde. Exigir email acá dejaría afuera a
+      quien cargó sólo el teléfono, que con WhatsApp enchufado sí es alcanzable.
+    */
+    if (!r?.huesped) continue
     if (!mereceLaPenaPedirResena(puntajePorReserva.get(r.id))) continue
 
     const res = await avisarSolicitudResena(client, destinoDe(r), {

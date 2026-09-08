@@ -211,6 +211,12 @@ export interface DestinoHuesped {
   reservaId: string
   huespedId: string | null
   email: string | null
+  /**
+   * Teléfono, si se conoce. Con WhatsApp enchufado y plantilla aprobada, el
+   * aviso sale por ahí en vez de por correo (ver `canalDelAviso`). Opcional
+   * porque muchos call sites no lo tienen a mano, y sin él todo sigue por mail.
+   */
+  telefono?: string | null
   nombre: string
   codigo: string
 }
@@ -225,6 +231,7 @@ export function avisarReservaConfirmada(
     evento: 'reserva_confirmada',
     entidadId: h.reservaId,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -249,6 +256,7 @@ export function avisarPagoRecibido(
     evento: 'pago_recibido',
     entidadId: d.pagoId,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -276,6 +284,7 @@ export function avisarPagoRechazado(
     evento: 'pago_rechazado',
     entidadId: d.pagoId,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -303,6 +312,7 @@ export function avisarReservaReprogramada(
     entidadId: h.reservaId,
     discriminante: `${d.checkIn}_${d.checkOut}`,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -334,6 +344,7 @@ export function avisarReservaCancelada(
     evento: 'reserva_cancelada',
     entidadId: h.reservaId,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -356,6 +367,7 @@ export function avisarNoShow(
     evento: 'no_show',
     entidadId: h.reservaId,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -383,6 +395,7 @@ export function avisarReservaPorVencer(
     evento: 'reserva_por_vencer',
     entidadId: h.reservaId,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -406,6 +419,7 @@ export function avisarSaldoPendiente(
     entidadId: h.reservaId,
     discriminante: d.checkIn,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -435,6 +449,7 @@ export function avisarCheckoutProximo(
     entidadId: h.reservaId,
     discriminante: d.checkOut,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: {
@@ -467,6 +482,7 @@ export function avisarSolicitudResena(
     evento: 'solicitud_resena',
     entidadId: h.reservaId,
     destinatario: h.email,
+    telefono: h.telefono,
     huespedId: h.huespedId,
     reservaId: h.reservaId,
     variables: { nombre: h.nombre, enlace: d.enlace },

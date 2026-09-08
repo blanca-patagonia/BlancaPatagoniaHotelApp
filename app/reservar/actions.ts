@@ -153,6 +153,9 @@ export async function crearReservaPublica(
     evento: 'confirmacion_reserva',
     entidadId: nueva.id,
     destinatario: email,
+    // Con WhatsApp enchufado, la confirmación sale por ahí: es el aviso que el
+    // huésped está esperando en ese mismo minuto (ver `canalDelAviso`).
+    telefono,
     huespedId,
     reservaId: nueva.id,
     variables: {
