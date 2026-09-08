@@ -533,7 +533,12 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Reintentar a mano',
         detalle:
-          'Si algo quedó fallido y ya se arregló el motivo —la dirección estaba mal, el proveedor estuvo caído—, se puede volver a poner en cola desde el detalle. Nunca manda dos veces el mismo aviso por error: cada uno tiene su clave.',
+          'Si algo quedó fallido y ya se arregló el motivo —la dirección estaba mal, el proveedor estuvo caído—, se puede volver a poner en cola. Nunca manda dos veces el mismo aviso por error: cada uno tiene su clave.',
+      },
+      {
+        titulo: 'Frenar un aviso antes de que salga',
+        detalle:
+          'Sólo se puede cancelar lo que está "pendiente": es lo único que todavía no salió. Un aviso ya enviado no vuelve, así que cancelarlo no está permitido —diría que no se mandó algo que sí se mandó—. Lo cancelado se puede volver a encolar más tarde.',
       },
     ],
   },

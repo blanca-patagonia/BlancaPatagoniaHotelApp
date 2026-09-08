@@ -188,6 +188,21 @@ export function sePuedeReintentar(estado: string): boolean {
   return estado === 'fallida' || estado === 'cancelada'
 }
 
+/**
+ * ¿Se puede frenar antes de que salga?
+ *
+ * Sólo lo pendiente: es lo único que todavía no salió. Cancelar algo ya enviado
+ * no lo trae de vuelta —el correo está en la casilla del huésped— y marcarlo
+ * como cancelado sería falsear el registro de lo que pasó.
+ *
+ * Existe para el caso feo: un despliegue que encoló avisos equivocados. El
+ * procedimiento completo está en `docs/despliegue.md` §3.5, y el orden importa:
+ * primero se frena el cron, después se cancela.
+ */
+export function sePuedeCancelar(estado: string): boolean {
+  return estado === 'pendiente'
+}
+
 /* ──────────────────────────────────────── a quién le toca cada interno ──── */
 
 /**

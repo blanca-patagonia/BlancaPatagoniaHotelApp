@@ -9,6 +9,7 @@ import {
   ETIQUETAS_ESTADO,
   SIGNIFICADO_ESTADO,
   esEstadoNotificacion,
+  sePuedeCancelar,
   sePuedeReintentar,
   type EstadoNotificacion,
 } from '@/lib/domain/notificaciones'
@@ -33,7 +34,7 @@ import {
   type Tono,
 } from '../_components/ui'
 import { BotonEnvio } from '../_components/boton-envio'
-import { reencolarNotificacion } from './actions'
+import { cancelarNotificacion, reencolarNotificacion } from './actions'
 
 /**
  * Registro de envíos (bandeja de salida, migraciones 0075 y 0086).
@@ -49,11 +50,12 @@ import { reencolarNotificacion } from './actions'
  * La pregunta que trae a alguien acá es siempre la misma y llega por teléfono:
  * «no me llegó nada». Sin esta pantalla la respuesta era «debe ser tu casilla».
  *
- * ── De solo lectura, salvo reintentar ───────────────────────────────────────
+ * ── De solo lectura, salvo dos acciones ─────────────────────────────────────
  *
  * No hay borrar ni editar: es un registro de lo que pasó. Lo único que se puede
- * hacer es **volver a poner en cola** lo que falló, y sólo eso, porque es la
- * única acción que arregla algo —el resto sería falsear el rastro—.
+ * hacer es **volver a poner en cola** lo que falló y **cancelar** lo que
+ * todavía no salió. Las dos actúan sobre el futuro del envío; ninguna reescribe
+ * lo que ya ocurrió, que es lo que convertiría el registro en una opinión.
  */
 
 const TONO_ESTADO: Record<EstadoNotificacion, Tono> = {
@@ -73,6 +75,8 @@ const NOMBRE_EVENTO: Record<string, string> = Object.fromEntries(
 const MENSAJES_ERROR: Record<string, string> = {
   reencolar: 'No se pudo volver a poner en cola el aviso. Probá de nuevo.',
   estado: 'Ese aviso no se puede reintentar: sólo lo fallido y lo cancelado.',
+  cancelar: 'No se pudo cancelar el aviso. Probá de nuevo.',
+  ya_salio: 'Ese aviso ya salió: cancelarlo no lo trae de vuelta.',
 }
 
 interface Fila {
@@ -170,6 +174,13 @@ export default async function NotificacionesPage({
           </Mensaje>
         </div>
       )}
+      {sp.ok === 'cancelada' && (
+        <div className="mb-4">
+          <Mensaje tono="ok">
+            El aviso quedó cancelado y no va a salir. Se puede volver a encolar más tarde.
+          </Mensaje>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="En el filtro" valor={String(total)} detalle="avisos" icono="sobre" />
@@ -243,7 +254,7 @@ export default async function NotificacionesPage({
                   <th className={TH}>Qué se avisó</th>
                   <th className={`${TH} ${COL_SECUNDARIA}`}>A quién</th>
                   <th className={TH}>Estado</th>
-                  <th className={`${TH} ${COL_SECUNDARIA}`}>Reintentar</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -296,14 +307,32 @@ export default async function NotificacionesPage({
                         )}
                       </td>
                       <td className={`${TD} ${COL_SECUNDARIA}`}>
-                        {sePuedeReintentar(n.estado) ? (
+                        {/*
+                          Una acción o la otra, nunca las dos: lo pendiente se
+                          frena y lo fallido se reintenta. Son estados disjuntos.
+                        */}
+                        {sePuedeReintentar(n.estado) && (
                           <form action={reencolarNotificacion}>
                             <input type="hidden" name="id" value={n.id} />
                             <BotonEnvio variante="fantasma" cargando="Encolando…">
                               Volver a la cola
                             </BotonEnvio>
                           </form>
-                        ) : (
+                        )}
+                        {sePuedeCancelar(n.estado) && (
+                          <form action={cancelarNotificacion}>
+                            <input type="hidden" name="id" value={n.id} />
+                            <BotonEnvio
+                              variante="fantasma"
+                              extra="text-stone-600 hover:text-red-600"
+                              cargando="Cancelando…"
+                              confirmar="¿Cancelar este aviso? No se va a enviar. Se puede volver a encolar más tarde."
+                            >
+                              Cancelar
+                            </BotonEnvio>
+                          </form>
+                        )}
+                        {!sePuedeReintentar(n.estado) && !sePuedeCancelar(n.estado) && (
                           <span className="text-xs text-stone-500">—</span>
                         )}
                       </td>

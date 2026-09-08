@@ -60,3 +60,51 @@ export async function reencolarNotificacion(formData: FormData): Promise<void> {
 
   redirect('/panel/notificaciones')
 }
+
+/**
+ * Frena un aviso antes de que salga.
+ *
+ * ── Para qué existe ─────────────────────────────────────────────────────────
+ *
+ * Para el caso feo: un despliegue que encoló avisos equivocados. Sin esto, la
+ * única forma de que no salgan sería sacarle el secreto al cron —que frena
+ * TODOS, incluidos los que sí correspondían— o entrar a la base a mano.
+ *
+ * El procedimiento completo está en `docs/despliegue.md` §3.5, y el orden
+ * importa: primero se frena el cron, después se cancela. Al revés, una corrida
+ * se lleva justo lo que se está por cancelar.
+ *
+ * ⚠️ Sólo cancela lo `pendiente`, y el filtro va EN LA CONSULTA. Cancelar algo
+ * ya enviado no lo trae de vuelta —el correo está en la casilla del huésped— y
+ * marcarlo como cancelado falsearía el registro de lo que pasó. Como
+ * `service_role` saltea RLS, sin ese `.eq(...)` un POST armado a mano podría
+ * reescribir la historia de un envío.
+ *
+ * Lo cancelado se puede volver a encolar (`sePuedeReintentar`): la decisión es
+ * reversible mientras el aviso siga teniendo sentido.
+ */
+export async function cancelarNotificacion(formData: FormData): Promise<void> {
+  await requerirAcceso('notificaciones')
+  const id = String(formData.get('id') ?? '')
+
+  if (id) {
+    const admin = crearClienteAdmin()
+    const { data, error } = await admin
+      .from('notificaciones')
+      .update({ estado: 'cancelada' })
+      .eq('estado', 'pendiente')
+      .eq('id', id)
+      .select('id')
+
+    cortarSiFalla(error, '/panel/notificaciones', 'cancelar')
+
+    if (!data || data.length === 0) {
+      redirect('/panel/notificaciones?error=ya_salio')
+    }
+
+    revalidatePath('/panel/notificaciones')
+    redirect('/panel/notificaciones?ok=cancelada')
+  }
+
+  redirect('/panel/notificaciones')
+}
