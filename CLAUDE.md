@@ -214,6 +214,11 @@ Tarifario 2025/2026 (Anexo A).
   mienta**, porque sus fuentes son públicas y sin credenciales. El respaldo de
   divisas es `manual` (no inventa: usa lo que un admin cargó) y el de canales es
   `simulado` (ése sí no habla con nadie).
+  **El noveno es `WhatsAppProvider`** (`lib/whatsapp/`) y también rompe el patrón:
+  si `WHATSAPP_PROVIDER` está vacía **el canal no se ofrece** y todo sale por
+  correo, en vez de fallar al arrancar. No hace falta el fallo ruidoso del ADR
+  0018 porque no hay nada que se pueda dar por enviado sin salir: la bandeja
+  elige el canal **antes** de encolar (`canalDelAviso`).
   **El octavo es `ExtractoProvider`** (`lib/conciliacion/`, ADR 0030) y rompe el
   patrón a propósito: **no tiene variable de entorno**. No se elige una fuente —el
   hotel usa el banco y MercadoPago a la vez, como `PAGO_PROVIDER`— y su respaldo
@@ -318,6 +323,47 @@ Tarifario 2025/2026 (Anexo A).
      traducen en `lib/domain/comprobante-qr.ts`, en un solo lugar.
   4. **Una nota de crédito se imputa como PAGO, no como cargo** (códigos 3, 8, 13,
      53). Devuelve plata; cargarla como un gasto más infla lo que el hotel debe.
+- **Avisos y notificaciones (objetivos 6 y 7, 2026-09-08).** El catálogo pasa de
+  4 a **21 eventos**, hay pantalla de registro de envíos (`/panel/notificaciones`,
+  área nueva), cron de recordatorios y canal de WhatsApp. Migración **0086**.
+  ⚠️ **Ocho cosas antes de tocarlo:**
+  1. **`enviada` NO es `entregada`.** El proveedor acepta el mensaje mucho antes
+     de saber si el servidor del destinatario lo aceptó, y entre las dos está el
+     **rebote** — el caso que el hotel necesita ver. Fusionarlas lo deja
+     invisible: un huésped con la dirección mal cargada figura avisado.
+     `leida` es la más imprecisa de las cinco: su **ausencia no prueba nada**
+     (un cliente que bloquea imágenes nunca la reporta), su presencia sí.
+  2. **Los eventos del webhook de entrega llegan DESORDENADOS.** El de apertura
+     puede entrar antes que el de entrega. `esAvance` (`lib/domain/entregas.ts`)
+     impide retroceder de `leida` a `entregada` —el sistema olvidaría que el
+     huésped abrió el correo— pero deja que un **rebote pise una entrega**.
+  3. **`canalDelAviso` devuelve UN canal, y se decide AL ENCOLAR.** La clave de
+     idempotencia no incluye el canal: dos filas del mismo aviso chocarían contra
+     el `unique` y una se descartaría en silencio. Y recalcularlo al despachar
+     haría salir por WhatsApp un aviso cuyo `destinatario` guardado es un email.
+  4. **WhatsApp sólo acepta PLANTILLAS APROBADAS por Meta** fuera de la ventana
+     de 24 horas: los cuerpos del catálogo **no se pueden mandar tal cual**. Y el
+     **orden de los parámetros es el contrato** —Meta numera los huecos y valida
+     la cantidad, no el significado—: cruzarlos manda el código de reserva donde
+     va la fecha y el mensaje sale igual. Ver `lib/domain/whatsapp.ts`.
+  5. **`avisos.rol` es RUTEO, no un secreto.** Admin y gerencia ven todo, y los
+     avisos escritos por una persona (`rol is null`) los sigue viendo todo el
+     staff. Existe porque un «pago acreditado: USD 120» no le sirve a quien está
+     limpiando, y el ruido es lo que hace que después nadie mire la cartelera.
+  6. **El alta del mostrador NO avisa a la cartelera**, a propósito: la persona
+     que la cargó está mirando la pantalla. El aviso sale del portal público y
+     del cron de canales, que son los caminos sin nadie del otro lado.
+  7. **`DIAS_EXPIRACION` vive UNA sola vez**, en `lib/domain/recordatorios.ts`.
+     Con dos constantes, subir una sin la otra hace que el aviso de «se libera
+     mañana» salga **después** de que el sistema ya soltó la unidad.
+  8. **La reseña se pide sólo con puntaje ≥ 8 y `acepta_promociones`.** Pedírsela
+     a quien puntuó bajo es pedirle que publique su queja; a quien no respondió,
+     es apostar a ciegas con un costo público y permanente.
+  ⚠️ Los dos módulos que existen **sólo para no duplicar una regla de plata**:
+  `lib/notificaciones/cobros.ts` (los avisos de un cobro, desde el webhook y
+  desde el mostrador) y `lib/reservas/cancelacion.ts` (el cargo por cancelar,
+  desde la ficha y desde el correo). Es la misma situación de `saldarSiCorresponde`,
+  que estuvo duplicada, divergió, y se notó en la plata.
 - **Conciliación y gastos (Bloque C, 2026-09-07).** Área nueva `/panel/conciliacion`
   (admin y gerencia). Migraciones **0077** (`movimientos_externos`), **0078**
   (moneda real en cuentas corrientes) y **0079** (cerrar la conciliación del canal).
@@ -528,8 +574,13 @@ Tarifario 2025/2026 (Anexo A).
   adapter plural, porque el hotel ofrece varios medios a la vez). Con las pasarelas
   van `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`
   y `STRIPE_WEBHOOK_SECRET`. Opcionales:
-  `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL` y
-  `ARGENTINADATOS_URL`. Revisarlas **antes** del deploy.
+  `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL`,
+  `ARGENTINADATOS_URL`, `RESEND_WEBHOOK_SECRET` (sin ella **no se detectan los
+  rebotes**) y las cuatro de WhatsApp (`WHATSAPP_PROVIDER`, `WHATSAPP_TOKEN`,
+  `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_IDIOMA`).
+  **La tabla completa, con qué pasa si falta cada una, está en
+  `docs/despliegue.md` §1** — junto con las instrucciones de despliegue y de
+  vuelta atrás (entregables 8, 15 y 16). Revisarlas **antes** del deploy.
 - Admin de la **base local de tests**: `admin@blancapatagonia.local` / `blancadev1234`
   (`npm run seed:usuarios`, que hay que repetir después de cada `db reset`). En el
   proyecto hosted los usuarios ya están sembrados y **no hay que correr el seed**:

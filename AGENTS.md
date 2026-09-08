@@ -336,7 +336,35 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   pierden también los cobros buenos. Por eso `ResultadoWebhook` distingue `ignorar` (200),
   `invalido` (400) y `reintentar` (500).
 - **El límite de tasa del webhook de pagos se cuenta DESPUÉS de rechazar la firma, nunca antes.**
-  Cada evento descartado por volumen es un cobro del que el hotel no se entera.
+  Cada evento descartado por volumen es un cobro del que el hotel no se entera. Lo mismo vale
+  para el webhook de entrega de correo (`webhook_email`): cada evento descartado es un rebote
+  del que el hotel no se entera, o sea volver a creer que un correo llegó cuando no llegó.
+- **`enviada` NO es `entregada`.** El proveedor de correo acepta el mensaje y responde 200 mucho
+  antes de saber si el servidor del destinatario lo aceptó: entre las dos cosas está el **rebote**.
+  Tratarlas como una sola deja invisible el caso que el hotel necesita ver —«le escribimos y no le
+  llegó»— y un huésped con la dirección mal cargada figura avisado. Y **la ausencia de `leida` no
+  prueba nada**: muchos clientes de correo bloquean el pixel de apertura, así que su presencia
+  informa y su ausencia no (migración 0086, `lib/domain/entregas.ts`).
+- **Los eventos de un webhook de entrega llegan DESORDENADOS.** El de apertura puede entrar antes
+  que el de entrega, y aplicarlos a ciegas haría retroceder de `leida` a `entregada`: el sistema
+  olvidaría que el huésped abrió el correo. Lo decide `esAvance`, que sí deja que un **rebote pise
+  una entrega** porque eso es información nueva y mala.
+- **La firma de Svix (Resend) NO es la del otro esquema del proyecto.** Firma
+  `"<id>.<timestamp>.<cuerpo>"` —con el id adentro—, la clave va **decodificada de base64** detrás
+  del prefijo `whsec_`, y la comparación es en base64, no en hex. La cabecera puede traer **varias
+  firmas separadas por espacios** durante una rotación de secreto. Reimplementar mal un HMAC no
+  falla ruidosamente: **rechaza todos los eventos**, y el síntoma es que el hotel deja de enterarse
+  de los rebotes. Está en `lib/integraciones/firma-svix.ts` con tests por cada diferencia.
+- **WhatsApp no deja mandar texto libre fuera de la ventana de 24 horas:** hay que usar
+  **plantillas aprobadas por Meta**, así que los cuerpos del catálogo NO sirven tal cual. Y **el
+  orden de los parámetros es el contrato**: Meta numera los huecos (`{{1}}`, `{{2}}`) y valida la
+  **cantidad**, no el significado — cruzarlos manda el código de reserva donde va la fecha y el
+  mensaje sale igual. Ver `lib/domain/whatsapp.ts` y el test que compara cada parámetro contra la
+  plantilla del catálogo.
+- **Un aviso se encola con UN canal, decidido al encolar y no al despachar.** La clave de
+  idempotencia no incluye el canal: dos filas del mismo aviso chocarían contra el `unique` y una se
+  descartaría en silencio. Y recalcular el canal al despachar haría salir por WhatsApp un aviso
+  cuyo `destinatario` guardado es una dirección de correo.
 - **La URL de retorno de una pasarela no es prueba de pago:** se puede abrir a mano sin haber
   pagado. Quien confirma es el webhook; la pantalla de confirmación lee el estado de la base.
 - **`npm run check` devuelve 0 con tests en rojo** si no hay `.env.local`: tres archivos fallan por
