@@ -377,6 +377,31 @@ export const CAPITULOS: Capitulo[] = [
           'Las reservas de Booking aterrizan en una lista aparte y no ocupan habitación hasta que alguien aprieta "Importar". Es a propósito: Booking llama a las habitaciones con sus propios nombres, y hay que confirmar a qué tipo corresponde antes de darla por buena.',
       },
       {
+        titulo: 'El sistema avisa cuando entra algo',
+        detalle:
+          'Si la sincronización trae reservas nuevas, aparece un aviso en el tablón de Avisos marcado "Del sistema". Así una reserva que entró el viernes a la noche no espera hasta que alguien abra esta pantalla. Si la sincronización falla, también avisa.',
+      },
+      {
+        titulo: 'Cerrar fechas o pedir un mínimo de noches',
+        detalle:
+          'En la pestaña Publicación hay dos niveles. La tabla de arriba vale siempre: "esta habitación pide 2 noches, todo el año". La de abajo vale para un tramo de fechas: "el fin de semana largo pide 3", "esas dos semanas las guardo para el grupo que reservó por teléfono".',
+      },
+      {
+        titulo: 'El "hasta" de una restricción queda AFUERA',
+        detalle:
+          'Del 9 al 13 alcanza al 9, 10, 11 y 12. Es la misma forma de contar que las temporadas y las estadías. La lista muestra el último día incluido, así que lo que se lee ahí es lo que rige.',
+      },
+      {
+        titulo: '"Sin llegadas" no es lo mismo que "cerrado"',
+        detalle:
+          'Cerrado no vende nada ese día. "Sin llegadas" deja que alguien pase esa noche pero no que empiece ahí, y es lo que evita que un fin de semana largo se parta al medio: sin eso, un mínimo de tres noches igual permite reservar sábado, domingo y lunes.',
+      },
+      {
+        titulo: 'Ojo: estas restricciones todavía no salen',
+        detalle:
+          'Se calculan y quedan registradas, pero con el proveedor actual no llegan a Booking, porque la conexión que tiene el hotel es de solo lectura. Sirven para el día que se contrate un channel manager. Mientras tanto, cerrar fechas en Booking se sigue haciendo desde el extranet.',
+      },
+      {
         titulo: 'Cómo traerlas',
         detalle:
           'En el extranet de Booking: Administración → Informe de reservas. Se descarga el CSV y se sube en esta pantalla. No hay que abrirlo en Excel antes: si se abre y se guarda, las fechas y los precios cambian de formato y algunas filas dejan de leerse.',

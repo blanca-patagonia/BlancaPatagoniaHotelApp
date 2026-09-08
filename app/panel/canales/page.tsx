@@ -5,7 +5,15 @@ import { obtenerProveedorCanal } from '@/lib/canales'
 import { describirUltimaLectura } from '@/lib/canales/ical-saliente'
 import { MONEDAS_EXTRANJERAS } from '@/lib/domain/divisas'
 import { urlDelSitio } from '@/lib/env'
-import { fechaHoraHotel, fechaHotel, formatoFechaCorta, horaHotel, hoyISO } from '@/lib/fechas'
+import {
+  fechaHoraHotel,
+  fechaHotel,
+  formatoFechaCorta,
+  horaHotel,
+  hoyISO,
+  parsearPeriodo,
+  sumarDias,
+} from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
@@ -32,8 +40,10 @@ import { ImportarResenas } from './importar-resenas'
 import {
   cargarMensaje,
   cargarResena,
+  borrarRestriccionCanal,
   conciliarCargo,
   guardarMapeoCanal,
+  guardarRestriccionCanal,
   publicarAhora,
   ignorarEntrante,
   importarUna,
@@ -134,6 +144,15 @@ const MENSAJES_ERROR: Record<string, string> = {
   resena_vacia: 'Escribí al menos lo positivo o lo negativo de la reseña.',
   respuesta: 'No se pudo guardar la respuesta.',
   respuesta_vacia: 'Escribí la respuesta antes de guardar.',
+  restriccion_rol:
+    'Cerrar fechas en un canal es de administración o gerencia: decide cuánto inventario se le deja a la OTA.',
+  restriccion_fechas:
+    'Revisá las fechas: el "hasta" queda AFUERA del bloqueo, así que tiene que ser posterior al "desde".',
+  restriccion_minimo: 'El mínimo de noches tiene que ser un número entero de 1 o más.',
+  restriccion_vacia:
+    'Esa restricción no restringe nada. Poné un mínimo de noches, o tildá cerrado, sin llegadas o sin salidas.',
+  restriccion: 'No se pudo guardar la restricción. Probá de nuevo.',
+  restriccion_borrar: 'No se pudo levantar la restricción. Quedó como estaba.',
   factura_rol: 'Registrar la factura del canal es de administración o gerencia: mueve la cuenta corriente del proveedor.',
   factura_comprobante: 'Poné el número de la factura: es con lo que después se coteja contra el papel.',
   factura_monto: 'El importe de la factura tiene que ser mayor que cero.',
@@ -314,6 +333,7 @@ export default async function CanalesPage({
     { data: configData },
     { data: mapeosData },
     { data: salidaData },
+    { data: restriccionesData },
   ] = await Promise.all([
       consultaEntrantes,
       supabase
@@ -383,6 +403,20 @@ export default async function CanalesPage({
       .order('corrida_en', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    /*
+      Las restricciones por fecha (0087).
+
+      Se traen sólo las que **todavía rigen o van a regir**: una que terminó no
+      cambia nada de lo que se publica, y dejarlas acumular convierte la lista en
+      algo ilegible justo cuando hay que revisarla rápido. El corte es por el fin
+      del rango, y `hoyISO()` resuelve en la zona del hotel.
+    */
+    supabase
+      .from('canal_restricciones')
+      .select('id, tipo_unidad_id, periodo, minimo_noches, cerrado, cerrado_llegada, cerrado_salida, nota')
+      .eq('canal', 'booking')
+      .overlaps('periodo', `[${hoyISO()},9999-12-31)`)
+      .order('periodo'),
   ])
 
   const entrantes = (entrantesData ?? []) as unknown as EntranteRow[]
@@ -532,6 +566,17 @@ export default async function CanalesPage({
     }[]).map((m) => [m.tipo_unidad_id, m]),
   )
 
+  const restricciones = ((restriccionesData ?? []) as {
+    id: string
+    tipo_unidad_id: string | null
+    periodo: string
+    minimo_noches: number | null
+    cerrado: boolean
+    cerrado_llegada: boolean
+    cerrado_salida: boolean
+    nota: string
+  }[]).map((r) => ({ ...r, rango: parsearPeriodo(r.periodo) }))
+
   const ultimaSalida = salidaData as {
     proveedor: string
     leidas: number
@@ -597,6 +642,14 @@ export default async function CanalesPage({
       )}
       {sp.ok === 'importada' && (
         <Mensaje tono="ok">Reserva {sp.codigo} creada a partir de la del canal.</Mensaje>
+      )}
+      {sp.ok === 'restriccion' && (
+        <Mensaje tono="ok">
+          Restricción guardada. Sale en la próxima publicación al canal.
+        </Mensaje>
+      )}
+      {sp.ok === 'restriccion_borrada' && (
+        <Mensaje tono="ok">Restricción levantada: esas fechas vuelven a la venta normal.</Mensaje>
       )}
       {sp.ok === 'importada_con_aviso' && (
         <Mensaje tono="ok">
@@ -1929,6 +1982,166 @@ export default async function CanalesPage({
                                 Guardar
                               </BotonEnvio>
                             </form>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </Tabla>
+              </div>
+            )}
+          </Tarjeta>
+
+          <Tarjeta
+            titulo="Restricciones por fecha"
+            descripcion="Un mínimo de noches o un cierre que vale sólo para unos días, sin tocar el resto del año."
+          >
+            <div className="mb-4 space-y-2 text-sm text-stone-600">
+              <p>
+                Las restricciones de la tabla de arriba valen <strong>siempre</strong>. Éstas valen
+                para un tramo de fechas: «el fin de semana largo pide 3 noches», «esas dos semanas
+                las guardo para el grupo que reservó por teléfono», «no acepto llegadas el 24».
+              </p>
+              <p>
+                <strong>El «hasta» queda afuera.</strong> Del 9 al 13 alcanza al 9, 10, 11 y 12: es
+                la misma forma de contar que las temporadas y las estadías.
+              </p>
+              <p>
+                <strong>Sin llegadas</strong> no cierra el día: deja que alguien pase esa noche,
+                pero no que empiece ahí. Es lo que evita que un fin de semana largo se parta al
+                medio. <strong>Sin salidas</strong> es lo mismo del otro lado.
+              </p>
+            </div>
+
+            {puedeConciliarCargos ? (
+              <form
+                action={guardarRestriccionCanal}
+                className="mb-5 flex flex-wrap items-end gap-2 rounded-xl bg-stone-50 p-4 ring-1 ring-stone-200"
+              >
+                <Campo etiqueta="Desde">
+                  <input name="desde" type="date" required className={`${CAMPO} w-40`} />
+                </Campo>
+                <Campo etiqueta="Hasta (excluido)">
+                  <input name="hasta" type="date" required className={`${CAMPO} w-40`} />
+                </Campo>
+                <Campo etiqueta="Tipo de unidad" ayuda="Vacío = todo el hotel.">
+                  <select name="tipo_unidad_id" className={`${CAMPO} w-48`}>
+                    <option value="">Todos los tipos</option>
+                    {tiposUnidad.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+                <Campo etiqueta="Mín. noches">
+                  <input name="minimo_noches" type="number" min="1" className={`${CAMPO} w-24`} />
+                </Campo>
+                <label className="flex items-center gap-2 pb-2 text-sm text-stone-700">
+                  <input type="checkbox" name="cerrado" className="size-4" />
+                  Cerrado
+                </label>
+                <label className="flex items-center gap-2 pb-2 text-sm text-stone-700">
+                  <input type="checkbox" name="cerrado_llegada" className="size-4" />
+                  Sin llegadas
+                </label>
+                <label className="flex items-center gap-2 pb-2 text-sm text-stone-700">
+                  <input type="checkbox" name="cerrado_salida" className="size-4" />
+                  Sin salidas
+                </label>
+                <Campo etiqueta="Motivo" ayuda="Para acordarse de por qué, dentro de tres meses.">
+                  <input
+                    name="nota"
+                    maxLength={200}
+                    placeholder="Fin de semana largo"
+                    className={`${CAMPO} w-56`}
+                  />
+                </Campo>
+                <BotonEnvio variante="secundario" cargando="Guardando…">
+                  Agregar
+                </BotonEnvio>
+              </form>
+            ) : (
+              <p className="mb-5 rounded-lg bg-stone-50 px-3 py-2 text-sm text-stone-600 ring-1 ring-stone-200">
+                Cerrar fechas en un canal lo hace administración o gerencia: decide cuánto
+                inventario se le deja a la OTA.
+              </p>
+            )}
+
+            {restricciones.length === 0 ? (
+              <EstadoVacio
+                titulo="No hay restricciones vigentes"
+                descripcion="Se publica lo que digan el cupo y el mapeo de cada tipo."
+                icono="ocupacion"
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <Tabla resumen="Restricciones de venta por fecha, con el tramo, el tipo alcanzado y qué impone cada una.">
+                  <thead>
+                    <tr className={FILA}>
+                      <th className={TH}>Fechas</th>
+                      <th className={TH}>Alcanza a</th>
+                      <th className={TH}>Qué impone</th>
+                      <th className={`${TH} ${COL_SECUNDARIA}`}>Motivo</th>
+                      <th className={TH}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {restricciones.map((r) => {
+                      const tipo = tiposUnidad.find((t) => t.id === r.tipo_unidad_id)
+                      const impone = [
+                        r.cerrado ? 'Cerrado' : null,
+                        r.minimo_noches ? `Mín. ${r.minimo_noches} noches` : null,
+                        r.cerrado_llegada ? 'Sin llegadas' : null,
+                        r.cerrado_salida ? 'Sin salidas' : null,
+                      ].filter(Boolean)
+
+                      return (
+                        <tr key={r.id} className={FILA}>
+                          <td className={`${TD} whitespace-nowrap`}>
+                            {/*
+                              Se muestra el último día INCLUIDO, no el fin del
+                              rango: quien lee «hasta el 13» y ve que el bloqueo
+                              termina el 12 concluye que el sistema le erró por un
+                              día. Es lo mismo que hace `textoRango` con las
+                              temporadas.
+                            */}
+                            {formatoFechaCorta(r.rango.desde)} al{' '}
+                            {formatoFechaCorta(sumarDias(r.rango.hasta, -1))}
+                          </td>
+                          <td className={TD}>
+                            {tipo ? (
+                              tipo.nombre
+                            ) : (
+                              <span className="text-stone-600">Todo el hotel</span>
+                            )}
+                          </td>
+                          <td className={TD}>
+                            <span className="flex flex-wrap gap-1.5">
+                              {impone.map((i) => (
+                                <Etiqueta key={i} tono={r.cerrado ? 'peligro' : 'alerta'}>
+                                  {i}
+                                </Etiqueta>
+                              ))}
+                            </span>
+                          </td>
+                          <td className={`${TD} ${COL_SECUNDARIA} text-xs text-stone-600`}>
+                            {r.nota || '—'}
+                          </td>
+                          <td className={TD}>
+                            {puedeConciliarCargos && (
+                              <form action={borrarRestriccionCanal}>
+                                <input type="hidden" name="id" value={r.id} />
+                                <BotonEnvio
+                                  variante="fantasma"
+                                  extra="text-stone-600 hover:text-red-600"
+                                  cargando="Levantando…"
+                                  confirmar="¿Levantar esta restricción? Esas fechas vuelven a la venta normal en la próxima publicación."
+                                >
+                                  Levantar
+                                </BotonEnvio>
+                              </form>
+                            )}
                           </td>
                         </tr>
                       )

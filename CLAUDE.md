@@ -310,6 +310,17 @@ Tarifario 2025/2026 (Anexo A).
      publicarlo rompe la paridad tarifaria; sin IVA anuncia menos de lo que cobra.
   4. **Un día sin tarifa NO se publica.** Publicar `0` es publicar una noche
      gratis: es el «USD 0» de la Fase 18. Se omite y se cuenta en `sinPrecio`.
+  5. **Las restricciones por FECHA viven en `canal_restricciones` (0087)**, aparte
+     de las de `canal_tipos`, que valen para siempre. Al resolver un día gana **la
+     más restrictiva** de las dos (`restriccionDelDia`): quedarse corto vende una
+     noche que el hotel no quería vender y esa venta ya no se deshace sin
+     cancelarle a alguien. ⚠️ El rango es `[desde, hasta)` con el **fin excluido**,
+     y `tipo_unidad_id` nulo significa **todos** los tipos, no ninguno — es el caso
+     más común—. ⚠️ **CTA y CTD sólo se informan cuando son `true`**: son
+     instrucciones, no estados, y mandarlas en `false` puede levantar una
+     restricción que el hotel puso a mano en el extranet. Si la lectura de
+     `canal_restricciones` falla, la publicación **se corta**: seguir sin ellas
+     publicaría el cupo completo de fechas que el hotel cerró.
 - **Comprobantes recibidos (objetivo 9, 2026-09-07).**
   `/panel/proveedores/comprobantes`, migración **0080**. ⚠️ Cuatro cosas antes de
   tocarlo:

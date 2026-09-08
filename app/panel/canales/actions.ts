@@ -1020,3 +1020,100 @@ export async function responderResena(formData: FormData): Promise<void> {
   revalidatePath(DESTINO)
   redirect(`${DESTINO}?vista=resenas&ok=respuesta`)
 }
+
+/* ─────────────────────────────── restricciones por fecha (0087) ────────── */
+
+/**
+ * Carga una restricción de venta para un rango de fechas.
+ *
+ * ── Por qué es de gerencia ──────────────────────────────────────────────────
+ *
+ * Cerrar fechas en una OTA es decidir cuánto inventario se le deja al canal y
+ * cuándo: es una decisión comercial, no una tarea de mostrador. Mismo criterio
+ * que `guardarMapeoCanal`, aunque el área `canales` sí alcance a recepción para
+ * lo operativo. La política RLS de la 0087 declara los mismos dos roles.
+ */
+export async function guardarRestriccionCanal(formData: FormData): Promise<void> {
+  const sesion = await exigirAcceso()
+
+  if (sesion.rol !== 'admin' && sesion.rol !== 'gerencia') {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_rol`)
+  }
+
+  const desde = String(formData.get('desde') ?? '')
+  const hasta = String(formData.get('hasta') ?? '')
+  const tipoUnidadId = String(formData.get('tipo_unidad_id') ?? '')
+  const minimoCrudo = String(formData.get('minimo_noches') ?? '').trim()
+  const cerrado = formData.get('cerrado') === 'on'
+  const cerradoLlegada = formData.get('cerrado_llegada') === 'on'
+  const cerradoSalida = formData.get('cerrado_salida') === 'on'
+  const nota = String(formData.get('nota') ?? '').trim().slice(0, 200)
+
+  if (!desde || !hasta) redirect(`${DESTINO}?vista=publicacion&error=restriccion_fechas`)
+
+  /*
+    El fin es EXCLUIDO, igual que en estadías y temporadas. Se valida `hasta >
+    desde` y no `>=`: un rango vacío no restringe nada, y la base además lo
+    rechaza con el `check` de `isempty`.
+  */
+  if (hasta <= desde) redirect(`${DESTINO}?vista=publicacion&error=restriccion_fechas`)
+
+  const minimoNoches = minimoCrudo ? Number(minimoCrudo) : null
+  if (minimoNoches !== null && (!Number.isInteger(minimoNoches) || minimoNoches < 1)) {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_minimo`)
+  }
+
+  /*
+    Una fila que no restringe nada parece una restricción activa en la pantalla y
+    no restringe nada: el síntoma sería «cargué el bloqueo y el canal siguió
+    vendiendo». La base tiene el mismo `check`; acá se comprueba antes para poder
+    explicarlo en español en vez de mostrar un error de Postgres.
+  */
+  if (minimoNoches === null && !cerrado && !cerradoLlegada && !cerradoSalida) {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_vacia`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('canal_restricciones').insert({
+    canal: 'booking',
+    // Vacío = todos los tipos, que es el caso más común.
+    tipo_unidad_id: tipoUnidadId || null,
+    periodo: `[${desde},${hasta})`,
+    minimo_noches: minimoNoches,
+    cerrado,
+    cerrado_llegada: cerradoLlegada,
+    cerrado_salida: cerradoSalida,
+    nota,
+    creado_por: sesion.userId,
+  })
+
+  cortarSiFalla(error, `${DESTINO}?vista=publicacion`, 'restriccion')
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=publicacion&ok=restriccion`)
+}
+
+/**
+ * Levanta una restricción.
+ *
+ * Se borra en vez de desactivarse: una restricción vencida o levantada no aporta
+ * nada al historial —lo que importa es qué rige hoy— y una lista que acumula
+ * fechas viejas se vuelve ilegible justo cuando hay que revisarla rápido.
+ */
+export async function borrarRestriccionCanal(formData: FormData): Promise<void> {
+  const sesion = await exigirAcceso()
+
+  if (sesion.rol !== 'admin' && sesion.rol !== 'gerencia') {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_rol`)
+  }
+
+  const id = String(formData.get('id') ?? '')
+  if (id) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase.from('canal_restricciones').delete().eq('id', id)
+    cortarSiFalla(error, `${DESTINO}?vista=publicacion`, 'restriccion_borrar')
+  }
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=publicacion&ok=restriccion_borrada`)
+}
