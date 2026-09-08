@@ -4967,3 +4967,107 @@ existe. Ahora está una sola vez, en `lib/domain/recordatorios.ts`.
 **Verificación:** typecheck 0 · lint 0 · build 0 · **1574 tests puros en verde**.
 Los que tocan la base —canal interno, los cinco estados, unicidad del
 `proveedor_id`— los corre el CI del PR, que es el único lugar con Docker.
+
+---
+
+## 2026-09-08 (segunda mitad) — Dejar el correo listo para usar, y un hallazgo que apareció de paso
+
+**Resumen:** el diagnóstico de configuración del correo, el botón de prueba de
+envío, las restricciones de canal por fecha (0087), la reserva que el canal
+modifica (0088) y el borde público en escritura (0089). Mismo PR #42.
+
+### El problema de fondo del correo: todo funciona sin configurar nada
+
+La bandeja encola, el cron despacha y el proveedor de consola devuelve `ok`. O
+sea que **un hotel sin configurar ve exactamente lo mismo que uno configurado**:
+filas en verde que dicen «enviada». La diferencia recién se nota cuando un
+huésped llama para decir que no le llegó nada, que es tarde.
+
+Se agregaron dos cosas a `/panel/notificaciones`, las dos para admin y gerencia
+—recepción no puede hacer nada con «falta RESEND_API_KEY», y mostrárselo
+convierte una pantalla operativa en una lista de cosas que no puede resolver—:
+
+1. **El diagnóstico** (`lib/notificaciones/diagnostico.ts`): seis requisitos con
+   **qué pasa si falta cada uno**, en la consecuencia concreta y no en «revisar
+   la configuración». ⚠️ Nunca devuelve el valor de un secreto, sólo si está: una
+   pantalla que muestra media clave para «ayudar a verificar» es una clave
+   filtrada —queda en el historial, en una captura y en el hombro de quien pasa—.
+2. **El botón de prueba**: manda un correo real a una dirección que se escribe, y
+   **devuelve el motivo verbatim del proveedor**. Ahí es donde aparece lo que hay
+   que corregir («domain is not verified», «API key is invalid»); traducirlo a «no
+   se pudo enviar» sería quedarse justo con la parte inútil.
+
+⚠️ El botón **no pasa por la bandeja**, a propósito: un correo de prueba no es una
+comunicación al huésped, no tiene entidad a la que imputarse y no debe ensuciar el
+registro de lo que el hotel le dijo a la gente. Y si el proveedor es el de
+consola, la prueba **devuelve error** aunque el envío diga `ok`: decir «listo, se
+envió» sería la mentira más cara de esa pantalla.
+
+### El hallazgo: `anon` podía escribir (migración 0089)
+
+Apareció escribiendo `tests/anon-no-escribe.test.ts`, que audita el borde público
+en escritura tabla por tabla. La primera corrida encontró que el rol público
+—el que cualquiera alcanza desde internet, sin credenciales— conservaba
+`update` y `delete` sobre las **seis tablas del catálogo**.
+
+No venía de ninguna migración de este proyecto: la 0006 le da a `anon` sólo
+`select`. Sale de los privilegios por omisión de la **plataforma**, y nadie lo
+había mirado — la 0072 revocó `select` sobre lo que no es catálogo y ahí se
+detuvo.
+
+**Exposición real: ninguna.** Las políticas RLS de esas tablas acotan la escritura
+a admin y gerencia. Pero es la forma exacta del hallazgo de `cotizar_estadia`: la
+capa que la documentación daba por puesta no estaba, y la protección efectiva
+dependía de una sola política.
+
+⚠️ Y sobre el resto de las tablas probablemente estaba también. No se nota porque,
+sin `select`, PostgREST no expone la tabla al rol y responde «no existe» antes de
+llegar a la base: **la barrera que actúa ahí no es el permiso**, es que el cliente
+no encuentra la puerta.
+
+Se revoca en bloque —ninguna escritura pública usa `anon`; las tres que existen
+resuelven con `service_role` y el token de la URL— más `alter default privileges`,
+sin lo cual el arreglo duraría hasta el próximo `create table`.
+
+### Dónde me equivoqué escribiendo el test
+
+**La primera versión sondeaba con un `insert` vacío y leía el código de error.**
+Parece elegante —`42501` es «denegado», cualquier otra cosa es «la barrera dejó
+pasar»— y tiene dos falsos negativos que no se ven:
+
+- una **vista** responde `55000` («no se puede insertar en una vista»);
+- una tabla con **trigger BEFORE INSERT** responde lo que lance el trigger.
+
+En los dos casos el error no es de permiso, y el test lo leía como si la barrera
+hubiera actuado. Lo destapó el CI mostrando cinco tablas que «dejaban pasar» y que
+en realidad eran cuatro vistas y una tabla con trigger.
+
+Ahora pregunta `has_table_privilege` vía `privilegios_de_escritura(rol)`. Sin
+ambigüedad, cubre vistas, y no depende de que PostgREST muestre la tabla. Con dos
+contrapesos que hacían falta: que el catálogo **siga** siendo legible —un `revoke`
+de más rompe el portal de la forma más silenciosa posible— y que `authenticated`
+**siga** escribiendo, porque un `revoke` dirigido a `public` alcanzaría a los dos
+roles.
+
+### Lo otro que entró
+
+**Restricciones por fecha del canal (0087).** `canal_tipos` guardaba el mínimo de
+noches y el cierre por tipo y **para siempre**: se podía decir «la Doble Vista
+pide 2 noches» pero no «el fin de semana largo pide 3». Ahora hay un rango, con
+CTA y CTD —«se puede estar el sábado, pero no se puede llegar el sábado»—, que es
+lo que evita que un fin de semana largo se parta al medio. Al resolver un día gana
+**la más restrictiva**: quedarse corto vende una noche que el hotel no quería
+vender, y esa venta ya no se deshace sin cancelarle a alguien.
+
+**La reserva que el canal modifica (0088).** La otra mitad de lo que cerró la
+0074. Aquélla cubre la que desaparece; ésta, la que cambia: el huésped mueve las
+fechas en Booking, la fila del canal se actualiza —correcto— y la reserva del
+hotel se queda con las viejas, sin ningún síntoma. Se detecta y se muestra en
+rojo; **no se reprograma solo**, porque mover el período va contra la exclusión
+del ADR 0002 y el precio no se recotiza — quedaría cobrando la tarifa de otras
+fechas.
+
+**El RCE de Next.** Lo destapó el `npm audit` del CI: 16.0.0–16.3.2 tenía dos RCE
+sin autenticar, uno crítico. Se subió a 16.3.4 y el árbol quedó en cero
+vulnerabilidades. No es una dependencia nueva; la alternativa era desplegar con un
+RCE conocido.
