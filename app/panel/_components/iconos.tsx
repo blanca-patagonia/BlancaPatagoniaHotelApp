@@ -15,6 +15,7 @@ export type NombreIcono =
   | 'mantenimiento'
   | 'objetos'
   | 'avisos'
+  | 'sobre'
   | 'agencias'
   | 'proveedores'
   | 'contratos'
@@ -63,6 +64,8 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     'M4 10v4a1 1 0 0 0 1 1h2.5l6.5 3.5v-13L7.5 9H5a1 1 0 0 0-1 1z',
     'M17.5 8.5a4 4 0 0 1 0 7',
   ],
+  // Sobre abierto: el registro de lo que salió, no un buzón de entrada.
+  sobre: ['M3.5 6.5h17v11h-17z', 'M3.5 7 12 13l8.5-6'],
   agencias: [
     'M3.5 7.5h17v12h-17z',
     'M9 7.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2',

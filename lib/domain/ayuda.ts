@@ -502,6 +502,42 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
+    area: 'notificaciones',
+    resumen: 'Qué avisos salieron, a quién y en qué estado quedaron.',
+    pasos: [
+      {
+        titulo: 'Para qué es esta pantalla',
+        detalle:
+          'Cada vez que el sistema tiene algo que comunicar —una reserva confirmada, un pago recibido, un recordatorio de llegada— lo anota acá antes de mandarlo. Sirve para responder la pregunta que llega al mostrador todo el tiempo: "no me llegó nada".',
+      },
+      {
+        titulo: 'Los cinco estados',
+        detalle:
+          'Pendiente: todavía no salió, está esperando su turno. Enviada: el proveedor de correo la aceptó. Entregada: el correo del huésped la recibió. Leída: la abrió. Fallida: se intentó varias veces y no se pudo.',
+      },
+      {
+        titulo: '"Enviada" no es "entregada"',
+        detalle:
+          'Entre las dos está el rebote: el proveedor acepta el mensaje mucho antes de saber si la casilla del huésped existe. Si algo quedó en "enviada" y nunca pasó a "entregada", vale la pena revisar la dirección de correo.',
+      },
+      {
+        titulo: 'Que no diga "leída" no significa que no la haya leído',
+        detalle:
+          'La apertura se detecta con una imagen diminuta dentro del correo, y muchos programas de correo las bloquean. O sea: si dice leída, la abrió seguro; si no lo dice, no se sabe.',
+      },
+      {
+        titulo: 'Los avisos internos no salen del sistema',
+        detalle:
+          'Los que dicen "interno" no le llegan a ningún huésped: aparecen en el tablón de Avisos, marcados como "Del sistema", para el rol que corresponda.',
+      },
+      {
+        titulo: 'Reintentar a mano',
+        detalle:
+          'Si algo quedó fallido y ya se arregló el motivo —la dirección estaba mal, el proveedor estuvo caído—, se puede volver a poner en cola desde el detalle. Nunca manda dos veces el mismo aviso por error: cada uno tiene su clave.',
+      },
+    ],
+  },
+  {
     area: 'reportes',
     resumen: 'Cómo viene el negocio.',
     pasos: [

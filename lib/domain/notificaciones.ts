@@ -1,5 +1,6 @@
 import { ZONA_HOTEL } from '@/lib/fechas'
-import { esInterno, type EventoEmail } from './plantillas'
+import { EVENTOS_INTERNOS, esInterno, type EventoEmail } from './plantillas'
+import type { Rol } from './roles'
 
 /**
  * Reglas de la bandeja de salida (migración 0075).
@@ -119,6 +120,117 @@ export function cuandoEnviar(evento: EventoEmail, ahora: Date): Date | null {
   // `HORA_DESDE` es hora del hotel (UTC−3), así que en UTC es +3.
   destino.setUTCHours(HORA_DESDE + 3, 0, 0, 0)
   return destino
+}
+
+/* ────────────────────────────────────────────── los estados del envío ──── */
+
+/**
+ * Los estados de un aviso, en el orden en que ocurren.
+ *
+ * ⚠️ **`enviada` no es `entregada`, y la diferencia es el rebote.** El proveedor
+ * acepta el mensaje y responde 200 mucho antes de saber si el servidor del
+ * destinatario lo aceptó. Entre esas dos cosas está el caso que el hotel
+ * necesita ver —«le escribimos y no le llegó»—, y tratarlas como una sola lo
+ * deja invisible.
+ *
+ * `cancelada` está al final y fuera de la progresión: no es un desenlace del
+ * envío sino una decisión de no mandarlo.
+ */
+export const ESTADOS_NOTIFICACION = [
+  'pendiente',
+  'enviada',
+  'entregada',
+  'leida',
+  'fallida',
+  'cancelada',
+] as const
+
+export type EstadoNotificacion = (typeof ESTADOS_NOTIFICACION)[number]
+
+export function esEstadoNotificacion(v: string): v is EstadoNotificacion {
+  return (ESTADOS_NOTIFICACION as readonly string[]).includes(v)
+}
+
+export const ETIQUETAS_ESTADO: Record<EstadoNotificacion, string> = {
+  pendiente: 'Pendiente',
+  enviada: 'Enviada',
+  entregada: 'Entregada',
+  leida: 'Leída',
+  fallida: 'Fallida',
+  cancelada: 'Cancelada',
+}
+
+/**
+ * Qué significa cada estado, en palabras que sirvan en el mostrador.
+ *
+ * Está en el dominio y no en la pantalla porque es la definición del estado, no
+ * su presentación: la misma frase tiene que valer en el listado, en la Ayuda y
+ * en cualquier informe.
+ */
+export const SIGNIFICADO_ESTADO: Record<EstadoNotificacion, string> = {
+  pendiente: 'Todavía no salió: está esperando su turno.',
+  enviada: 'El proveedor la aceptó. Todavía no se sabe si llegó a destino.',
+  entregada: 'El servidor del destinatario la recibió.',
+  leida: 'Se abrió. Que NO lo diga no prueba lo contrario: muchos clientes de correo bloquean la señal.',
+  fallida: 'Se intentó varias veces y no se pudo. Se puede reintentar a mano.',
+  cancelada: 'Se decidió no mandarla.',
+}
+
+/**
+ * ¿Se puede volver a poner en cola?
+ *
+ * Sólo lo fallido y lo cancelado: reintentar algo que ya salió mandaría el
+ * mismo aviso dos veces, que es exactamente lo que la bandeja existe para
+ * evitar. Y lo pendiente no necesita reintento —ya está en la cola—; ofrecerlo
+ * sugeriría que está trabado cuando sólo está esperando.
+ */
+export function sePuedeReintentar(estado: string): boolean {
+  return estado === 'fallida' || estado === 'cancelada'
+}
+
+/* ──────────────────────────────────────── a quién le toca cada interno ──── */
+
+/**
+ * El rol al que le corresponde cada aviso interno.
+ *
+ * ── Por qué un rol y no una persona ─────────────────────────────────────────
+ *
+ * «Recepción» sigue existiendo cuando cambia quien atiende el mostrador; una
+ * casilla personal, no. Es el mismo criterio con el que están hechos los
+ * permisos del sistema.
+ *
+ * ── Por qué rutear en vez de mandarle todo a todos ──────────────────────────
+ *
+ * Porque el ruido es lo que hace que después nadie mire la cartelera. Un aviso
+ * de «pago acreditado: USD 120» no le sirve a quien está limpiando una
+ * habitación, y si la mitad de lo que ve no le sirve, deja de mirarla — y ahí se
+ * pierde también el que sí importaba.
+ *
+ * ⚠️ Es **ruteo, no un secreto**: admin y gerencia ven todo (supervisan), y los
+ * datos de un aviso ya son visibles en la pantalla del módulo que lo originó.
+ */
+export const ROL_DEL_AVISO: Record<(typeof EVENTOS_INTERNOS)[number], Rol> = {
+  // El mostrador es el que arma la llegada y el que cobra.
+  interno_nueva_reserva: 'recepcion',
+  interno_nuevo_pago: 'recepcion',
+  // La sincronización que se rompe deja de traer reservas, y el que decide qué
+  // hacer con eso —llamar al canal, cargarlas a mano— es gerencia.
+  interno_error_sincronizacion: 'gerencia',
+  // Plata que se factura distinto de lo que se devengó: se revisa antes de pagar.
+  interno_discrepancia_factura: 'gerencia',
+  // La habitación lista la espera el mostrador para poder asignarla.
+  interno_habitacion_lista: 'recepcion',
+  // Un incidente urgente se resuelve contratando o mandando a alguien.
+  interno_incidente_mantenimiento: 'gerencia',
+}
+
+/**
+ * A qué rol le toca. `null` para los avisos que van al huésped: ahí el
+ * destinatario es una dirección de correo, no un puesto del hotel.
+ */
+export function rolDelAviso(evento: EventoEmail): Rol | null {
+  if (!esInterno(evento)) return null
+  return ROL_DEL_AVISO[evento as (typeof EVENTOS_INTERNOS)[number]]
 }
 
 /* ────────────────────────────────────────────────── consentimiento ──── */

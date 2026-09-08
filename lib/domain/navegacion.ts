@@ -47,7 +47,10 @@ export const GRUPOS: readonly GrupoNavegacion[] = [
   { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
   { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
-  { titulo: 'Equipo', areas: ['avisos', 'conversaciones'] },
+  // El registro de envíos va en Equipo, junto al tablón: las dos responden la
+  // misma pregunta —«¿esto se avisó?»— desde los dos lados, el interno y el que
+  // salió al huésped.
+  { titulo: 'Equipo', areas: ['avisos', 'notificaciones', 'conversaciones'] },
   // `conciliacion` va en Administración y no en Comercial: no se toca con un
   // tercero enfrente, se mira a fin de mes con el extracto del banco al lado.
   { titulo: 'Administración', areas: ['reportes', 'conciliacion', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
@@ -111,6 +114,7 @@ export const RUTA_AREA: Record<Area, string> = {
   conciliacion: '/panel/conciliacion',
   auditoria: '/panel/auditoria',
   errores: '/panel/errores',
+  notificaciones: '/panel/notificaciones',
   reportes: '/panel/reportes',
   config: '/panel/config',
   usuarios: '/panel/usuarios',

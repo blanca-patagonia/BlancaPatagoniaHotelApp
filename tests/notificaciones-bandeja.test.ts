@@ -266,3 +266,165 @@ describe.skipIf(!hayAnon)('borde público de la bandeja', () => {
     if (error) expect(['42501', '42P01']).toContain(error.code)
   })
 })
+
+/**
+ * El canal interno (migración 0086).
+ *
+ * Un aviso interno no sale del sistema: aterriza en la cartelera de `avisos`,
+ * que el staff ya mira. Lo que se verifica es que **de verdad aterrice**, con el
+ * rol que le toca, y que quede marcado como entregado — porque la cartelera es
+ * el destino y ahí no hay rebote posible.
+ */
+describe.skipIf(!hayDB)('avisos internos a la cartelera', () => {
+  let db: SupabaseClient
+  const sufijo = sufijoUnico()
+
+  beforeAll(() => {
+    db = clienteDePrueba()
+  })
+
+  afterAll(async () => {
+    await db.from('notificaciones').delete().like('clave', `%${sufijo}%`)
+    await db.from('avisos').delete().eq('automatico', true).like('mensaje', `%${sufijo}%`)
+  })
+
+  it('el interno no pide destinatario: el rol lo pone el sistema', async () => {
+    const r = await encolar(db, {
+      evento: 'interno_nueva_reserva',
+      entidadId: `r-${sufijo}-alta`,
+      variables: {
+        codigo: `BP-${sufijo}`,
+        huesped: 'Ana Pérez',
+        check_in: '10/03/2027',
+        check_out: '13/03/2027',
+        total: 'USD 300',
+        origen: 'Portal',
+      },
+    })
+
+    /*
+      Sin `destinatario`, un aviso al huésped se rechaza («no tiene email
+      cargado»). El interno tiene que pasar igual: su destinatario es un puesto
+      del hotel y lo resuelve `ROL_DEL_AVISO`, no el call site.
+    */
+    expect(r.ok, r.motivo ?? '').toBe(true)
+
+    const { data } = await db
+      .from('notificaciones')
+      .select('canal, destinatario, estado')
+      .eq('clave', `interno_nueva_reserva:r-${sufijo}-alta`)
+      .single()
+
+    const fila = data as { canal: string; destinatario: string; estado: string }
+    expect(fila.canal, 'un aviso interno se iba a mandar por correo').toBe('interno')
+    expect(fila.destinatario).toBe('recepcion')
+    expect(fila.estado).toBe('pendiente')
+  })
+
+  it('despachar lo publica en la cartelera y lo deja ENTREGADO', async () => {
+    await despachar(db, 50)
+
+    const { data } = await db
+      .from('notificaciones')
+      .select('estado, enviada_en, entregada_en, leida_en')
+      .eq('clave', `interno_nueva_reserva:r-${sufijo}-alta`)
+      .single()
+
+    const fila = data as {
+      estado: string
+      enviada_en: string | null
+      entregada_en: string | null
+      leida_en: string | null
+    }
+
+    /*
+      ⚠️ `entregada`, no `enviada`. La cartelera es el destino: si la fila se
+      insertó, el aviso está donde tiene que estar y no hay tercero que pueda
+      rebotarlo. Con el correo es al revés, y por eso los dos estados existen.
+    */
+    expect(fila.estado).toBe('entregada')
+    expect(fila.entregada_en).not.toBeNull()
+    // `leida` la informa quien lee. Marcarla acá sería inventar el dato.
+    expect(fila.leida_en).toBeNull()
+
+    const { data: avisos } = await db
+      .from('avisos')
+      .select('mensaje, automatico, evento, rol, autor_id')
+      .eq('evento', 'interno_nueva_reserva')
+      .like('mensaje', `%${sufijo}%`)
+
+    const publicados = (avisos ?? []) as {
+      mensaje: string
+      automatico: boolean
+      evento: string
+      rol: string | null
+      autor_id: string | null
+    }[]
+
+    expect(publicados.length, 'el aviso interno no llegó a la cartelera').toBe(1)
+    expect(publicados[0].automatico).toBe(true)
+    expect(publicados[0].rol).toBe('recepcion')
+    // Sin autor: no lo escribió nadie. Poner ahí a quien disparó la acción sería
+    // atribuirle un texto que no escribió.
+    expect(publicados[0].autor_id).toBeNull()
+    expect(publicados[0].mensaje).toContain('Ana Pérez')
+  })
+
+  it('la base acepta los cinco estados del pedido y rechaza los inventados', async () => {
+    const clave = `interno_nuevo_pago:r-${sufijo}-estados`
+    await db.from('notificaciones').insert({
+      evento: 'interno_nuevo_pago',
+      canal: 'interno',
+      clave,
+      destinatario: 'recepcion',
+    })
+
+    for (const estado of ['enviada', 'entregada', 'leida', 'fallida', 'pendiente']) {
+      const { error } = await db.from('notificaciones').update({ estado }).eq('clave', clave)
+      expect(error, `la base rechazó el estado «${estado}»`).toBeNull()
+    }
+
+    const { error: malo } = await db
+      .from('notificaciones')
+      .update({ estado: 'rebotada' })
+      .eq('clave', clave)
+    expect(malo?.code, 'la base aceptó un estado inventado').toBe('23514')
+
+    const { error: canalMalo } = await db
+      .from('notificaciones')
+      .update({ canal: 'paloma' })
+      .eq('clave', clave)
+    expect(canalMalo?.code, 'la base aceptó un canal inventado').toBe('23514')
+  })
+
+  it('un id de proveedor no se repite', async () => {
+    /*
+      Es con lo que el webhook de entrega encuentra la fila. Si dos filas
+      compartieran id, un rebote se imputaría a la notificación equivocada: el
+      hotel vería «no le llegó» sobre un correo que sí llegó.
+    */
+    const base = { evento: 'pago_recibido', canal: 'email', destinatario: `x-${sufijo}@example.com` }
+    const id = `prov-${sufijo}`
+
+    const { error: e1 } = await db
+      .from('notificaciones')
+      .insert({ ...base, clave: `p1-${sufijo}`, proveedor_id: id })
+    expect(e1).toBeNull()
+
+    const { error: e2 } = await db
+      .from('notificaciones')
+      .insert({ ...base, clave: `p2-${sufijo}`, proveedor_id: id })
+    expect(e2?.code, 'dos envíos con el mismo id del proveedor').toBe('23505')
+
+    // Nulo no colisiona: el índice es parcial, y la mayoría de las filas todavía
+    // no tienen id del proveedor.
+    const { error: e3 } = await db
+      .from('notificaciones')
+      .insert({ ...base, clave: `p3-${sufijo}` })
+    const { error: e4 } = await db
+      .from('notificaciones')
+      .insert({ ...base, clave: `p4-${sufijo}` })
+    expect(e3).toBeNull()
+    expect(e4, 'dos filas sin id del proveedor chocaron entre sí').toBeNull()
+  })
+})

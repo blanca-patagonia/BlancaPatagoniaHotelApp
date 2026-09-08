@@ -12,6 +12,13 @@ import {
   horaDelHotel,
   motivoNoNotificar,
   esComercial,
+  ESTADOS_NOTIFICACION,
+  ETIQUETAS_ESTADO,
+  SIGNIFICADO_ESTADO,
+  esEstadoNotificacion,
+  sePuedeReintentar,
+  rolDelAviso,
+  ROL_DEL_AVISO,
 } from '@/lib/domain/notificaciones'
 import { EVENTOS_EMAIL, EVENTOS_INTERNOS } from '@/lib/domain/plantillas'
 
@@ -226,6 +233,107 @@ describe('el catálogo ampliado y sus reglas', () => {
     // decisión tomada por descarte.
     for (const e of EVENTOS_EMAIL) {
       expect(typeof esInmediato(e), `${e} sin clasificar`).toBe('boolean')
+    }
+  })
+})
+
+describe('los cinco estados del envío', () => {
+  it('están los cinco que pide el pedido, más «cancelada»', () => {
+    /*
+      El pedido original nombra cinco: enviado, entregado, leído, fallido y
+      pendiente. La 0075 tenía cuatro y le faltaban justamente los dos que sólo
+      puede informar el proveedor.
+    */
+    for (const e of ['pendiente', 'enviada', 'entregada', 'leida', 'fallida'] as const) {
+      expect(ESTADOS_NOTIFICACION, `falta el estado «${e}»`).toContain(e)
+    }
+    // `cancelada` no es un desenlace del envío sino la decisión de no mandarlo.
+    expect(ESTADOS_NOTIFICACION).toContain('cancelada')
+  })
+
+  it('«enviada» y «entregada» son estados distintos, y la diferencia está escrita', () => {
+    /*
+      ⚠️ Es el punto entero de haber agregado los dos estados. El proveedor acepta
+      el mensaje y responde 200 mucho antes de saber si el servidor del
+      destinatario lo aceptó: entre las dos cosas está el rebote, que es el caso
+      que el hotel necesita ver —«le escribimos y no le llegó»—.
+
+      Si alguien las fusiona «porque son lo mismo», este test falla.
+    */
+    expect(SIGNIFICADO_ESTADO.enviada).not.toBe(SIGNIFICADO_ESTADO.entregada)
+    expect(SIGNIFICADO_ESTADO.enviada).toMatch(/no se sabe/i)
+  })
+
+  it('la ausencia de «leída» no prueba nada, y el texto lo dice', () => {
+    // Un cliente de correo que bloquea imágenes nunca reporta la apertura. Que la
+    // pantalla afirmara «no la leyó» sería inventar un dato.
+    expect(SIGNIFICADO_ESTADO.leida).toMatch(/bloquean|NO lo diga/i)
+  })
+
+  it('cada estado tiene etiqueta y significado', () => {
+    for (const e of ESTADOS_NOTIFICACION) {
+      expect(ETIQUETAS_ESTADO[e], `${e} sin etiqueta`).toBeTruthy()
+      expect(SIGNIFICADO_ESTADO[e]?.length ?? 0, `${e} sin explicación`).toBeGreaterThan(20)
+    }
+  })
+
+  it('reconoce los estados válidos y rechaza el resto', () => {
+    expect(esEstadoNotificacion('entregada')).toBe(true)
+    expect(esEstadoNotificacion('leida')).toBe(true)
+    expect(esEstadoNotificacion('enviado')).toBe(false) // en masculino no existe
+    expect(esEstadoNotificacion('')).toBe(false)
+  })
+
+  it('sólo se reintenta lo fallido y lo cancelado', () => {
+    /*
+      Reintentar algo ya entregado le mandaría al huésped el mismo aviso dos
+      veces, que es exactamente lo que la bandeja existe para evitar. Y lo
+      pendiente no está trabado: está esperando su turno.
+    */
+    expect(sePuedeReintentar('fallida')).toBe(true)
+    expect(sePuedeReintentar('cancelada')).toBe(true)
+    expect(sePuedeReintentar('pendiente')).toBe(false)
+    expect(sePuedeReintentar('enviada')).toBe(false)
+    expect(sePuedeReintentar('entregada')).toBe(false)
+    expect(sePuedeReintentar('leida')).toBe(false)
+  })
+})
+
+describe('a quién le toca cada aviso interno', () => {
+  it('todos los internos tienen rol, y ninguno del huésped lo tiene', () => {
+    for (const e of EVENTOS_INTERNOS) {
+      expect(rolDelAviso(e), `${e} sin rol asignado`).toBeTruthy()
+    }
+    // El destinatario de un aviso al huésped es una dirección, no un puesto.
+    expect(rolDelAviso('confirmacion_reserva')).toBeNull()
+    expect(rolDelAviso('solicitud_resena')).toBeNull()
+  })
+
+  it('el rol asignado es uno de los cuatro que existen', () => {
+    // Un rol inventado dejaría el aviso fuera del `check` de la 0086 y la fila no
+    // entraría: el aviso no llegaría a nadie y el motivo sería un error de la base.
+    for (const rol of Object.values(ROL_DEL_AVISO)) {
+      expect(['admin', 'gerencia', 'recepcion', 'housekeeping']).toContain(rol)
+    }
+  })
+
+  it('lo que se atiende en el mostrador va a recepción; lo que se decide, a gerencia', () => {
+    expect(rolDelAviso('interno_nueva_reserva')).toBe('recepcion')
+    expect(rolDelAviso('interno_nuevo_pago')).toBe('recepcion')
+    expect(rolDelAviso('interno_habitacion_lista')).toBe('recepcion')
+    expect(rolDelAviso('interno_error_sincronizacion')).toBe('gerencia')
+    expect(rolDelAviso('interno_discrepancia_factura')).toBe('gerencia')
+  })
+
+  it('un aviso interno nunca se bloquea por consentimiento del huésped', () => {
+    /*
+      Va a la cartelera del hotel, no al huésped. Si el consentimiento aplicara,
+      un huésped que pidió no recibir avisos dejaría al hotel sin enterarse de que
+      entró su propia reserva.
+    */
+    const noQuiereNada = { acepta_avisos: false, acepta_promociones: false }
+    for (const e of EVENTOS_INTERNOS) {
+      expect(motivoNoNotificar(e, noQuiereNada), `${e} bloqueado`).toBeNull()
     }
   })
 })
