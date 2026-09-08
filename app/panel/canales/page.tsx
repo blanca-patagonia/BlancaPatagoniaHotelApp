@@ -218,6 +218,9 @@ interface EntranteRow {
   liquidado_en: string | null
   conflicto: boolean
   notas: string
+  /** Qué cambió el canal después de importarla, en palabras (migración 0088). */
+  divergencia: string
+  divergencia_desde: string | null
   reserva_id: string | null
   reserva: { codigo: string } | null
 }
@@ -316,7 +319,7 @@ export default async function CanalesPage({
   let consultaEntrantes = supabase
     .from('canal_reservas')
     .select(
-      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, reserva_id, reserva:reservas(codigo)',
+      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, divergencia, divergencia_desde, reserva_id, reserva:reservas(codigo)',
     )
     .order('check_in', { ascending: true })
     .limit(200)
@@ -1007,6 +1010,22 @@ export default async function CanalesPage({
                             {e.motivo && (
                               <span className="mt-1 block max-w-xs text-xs text-stone-600">
                                 {e.motivo}
+                              </span>
+                            )}
+                            {/*
+                              El canal cambió algo DESPUÉS de importarla (0088).
+
+                              Va en rojo y con el detalle a la vista porque es lo
+                              más caro del módulo: la reserva del hotel sigue con
+                              los datos viejos y no hay ningún otro síntoma hasta
+                              que el huésped se presenta. El sistema no la corrige
+                              solo, así que este texto es lo único que dispara la
+                              corrección.
+                            */}
+                            {e.divergencia_desde && e.divergencia && (
+                              <span className="mt-1 block max-w-xs rounded-lg bg-red-50 px-2 py-1 text-xs text-red-800 ring-1 ring-red-200">
+                                <strong>El canal cambió esta reserva.</strong> {e.divergencia}.
+                                Corregila a mano en la ficha: el sistema no la mueve solo.
                               </span>
                             )}
                             {e.notas && (

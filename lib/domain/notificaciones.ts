@@ -234,6 +234,9 @@ export const ROL_DEL_AVISO: Record<(typeof EVENTOS_INTERNOS)[number], Rol> = {
   // Las entrantes las importa y las atiende el mostrador: es trabajo diario, y
   // por eso `canales` está entre las áreas de recepción.
   interno_canal_por_revisar: 'recepcion',
+  // Corregir una reserva que el canal cambió es trabajo del mostrador: abre la
+  // ficha, reprograma y recotiza. Gerencia se entera igual, porque ve todo.
+  interno_reserva_modificada_canal: 'recepcion',
   // Plata que se factura distinto de lo que se devengó: se revisa antes de pagar.
   interno_discrepancia_factura: 'gerencia',
   // La habitación lista la espera el mostrador para poder asignarla.

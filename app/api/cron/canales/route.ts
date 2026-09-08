@@ -3,7 +3,11 @@ import { obtenerProveedorCanal } from '@/lib/canales'
 import { guardarEntrantes } from '@/lib/canales/servicio'
 import { comparacionConstante } from '@/lib/integraciones/firma-webhook'
 import { registrarFalla } from '@/lib/acciones'
-import { avisarCanalPorRevisar, avisarErrorSincronizacion } from '@/lib/notificaciones/eventos'
+import {
+  avisarCanalPorRevisar,
+  avisarErrorSincronizacion,
+  avisarReservasModificadas,
+} from '@/lib/notificaciones/eventos'
 import { hoyISO, sumarDias } from '@/lib/fechas'
 
 /**
@@ -171,12 +175,30 @@ export async function POST(req: Request) {
     })
   }
 
+  /*
+    ⚠️ El más caro de los tres.
+
+    Una entrante YA IMPORTADA que el canal cambió deja a la reserva del hotel con
+    las fechas viejas y sin ningún síntoma. El sistema no la corrige solo (0088)
+    —mover el período choca con la exclusión y el precio no se recotiza—, así que
+    si nadie se entera, nadie la corrige, y se descubre con el huésped en la
+    puerta.
+  */
+  if (resumen.divergentes > 0) {
+    await avisarReservasModificadas(supabase, {
+      canal: 'Booking',
+      cantidad: resumen.divergentes,
+      dia: hoyISO(),
+    })
+  }
+
   return Response.json({
     ok: true,
     leidas: resumen.leidas,
     nuevas: resumen.nuevas,
     actualizadas: resumen.actualizadas,
     rechazadas: resumen.rechazadas,
+    divergentes: resumen.divergentes,
   })
 }
 

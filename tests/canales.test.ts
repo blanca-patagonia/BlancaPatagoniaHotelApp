@@ -5,6 +5,7 @@ import {
   esEventoMasReciente,
   detectarDiscrepancia,
   estadoSegunOperacion,
+  describirDivergencia,
   type ReservaEntrante,
 } from '@/lib/domain/canales'
 
@@ -129,5 +130,66 @@ describe('estadoSegunOperacion', () => {
 
   it('una cancelación del canal cancela', () => {
     expect(estadoSegunOperacion('cancelada')).toBe('cancelada')
+  })
+})
+
+describe('el canal modifica una reserva ya importada (migración 0088)', () => {
+  const IMPORTADO = {
+    checkIn: '2026-04-10',
+    checkOut: '2026-04-13',
+    huespedes: 2,
+    importeCanal: 300,
+  }
+
+  it('sin cambios devuelve null', () => {
+    // Es el caso normal: el canal reenvía lo mismo en cada corrida. Marcar eso
+    // como divergencia llenaría la lista de falsos positivos y nadie la miraría.
+    expect(describirDivergencia(IMPORTADO, { ...IMPORTADO })).toBeNull()
+  })
+
+  it('detecta el cambio de fechas, que es el caro', () => {
+    /*
+      ⚠️ El caso que la 0074 dejaba abierto. La fila del canal se actualiza —bien,
+      es lo que el canal afirma hoy— y la reserva del hotel se queda con las
+      fechas viejas, sin ningún síntoma. Se descubre cuando el huésped llega.
+    */
+    const texto = describirDivergencia(IMPORTADO, { ...IMPORTADO, checkIn: '2026-04-12' })
+    expect(texto).toContain('llegada')
+    // Los DOS valores: la fila ya tiene el nuevo, así que sin el viejo no queda
+    // rastro de qué había antes y no se puede saber qué corregir.
+    expect(texto).toContain('2026-04-10')
+    expect(texto).toContain('2026-04-12')
+  })
+
+  it('junta todos los cambios en un solo texto', () => {
+    const texto = describirDivergencia(IMPORTADO, {
+      checkIn: '2026-04-11',
+      checkOut: '2026-04-15',
+      huespedes: 3,
+      importeCanal: 450,
+    })
+    for (const campo of ['llegada', 'salida', 'huéspedes', 'importe']) {
+      expect(texto, `falta ${campo}`).toContain(campo)
+    }
+  })
+
+  it('el importe tiene tolerancia de un centavo', () => {
+    /*
+      Dos `numeric` convertidos a `number` difieren por redondeo. Una alerta que
+      suena siempre deja de mirarse, así que la diferencia tiene que ser real.
+    */
+    expect(describirDivergencia(IMPORTADO, { ...IMPORTADO, importeCanal: 300.004 })).toBeNull()
+    expect(describirDivergencia(IMPORTADO, { ...IMPORTADO, importeCanal: 300.5 })).toContain(
+      'importe',
+    )
+  })
+
+  it('un importe que falta de un lado no cuenta como cambio', () => {
+    // El feed iCal no trae importe. Compararlo contra el del CSV daría «cambió de
+    // 300 a nada» en cada corrida del cron, que es ruido garantizado.
+    expect(describirDivergencia(IMPORTADO, { ...IMPORTADO, importeCanal: null })).toBeNull()
+    expect(
+      describirDivergencia({ ...IMPORTADO, importeCanal: null }, IMPORTADO),
+    ).toBeNull()
   })
 })

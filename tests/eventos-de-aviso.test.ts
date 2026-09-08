@@ -123,6 +123,8 @@ const LLAMADAS: Partial<Record<EventoEmail, (c: SupabaseClient) => Promise<unkno
       dia: '2027-03-10',
       conflictos: 1,
     }),
+  interno_reserva_modificada_canal: (c) =>
+    eventos.avisarReservasModificadas(c, { canal: 'Booking', cantidad: 2, dia: '2027-03-10' }),
   interno_discrepancia_factura: (c) =>
     eventos.avisarDiscrepanciaFactura(c, {
       cargoId: 'cargo-1',

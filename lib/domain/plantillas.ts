@@ -53,6 +53,7 @@ export const EVENTOS_EMAIL = [
   'interno_nuevo_pago',
   'interno_error_sincronizacion',
   'interno_canal_por_revisar',
+  'interno_reserva_modificada_canal',
   'interno_discrepancia_factura',
   'interno_habitacion_lista',
   'interno_incidente_mantenimiento',
@@ -64,6 +65,7 @@ export const EVENTOS_INTERNOS = [
   'interno_nuevo_pago',
   'interno_error_sincronizacion',
   'interno_canal_por_revisar',
+  'interno_reserva_modificada_canal',
   'interno_discrepancia_factura',
   'interno_habitacion_lista',
   'interno_incidente_mantenimiento',
@@ -460,6 +462,28 @@ Hasta que se importen, esas fechas NO ocupan inventario en el sistema.{{aviso_co
       dice otra cosa.
     */
     opcionales: ['aviso_conflicto'],
+  },
+
+  interno_reserva_modificada_canal: {
+    evento: 'interno_reserva_modificada_canal',
+    nombre: 'Interno · el canal cambió una reserva ya importada',
+    /*
+      ⚠️ El caso que más caro sale de los tres del módulo de canales.
+
+      El huésped entra a Booking y mueve las fechas. La fila del canal se
+      actualiza —correcto—, pero la reserva del hotel se queda con las fechas
+      viejas y **no hay ningún síntoma**: las dos parecen normales y nada las
+      compara. Se descubre el día que el huésped se presenta.
+
+      El sistema no reprograma solo (0088): mover el período va contra la
+      restricción de exclusión, y el precio no se recotiza solo.
+    */
+    disparador: 'Cuando el canal modifica una entrante que ya se había importado',
+    asunto: '{{cantidad}} reserva(s) de {{canal}} cambiaron después de importarse',
+    cuerpo: `El canal cambió {{cantidad}} reserva(s) que ya están cargadas en el sistema.
+
+⚠️ La reserva del hotel sigue con los datos VIEJOS: hay que corregirla a mano desde la ficha. El sistema no la mueve solo — cambiar las fechas puede chocar con otra estadía, y el precio no se recotiza automáticamente.`,
+    variables: ['canal', 'cantidad'],
   },
 
   interno_discrepancia_factura: {

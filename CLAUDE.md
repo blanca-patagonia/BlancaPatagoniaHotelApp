@@ -310,7 +310,15 @@ Tarifario 2025/2026 (Anexo A).
      publicarlo rompe la paridad tarifaria; sin IVA anuncia menos de lo que cobra.
   4. **Un día sin tarifa NO se publica.** Publicar `0` es publicar una noche
      gratis: es el «USD 0» de la Fase 18. Se omite y se cuenta en `sinPrecio`.
-  5. **Las restricciones por FECHA viven en `canal_restricciones` (0087)**, aparte
+  5. **Una entrante YA IMPORTADA que el canal modifica se DETECTA, no se
+     reprograma** (0088, `describirDivergencia`). Es la otra mitad de lo que
+     cerró la 0074: aquélla cubre la que desaparece, ésta la que cambia. El
+     huésped mueve las fechas en Booking, la fila de `canal_reservas` se
+     actualiza —correcto— y la reserva del hotel se queda con las viejas **sin
+     ningún síntoma**; se descubre cuando el huésped se presenta. ⚠️ No se mueve
+     sola porque el período va contra la exclusión del ADR 0002 y el precio **no
+     se recotiza solo**: quedaría cobrando la tarifa de otras fechas.
+  6. **Las restricciones por FECHA viven en `canal_restricciones` (0087)**, aparte
      de las de `canal_tipos`, que valen para siempre. Al resolver un día gana **la
      más restrictiva** de las dos (`restriccionDelDia`): quedarse corto vende una
      noche que el hotel no quería vender y esa venta ya no se deshace sin

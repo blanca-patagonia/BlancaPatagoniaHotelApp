@@ -377,6 +377,11 @@ export const CAPITULOS: Capitulo[] = [
           'Las reservas de Booking aterrizan en una lista aparte y no ocupan habitación hasta que alguien aprieta "Importar". Es a propósito: Booking llama a las habitaciones con sus propios nombres, y hay que confirmar a qué tipo corresponde antes de darla por buena.',
       },
       {
+        titulo: 'Si el huésped cambia las fechas en Booking',
+        detalle:
+          'La reserva vuelve a llegar con los datos nuevos, pero la que está cargada en el sistema NO se mueve sola: aparece un cartel rojo en la lista diciendo qué cambió, y hay que corregirla a mano desde la ficha. Es a propósito. Moverla sola puede chocar con otra habitación ocupada, y el precio no se recalcula: quedaría cobrando la tarifa de las fechas viejas.',
+      },
+      {
         titulo: 'El sistema avisa cuando entra algo',
         detalle:
           'Si la sincronización trae reservas nuevas, aparece un aviso en el tablón de Avisos marcado "Del sistema". Así una reserva que entró el viernes a la noche no espera hasta que alguien abra esta pantalla. Si la sincronización falla, también avisa.',

@@ -146,6 +146,29 @@ export function avisarCanalPorRevisar(
   })
 }
 
+/**
+ * El canal cambió reservas que ya estaban importadas.
+ *
+ * ⚠️ Es el aviso más caro de no dar del módulo de canales: la reserva del hotel
+ * queda con las fechas viejas y no hay ningún síntoma hasta que el huésped se
+ * presenta. El sistema no la corrige solo (0088), así que si nadie se entera,
+ * nadie la corrige.
+ *
+ * El `discriminante` es el día: una corrida que detecta lo mismo cada hora deja
+ * un solo aviso. La cartelera no es un log.
+ */
+export function avisarReservasModificadas(
+  client: SupabaseClient,
+  d: { canal: string; cantidad: number; dia: string },
+): Promise<ResultadoEncolado> {
+  return encolar(client, {
+    evento: 'interno_reserva_modificada_canal',
+    entidadId: d.canal,
+    discriminante: d.dia,
+    variables: { canal: d.canal, cantidad: d.cantidad },
+  })
+}
+
 /** Lo facturado por el canal no coincide con lo devengado. */
 export function avisarDiscrepanciaFactura(
   client: SupabaseClient,
