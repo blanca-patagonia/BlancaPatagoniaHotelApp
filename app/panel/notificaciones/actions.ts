@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { requerirAcceso } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
+import { obtenerProveedorEmail } from '@/lib/email'
+import { registrarAviso } from '@/lib/registro'
 
 /**
  * Vuelve a poner un aviso en la cola.
@@ -107,4 +109,94 @@ export async function cancelarNotificacion(formData: FormData): Promise<void> {
   }
 
   redirect('/panel/notificaciones')
+}
+
+export interface EstadoPrueba {
+  ok?: string
+  error?: string
+}
+
+/**
+ * Manda un correo de prueba a una dirección que escribe quien lo pide.
+ *
+ * ── Por qué hace falta un botón para esto ───────────────────────────────────
+ *
+ * Porque **todo el camino funciona sin credenciales**: la bandeja encola, el cron
+ * despacha y el proveedor de consola devuelve `ok`. Un hotel sin configurar ve
+ * exactamente lo mismo que uno configurado —filas en verde que dicen «enviada»—
+ * y la diferencia recién se nota cuando un huésped llama para decir que no le
+ * llegó nada.
+ *
+ * Esto lo prueba en diez segundos y, sobre todo, **devuelve el motivo verbatim
+ * del proveedor**. Es donde aparece lo que de verdad hay que corregir: «domain is
+ * not verified», «API key is invalid». Traducirlo a «no se pudo enviar» sería
+ * quedarse justo con la parte inútil.
+ *
+ * ── Por qué NO pasa por la bandeja ──────────────────────────────────────────
+ *
+ * Un correo de prueba no es una comunicación al huésped: no tiene entidad a la
+ * que imputarse, no debe aparecer en el registro de envíos —que es el rastro de
+ * lo que el hotel le dijo a la gente— y no tiene sentido reintentarlo con espera
+ * creciente. Lo que se está probando es el proveedor, y se lo llama directo.
+ *
+ * ⚠️ Es de administración: manda correo hacia afuera con el dominio del hotel.
+ */
+export async function mandarCorreoDePrueba(
+  _prev: EstadoPrueba,
+  formData: FormData,
+): Promise<EstadoPrueba> {
+  const sesion = await requerirAcceso('notificaciones')
+
+  if (sesion.rol !== 'admin' && sesion.rol !== 'gerencia') {
+    return { error: 'La prueba de envío es de administración o gerencia.' }
+  }
+
+  const para = String(formData.get('para') ?? '').trim()
+  if (!para || !para.includes('@')) {
+    return { error: 'Escribí una dirección de correo válida.' }
+  }
+
+  const proveedor = obtenerProveedorEmail()
+
+  const r = await proveedor.enviar({
+    para,
+    asunto: 'Prueba de envío — Blanca Patagonia',
+    cuerpo: `Este es un correo de prueba del sistema de gestión del Hotel Blanca Patagonia.
+
+Si lo estás leyendo, el envío de correos está funcionando: las confirmaciones de
+reserva, los recordatorios y los avisos de pago van a salir por este mismo camino.
+
+No hace falta responderlo.`,
+  })
+
+  /*
+    Queda registrado, y no es un detalle: una prueba fallida es la mejor pista
+    que va a haber de por qué el hotel no está mandando correos. Se guarda el
+    motivo del proveedor, nunca la clave ni el cuerpo.
+  */
+  await registrarAviso('prueba_de_correo', {
+    detalle: r.detalle.slice(0, 500),
+    proveedor: proveedor.nombre,
+    ok: r.ok,
+    real: proveedor.esReal(),
+  })
+
+  if (!r.ok) return { error: r.detalle }
+
+  if (!proveedor.esReal()) {
+    /*
+      El proveedor de consola devuelve `ok: true` y no manda nada. Decir «listo,
+      se envió» sería la mentira más cara de esta pantalla: alguien concluiría
+      que el correo está configurado y se iría tranquilo.
+    */
+    return {
+      error:
+        `El proveedor configurado es «${proveedor.nombre}», que NO envía: escribe el correo en el ` +
+        'registro del servidor. Para mandar de verdad hay que poner EMAIL_PROVIDER=resend con su clave.',
+    }
+  }
+
+  return {
+    ok: `Se mandó a ${para}. Si no llega en unos minutos, revisá el correo no deseado y el dominio del remitente.`,
+  }
 }

@@ -10,214 +10,144 @@ import { clienteAnonimo, clienteDePrueba, hayAnon, hayDB } from './db'
  * de forma exhaustiva por `tests/rls-por-rol.test.ts`: todas las tablas × los
  * cuatro roles, con la lista sacada de la base para que una tabla nueva sin
  * declarar haga fallar el test. La **escritura** está en
- * `tests/rls-escritura-por-rol.test.ts`, que es dirigido por consecuencia
- * —escalada de privilegio, dinero, inventario— y lo dice de frente: no es una
- * matriz completa.
+ * `tests/rls-escritura-por-rol.test.ts`, que es dirigido por consecuencia y lo
+ * dice de frente: no es una matriz completa.
  *
  * Este archivo cierra el eje más expuesto de esa mitad, y lo cierra **entero**:
- * `anon` no escribe en ninguna tabla, ninguna operación.
+ * `anon` no tiene permiso de escritura sobre ninguna tabla del esquema.
  *
- * ── Por qué `anon` y por qué exhaustivo ─────────────────────────────────────
+ * ── Lo que encontró la primera vez que corrió ───────────────────────────────
  *
- * Porque es el único rol alcanzable **desde internet sin credenciales**. La clave
- * publicable viaja en el navegador —tiene que hacerlo, el portal público la usa—
- * así que cualquiera puede mandar un `POST /rest/v1/<tabla>` a mano, sin pasar por
- * ninguna pantalla ni por ninguna Server Action. Para los otros tres roles hace
- * falta una cuenta del hotel; para éste no hace falta nada.
+ * Que `anon` conservaba **UPDATE y DELETE sobre las seis tablas del catálogo**.
+ * No venía de ninguna migración de este proyecto —la 0006 le da sólo `select`—
+ * sino de los privilegios por omisión de la plataforma, y nadie lo había mirado:
+ * la 0072 revocó `select` sobre lo que no es catálogo y ahí se detuvo.
  *
- * Y exhaustivo porque el modo de falla es una **tabla nueva**: la migración que la
- * crea se acuerda de `enable row level security` —está en la convención del
- * proyecto— pero puede olvidarse del `revoke ... from anon`, y entonces `anon`
- * hereda el grant que la plataforma le da al rol. No hay ningún síntoma: la tabla
- * anda bien para todos.
+ * Exposición real: ninguna, porque las políticas RLS de esas tablas acotan la
+ * escritura a `admin` y `gerencia`. Pero es la misma forma que tuvo el hallazgo
+ * de `cotizar_estadia`: **la capa que la documentación daba por puesta no
+ * estaba**. Lo cerró la migración 0089.
  *
- * ── Cómo se distingue «denegado» de «datos inválidos» ───────────────────────
+ * ── Por qué se le pregunta al CATÁLOGO y no a PostgREST ─────────────────────
  *
- * ⚠️ Es la parte delicada, y es lo que permite escribir este test sin armar una
- * fila válida para cada tabla del esquema.
+ * ⚠️ Es la lección de este archivo, y la primera versión se equivocó.
  *
- * Se manda un `insert` de una fila **vacía**. Hay dos desenlaces y significan
- * cosas opuestas:
+ * Sondear con un `insert` vacío y leer el código de error parece elegante —`42501`
+ * es «denegado», cualquier otra cosa es «la barrera dejó pasar»— y tiene dos
+ * falsos negativos que no se ven:
  *
- *  · `42501` — permiso denegado, o «new row violates row-level security policy».
- *    Es lo que se busca: la barrera actuó **antes** de mirar el contenido.
- *  · Cualquier otra cosa —`23502` not-null, `23503` clave foránea, o incluso
- *    éxito— significa que la barrera **dejó pasar** y lo que falló fue la
- *    validación de datos. Eso es un agujero aunque la fila no haya entrado: con
- *    una fila bien armada entraría.
+ *  · una **vista** responde `55000` («no se puede insertar en una vista»);
+ *  · una tabla con **trigger BEFORE INSERT** responde lo que lance el trigger.
  *
- * Por eso se afirma el **código** y no «hubo error». Afirmar que hubo error daría
- * verde con `23502`, que es justamente el caso peligroso.
+ * En los dos casos el error no es de permiso, y el test lo leía como si la
+ * barrera hubiera actuado. Peor todavía: sobre las tablas sin `select`, PostgREST
+ * ni siquiera expone la tabla al rol y responde «no existe» **antes** de llegar a
+ * la base — así que el grant de escritura podía estar puesto y el sondeo lo daba
+ * por cerrado.
  *
- * ── Este archivo no escribe nada ────────────────────────────────────────────
- *
- * El `insert` va vacío (no puede entrar en ninguna tabla con columnas
- * obligatorias) y el `update`/`delete` filtran por `id is null`, que sobre una
- * clave primaria no alcanza **ninguna** fila. Una auditoría que corre contra una
- * base con datos no puede permitirse tocarlos para demostrar que podía.
- *
- * `is null` además sirve para cualquier tipo de columna, que es el motivo por el
- * que se usa eso y no un valor: en este esquema hay `id uuid`, `id bigint` y hasta
- * un `id boolean` (`datos_fiscales`), y un uuid literal daría `22P02` en la mitad
- * de las tablas — un error de tipo que se leería como si la barrera hubiera
- * actuado.
+ * `privilegios_de_escritura()` (0089) pregunta `has_table_privilege`. No tiene
+ * ambigüedad, cubre vistas, y no depende de que PostgREST muestre la tabla.
  */
 
-/** Códigos que significan «la barrera actuó». */
-const DENEGADO = new Set([
-  // Falta el privilegio de tabla, o la política rechazó la fila nueva.
-  '42501',
-  /*
-    PostgREST no encuentra la tabla en su caché de esquema para este rol. Sin
-    ningún privilegio, la tabla directamente **no existe** para `anon`: es la misma
-    denegación vista una capa más arriba. Los dos códigos aparecen según la versión.
-  */
-  'PGRST205',
-  'PGRST106',
-])
-
-/**
- * Columna por la que filtrar el `update` y el `delete`.
- *
- * Casi todas las tablas tienen `id`. Las dos excepciones no son un descuido:
- * `puntos_venta` se identifica por su número fiscal y `canal_config` tiene una
- * fila por canal. Se declaran acá para que el sondeo no falle con «la columna no
- * existe» y ese error se lea como una denegación que no ocurrió.
- */
-const CLAVE_POR_TABLA: Record<string, string> = {
-  puntos_venta: 'numero',
-  canal_config: 'canal',
-}
-
-function claveDe(tabla: string): string {
-  return CLAVE_POR_TABLA[tabla] ?? 'id'
-}
-
-describe.skipIf(!hayDB || !hayAnon)('borde público · anon no escribe en ninguna tabla', () => {
+describe.skipIf(!hayDB)('borde público · anon no tiene escritura sobre ninguna tabla', () => {
+  let expuestas: { tabla: string; privilegio: string }[] = []
   let tablas: string[] = []
 
   beforeAll(async () => {
+    const admin = clienteDePrueba()
+
+    const { data, error } = await admin.rpc('privilegios_de_escritura', { p_rol: 'anon' })
+    if (error) throw new Error(`No se pudo auditar los privilegios: ${error.message}`)
+    expuestas = (data ?? []) as { tabla: string; privilegio: string }[]
+
     /*
-      Las tablas se descubren de la base y no de una lista escrita a mano: es el
-      punto entero del archivo. Con una lista, la tabla nueva —que es el caso que
-      esto vigila— quedaría afuera y el test seguiría en verde.
+      La lista de tablas se trae aparte para la guarda de más abajo. Sin ella, una
+      función de auditoría que devolviera vacío por estar rota daría el mismo
+      resultado que una base bien cerrada, y el test pasaría sin haber mirado
+      nada. Es el defecto que tuvo la primera versión del test de lectura, que se
+      comparaba contra sí misma.
     */
-    const { data, error } = await clienteDePrueba().rpc('tablas_publicas')
-    if (error) throw new Error(`No se pudo listar las tablas: ${error.message}`)
-
-    tablas = (data as { tabla: string }[] | string[]).map((t) =>
-      typeof t === 'string' ? t : t.tabla,
+    const { data: t, error: eTablas } = await admin.rpc('tablas_publicas')
+    if (eTablas) throw new Error(`No se pudo listar las tablas: ${eTablas.message}`)
+    tablas = (t as { tabla: string }[] | string[]).map((x) =>
+      typeof x === 'string' ? x : x.tabla,
     )
-
-    if (tablas.length === 0) throw new Error('La base no devolvió ninguna tabla')
   }, 60_000)
 
   it('la base devolvió una cantidad de tablas plausible', () => {
-    /*
-      Guarda contra el falso verde más tonto de todos: si `tablas_publicas()`
-      devolviera vacío, los bucles de abajo no probarían nada y la suite pasaría
-      igual. Es el mismo defecto que tuvo la primera versión del test de lectura,
-      que se comparaba contra sí misma y por eso no podía fallar nunca.
-    */
     expect(tablas.length).toBeGreaterThan(40)
   })
 
-  /*
-    Los casos se acumulan y se reportan TODOS juntos, en un `it` por operación.
-
-    Con un `expect` por tabla dentro del bucle, la primera que falla esconde a las
-    demás, y en una auditoría lo que importa es la lista completa: saber que hay
-    una tabla abierta sirve la mitad que saber que hay siete.
-
-    Y va en un `it` y no en un `it.each` porque la lista se conoce recién en el
-    `beforeAll`, y Vitest arma los casos antes de eso.
-  */
-  it('anon no puede INSERTAR en ninguna tabla', async () => {
-    const anon = clienteAnonimo()
-    const infractores: string[] = []
-
-    for (const tabla of tablas) {
-      const { error } = await anon.from(tabla).insert({})
-
-      if (!error) {
-        // Sin error el insert entró: el peor caso posible.
-        infractores.push(`${tabla} (¡el insert ENTRÓ!)`)
-        continue
-      }
-      if (!DENEGADO.has(error.code ?? '')) {
-        infractores.push(`${tabla} (${error.code}: la barrera dejó pasar, falló la validación)`)
-      }
-    }
-
-    expect(
-      infractores,
-      'anon puede escribir en estas tablas. Falta `revoke insert on <tabla> from anon` ' +
-        'en su migración: **RLS activo NO alcanza** si el grant de tabla sigue puesto',
-    ).toEqual([])
-  }, 120_000)
-
-  it('anon no puede ACTUALIZAR en ninguna tabla', async () => {
-    const anon = clienteAnonimo()
-    const infractores: string[] = []
-
-    for (const tabla of tablas) {
-      /*
-        `is null` sobre la clave primaria no alcanza ninguna fila, así que este
-        sondeo no puede modificar datos ni cuando encuentra un agujero.
-
-        Por lo mismo, la ausencia de error no prueba que el `update` haya
-        cambiado algo —no matcheó nada—: lo que prueba es que el **grant** está,
-        que es exactamente lo que se audita.
-      */
-      const { error } = await anon.from(tabla).update({}).is(claveDe(tabla), null)
-
-      if (!error) {
-        infractores.push(`${tabla} (anon conserva UPDATE)`)
-        continue
-      }
-      if (!DENEGADO.has(error.code ?? '')) {
-        infractores.push(`${tabla} (${error.code}: la barrera dejó pasar)`)
-      }
-    }
-
-    expect(
-      infractores,
-      'anon conserva UPDATE sobre estas tablas. Falta `revoke update on <tabla> from anon`',
-    ).toEqual([])
-  }, 120_000)
-
-  it('anon no puede BORRAR en ninguna tabla', async () => {
-    const anon = clienteAnonimo()
-    const infractores: string[] = []
-
-    for (const tabla of tablas) {
-      const { error } = await anon.from(tabla).delete().is(claveDe(tabla), null)
-
-      if (!error) {
-        infractores.push(`${tabla} (anon conserva DELETE)`)
-        continue
-      }
-      if (!DENEGADO.has(error.code ?? '')) {
-        infractores.push(`${tabla} (${error.code}: la barrera dejó pasar)`)
-      }
-    }
-
-    expect(
-      infractores,
-      'anon conserva DELETE sobre estas tablas. Es el más caro de los tres: borrar ' +
-        'no se deshace sin restaurar un backup, y restaurar un backup nunca se probó',
-    ).toEqual([])
-  }, 120_000)
-
-  it('la clave declarada a mano existe en esas dos tablas', () => {
+  it('anon no conserva INSERT, UPDATE ni DELETE sobre nada', () => {
     /*
-      Si mañana `puntos_venta` gana un `id`, esta excepción queda apuntando a una
-      columna que ya no es la clave y el sondeo seguiría andando por casualidad.
-      Se verifica que las dos tablas sigan existiendo; que la columna sea la
-      correcta lo demuestra el propio sondeo, que fallaría con 42703.
+      Se reportan TODAS juntas y no una por `expect`: en una auditoría, saber que
+      hay una tabla abierta sirve la mitad que saber que hay siete.
     */
-    for (const tabla of Object.keys(CLAVE_POR_TABLA)) {
-      expect(tablas, `la excepción «${tabla}» apunta a una tabla que ya no existe`).toContain(tabla)
+    const detalle = expuestas.map((e) => `${e.tabla} (${e.privilegio})`)
+
+    expect(
+      detalle,
+      'El rol público conserva escritura sobre estas tablas. `anon` es el único rol ' +
+        'alcanzable desde internet SIN credenciales —la clave publicable viaja en el ' +
+        'navegador porque el portal la necesita—, así que acá el grant es la última ' +
+        'barrera antes de RLS. Se cierra con `revoke insert, update, delete on <tabla> ' +
+        'from anon` en la migración que creó la tabla. Ver el encabezado de la 0089: ' +
+        'los privilegios por omisión de la plataforma la vuelven a abrir si nadie mira',
+    ).toEqual([])
+  })
+
+  it('el catálogo público SIGUE siendo legible', async () => {
+    /*
+      El contrapeso, y hace falta.
+
+      La 0089 revoca en bloque, y un `revoke` de más rompe el portal público de la
+      forma más silenciosa posible: la web deja de mostrar tipos y tarifas, no
+      falla nada visible y el hotel se entera cuando alguien pregunta por qué no
+      se puede reservar.
+
+      Se comprueba leyendo de verdad, con el cliente anónimo, y no con
+      `has_table_privilege`: lo que importa no es el grant sino que el dato llegue.
+    */
+    if (!hayAnon) return
+
+    const anon = clienteAnonimo()
+    for (const tabla of ['tipos_unidad', 'temporadas', 'promociones', 'politicas_cancelacion']) {
+      const { error } = await anon.from(tabla).select('id').limit(1)
+      expect(error, `anon dejó de poder leer ${tabla}: se rompió el portal público`).toBeNull()
+    }
+
+    // `tarifas` va aparte: desde la 0031 tiene `precio_neto` revocado por columna,
+    // así que `select('*')` da 42501 para todos y hay que pedir una columna legible.
+    const { error } = await anon.from('tarifas').select('precio_rack').limit(1)
+    expect(error, 'anon dejó de poder leer las tarifas públicas').toBeNull()
+  })
+
+  it('el staff autenticado SIGUE pudiendo escribir', async () => {
+    /*
+      El otro contrapeso, y hace falta de verdad.
+
+      La 0089 revoca en bloque. Un `revoke` mal dirigido —a `public`, por ejemplo,
+      que es un grupo del que `anon` y `authenticated` son los dos miembros—
+      dejaría al hotel sin poder cargar una reserva, y el síntoma sería un error
+      de permisos en la cara de recepción.
+
+      Se comprueba sobre las tablas que el mostrador toca todos los días: si
+      alguna perdiera la escritura, el sistema deja de funcionar para trabajar.
+    */
+    const { data, error } = await clienteDePrueba().rpc('privilegios_de_escritura', {
+      p_rol: 'authenticated',
+    })
+    expect(error, error?.message).toBeNull()
+
+    const conEscritura = new Set(
+      ((data ?? []) as { tabla: string; privilegio: string }[]).map((e) => e.tabla),
+    )
+
+    for (const tabla of ['reservas', 'estadias', 'huespedes', 'pagos', 'consumos']) {
+      expect(
+        conEscritura.has(tabla),
+        `authenticated perdió la escritura sobre ${tabla}: el revoke de la 0089 se pasó de rol`,
+      ).toBe(true)
     }
   })
 })

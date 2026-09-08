@@ -93,14 +93,28 @@ columnas, conciliar la factura e importar reseñas.
   Comprobado rompiendo la guarda a propósito: tres tests se ponen en rojo.
   Migrar los 29 a sesiones reales sigue siendo deseable, pero ya no es lo único
   que separa la suite de verificar la autorización.
-- **Qué cubre y qué no la matriz de escritura.**
+- **Qué cubre y qué no la matriz de escritura.** *(actualizado el 2026-09-08)*
   `tests/rls-escritura-por-rol.test.ts` cubre casos elegidos por consecuencia
-  (escalada de privilegio, dinero, inventario, borde público, borrado). Lo que no
-  está, no está auditado — y el archivo lo dice.
-  La de **lectura** sí es exhaustiva: 51 tablas × 4 roles, con la lista traída de la
-  base para que una tabla nueva sin declarar haga fallar el test. Y hay un guardián
-  que reporta los casos negativos que pasaron «por tabla vacía» en vez de darlos por
-  verificados.
+  (escalada de privilegio, dinero, inventario, borrado). Lo que no está, no está
+  auditado — y el archivo lo dice.
+  La de **lectura** sí es exhaustiva: todas las tablas × 4 roles, con la lista
+  traída de la base para que una tabla nueva sin declarar haga fallar el test. Y hay
+  un guardián que reporta los casos negativos que pasaron «por tabla vacía» en vez
+  de darlos por verificados.
+  **Y desde el 2026-09-08 el borde público en escritura también es exhaustivo:**
+  `tests/anon-no-escribe.test.ts` prueba insert, update y delete de `anon` contra
+  **todas** las tablas, con la lista traída de la base. Se eligió ese eje y no otro
+  porque `anon` es el único rol alcanzable desde internet sin credenciales —la clave
+  publicable viaja en el navegador— y porque el modo de falla es una tabla nueva
+  cuya migración se acuerda del `enable row level security` y se olvida del
+  `revoke ... from anon`.
+  ⚠️ Ese test **afirma el código de error, no que haya habido error**: `42501` es la
+  barrera actuando, mientras que `23502` significa que la barrera dejó pasar y falló
+  la validación de datos. Afirmar «hubo error» daría verde justo en el caso
+  peligroso. Es lo que permite auditarlo sin armar una fila válida por tabla.
+  **Lo que sigue sin auditar de forma exhaustiva:** la escritura de los tres roles
+  de staff. Ahí hace falta una cuenta del hotel, y el riesgo es escalada interna, no
+  exposición pública.
 
 ---
 

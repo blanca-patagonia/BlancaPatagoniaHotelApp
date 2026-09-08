@@ -35,6 +35,9 @@ import {
 } from '../_components/ui'
 import { BotonEnvio } from '../_components/boton-envio'
 import { cancelarNotificacion, reencolarNotificacion } from './actions'
+import { PruebaDeCorreo } from './prueba'
+import { diagnosticarAvisos } from '@/lib/notificaciones/diagnostico'
+import { Icono } from '../_components/iconos'
 
 /**
  * Registro de envíos (bandeja de salida, migraciones 0075 y 0086).
@@ -99,8 +102,19 @@ export default async function NotificacionesPage({
 }: {
   searchParams: Promise<{ estado?: string; q?: string; pagina?: string; error?: string; ok?: string }>
 }) {
-  await requerirAcceso('notificaciones')
+  const sesion = await requerirAcceso('notificaciones')
   const sp = await searchParams
+
+  /*
+    El diagnóstico es de administración y gerencia.
+
+    No porque tenga secretos —sólo dice si una variable está, nunca su valor—
+    sino porque lo que informa es una tarea de configuración: recepción no puede
+    hacer nada con «falta RESEND_API_KEY», y mostrárselo convierte una pantalla
+    operativa en una lista de cosas que no puede resolver.
+  */
+  const puedeConfigurar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
+  const diagnostico = puedeConfigurar ? diagnosticarAvisos() : null
   const supabase = await crearClienteServidor()
 
   const estado = esEstadoNotificacion(sp.estado ?? '') ? (sp.estado as EstadoNotificacion) : undefined
@@ -180,6 +194,67 @@ export default async function NotificacionesPage({
             El aviso quedó cancelado y no va a salir. Se puede volver a encolar más tarde.
           </Mensaje>
         </div>
+      )}
+
+      {diagnostico && (
+        <Tarjeta
+          className="mb-4"
+          titulo="¿Los avisos salen de verdad?"
+          descripcion="Todo el camino funciona sin configurar nada: la bandeja anota y marca «enviada» igual. Esto dice si además sale."
+        >
+          {!diagnostico.puedeMandarCorreo && (
+            <div className="mb-4 flex items-start gap-3 rounded-xl bg-lenga-50 px-4 py-3 ring-1 ring-lenga-200">
+              <span className="mt-0.5 shrink-0 text-lenga-700">
+                <Icono nombre="alerta" tam={18} />
+              </span>
+              <div className="text-sm text-lenga-900">
+                <p className="font-semibold">
+                  Hoy los correos NO salen del sistema.
+                </p>
+                <p className="mt-1 text-stone-700">
+                  El proveedor configurado es «{diagnostico.email.proveedor}», que escribe el
+                  correo en el registro del servidor y no lo manda. Los avisos igual se van a
+                  marcar como enviados en la lista de abajo: es el motivo por el que esta tarjeta
+                  existe.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <ul className="mb-4 space-y-2">
+            {diagnostico.requisitos.map((r) => (
+              <li key={r.clave} className="flex items-start gap-2.5 text-sm">
+                <span
+                  className={`mt-0.5 shrink-0 ${r.listo ? 'text-emerald-600' : 'text-lenga-700'}`}
+                  aria-hidden
+                >
+                  <Icono nombre={r.listo ? 'ok' : 'alerta'} tam={16} />
+                </span>
+                <span className="min-w-0">
+                  {/* El estado también en palabras: el color solo no alcanza para
+                      quien no lo distingue, y es la misma regla que sigue el resto
+                      del panel con los estados de reserva. */}
+                  <span className="font-medium text-stone-800">
+                    {r.listo ? 'Listo' : 'Falta'} · {r.que}
+                  </span>
+                  <span className="ml-1 font-mono text-xs text-stone-500">{r.clave}</span>
+                  {!r.listo && (
+                    <span className="mt-0.5 block text-xs text-stone-600">{r.siFalta}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mb-4 text-sm text-stone-600">
+            <strong>WhatsApp:</strong>{' '}
+            {diagnostico.whatsapp.activo
+              ? `activo con «${diagnostico.whatsapp.proveedor}». Las confirmaciones y los recordatorios de llegada salen por ahí cuando el huésped tiene teléfono cargado.`
+              : 'no está configurado, así que todo sale por correo. No es una falla: es el respaldo, y funciona.'}
+          </p>
+
+          <PruebaDeCorreo sugerido={sesion.email ?? ''} />
+        </Tarjeta>
       )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
