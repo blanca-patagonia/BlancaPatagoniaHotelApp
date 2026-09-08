@@ -397,6 +397,48 @@ describe.skipIf(!hayDB)('avisos internos a la cartelera', () => {
     expect(canalMalo?.code, 'la base aceptó un canal inventado').toBe('23514')
   })
 
+  it('el staff no puede reescribir de quién es un aviso automático', async () => {
+    /*
+      `solo_fijar_aviso` (0017) congelaba `mensaje`, `autor_id` y `creado_en` —las
+      únicas columnas que había entonces—. La 0086 sumó `automatico`, `evento` y
+      `rol`, y sin meterlas en el trigger cualquier integrante del staff podría
+      cambiarle el rol a un aviso para sacárselo de encima, o desmarcar
+      `automatico` y hacer pasar uno del sistema por uno escrito por una persona.
+
+      `authenticated` tiene UPDATE a nivel de tabla desde la 0006: la restricción
+      por columna la impone el trigger, no un grant.
+
+      El cliente de prueba usa `service_role`, para el que `rol_actual()` es null
+      —o sea, no es admin—, así que recorre exactamente el camino del staff.
+    */
+    const { data: creado } = await db
+      .from('avisos')
+      .insert({
+        mensaje: `Aviso del sistema ${sufijo}`,
+        automatico: true,
+        evento: 'interno_nuevo_pago',
+        rol: 'recepcion',
+      })
+      .select('id')
+      .single<{ id: string }>()
+
+    const avisoId = creado!.id
+
+    for (const cambio of [{ rol: 'housekeeping' }, { automatico: false }, { evento: 'otro' }]) {
+      const { error } = await db.from('avisos').update(cambio).eq('id', avisoId)
+      expect(
+        error,
+        `el staff pudo cambiar ${Object.keys(cambio)[0]} de un aviso automático`,
+      ).not.toBeNull()
+    }
+
+    // Fijar sí se puede: es lo único para lo que se le dio el UPDATE al staff.
+    const { error: eFijar } = await db.from('avisos').update({ fijado: true }).eq('id', avisoId)
+    expect(eFijar, 'el trigger rompió lo único que el staff sí puede hacer').toBeNull()
+
+    await db.from('avisos').delete().eq('id', avisoId)
+  })
+
   it('un id de proveedor no se repite', async () => {
     /*
       Es con lo que el webhook de entrega encuentra la fila. Si dos filas

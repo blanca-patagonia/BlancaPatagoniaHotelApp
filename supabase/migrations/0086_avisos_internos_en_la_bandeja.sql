@@ -94,7 +94,7 @@ create unique index notificaciones_proveedor_id_idx
 
 -- El listado de la pantalla: lo último primero, filtrando por estado.
 create index notificaciones_estado_creada_idx
-  on notificaciones (estado, creada_en desc);
+  on notificaciones (estado, creado_en desc);
 
 /* ─────────────────────────── 3. de dónde sale un aviso ─────────────────── */
 
@@ -149,6 +149,46 @@ create policy "avisos: staff lee los suyos"
     rol_actual() in ('admin', 'gerencia')
     or (rol_actual() is not null and (rol is null or rol = rol_actual()))
   );
+
+/*
+  Las tres columnas nuevas entran en el trigger que congela el aviso.
+
+  `solo_fijar_aviso` (0017) existe porque `authenticated` tiene UPDATE a nivel de
+  tabla desde la 0006: la restricción por columna se impone con el trigger, no
+  con un grant. Su lista nombraba `mensaje`, `autor_id` y `creado_en` — las
+  únicas que había entonces.
+
+  Sin agregar las de acá, cualquier integrante del staff podría:
+    · cambiarle el `rol` a un aviso y sacárselo de encima mandándoselo a otro,
+    · o desmarcar `automatico` y hacer pasar un aviso del sistema por uno escrito
+      por una persona.
+
+  Ninguna de las dos rompe nada grave, pero las dos rompen lo que la cartelera
+  promete: que se pueda distinguir quién dijo qué. El staff sigue pudiendo fijar
+  y desfijar, que es lo único para lo que se le dio el UPDATE.
+*/
+create or replace function solo_fijar_aviso()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if rol_actual() is distinct from 'admin'
+     and (new.mensaje    is distinct from old.mensaje
+       or new.autor_id   is distinct from old.autor_id
+       or new.creado_en  is distinct from old.creado_en
+       or new.automatico is distinct from old.automatico
+       or new.evento     is distinct from old.evento
+       or new.rol        is distinct from old.rol) then
+    raise exception 'Solo se puede fijar o desfijar un aviso';
+  end if;
+  return new;
+end;
+$$;
+
+comment on function solo_fijar_aviso() is
+  'Impide que un UPDATE del staff altere algo distinto de avisos.fijado. Desde la 0086 protege también automatico, evento y rol.';
 
 -- ═════════════════════════════════════════════════════════════════════════════
 -- Verificación posterior (correr a mano tras aplicar)
