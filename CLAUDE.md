@@ -222,7 +222,8 @@ Tarifario 2025/2026 (Anexo A).
   `MERCADOPAGO_ACCESS_TOKEN`, que es el mismo del cobro.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 32 ADRs.** Los últimos: **ADR 0016** el precio neto fuera del alcance
+- **Hay 33 ADRs.** El último es el **0033** (el arrastre en la grilla cambia de
+  habitación y no de fechas). Los anteriores: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -358,6 +359,46 @@ Tarifario 2025/2026 (Anexo A).
   **Queda solo P5** —bandeja, comentarios y analytics de Booking—, que **difirió
   el propio cliente**: antes de prometer nada hay que verificar qué exporta el
   extranet sin API de partner.
+- **Pedidos del cliente del 2026-09-07, hechos el 2026-09-08.** Audio + captura de
+  la grilla mensual de WinPAX + una nota reenviada. Tres cosas, ninguna con
+  migración nueva:
+  1. **Arrastrar una reserva en la grilla para cambiarla de habitación**
+     (**ADR 0033**). El servidor ya estaba entero: llama a la misma
+     `cambiar_unidad_reserva` de la 0028. Lo nuevo es
+     `lib/domain/arrastre-grilla.ts` (regla pura, que **llama** a
+     `mudanzas.ts` en vez de reimplementarla) y
+     `app/panel/ocupacion/arrastre.tsx`.
+  2. **Informe de venta por categoría**: `/panel/reportes/categorias` +
+     `lib/domain/metricas-categoria.ts`.
+  3. **Los informes en pantallas propias**: índice + `ocupacion`,
+     `categorias`, `canales`, `satisfaccion` y `estados`, cada uno con su
+     URL, su mes y un botón «Abrir aparte». Catálogo en `lib/domain/informes.ts`.
+  ⚠️ **Seis cosas que hay que saber antes de tocar esto:**
+  1. **El arrastre mueve de HABITACIÓN, nunca de fechas** (ADR 0033). Correr
+     fechas recotiza —cambia lo que el huésped paga— y eso no puede salir de un
+     gesto que se dispara sin querer. Reprogramar sigue teniendo su pantalla.
+  2. **La validación del navegador NO es la garantía**, sigue siendo el ADR 0002.
+     Pero hay un caso donde sí alcanza y está demostrado: si el bloque entra
+     entero en la ventana visible, cualquier choque posible ya está en pantalla
+     (`ventanaAlcanza`). Cuando se sale, el diálogo lo dice en vez de afirmar
+     una disponibilidad que no verificó.
+  3. **`preventDefault` va en CADA `dragover`**, no sólo al cambiar de fila: el
+     navegador da la zona por rechazada apenas un evento pasa sin él y el
+     `drop` no llega nunca. El síntoma («a veces no me deja soltar») no apunta
+     a la causa.
+  4. **La ruta de retorno de la mudanza es un token de lista blanca, no una URL**
+     (`retornoDeMudanza`). Un campo de formulario con «volvé acá» es un
+     redirect abierto.
+  5. **La venta por categoría se agrupa por `estadias.tipo_unidad_id`**, no por
+     el tipo de la unidad actual: después de una mudanza entre tipos son
+     distintos, y un informe de venta dice qué se **vendió**. Un tipo sin
+     unidades activas muestra «—» y no «0 %» (no está vacío: no tiene
+     denominador), y el ADR del total es ingreso/noches, **no** el promedio de
+     los ADR de cada tipo.
+  6. **No se hizo vista SQL para el informe por categoría, a propósito**: reusa
+     `metricasDeMes`, así ocupación/ADR/RevPAR tienen una sola definición en
+     todo el sistema. Los históricos (NPS, estados) **no llevan selector de mes**:
+     uno que no cambia nada haría creer que el número es el de ese mes.
 - **Auditoría técnica aplicada (2026-08-24).** Doce fases de auditoría y sus hallazgos
   corregidos: tokens de socio fuera del alcance del staff (0060), el borrado de dinero
   con permiso revocado y auditado (0061), índices del listado y `canal` acotado (0062),
