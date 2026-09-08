@@ -52,6 +52,7 @@ export const EVENTOS_EMAIL = [
   'interno_nueva_reserva',
   'interno_nuevo_pago',
   'interno_error_sincronizacion',
+  'interno_canal_por_revisar',
   'interno_discrepancia_factura',
   'interno_habitacion_lista',
   'interno_incidente_mantenimiento',
@@ -62,6 +63,7 @@ export const EVENTOS_INTERNOS = [
   'interno_nueva_reserva',
   'interno_nuevo_pago',
   'interno_error_sincronizacion',
+  'interno_canal_por_revisar',
   'interno_discrepancia_factura',
   'interno_habitacion_lista',
   'interno_incidente_mantenimiento',
@@ -428,6 +430,36 @@ Son dos minutos, y si preferís no hacerlo no pasa nada.
 
 Si esto se repite, las reservas del canal pueden no estar entrando.`,
     variables: ['canal', 'detalle'],
+  },
+
+  interno_canal_por_revisar: {
+    evento: 'interno_canal_por_revisar',
+    nombre: 'Interno · reservas de canal esperando revisión',
+    /*
+      ⚠️ El cron ATERRIZA, no importa (ver `app/api/cron/canales/route.ts`).
+
+      Eso es deliberado: importar es crear una reserva que ocupa inventario, y
+      hacerlo sin que nadie mire convertiría el choque con el anti-overbooking
+      —el caso más caro que le puede pasar al hotel— en una fila de error que
+      nadie lee.
+
+      Pero el corolario es que una reserva que aterrizó el viernes a la noche
+      **sigue sin importarse hasta que alguien entre a la pantalla de canales**.
+      El KPI se enciende solo; el problema es que hay que estar mirándolo. Este
+      aviso es el que hace que no haga falta.
+    */
+    disparador: 'Cuando el cron aterriza reservas nuevas de un canal',
+    asunto: '{{cantidad}} reserva(s) de {{canal}} esperando importación',
+    cuerpo: `Entraron {{cantidad}} reserva(s) de {{canal}} y están en la zona de recepción, sin importar.
+
+Hasta que se importen, esas fechas NO ocupan inventario en el sistema.{{aviso_conflicto}}`,
+    variables: ['canal', 'cantidad'],
+    /*
+      El aviso de conflicto va sólo cuando lo hay. Ponerlo siempre —«conflictos:
+      0»— haría que se leyera como ruido y se dejara de mirar justo el día que
+      dice otra cosa.
+    */
+    opcionales: ['aviso_conflicto'],
   },
 
   interno_discrepancia_factura: {

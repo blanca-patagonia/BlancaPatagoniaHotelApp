@@ -18,7 +18,8 @@ import { publicarAri } from '@/lib/canales/ari'
 import { movimientoEnMoneda } from '@/lib/domain/cuentas'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
-import { hoyISO, sumarDias } from '@/lib/fechas'
+import { hoyISO, inicioFinDeMes, sumarDias } from '@/lib/fechas'
+import { avisarDiscrepanciaFactura } from '@/lib/notificaciones/eventos'
 import {
   MODALIDADES_COBRO,
   referenciaTransferenciaCanal,
@@ -731,8 +732,82 @@ export async function registrarFacturaComision(formData: FormData): Promise<void
   }
   cortarSiFalla(eCargo, `${DESTINO}?vista=costos`, 'factura_cargo')
 
+  /*
+    ¿Coincide con lo que el sistema devengó ese mes?
+
+    Esta comparación **ya existía en la pantalla** y era el motivo de la vista de
+    costos. Lo que faltaba es que alguien se enterara sin entrar a mirarla: una
+    factura del canal se paga por vencimiento, y si la diferencia se descubre
+    después de pagarla, reclamarla es mucho más difícil que discutirla antes.
+  */
+  await avisarSiHayDiferencia(supabase, {
+    periodo,
+    imputadoEl,
+    facturado: mov.monto,
+  })
+
   revalidatePath(DESTINO)
   redirect(`${DESTINO}?vista=costos&ok=factura`)
+}
+
+/**
+ * Compara la factura del canal contra lo devengado y avisa si no cierran.
+ *
+ * **Nunca corta.** El asiento contable ya está hecho: que no se pueda anotar un
+ * aviso no puede volverse un error sobre una escritura que salió bien.
+ */
+async function avisarSiHayDiferencia(
+  client: Awaited<ReturnType<typeof crearClienteServidor>>,
+  d: { periodo: string; imputadoEl: string; facturado: number },
+): Promise<void> {
+  /*
+    `inicioFinDeMes().fin` ya es el PRIMER día del mes siguiente, o sea un fin
+    **excluido**: se usa con `<` y no con `<=`. Sumarle un día metería en la
+    comparación el primero del mes que viene.
+  */
+  const finDeMes = inicioFinDeMes(d.periodo).fin
+
+  /*
+    Lo devengado del mes: las comisiones que el sistema calculó reserva por
+    reserva, **sin** la factura que se acaba de cargar (`origen` distinto) — si
+    no, se estaría comparando la factura contra sí misma.
+  */
+  const { data, error } = await client
+    .from('canal_cargos')
+    .select('monto_usd')
+    .eq('canal', 'booking')
+    .eq('concepto', 'comision')
+    .neq('origen', 'factura_comision')
+    .gte('imputado_el', d.imputadoEl)
+    .lt('imputado_el', finDeMes)
+
+  if (error) {
+    registrarFalla(error, `leer lo devengado de ${d.periodo} para comparar con la factura`)
+    return
+  }
+
+  const devengado = (data ?? []).reduce(
+    (t, c) => t + Number((c as { monto_usd: number | null }).monto_usd ?? 0),
+    0,
+  )
+
+  /*
+    El umbral es un centavo, no cero.
+
+    Comparar dos sumas de `numeric` convertidas a `number` con `!==` haría saltar
+    el aviso por diferencias de redondeo, y un aviso que suena siempre deja de
+    mirarse. Un centavo de diferencia no es un problema contable; diez dólares sí.
+  */
+  if (Math.abs(devengado - d.facturado) < 0.01) return
+
+  await avisarDiscrepanciaFactura(client, {
+    // La clave es el período: una sola alerta por mes, aunque la factura se
+    // cargue de nuevo tras corregirla.
+    cargoId: `booking:${d.periodo}`,
+    canal: 'Booking',
+    devengado,
+    facturado: d.facturado,
+  })
 }
 
 /**

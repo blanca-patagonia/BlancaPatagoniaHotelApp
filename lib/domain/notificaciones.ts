@@ -216,6 +216,9 @@ export const ROL_DEL_AVISO: Record<(typeof EVENTOS_INTERNOS)[number], Rol> = {
   // La sincronización que se rompe deja de traer reservas, y el que decide qué
   // hacer con eso —llamar al canal, cargarlas a mano— es gerencia.
   interno_error_sincronizacion: 'gerencia',
+  // Las entrantes las importa y las atiende el mostrador: es trabajo diario, y
+  // por eso `canales` está entre las áreas de recepción.
+  interno_canal_por_revisar: 'recepcion',
   // Plata que se factura distinto de lo que se devengó: se revisa antes de pagar.
   interno_discrepancia_factura: 'gerencia',
   // La habitación lista la espera el mostrador para poder asignarla.

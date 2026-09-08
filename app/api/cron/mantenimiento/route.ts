@@ -1,6 +1,7 @@
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { comparacionConstante } from '@/lib/integraciones/firma-webhook'
 import { registrarError, registrarInfo } from '@/lib/registro'
+import { DIAS_EXPIRACION } from '@/lib/domain/recordatorios'
 
 /**
  * Tareas de mantenimiento diarias: `POST /api/cron/mantenimiento`.
@@ -37,8 +38,15 @@ import { registrarError, registrarInfo } from '@/lib/registro'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-/** Días que una reserva pendiente retiene la unidad antes de liberarse. */
-const DIAS_EXPIRACION = 5
+/*
+  Los días de expiración salen de `lib/domain/recordatorios.ts` y no se declaran
+  acá.
+
+  Es el mismo número que decide **cuándo se avisa** que la reserva está por
+  liberarse. Con dos constantes, subir una sin la otra haría que el aviso saliera
+  después de que la reserva ya se liberó: un correo diciéndole al huésped que
+  tiene 24 horas para señar algo que el sistema ya soltó.
+*/
 
 /** Retención de la tabla `errores` (migración 0068). */
 const DIAS_ERRORES = 90

@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { encolar } from '@/lib/notificaciones'
+import { avisarNuevaReserva } from '@/lib/notificaciones/eventos'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { urlDelSitio } from '@/lib/env'
 import { formatoFechaCorta, diasEntre } from '@/lib/fechas'
@@ -164,6 +165,27 @@ export async function crearReservaPublica(
       total: formatearUSD(Number(nueva.total)),
       enlace: `${urlDelSitio()}/reservar/confirmacion/${token}`,
     },
+  })
+
+  /*
+    Y el hotel se entera.
+
+    Una reserva que entra por la web a las tres de la mañana no la ve nadie hasta
+    que alguien abre el listado. El aviso interno aterriza en la cartelera que el
+    staff ya mira, con el código, las fechas y el total: lo mínimo para saber si
+    hay que hacer algo antes de que llegue.
+
+    `origen` dice de dónde vino, que es lo que distingue esto de lo que el propio
+    mostrador acaba de cargar —eso no se avisa, la persona está ahí—.
+  */
+  await avisarNuevaReserva(admin, {
+    reservaId: nueva.id,
+    codigo: nueva.codigo,
+    huesped: `${nombre} ${apellido}`.trim() || email,
+    checkIn,
+    checkOut,
+    total: Number(nueva.total),
+    origen: 'Portal web',
   })
 
   redirect(`/reservar/confirmacion/${token}`)

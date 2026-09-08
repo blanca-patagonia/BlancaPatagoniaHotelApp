@@ -20,15 +20,8 @@ import {
   textoOcupantes,
   type Ocupantes,
 } from '@/lib/domain/ocupantes'
-import {
-  cargoPorCancelacion,
-  montoCancelacion,
-  nochePromedioConIva,
-  primeraNocheRealConIva,
-  type ReglaCancelacion,
-} from '@/lib/domain/cancelacion'
+import { cargoDeCancelacion } from '@/lib/reservas/cancelacion'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
-import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import {
   cambiarEstadoReserva,
   registrarPago,
@@ -377,51 +370,25 @@ export default async function DetalleReservaPage({
   const garantiaOk = garantiaSirveParaCobrar(garantiaTarjeta, fechaGarantia)
   const motivoGarantia = motivoGarantiaNoSirve(garantiaTarjeta, fechaGarantia)
 
-  // Preview del cargo por cancelación (política estándar).
-  let cargo: { dias: number; monto: number } | null = null
-  if (periodo && transiciones.includes('cancelada')) {
-    const { data: pol } = await supabase
-      .from('politicas_cancelacion')
-      .select('reglas')
-      .eq('codigo', 'estandar')
-      .single()
-    const reglas = (pol?.reglas ?? []) as ReglaCancelacion[]
-    const dias = diasEntre(hoyISO(), periodo.desde)
-    const tipoCargo = cargoPorCancelacion(reglas, dias)
-    /*
-      La primera noche REAL, no el promedio.
+  /*
+    Preview del cargo por cancelación (política estándar).
 
-      `estadia.precio_noche` guarda `totalNeto / noches`: ya viene promediado, así que
-      no sirve para esto. Se piden las tarifas por noche del tramo y se reparte el
-      total **guardado** según esa proporción — el precio se fijó al reservar (ADR
-      0004), así que recotizar cobraría un número que el huésped nunca aceptó.
-
-      Si la estadía cruza un cambio de temporada, el promedio cobraba de más o de
-      menos según cuál de las dos fuera la primera noche. En los dos sentidos es plata
-      mal cobrada, y el huésped tiene el tarifario publicado para discutirlo.
-
-      Si no se pudieron leer las tarifas —temporada sin cargar, por ejemplo— se cae al
-      promedio, que es lo que había antes: peor que lo exacto, mejor que nada.
-    */
-    const cotizacion = await cotizarEstadia({
-      tipoUnidadId: estadia?.unidad?.tipo_unidad_id ?? '',
-      checkIn: periodo.desde,
-      checkOut: periodo.hasta,
-      tarifaTipo: reserva.tarifa_tipo as 'neto' | 'rack',
-    }).catch(() => null)
-
-    const preciosPorNoche = (cotizacion?.noches ?? []).map((n: { precio: number }) => n.precio)
-
-    const monto = montoCancelacion({
-      cargo: tipoCargo,
-      totalEstadia: Number(reserva.total),
-      primeraNocheConIva:
-        preciosPorNoche.length > 0
-          ? primeraNocheRealConIva(Number(reserva.total), preciosPorNoche)
-          : nochePromedioConIva(Number(reserva.total), noches),
-    })
-    cargo = { dias, monto }
-  }
+    La cuenta vive en `lib/reservas/cancelacion.ts` y no acá porque el correo que
+    se le manda al huésped **al** cancelar tiene que anunciar el mismo número que
+    esta pantalla mostró **antes** de cancelar. Cuando estuvo duplicada con
+    `saldarSiCorresponde` pasó lo previsible: divergió, y se notó en la plata.
+  */
+  const cargo =
+    periodo && transiciones.includes('cancelada')
+      ? await cargoDeCancelacion(supabase, {
+          checkIn: periodo.desde,
+          checkOut: periodo.hasta,
+          total: Number(reserva.total),
+          tipoUnidadId: estadia?.unidad?.tipo_unidad_id ?? '',
+          tarifaTipo: reserva.tarifa_tipo as 'neto' | 'rack',
+          noches,
+        })
+      : null
 
   const { data: pagosData } = await supabase
     .from('pagos')
