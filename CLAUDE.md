@@ -520,7 +520,10 @@ Tarifario 2025/2026 (Anexo A).
 - **Pagos: los adaptadores reales están escritos** (MercadoPago Checkout Pro y
   Stripe Checkout Sessions, por HTTP y sin SDK). Lo que falta es **contratar** las
   pasarelas: enchufarlas es cargar `PAGO_PROVIDER` y las credenciales, no tocar
-  código (ADR 0027). El envío de email real sigue sin integrarse.
+  código (ADR 0027). **El envío de email real también está integrado** (Resend,
+  `lib/email/resend.ts`, por HTTP y sin SDK): enchufarlo es cargar
+  `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` con un dominio
+  verificado en Resend (ver `COMO-LEVANTARLO.md`).
 - ⚠️ **Variables obligatorias en producción** (ADR 0018: si faltan, el sistema falla
   al arrancar, a propósito): `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,
   `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER`, `CANAL_PROVIDER` y **`PAGO_PROVIDER`**
