@@ -18,7 +18,8 @@ import { publicarAri } from '@/lib/canales/ari'
 import { movimientoEnMoneda } from '@/lib/domain/cuentas'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
-import { hoyISO, sumarDias } from '@/lib/fechas'
+import { hoyISO, inicioFinDeMes, sumarDias } from '@/lib/fechas'
+import { avisarDiscrepanciaFactura } from '@/lib/notificaciones/eventos'
 import {
   MODALIDADES_COBRO,
   referenciaTransferenciaCanal,
@@ -731,8 +732,82 @@ export async function registrarFacturaComision(formData: FormData): Promise<void
   }
   cortarSiFalla(eCargo, `${DESTINO}?vista=costos`, 'factura_cargo')
 
+  /*
+    ¿Coincide con lo que el sistema devengó ese mes?
+
+    Esta comparación **ya existía en la pantalla** y era el motivo de la vista de
+    costos. Lo que faltaba es que alguien se enterara sin entrar a mirarla: una
+    factura del canal se paga por vencimiento, y si la diferencia se descubre
+    después de pagarla, reclamarla es mucho más difícil que discutirla antes.
+  */
+  await avisarSiHayDiferencia(supabase, {
+    periodo,
+    imputadoEl,
+    facturado: mov.monto,
+  })
+
   revalidatePath(DESTINO)
   redirect(`${DESTINO}?vista=costos&ok=factura`)
+}
+
+/**
+ * Compara la factura del canal contra lo devengado y avisa si no cierran.
+ *
+ * **Nunca corta.** El asiento contable ya está hecho: que no se pueda anotar un
+ * aviso no puede volverse un error sobre una escritura que salió bien.
+ */
+async function avisarSiHayDiferencia(
+  client: Awaited<ReturnType<typeof crearClienteServidor>>,
+  d: { periodo: string; imputadoEl: string; facturado: number },
+): Promise<void> {
+  /*
+    `inicioFinDeMes().fin` ya es el PRIMER día del mes siguiente, o sea un fin
+    **excluido**: se usa con `<` y no con `<=`. Sumarle un día metería en la
+    comparación el primero del mes que viene.
+  */
+  const finDeMes = inicioFinDeMes(d.periodo).fin
+
+  /*
+    Lo devengado del mes: las comisiones que el sistema calculó reserva por
+    reserva, **sin** la factura que se acaba de cargar (`origen` distinto) — si
+    no, se estaría comparando la factura contra sí misma.
+  */
+  const { data, error } = await client
+    .from('canal_cargos')
+    .select('monto_usd')
+    .eq('canal', 'booking')
+    .eq('concepto', 'comision')
+    .neq('origen', 'factura_comision')
+    .gte('imputado_el', d.imputadoEl)
+    .lt('imputado_el', finDeMes)
+
+  if (error) {
+    registrarFalla(error, `leer lo devengado de ${d.periodo} para comparar con la factura`)
+    return
+  }
+
+  const devengado = (data ?? []).reduce(
+    (t, c) => t + Number((c as { monto_usd: number | null }).monto_usd ?? 0),
+    0,
+  )
+
+  /*
+    El umbral es un centavo, no cero.
+
+    Comparar dos sumas de `numeric` convertidas a `number` con `!==` haría saltar
+    el aviso por diferencias de redondeo, y un aviso que suena siempre deja de
+    mirarse. Un centavo de diferencia no es un problema contable; diez dólares sí.
+  */
+  if (Math.abs(devengado - d.facturado) < 0.01) return
+
+  await avisarDiscrepanciaFactura(client, {
+    // La clave es el período: una sola alerta por mes, aunque la factura se
+    // cargue de nuevo tras corregirla.
+    cargoId: `booking:${d.periodo}`,
+    canal: 'Booking',
+    devengado,
+    facturado: d.facturado,
+  })
 }
 
 /**
@@ -944,4 +1019,101 @@ export async function responderResena(formData: FormData): Promise<void> {
   cortarSiFalla(error, `${DESTINO}?vista=resenas`, 'respuesta')
   revalidatePath(DESTINO)
   redirect(`${DESTINO}?vista=resenas&ok=respuesta`)
+}
+
+/* ─────────────────────────────── restricciones por fecha (0087) ────────── */
+
+/**
+ * Carga una restricción de venta para un rango de fechas.
+ *
+ * ── Por qué es de gerencia ──────────────────────────────────────────────────
+ *
+ * Cerrar fechas en una OTA es decidir cuánto inventario se le deja al canal y
+ * cuándo: es una decisión comercial, no una tarea de mostrador. Mismo criterio
+ * que `guardarMapeoCanal`, aunque el área `canales` sí alcance a recepción para
+ * lo operativo. La política RLS de la 0087 declara los mismos dos roles.
+ */
+export async function guardarRestriccionCanal(formData: FormData): Promise<void> {
+  const sesion = await exigirAcceso()
+
+  if (sesion.rol !== 'admin' && sesion.rol !== 'gerencia') {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_rol`)
+  }
+
+  const desde = String(formData.get('desde') ?? '')
+  const hasta = String(formData.get('hasta') ?? '')
+  const tipoUnidadId = String(formData.get('tipo_unidad_id') ?? '')
+  const minimoCrudo = String(formData.get('minimo_noches') ?? '').trim()
+  const cerrado = formData.get('cerrado') === 'on'
+  const cerradoLlegada = formData.get('cerrado_llegada') === 'on'
+  const cerradoSalida = formData.get('cerrado_salida') === 'on'
+  const nota = String(formData.get('nota') ?? '').trim().slice(0, 200)
+
+  if (!desde || !hasta) redirect(`${DESTINO}?vista=publicacion&error=restriccion_fechas`)
+
+  /*
+    El fin es EXCLUIDO, igual que en estadías y temporadas. Se valida `hasta >
+    desde` y no `>=`: un rango vacío no restringe nada, y la base además lo
+    rechaza con el `check` de `isempty`.
+  */
+  if (hasta <= desde) redirect(`${DESTINO}?vista=publicacion&error=restriccion_fechas`)
+
+  const minimoNoches = minimoCrudo ? Number(minimoCrudo) : null
+  if (minimoNoches !== null && (!Number.isInteger(minimoNoches) || minimoNoches < 1)) {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_minimo`)
+  }
+
+  /*
+    Una fila que no restringe nada parece una restricción activa en la pantalla y
+    no restringe nada: el síntoma sería «cargué el bloqueo y el canal siguió
+    vendiendo». La base tiene el mismo `check`; acá se comprueba antes para poder
+    explicarlo en español en vez de mostrar un error de Postgres.
+  */
+  if (minimoNoches === null && !cerrado && !cerradoLlegada && !cerradoSalida) {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_vacia`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('canal_restricciones').insert({
+    canal: 'booking',
+    // Vacío = todos los tipos, que es el caso más común.
+    tipo_unidad_id: tipoUnidadId || null,
+    periodo: `[${desde},${hasta})`,
+    minimo_noches: minimoNoches,
+    cerrado,
+    cerrado_llegada: cerradoLlegada,
+    cerrado_salida: cerradoSalida,
+    nota,
+    creado_por: sesion.userId,
+  })
+
+  cortarSiFalla(error, `${DESTINO}?vista=publicacion`, 'restriccion')
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=publicacion&ok=restriccion`)
+}
+
+/**
+ * Levanta una restricción.
+ *
+ * Se borra en vez de desactivarse: una restricción vencida o levantada no aporta
+ * nada al historial —lo que importa es qué rige hoy— y una lista que acumula
+ * fechas viejas se vuelve ilegible justo cuando hay que revisarla rápido.
+ */
+export async function borrarRestriccionCanal(formData: FormData): Promise<void> {
+  const sesion = await exigirAcceso()
+
+  if (sesion.rol !== 'admin' && sesion.rol !== 'gerencia') {
+    redirect(`${DESTINO}?vista=publicacion&error=restriccion_rol`)
+  }
+
+  const id = String(formData.get('id') ?? '')
+  if (id) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase.from('canal_restricciones').delete().eq('id', id)
+    cortarSiFalla(error, `${DESTINO}?vista=publicacion`, 'restriccion_borrar')
+  }
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?vista=publicacion&ok=restriccion_borrada`)
 }

@@ -262,3 +262,80 @@ export function detectarConflictoDeCupo(
 
   return conflicto
 }
+
+/* ──────────────────────── modificaciones del canal (migración 0088) ────── */
+
+/**
+ * Los datos de una entrante que, si cambian después de importarla, dejan a la
+ * reserva del hotel diciendo algo distinto de lo que el canal afirma.
+ */
+export interface DatosComparables {
+  checkIn: string
+  checkOut: string
+  huespedes: number
+  importeCanal: number | null
+}
+
+/** Un campo que cambió, con los dos valores. */
+interface Cambio {
+  campo: string
+  antes: string
+  ahora: string
+}
+
+/**
+ * ¿El canal cambió algo de una reserva que **ya se importó**?
+ *
+ * ── Por qué esto importa ────────────────────────────────────────────────────
+ *
+ * El huésped entra a Booking y mueve las fechas. La reserva vuelve a llegar con
+ * el mismo `external_id` y la fila de `canal_reservas` se actualiza, que es lo
+ * correcto: es lo que el canal afirma hoy. Pero la reserva **de verdad** —la que
+ * ocupa una unidad y tiene una estadía con su período— se queda con las fechas
+ * viejas, y no hay ningún síntoma: las dos filas parecen normales y nada las
+ * compara. Se descubre el día que el huésped se presenta.
+ *
+ * Esta función es la comparación que faltaba. Devuelve el texto que se guarda en
+ * `canal_reservas.divergencia`, o `null` si no cambió nada relevante.
+ *
+ * ── Qué se compara y qué no ─────────────────────────────────────────────────
+ *
+ * Sólo lo que obliga a **hacer algo**: fechas, cantidad de huéspedes e importe.
+ * El teléfono o una nota del huésped también cambian, y avisar de eso llenaría la
+ * lista de cosas que no hay que corregir — con el resultado conocido de que
+ * después nadie la mira.
+ *
+ * El importe se compara con una tolerancia de un centavo: dos `numeric`
+ * convertidos a `number` difieren por redondeo, y una alerta que suena siempre
+ * deja de mirarse.
+ */
+export function describirDivergencia(
+  importado: DatosComparables,
+  delCanal: DatosComparables,
+): string | null {
+  const cambios: Cambio[] = []
+
+  if (importado.checkIn !== delCanal.checkIn) {
+    cambios.push({ campo: 'llegada', antes: importado.checkIn, ahora: delCanal.checkIn })
+  }
+  if (importado.checkOut !== delCanal.checkOut) {
+    cambios.push({ campo: 'salida', antes: importado.checkOut, ahora: delCanal.checkOut })
+  }
+  if (importado.huespedes !== delCanal.huespedes) {
+    cambios.push({
+      campo: 'huéspedes',
+      antes: String(importado.huespedes),
+      ahora: String(delCanal.huespedes),
+    })
+  }
+
+  const antes = importado.importeCanal
+  const ahora = delCanal.importeCanal
+  if (antes !== null && ahora !== null && Math.abs(antes - ahora) >= 0.01) {
+    cambios.push({ campo: 'importe', antes: antes.toFixed(2), ahora: ahora.toFixed(2) })
+  }
+
+  if (cambios.length === 0) return null
+
+  return cambios.map((c) => `${c.campo}: ${c.antes} → ${c.ahora}`).join(' · ')
+}

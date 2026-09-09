@@ -185,6 +185,20 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // cerrados en cada OTA. Eso es estrategia comercial, no operación de mostrador.
   canal_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  /*
+    ── Restricciones por fecha (migración 0087) ──────────────────────────────
+
+    Acá SÍ lee todo el staff, al revés que `canal_tipos`, y la diferencia no es
+    un descuido: `canal_tipos` guarda el tope de inventario que el hotel se
+    reserva y el porcentaje del canal —estrategia comercial—, mientras que esto
+    es «del 9 al 12 pedimos tres noches». Recepción necesita saberlo para
+    contestar el teléfono sin contradecir lo que el canal está publicando.
+
+    Escribir sigue siendo de admin y gerencia: leer qué fechas están cerradas es
+    operación, decidir cerrarlas es una decisión de venta.
+  */
+  canal_restricciones: { todos: 'si' },
+
   // ── Divisas y respaldos ──
   cotizaciones: { todos: 'si' },
   respaldos: { todos: 'si' },
@@ -500,6 +514,28 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar movimientos_externos: ${error.message}`)
 
       sembradas.push({ tabla: 'movimientos_externos', columna: 'external_id', valor: externalId })
+    }
+
+    /*
+      ── canal_restricciones (migración 0087) ─────────────────────────────────
+
+      Nace vacía, igual que `canal_tipos`: cerrar fechas es una decisión del
+      hotel. Sin sembrar, los casos positivos pasarían por tabla vacía en vez de
+      por la política, que es exactamente el falso verde que este archivo existe
+      para evitar.
+    */
+    if ((await contar('canal_restricciones')) === 0) {
+      const nota = `AUDIT-RLS-${sufijo}`
+      const { error } = await admin.from('canal_restricciones').insert({
+        canal: 'booking',
+        // Fechas lejanas para no pisarse con nada real del hotel.
+        periodo: '[2099-01-01,2099-01-05)',
+        minimo_noches: 2,
+        nota,
+      })
+      if (error) throw new Error(`No se pudo sembrar canal_restricciones: ${error.message}`)
+
+      sembradas.push({ tabla: 'canal_restricciones', columna: 'nota', valor: nota })
     }
 
     /*

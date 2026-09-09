@@ -18,6 +18,7 @@ import { BotonEnvio } from '../_components/boton-envio'
 import { FormularioAviso } from './formulario'
 import { borrarAviso, alternarFijado } from './actions'
 import { fechaHotel } from '@/lib/fechas'
+import { PLANTILLAS } from '@/lib/domain/plantillas'
 
 interface Aviso {
   id: string
@@ -25,6 +26,8 @@ interface Aviso {
   creado_en: string
   fijado: boolean
   autor_id: string | null
+  automatico: boolean
+  evento: string | null
   autor: { nombre: string } | null
 }
 
@@ -48,22 +51,56 @@ const MENSAJES_ERROR: Record<string, string> = {
   borrar: 'No se pudo borrar el aviso. Probá de nuevo.',
 }
 
+/**
+ * Vistas del tablón.
+ *
+ * Desde la 0086 conviven lo que escribió una persona y lo que generó el sistema.
+ * Mezclados sin poder separarlos, «mañana viene el técnico del ascensor» queda
+ * enterrado bajo diez «pago acreditado», que es exactamente lo que hace que
+ * después nadie mire el tablón.
+ */
+/**
+ * Nombre legible del evento que originó un aviso automático.
+ *
+ * Sale de `PLANTILLAS`, así que un evento nuevo aparece con su nombre sin tocar
+ * esta pantalla. Se arma acá y no en el `map` para no recorrer el catálogo en
+ * cada fila.
+ */
+const NOMBRE_EVENTO: Record<string, string> = Object.fromEntries(
+  Object.values(PLANTILLAS).map((p) => [p.evento, p.nombre]),
+)
+
+const VISTAS = {
+  todos: { etiqueta: 'Todos', descripcion: 'Todo el tablón.' },
+  equipo: { etiqueta: 'Del equipo', descripcion: 'Lo que escribió una persona.' },
+  sistema: { etiqueta: 'Del sistema', descripcion: 'Lo que generó el sistema solo.' },
+} as const
+
+type Vista = keyof typeof VISTAS
+
+function esVista(v: string | undefined): v is Vista {
+  return v === 'equipo' || v === 'sistema'
+}
+
 export default async function AvisosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; error?: string }>
+  searchParams: Promise<{ q?: string; error?: string; vista?: string }>
 }) {
   const sesion = await requerirAcceso('avisos')
-  const { q, error: errorParam } = await searchParams
+  const { q, error: errorParam, vista: vistaParam } = await searchParams
+  const vista: Vista = esVista(vistaParam) ? vistaParam : 'todos'
   const supabase = await crearClienteServidor()
 
   let consulta = supabase
     .from('avisos')
-    .select('id, mensaje, creado_en, fijado, autor_id, autor:perfiles(nombre)')
+    .select('id, mensaje, creado_en, fijado, autor_id, automatico, evento, autor:perfiles(nombre)')
     // Los fijados van primero; dentro de cada grupo, del más nuevo al más viejo.
     .order('fijado', { ascending: false })
     .order('creado_en', { ascending: false })
     .limit(100)
+
+  if (vista !== 'todos') consulta = consulta.eq('automatico', vista === 'sistema')
 
   const termino = terminoBusqueda(q)
   if (termino) consulta = consulta.ilike('mensaje', `%${termino}%`)
@@ -93,12 +130,31 @@ export default async function AvisosPage({
       </Tarjeta>
 
       <BarraHerramientas>
+        {/* `ocultos` mantiene la vista al buscar; sin eso, buscar salta a «todos». */}
         <Buscador
           accion="/panel/avisos"
           valor={q}
           etiqueta="Buscar avisos"
           placeholder="Buscar en los mensajes⬦"
+          ocultos={{ vista: vista === 'todos' ? undefined : vista }}
         />
+        <span className="flex flex-wrap gap-1.5">
+          {(Object.keys(VISTAS) as Vista[]).map((v) => (
+            <Link
+              key={v}
+              href={
+                v === 'todos'
+                  ? `/panel/avisos${q ? `?q=${encodeURIComponent(q)}` : ''}`
+                  : `/panel/avisos?vista=${v}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+              }
+              className={botonClases(v === vista ? 'secundario' : 'fantasma')}
+              aria-current={v === vista ? 'page' : undefined}
+              title={VISTAS[v].descripcion}
+            >
+              {VISTAS[v].etiqueta}
+            </Link>
+          ))}
+        </span>
         {fijados > 0 && (
           <span className="text-xs text-stone-500">
             {fijados} aviso(s) fijado(s)
@@ -134,15 +190,23 @@ export default async function AvisosPage({
                   a.fijado ? 'border-lenga-300 ring-1 ring-lenga-100' : 'border-stone-200'
                 }`}
               >
-                {a.fijado && (
-                  <p className="mb-1.5">
-                    <Etiqueta tono="alerta">Fijado</Etiqueta>
+                {(a.fijado || a.automatico) && (
+                  <p className="mb-1.5 flex flex-wrap gap-1.5">
+                    {a.fijado && <Etiqueta tono="alerta">Fijado</Etiqueta>}
+                    {a.automatico && <Etiqueta tono="lago">Del sistema</Etiqueta>}
                   </p>
                 )}
                 <p className="whitespace-pre-line text-stone-800">{a.mensaje}</p>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600">
                   <span>
-                    {a.autor?.nombre ?? 'Staff'} · {cuando(a.creado_en)}
+                    {/*
+                      Un aviso del sistema no tiene autor, y decir «Staff» sería
+                      atribuirle a una persona algo que no escribió.
+                    */}
+                    {a.automatico
+                      ? (a.evento && NOMBRE_EVENTO[a.evento]) || 'Aviso automático'
+                      : (a.autor?.nombre ?? 'Staff')}{' '}
+                    · {cuando(a.creado_en)}
                   </span>
                   <span className="flex items-center gap-3">
                     <form action={alternarFijado}>

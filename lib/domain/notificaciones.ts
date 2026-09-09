@@ -1,5 +1,6 @@
 import { ZONA_HOTEL } from '@/lib/fechas'
-import type { EventoEmail } from './plantillas'
+import { EVENTOS_INTERNOS, esInterno, type EventoEmail } from './plantillas'
+import type { Rol } from './roles'
 
 /**
  * Reglas de la bandeja de salida (migración 0075).
@@ -56,9 +57,27 @@ export const HORA_HASTA = 21
  * El resto —recordatorios, encuestas, avisos de fidelidad— sí espera: son
  * mensajes que el hotel inicia, y llegar a las 3 de la mañana es molestar.
  */
-const INMEDIATOS: readonly EventoEmail[] = ['confirmacion_reserva']
+const INMEDIATOS: readonly EventoEmail[] = [
+  // El huésped está esperando: acaba de reservar, de pagar, o de que le
+  // rechacen el pago y quiere reintentar.
+  'confirmacion_reserva',
+  'reserva_confirmada',
+  'pago_recibido',
+  'pago_rechazado',
+  // Se acordaron por teléfono o en el mostrador hace un minuto: llegar mañana a
+  // las 9 haría dudar de si se registró.
+  'reserva_reprogramada',
+  'reserva_cancelada',
+  // La reserva se libera mañana. Esperar al horario le come horas al aviso.
+  'reserva_por_vencer',
+]
 
 export function esInmediato(evento: EventoEmail): boolean {
+  // Los internos no molestan a nadie: aterrizan en la cartelera del hotel, no en
+  // el teléfono de un huésped. La franja horaria protege al huésped, no al staff,
+  // y demorar un aviso operativo hasta las 9 es justamente lo contrario de lo que
+  // se busca — «entró una reserva» sirve cuando entró.
+  if (esInterno(evento)) return true
   return INMEDIATOS.includes(evento)
 }
 
@@ -103,6 +122,138 @@ export function cuandoEnviar(evento: EventoEmail, ahora: Date): Date | null {
   return destino
 }
 
+/* ────────────────────────────────────────────── los estados del envío ──── */
+
+/**
+ * Los estados de un aviso, en el orden en que ocurren.
+ *
+ * ⚠️ **`enviada` no es `entregada`, y la diferencia es el rebote.** El proveedor
+ * acepta el mensaje y responde 200 mucho antes de saber si el servidor del
+ * destinatario lo aceptó. Entre esas dos cosas está el caso que el hotel
+ * necesita ver —«le escribimos y no le llegó»—, y tratarlas como una sola lo
+ * deja invisible.
+ *
+ * `cancelada` está al final y fuera de la progresión: no es un desenlace del
+ * envío sino una decisión de no mandarlo.
+ */
+export const ESTADOS_NOTIFICACION = [
+  'pendiente',
+  'enviada',
+  'entregada',
+  'leida',
+  'fallida',
+  'cancelada',
+] as const
+
+export type EstadoNotificacion = (typeof ESTADOS_NOTIFICACION)[number]
+
+export function esEstadoNotificacion(v: string): v is EstadoNotificacion {
+  return (ESTADOS_NOTIFICACION as readonly string[]).includes(v)
+}
+
+export const ETIQUETAS_ESTADO: Record<EstadoNotificacion, string> = {
+  pendiente: 'Pendiente',
+  enviada: 'Enviada',
+  entregada: 'Entregada',
+  leida: 'Leída',
+  fallida: 'Fallida',
+  cancelada: 'Cancelada',
+}
+
+/**
+ * Qué significa cada estado, en palabras que sirvan en el mostrador.
+ *
+ * Está en el dominio y no en la pantalla porque es la definición del estado, no
+ * su presentación: la misma frase tiene que valer en el listado, en la Ayuda y
+ * en cualquier informe.
+ */
+export const SIGNIFICADO_ESTADO: Record<EstadoNotificacion, string> = {
+  pendiente: 'Todavía no salió: está esperando su turno.',
+  enviada: 'El proveedor la aceptó. Todavía no se sabe si llegó a destino.',
+  entregada: 'El servidor del destinatario la recibió.',
+  leida: 'Se abrió. Que NO lo diga no prueba lo contrario: muchos clientes de correo bloquean la señal.',
+  fallida: 'Se intentó varias veces y no se pudo. Se puede reintentar a mano.',
+  cancelada: 'Se decidió no mandarla.',
+}
+
+/**
+ * ¿Se puede volver a poner en cola?
+ *
+ * Sólo lo fallido y lo cancelado: reintentar algo que ya salió mandaría el
+ * mismo aviso dos veces, que es exactamente lo que la bandeja existe para
+ * evitar. Y lo pendiente no necesita reintento —ya está en la cola—; ofrecerlo
+ * sugeriría que está trabado cuando sólo está esperando.
+ */
+export function sePuedeReintentar(estado: string): boolean {
+  return estado === 'fallida' || estado === 'cancelada'
+}
+
+/**
+ * ¿Se puede frenar antes de que salga?
+ *
+ * Sólo lo pendiente: es lo único que todavía no salió. Cancelar algo ya enviado
+ * no lo trae de vuelta —el correo está en la casilla del huésped— y marcarlo
+ * como cancelado sería falsear el registro de lo que pasó.
+ *
+ * Existe para el caso feo: un despliegue que encoló avisos equivocados. El
+ * procedimiento completo está en `docs/despliegue.md` §3.5, y el orden importa:
+ * primero se frena el cron, después se cancela.
+ */
+export function sePuedeCancelar(estado: string): boolean {
+  return estado === 'pendiente'
+}
+
+/* ──────────────────────────────────────── a quién le toca cada interno ──── */
+
+/**
+ * El rol al que le corresponde cada aviso interno.
+ *
+ * ── Por qué un rol y no una persona ─────────────────────────────────────────
+ *
+ * «Recepción» sigue existiendo cuando cambia quien atiende el mostrador; una
+ * casilla personal, no. Es el mismo criterio con el que están hechos los
+ * permisos del sistema.
+ *
+ * ── Por qué rutear en vez de mandarle todo a todos ──────────────────────────
+ *
+ * Porque el ruido es lo que hace que después nadie mire la cartelera. Un aviso
+ * de «pago acreditado: USD 120» no le sirve a quien está limpiando una
+ * habitación, y si la mitad de lo que ve no le sirve, deja de mirarla — y ahí se
+ * pierde también el que sí importaba.
+ *
+ * ⚠️ Es **ruteo, no un secreto**: admin y gerencia ven todo (supervisan), y los
+ * datos de un aviso ya son visibles en la pantalla del módulo que lo originó.
+ */
+export const ROL_DEL_AVISO: Record<(typeof EVENTOS_INTERNOS)[number], Rol> = {
+  // El mostrador es el que arma la llegada y el que cobra.
+  interno_nueva_reserva: 'recepcion',
+  interno_nuevo_pago: 'recepcion',
+  // La sincronización que se rompe deja de traer reservas, y el que decide qué
+  // hacer con eso —llamar al canal, cargarlas a mano— es gerencia.
+  interno_error_sincronizacion: 'gerencia',
+  // Las entrantes las importa y las atiende el mostrador: es trabajo diario, y
+  // por eso `canales` está entre las áreas de recepción.
+  interno_canal_por_revisar: 'recepcion',
+  // Corregir una reserva que el canal cambió es trabajo del mostrador: abre la
+  // ficha, reprograma y recotiza. Gerencia se entera igual, porque ve todo.
+  interno_reserva_modificada_canal: 'recepcion',
+  // Plata que se factura distinto de lo que se devengó: se revisa antes de pagar.
+  interno_discrepancia_factura: 'gerencia',
+  // La habitación lista la espera el mostrador para poder asignarla.
+  interno_habitacion_lista: 'recepcion',
+  // Un incidente urgente se resuelve contratando o mandando a alguien.
+  interno_incidente_mantenimiento: 'gerencia',
+}
+
+/**
+ * A qué rol le toca. `null` para los avisos que van al huésped: ahí el
+ * destinatario es una dirección de correo, no un puesto del hotel.
+ */
+export function rolDelAviso(evento: EventoEmail): Rol | null {
+  if (!esInterno(evento)) return null
+  return ROL_DEL_AVISO[evento as (typeof EVENTOS_INTERNOS)[number]]
+}
+
 /* ────────────────────────────────────────────────── consentimiento ──── */
 
 export interface PreferenciasHuesped {
@@ -113,12 +264,16 @@ export interface PreferenciasHuesped {
 /**
  * Eventos comerciales, que exigen opt-in explícito.
  *
- * Hoy ninguno de los cuatro lo es: los cuatro hablan de la propia reserva del
- * huésped. La lista existe para que el día que se agregue una promoción alguien
- * tenga que decidir a conciencia de qué lado va, en vez de que salga por el
- * mismo camino que la confirmación.
+ * El criterio no es el tono: es de quién es el interés. Todos los demás le
+ * informan al huésped algo de **su** reserva —que entró, que se pagó, que se
+ * canceló—; el pedido de reseña le pide un favor **al hotel**. Esa diferencia es
+ * la que decide si hace falta `acepta_promociones`.
+ *
+ * La encuesta de satisfacción NO está acá y es deliberado: sirve para arreglar lo
+ * que estuvo mal en la estadía de esa persona, así que es parte de la operación.
+ * El pedido de reseña pública, en cambio, es marketing.
  */
-const COMERCIALES: readonly EventoEmail[] = []
+const COMERCIALES: readonly EventoEmail[] = ['solicitud_resena']
 
 export function esComercial(evento: EventoEmail): boolean {
   return COMERCIALES.includes(evento)
@@ -135,6 +290,14 @@ export function motivoNoNotificar(
   evento: EventoEmail,
   prefs: PreferenciasHuesped | null,
 ): string | null {
+  /*
+    Un aviso interno no pasa por el consentimiento de nadie: va a la cartelera
+    del hotel, no al huésped. Preguntarle a `acepta_avisos` si el hotel puede
+    enterarse de que entró una reserva no tiene sentido — y si el aviso llevara
+    un `huesped_id` para poder enlazarlo, el que dijo «no me escriban» dejaría al
+    hotel sin la novedad.
+  */
+  if (esInterno(evento)) return null
   if (!prefs) return null // Sin ficha de preferencias no se bloquea nada.
   if (esComercial(evento)) {
     return prefs.acepta_promociones ? null : 'El huésped no aceptó recibir comunicaciones comerciales.'

@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
+import { describirDivergencia } from '@/lib/domain/canales'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import {
   detectarDiscrepancia,
@@ -47,6 +48,15 @@ export interface ResumenSincronizacion {
   nuevas: number
   actualizadas: number
   rechazadas: number
+  /**
+   * Entrantes **ya importadas** en las que el canal cambió algo (0088).
+   *
+   * Va aparte de `actualizadas` porque son cosas distintas para quien lee el
+   * resumen: una actualización es rutina —el canal reenvía lo mismo—, una
+   * divergencia es trabajo pendiente. Sin separarlas, «40 actualizadas» tapa las
+   * dos que hay que corregir.
+   */
+  divergentes: number
   /** Motivos de rechazo, agrupados para poder mostrarlos sin repetir. */
   motivos: string[]
 }
@@ -55,6 +65,18 @@ interface FilaGuardada {
   id: string
   emitida_en: string
   estado: string
+  /*
+    Lo que se comparará contra lo que traiga el canal, para detectar que cambió
+    algo de una entrante YA IMPORTADA (0088). Mientras la fila está `pendiente`
+    esto no interesa —todavía no hay una reserva del hotel que pueda quedar
+    desincronizada—, pero se lee siempre: pedirlo sólo a veces obligaría a dos
+    consultas distintas para la misma tabla.
+  */
+  check_in: string
+  check_out: string
+  huespedes: number
+  importe_canal: number | null
+  divergencia_desde: string | null
 }
 
 /**
@@ -94,6 +116,7 @@ export async function guardarEntrantes(
     nuevas: 0,
     actualizadas: 0,
     rechazadas: 0,
+    divergentes: 0,
     motivos: [],
   }
 
@@ -130,7 +153,9 @@ export async function guardarEntrantes(
   for (const [canalEntrante, ids] of idsPorCanal) {
     const { data, error } = await client
       .from('canal_reservas')
-      .select('id, canal, external_id, emitida_en, estado')
+      .select(
+        'id, canal, external_id, emitida_en, estado, check_in, check_out, huespedes, importe_canal, divergencia_desde',
+      )
       .eq('canal', canalEntrante)
       .in('external_id', ids)
 
@@ -249,6 +274,43 @@ export async function guardarEntrantes(
       Un dato que llega vacío no es un dato que cambió a vacío.
     */
     const { modalidad_cobro: modalidadEntrante, ...resto } = fila
+
+    /*
+      ⚠️ ¿El canal cambió algo de una reserva que YA se importó? (0088)
+
+      Es la otra mitad del problema que la 0074 dejó abierta. Aquélla cubre la
+      reserva que **desaparece**; ésta, la que **cambia**: el huésped mueve las
+      fechas en Booking, la fila de acá se actualiza —correcto, es lo que el canal
+      afirma hoy— y la reserva del hotel se queda con las fechas viejas, sin
+      ningún síntoma. Se descubre cuando el huésped se presenta.
+
+      **No se reprograma sola**, por la misma razón que la 0074 no cancela sola y
+      con un motivo más: mover el período va contra la restricción de exclusión
+      del ADR 0002 —si pisa otra estadía falla igual, pero de madrugada— y el
+      precio **no se recotiza solo**, así que la reserva quedaría cobrando la
+      tarifa de otras fechas.
+
+      Sólo aplica a las importadas: mientras la fila está `pendiente` no hay
+      ninguna reserva del hotel que pueda quedar desincronizada.
+    */
+    const divergencia =
+      existente.estado === 'importada'
+        ? describirDivergencia(
+            {
+              checkIn: existente.check_in,
+              checkOut: existente.check_out,
+              huespedes: existente.huespedes,
+              importeCanal: existente.importe_canal,
+            },
+            {
+              checkIn: e.checkIn,
+              checkOut: e.checkOut,
+              huespedes: e.huespedes,
+              importeCanal: e.importeCanal ?? null,
+            },
+          )
+        : null
+
     const { error } = await client
       .from('canal_reservas')
       .update({
@@ -256,6 +318,23 @@ export async function guardarEntrantes(
         ...(modalidadEntrante !== 'desconocida' ? { modalidad_cobro: modalidadEntrante } : {}),
         // Si venía marcada como error, el dato nuevo merece otro intento.
         estado: existente.estado === 'error' ? 'pendiente' : existente.estado,
+        /*
+          La marca se pone cuando aparece y se **limpia cuando desaparece**: si el
+          huésped vuelve a las fechas originales, o alguien reprograma la reserva
+          y vuelve a sincronizar, ya no hay nada que revisar. Una marca que queda
+          pegada para siempre entrena a ignorarla.
+
+          El sello sólo se pisa si antes no había ninguno, para que «desde cuándo»
+          siga siendo la primera vez que se detectó y no la última corrida.
+        */
+        ...(existente.estado === 'importada'
+          ? divergencia
+            ? {
+                divergencia,
+                divergencia_desde: existente.divergencia_desde ?? corridaEn,
+              }
+            : { divergencia: '', divergencia_desde: null }
+          : {}),
         /*
           ⚠️ El `motivo` sólo se limpia si la fila SALE de `error`.
 
@@ -276,6 +355,7 @@ export async function guardarEntrantes(
       continue
     }
     resumen.actualizadas++
+    if (divergencia) resumen.divergentes++
 
     // También en la actualización: el canal puede corregir la comisión de una
     // reserva que ya habíamos aterrizado, y el devengo tiene que reflejarlo. El

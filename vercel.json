@@ -18,6 +18,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/recordatorios",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/cron/ari",
       "schedule": "20 6 * * *"
     }

@@ -3,6 +3,11 @@ import { obtenerProveedorCanal } from '@/lib/canales'
 import { guardarEntrantes } from '@/lib/canales/servicio'
 import { comparacionConstante } from '@/lib/integraciones/firma-webhook'
 import { registrarFalla } from '@/lib/acciones'
+import {
+  avisarCanalPorRevisar,
+  avisarErrorSincronizacion,
+  avisarReservasModificadas,
+} from '@/lib/notificaciones/eventos'
 import { hoyISO, sumarDias } from '@/lib/fechas'
 
 /**
@@ -89,10 +94,25 @@ export async function POST(req: Request) {
   try {
     entrantes = await proveedor.traerReservas(new Date().toISOString())
   } catch (e) {
-    registrarFalla(
-      { message: e instanceof Error ? e.message : String(e) },
-      'sondear el canal desde el cron',
-    )
+    const detalle = e instanceof Error ? e.message : String(e)
+    registrarFalla({ message: detalle }, 'sondear el canal desde el cron')
+
+    /*
+      Y alguien del hotel se entera, no sólo el log.
+
+      Es el peor silencio del módulo: si el feed deja de responder, las reservas
+      de Booking no llegan y **el síntoma es que no pasa nada**. Un 500 lo ve el
+      disparador; la cartelera la ve gerencia.
+
+      Se encola con el cliente administrativo —el cron no tiene sesión— y no corta
+      la respuesta: el 500 sigue siendo el que corresponde para que se reintente.
+    */
+    await avisarErrorSincronizacion(crearClienteAdmin(), {
+      canal: 'Booking',
+      detalle: `No se pudo consultar el canal: ${detalle}`,
+      dia: hoyISO(),
+    })
+
     // 500 para que el disparador lo reintente: un feed caído es transitorio.
     return Response.json({ error: 'no se pudo consultar el canal' }, { status: 500 })
   }
@@ -128,12 +148,57 @@ export async function POST(req: Request) {
     instantanea: { desde: sumarDias(hoyISO(), 1) },
   })
 
+  /*
+    Los dos avisos que cierran el silencio de la corrida automática.
+
+    ⚠️ `rechazadas > 0` se devolvía en este mismo body y **no lo leía nadie**: el
+    cron responde a Vercel, no a una persona. Una fila rechazada es una reserva de
+    Booking que no entró, así que el hotel puede estar vendiendo una unidad que ya
+    vendió el canal.
+
+    Y `nuevas > 0` es el corolario de que el cron aterriza pero no importa: hasta
+    que alguien entre a la pantalla, esas fechas no ocupan inventario.
+  */
+  if (resumen.rechazadas > 0) {
+    await avisarErrorSincronizacion(supabase, {
+      canal: 'Booking',
+      detalle: `${resumen.rechazadas} de ${resumen.leidas} reserva(s) no se pudieron guardar. ${resumen.motivos.join(' ')}`.trim(),
+      dia: hoyISO(),
+    })
+  }
+
+  if (resumen.nuevas > 0) {
+    await avisarCanalPorRevisar(supabase, {
+      canal: 'Booking',
+      cantidad: resumen.nuevas,
+      dia: hoyISO(),
+    })
+  }
+
+  /*
+    ⚠️ El más caro de los tres.
+
+    Una entrante YA IMPORTADA que el canal cambió deja a la reserva del hotel con
+    las fechas viejas y sin ningún síntoma. El sistema no la corrige solo (0088)
+    —mover el período choca con la exclusión y el precio no se recotiza—, así que
+    si nadie se entera, nadie la corrige, y se descubre con el huésped en la
+    puerta.
+  */
+  if (resumen.divergentes > 0) {
+    await avisarReservasModificadas(supabase, {
+      canal: 'Booking',
+      cantidad: resumen.divergentes,
+      dia: hoyISO(),
+    })
+  }
+
   return Response.json({
     ok: true,
     leidas: resumen.leidas,
     nuevas: resumen.nuevas,
     actualizadas: resumen.actualizadas,
     rechazadas: resumen.rechazadas,
+    divergentes: resumen.divergentes,
   })
 }
 

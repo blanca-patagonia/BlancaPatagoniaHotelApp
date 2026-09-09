@@ -5,6 +5,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import type { TarifaTipo } from '@/lib/domain/precios'
 import { crearReservaEnUnidadLibre } from '@/lib/reservas/crear'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { diasEntre } from '@/lib/fechas'
 import { puedeTransicionar, ESTADOS_ACTIVOS, type EstadoReserva } from '@/lib/domain/reservas'
 import {
@@ -42,6 +43,22 @@ import { imputarEnUSD, motivoNoSeCobra, MONEDA_BASE } from '@/lib/domain/cobro'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { encolar } from '@/lib/notificaciones'
+import { avisarCobroAprobado } from '@/lib/notificaciones/cobros'
+/*
+  ⚠️ `avisarNuevaReserva` NO se importa acá, y es deliberado: el alta del
+  mostrador la hace una persona que está mirando la pantalla. Avisarle a la
+  cartelera de lo que acaba de cargar ella misma es ruido, y el ruido es lo que
+  hace que después nadie mire la cartelera. El aviso sale del portal público
+  (`app/reservar/actions.ts`) y del cron de canales, que son los caminos donde
+  entra una reserva sin que haya nadie.
+*/
+import {
+  avisarNoShow,
+  avisarReservaCancelada,
+  avisarReservaReprogramada,
+  type DestinoHuesped,
+} from '@/lib/notificaciones/eventos'
+import { cargoDeCancelacion, textoDeCancelacion, textoDeNoShow } from '@/lib/reservas/cancelacion'
 import { urlDelSitio } from '@/lib/env'
 
 import { HORA_CHECK_IN } from '@/lib/domain/hotel'
@@ -298,6 +315,72 @@ export async function crearReservaAction(
   redirect(`/panel/reservas/${res.reserva.id}`)
 }
 
+/** La forma con la que `cambiarEstadoReserva` lee la reserva para poder avisar. */
+interface ReservaParaAvisar {
+  total: number
+  codigo: string
+  tarifa_tipo: string
+  huesped_id: string | null
+  huesped: { nombre: string; email: string | null; telefono: string | null } | null
+  // ⚠️ PostgREST tipa el embed como arreglo aunque la relación sea a-uno.
+  estadia: { check_in: string; check_out: string; unidad: { tipo_unidad_id: string } | null }[] | null
+}
+
+/**
+ * Le avisa al huésped que su reserva se canceló o quedó como no presentada.
+ *
+ * Está aparte de `cambiarEstadoReserva` para que la acción se siga leyendo de
+ * corrido: lo que hace es una cosa —cambiar el estado— y esto es su consecuencia.
+ *
+ * **Nunca corta.** El estado ya cambió y el trigger ya liberó el inventario; que
+ * no se pueda anotar un correo no puede volverse un error en la cara de quien
+ * está atendiendo, ni dejar la operación a medias.
+ */
+async function avisarDelFinal(
+  client: SupabaseClient,
+  reservaId: string,
+  nuevo: 'cancelada' | 'no_show',
+  reserva: unknown,
+): Promise<void> {
+  const r = reserva as ReservaParaAvisar
+  const estadia = r.estadia?.[0]
+  if (!estadia) return
+
+  const destino: DestinoHuesped = {
+    reservaId,
+    huespedId: r.huesped_id,
+    email: r.huesped?.email ?? null,
+    telefono: r.huesped?.telefono ?? null,
+    nombre: r.huesped?.nombre ?? '',
+    codigo: r.codigo,
+  }
+
+  const cargo = await cargoDeCancelacion(client, {
+    checkIn: estadia.check_in,
+    checkOut: estadia.check_out,
+    total: Number(r.total),
+    tipoUnidadId: estadia.unidad?.tipo_unidad_id ?? '',
+    tarifaTipo: r.tarifa_tipo === 'neto' ? 'neto' : 'rack',
+    noches: diasEntre(estadia.check_in, estadia.check_out),
+    noShow: nuevo === 'no_show',
+  })
+
+  if (nuevo === 'no_show') {
+    await avisarNoShow(client, destino, {
+      checkIn: estadia.check_in,
+      // El no-show se cobra siempre al 100 %: no depende de la anticipación.
+      detalle: textoDeNoShow(cargo?.monto ?? Number(r.total)),
+    })
+    return
+  }
+
+  await avisarReservaCancelada(client, destino, {
+    checkIn: estadia.check_in,
+    checkOut: estadia.check_out,
+    detalle: textoDeCancelacion(cargo),
+  })
+}
+
 /**
  * Cambia el estado de una reserva validando la transición con la máquina de
  * estados. El trigger de la base sincroniza las estadías (libera/ocupa inventario).
@@ -312,7 +395,9 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
   const { data: reserva } = await supabase
     .from('reservas')
     .select(
-      'estado, total, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email)',
+      `estado, total, codigo, tarifa_tipo, huesped_id,
+       huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono),
+       estadia:estadias(check_in, check_out, unidad:unidades(tipo_unidad_id))`,
     )
     .eq('id', id)
     .single()
@@ -324,6 +409,24 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
 
   const { error: eEstado } = await supabase.from('reservas').update({ estado: nuevo }).eq('id', id)
   cortarSiFalla(eEstado, `/panel/reservas/${id}`, 'estado')
+
+  /*
+    Los dos finales que el huésped tiene que enterarse: la cancelación y el
+    no-show.
+
+    Hasta acá el sistema cambiaba el estado y no decía nada. Una reserva cancelada
+    desde el mostrador —porque el huésped llamó, o porque el hotel la dio de
+    baja— dejaba al huésped sin constancia de qué se le cobró, que es exactamente
+    el dato por el que después llama.
+
+    ⚠️ El cargo NO se calcula acá: sale de `lib/reservas/cancelacion.ts`, el mismo
+    módulo que la ficha usa para mostrarlo **antes** de cancelar. Anunciar un
+    número en pantalla y mandar otro por correo es la clase de diferencia que
+    termina en una discusión con el tarifario publicado del otro lado.
+  */
+  if (nuevo === 'cancelada' || nuevo === 'no_show') {
+    await avisarDelFinal(supabase, id, nuevo, reserva)
+  }
 
   // Fidelidad: el check-out otorga puntos al huésped (una sola vez; 'checkout' es terminal).
   if (nuevo === 'checkout' && reserva.huesped_id) {
@@ -523,10 +626,29 @@ export async function registrarPago(formData: FormData): Promise<void> {
   // para consolidar alojamiento + consumos, y acá quedó comparando contra
   // `reservas.total`, que cubre solo la estadía. Quien había consumido del frigobar
   // y pagaba el alojamiento en efectivo quedaba marcado «pagada» debiendo esa parte.
-  const { error: eSaldada } = await saldarSiCorresponde(supabase, reservaId)
+  const { error: eSaldada, confirmada } = await saldarSiCorresponde(supabase, reservaId)
   // El pago ya está registrado. Si esto se pierde queda cobrado sin marcar, y acá
   // hay alguien mirando la pantalla — pero solo se entera si se le dice.
   cortarSiFalla(eSaldada ? { message: eSaldada } : null, `/panel/reservas/${reservaId}`, 'saldada')
+
+  /*
+    El comprobante que el huésped espera.
+
+    Cobrar en el mostrador y no mandar nada deja al huésped sin constancia de lo
+    que pagó, que es justamente lo que después trae el reclamo. Va por el mismo
+    camino que el cobro por pasarela —`lib/notificaciones/cobros.ts`— para que
+    las dos puntas digan lo mismo: cuando estuvieron duplicadas, divergieron.
+
+    No corta el flujo: el cobro ya está hecho, y no poder anotar un correo no
+    puede volverse un error en la cara de quien está cobrando.
+  */
+  await avisarCobroAprobado(supabase, {
+    reservaId,
+    pagoId: externalId ?? reservaId,
+    importe: montoUSD,
+    medio,
+    confirmada,
+  })
 
   redirect(`/panel/reservas/${reservaId}`)
 }
@@ -1409,7 +1531,13 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
     .eq('reserva_id', id)
     .limit(1)
     .single()
-  const { data: reserva } = await supabase.from('reservas').select('tarifa_tipo').eq('id', id).single()
+  const { data: reserva } = await supabase
+    .from('reservas')
+    .select(
+      'tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono)',
+    )
+    .eq('id', id)
+    .single()
   if (!estadia || !reserva) redirect(`/panel/reservas/${id}`)
 
   const tarifaTipo: TarifaTipo = reserva.tarifa_tipo === 'neto' ? 'neto' : 'rack'
@@ -1446,6 +1574,36 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
     // una falla del sistema, es el anti-overbooking funcionando (ADR 0002).
     redirect(`/panel/reservas/${id}?error=${r?.motivo === 'ocupada' ? 'overlap' : 'repro'}`)
   }
+
+  /*
+    Las fechas nuevas se le avisan al huésped.
+
+    Reprogramar sin avisar deja al huésped con las fechas viejas anotadas, y eso
+    se descubre el día que se presenta. El aviso lleva el total actualizado
+    porque **puede haber cambiado**: las tarifas dependen de la temporada y las
+    fechas nuevas pueden caer en otra.
+
+    El aviso va después del RPC y no antes: si el período pisaba otra estadía, la
+    reprogramación no ocurrió y el correo habría anunciado un cambio inexistente.
+  */
+  const h = reserva.huesped as unknown as {
+    nombre: string
+    email: string | null
+    telefono: string | null
+  } | null
+  await avisarReservaReprogramada(
+    supabase,
+    {
+      reservaId: id,
+      huespedId: reserva.huesped_id as string | null,
+      email: h?.email ?? null,
+      telefono: h?.telefono ?? null,
+      nombre: h?.nombre ?? '',
+      codigo: reserva.codigo as string,
+    },
+    { checkIn, checkOut, total: cot.resumen.total },
+  )
+
   redirect(`/panel/reservas/${id}`)
 }
 

@@ -178,8 +178,21 @@ Tarifario 2025/2026 (Anexo A).
   (`tests/funciones-sin-public.test.ts`) para que ninguna función nazca abierta.
   ⚠️ **No hacer `cotizar_estadia` `security definer`**: ahí `current_user` es el
   dueño de la función y la guarda quedaría siempre en verdadero.
-  **Pendiente:** auditar las 103 políticas RLS una por una — que estén activadas en
-  las 51 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
+  **Fase 5 ✅ (2026-09-08) — el borde público en ESCRITURA, exhaustivo.**
+  `tests/anon-no-escribe.test.ts` audita tabla por tabla que `anon` no tenga
+  `insert/update/delete`, con la lista traída de la base. La primera corrida
+  encontró que **sí los tenía**: no por una migración de este proyecto —la 0006
+  le da sólo `select`— sino por los privilegios por omisión de la plataforma, que
+  la 0072 no miró. Exposición real cero (RLS acota a admin/gerencia), pero es la
+  forma exacta del hallazgo de `cotizar_estadia`. Lo cierra la **0089**, que
+  revoca en bloque y toca los `default privileges` — sin eso el arreglo duraría
+  hasta el próximo `create table`.
+  **Pendiente:** auditar las 105 políticas RLS una por una — que estén activadas en
+  las 52 tablas no dice qué permite cada una. ⚠️ Acotado desde el 2026-09-08: la
+  **lectura** de los cuatro roles y la **escritura de `anon`** ya son exhaustivas
+  (`rls-por-rol` y `anon-no-escribe`). Lo que sigue dirigido es la escritura de
+  los tres roles de staff, donde el riesgo es escalada interna y no exposición
+  pública. ⚠️ La modernización WinPAX sumó **6
   tablas y 14 políticas** a ese pendiente (`cotizaciones`, `canal_reservas`,
   `canal_sincronizaciones`, `canal_mensajes`, `canal_resenas`, `departamentos`,
   `respaldos`); todas revocan `select` a `anon` explícitamente, pero eso no
@@ -214,6 +227,11 @@ Tarifario 2025/2026 (Anexo A).
   mienta**, porque sus fuentes son públicas y sin credenciales. El respaldo de
   divisas es `manual` (no inventa: usa lo que un admin cargó) y el de canales es
   `simulado` (ése sí no habla con nadie).
+  **El noveno es `WhatsAppProvider`** (`lib/whatsapp/`) y también rompe el patrón:
+  si `WHATSAPP_PROVIDER` está vacía **el canal no se ofrece** y todo sale por
+  correo, en vez de fallar al arrancar. No hace falta el fallo ruidoso del ADR
+  0018 porque no hay nada que se pueda dar por enviado sin salir: la bandeja
+  elige el canal **antes** de encolar (`canalDelAviso`).
   **El octavo es `ExtractoProvider`** (`lib/conciliacion/`, ADR 0030) y rompe el
   patrón a propósito: **no tiene variable de entorno**. No se elige una fuente —el
   hotel usa el banco y MercadoPago a la vez, como `PAGO_PROVIDER`— y su respaldo
@@ -305,6 +323,25 @@ Tarifario 2025/2026 (Anexo A).
      publicarlo rompe la paridad tarifaria; sin IVA anuncia menos de lo que cobra.
   4. **Un día sin tarifa NO se publica.** Publicar `0` es publicar una noche
      gratis: es el «USD 0» de la Fase 18. Se omite y se cuenta en `sinPrecio`.
+  5. **Una entrante YA IMPORTADA que el canal modifica se DETECTA, no se
+     reprograma** (0088, `describirDivergencia`). Es la otra mitad de lo que
+     cerró la 0074: aquélla cubre la que desaparece, ésta la que cambia. El
+     huésped mueve las fechas en Booking, la fila de `canal_reservas` se
+     actualiza —correcto— y la reserva del hotel se queda con las viejas **sin
+     ningún síntoma**; se descubre cuando el huésped se presenta. ⚠️ No se mueve
+     sola porque el período va contra la exclusión del ADR 0002 y el precio **no
+     se recotiza solo**: quedaría cobrando la tarifa de otras fechas.
+  6. **Las restricciones por FECHA viven en `canal_restricciones` (0087)**, aparte
+     de las de `canal_tipos`, que valen para siempre. Al resolver un día gana **la
+     más restrictiva** de las dos (`restriccionDelDia`): quedarse corto vende una
+     noche que el hotel no quería vender y esa venta ya no se deshace sin
+     cancelarle a alguien. ⚠️ El rango es `[desde, hasta)` con el **fin excluido**,
+     y `tipo_unidad_id` nulo significa **todos** los tipos, no ninguno — es el caso
+     más común—. ⚠️ **CTA y CTD sólo se informan cuando son `true`**: son
+     instrucciones, no estados, y mandarlas en `false` puede levantar una
+     restricción que el hotel puso a mano en el extranet. Si la lectura de
+     `canal_restricciones` falla, la publicación **se corta**: seguir sin ellas
+     publicaría el cupo completo de fechas que el hotel cerró.
 - **Comprobantes recibidos (objetivo 9, 2026-09-07).**
   `/panel/proveedores/comprobantes`, migración **0080**. ⚠️ Cuatro cosas antes de
   tocarlo:
@@ -318,6 +355,47 @@ Tarifario 2025/2026 (Anexo A).
      traducen en `lib/domain/comprobante-qr.ts`, en un solo lugar.
   4. **Una nota de crédito se imputa como PAGO, no como cargo** (códigos 3, 8, 13,
      53). Devuelve plata; cargarla como un gasto más infla lo que el hotel debe.
+- **Avisos y notificaciones (objetivos 6 y 7, 2026-09-08).** El catálogo pasa de
+  4 a **21 eventos**, hay pantalla de registro de envíos (`/panel/notificaciones`,
+  área nueva), cron de recordatorios y canal de WhatsApp. Migración **0086**.
+  ⚠️ **Ocho cosas antes de tocarlo:**
+  1. **`enviada` NO es `entregada`.** El proveedor acepta el mensaje mucho antes
+     de saber si el servidor del destinatario lo aceptó, y entre las dos está el
+     **rebote** — el caso que el hotel necesita ver. Fusionarlas lo deja
+     invisible: un huésped con la dirección mal cargada figura avisado.
+     `leida` es la más imprecisa de las cinco: su **ausencia no prueba nada**
+     (un cliente que bloquea imágenes nunca la reporta), su presencia sí.
+  2. **Los eventos del webhook de entrega llegan DESORDENADOS.** El de apertura
+     puede entrar antes que el de entrega. `esAvance` (`lib/domain/entregas.ts`)
+     impide retroceder de `leida` a `entregada` —el sistema olvidaría que el
+     huésped abrió el correo— pero deja que un **rebote pise una entrega**.
+  3. **`canalDelAviso` devuelve UN canal, y se decide AL ENCOLAR.** La clave de
+     idempotencia no incluye el canal: dos filas del mismo aviso chocarían contra
+     el `unique` y una se descartaría en silencio. Y recalcularlo al despachar
+     haría salir por WhatsApp un aviso cuyo `destinatario` guardado es un email.
+  4. **WhatsApp sólo acepta PLANTILLAS APROBADAS por Meta** fuera de la ventana
+     de 24 horas: los cuerpos del catálogo **no se pueden mandar tal cual**. Y el
+     **orden de los parámetros es el contrato** —Meta numera los huecos y valida
+     la cantidad, no el significado—: cruzarlos manda el código de reserva donde
+     va la fecha y el mensaje sale igual. Ver `lib/domain/whatsapp.ts`.
+  5. **`avisos.rol` es RUTEO, no un secreto.** Admin y gerencia ven todo, y los
+     avisos escritos por una persona (`rol is null`) los sigue viendo todo el
+     staff. Existe porque un «pago acreditado: USD 120» no le sirve a quien está
+     limpiando, y el ruido es lo que hace que después nadie mire la cartelera.
+  6. **El alta del mostrador NO avisa a la cartelera**, a propósito: la persona
+     que la cargó está mirando la pantalla. El aviso sale del portal público y
+     del cron de canales, que son los caminos sin nadie del otro lado.
+  7. **`DIAS_EXPIRACION` vive UNA sola vez**, en `lib/domain/recordatorios.ts`.
+     Con dos constantes, subir una sin la otra hace que el aviso de «se libera
+     mañana» salga **después** de que el sistema ya soltó la unidad.
+  8. **La reseña se pide sólo con puntaje ≥ 8 y `acepta_promociones`.** Pedírsela
+     a quien puntuó bajo es pedirle que publique su queja; a quien no respondió,
+     es apostar a ciegas con un costo público y permanente.
+  ⚠️ Los dos módulos que existen **sólo para no duplicar una regla de plata**:
+  `lib/notificaciones/cobros.ts` (los avisos de un cobro, desde el webhook y
+  desde el mostrador) y `lib/reservas/cancelacion.ts` (el cargo por cancelar,
+  desde la ficha y desde el correo). Es la misma situación de `saldarSiCorresponde`,
+  que estuvo duplicada, divergió, y se notó en la plata.
 - **Conciliación y gastos (Bloque C, 2026-09-07).** Área nueva `/panel/conciliacion`
   (admin y gerencia). Migraciones **0077** (`movimientos_externos`), **0078**
   (moneda real en cuentas corrientes) y **0079** (cerrar la conciliación del canal).
@@ -436,8 +514,8 @@ Tarifario 2025/2026 (Anexo A).
      la caché devolvería JavaScript viejo.
   4. **Cero escrituras diferidas.** Sin background sync: una escritura reproducida
      más tarde se aplicaría sobre una realidad distinta de la que la originó.
-- **1914 tests verdes** (118 archivos), **cero salteados**, verificados contra la base
-  local con las **83** migraciones aplicadas en orden. El feed iCal de salida (B7,
+- **2107 tests verdes** (129 archivos), **cero salteados**, verificados contra la base
+  local con las **89** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
   0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos
   migraciones con el mismo número **no conviven**: Supabase registra la versión por
@@ -528,8 +606,13 @@ Tarifario 2025/2026 (Anexo A).
   adapter plural, porque el hotel ofrece varios medios a la vez). Con las pasarelas
   van `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`
   y `STRIPE_WEBHOOK_SECRET`. Opcionales:
-  `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL` y
-  `ARGENTINADATOS_URL`. Revisarlas **antes** del deploy.
+  `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL`,
+  `ARGENTINADATOS_URL`, `RESEND_WEBHOOK_SECRET` (sin ella **no se detectan los
+  rebotes**) y las cuatro de WhatsApp (`WHATSAPP_PROVIDER`, `WHATSAPP_TOKEN`,
+  `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_IDIOMA`).
+  **La tabla completa, con qué pasa si falta cada una, está en
+  `docs/despliegue.md` §1** — junto con las instrucciones de despliegue y de
+  vuelta atrás (entregables 8, 15 y 16). Revisarlas **antes** del deploy.
 - Admin de la **base local de tests**: `admin@blancapatagonia.local` / `blancadev1234`
   (`npm run seed:usuarios`, que hay que repetir después de cada `db reset`). En el
   proyecto hosted los usuarios ya están sembrados y **no hay que correr el seed**:
