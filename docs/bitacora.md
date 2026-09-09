@@ -4998,3 +4998,38 @@ Typecheck 0 · lint 0 · build 0 (la ruta nueva aparece en el manifiesto) ·
 `tests/cierre-diario.test.ts`), 500 salteados por falta de base local. La
 pantalla **no se probó contra una base real** — falta `db reset` y confirmar
 en un navegador que los números coinciden con lo que de verdad pasó ese día.
+
+## 2026-09-09 — El huésped puede ver y descargar su factura
+
+Patrón de referencia: el portal de facturas de Invoice Ninja. El huésped no
+tenía forma de ver su comprobante: la pantalla de factura
+(`/panel/reservas/[id]/factura`) es staff-only, y el portal por token
+(`/portal/[token]`) es de agencias y proveedores, no de huéspedes.
+
+Nueva pantalla pública `/reservar/factura/[token]`, con el mismo token opaco
+que ya usa `/reservar/confirmacion/[token]` como credencial —quien lo tiene,
+entra—, y por eso lee con `service_role` igual que esa pantalla. «Descargar»
+es imprimir/guardar-como-PDF del navegador (`BotonImprimir`, ya existía para
+el staff y es un componente sin lógica propia): sumar un generador de PDF
+sería una dependencia nueva sin necesidad real (`AGENTS.md`).
+
+⚠️ **Decisión consciente: no se compartió componente con la pantalla del
+staff.** Se duplicó la caja visual del comprobante en vez de extraerla,
+porque la pantalla del staff además emite notas de crédito con CAE real —
+tocarla para sacar una pieza compartida bajo presión de tiempo era arriesgar
+una pantalla financiera para ahorrarse ~150 líneas repetidas. Si en algún
+momento las dos pantallas divergen en un cálculo, hay que corregir en las
+dos: queda anotado acá para que no se descubra por accidente.
+
+El enlace «Ver mi factura» en la confirmación de reserva solo aparece cuando
+ya existe una factura para esa reserva —antes del check-out no hay ninguna, y
+un botón a una pantalla vacía es peor que no tener botón—.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (la ruta nueva aparece en el manifiesto) ·
+**1497 tests en verde, 0 en rojo**, 500 salteados por falta de base local.
+Sin test dedicado: la pantalla no tiene lógica propia más allá de reusar
+`cuentaConsolidada`, `caeVigente` y el resto del dominio de facturación, ya
+cubiertos. **No se probó contra una base real** ni se verificó en un
+navegador que imprimir de verdad produzca un PDF legible.
