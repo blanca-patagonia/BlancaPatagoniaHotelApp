@@ -8,6 +8,7 @@ import {
   nochesEnVentana,
   inicioFinDeMes,
   hoyISO,
+  formatoFecha,
   fechaHotel,
   fechaHoraHotel,
   horaHotel,
@@ -149,6 +150,25 @@ describe('utilidades de fecha', () => {
 
     it('de día, cuando UTC y el hotel coinciden, no cambia nada', () => {
       expect(fechaHotel(new Date('2026-08-30T15:00:00Z'))).toBe('30/8/2026')
+    })
+  })
+
+  describe('formatoFecha · una columna `date` no es un instante', () => {
+    it('DD/MM/AAAA, sin tocar la hora ni la zona', () => {
+      expect(formatoFecha('2026-09-09')).toBe('09/09/2026')
+      expect(formatoFecha('2026-01-05')).toBe('05/01/2026')
+    })
+
+    it('NO retrocede un día, a diferencia de pasar la misma fecha por fechaHotel', () => {
+      /*
+        Encontrado probando `/panel/conciliacion/gastos` en el navegador: un
+        gasto cargado el 9 se mostraba como del 8. `fechaHotel('2026-09-09')`
+        arma `new Date('2026-09-09')` —medianoche UTC— y la reinterpreta en
+        `America/Argentina/Rio_Gallegos` (UTC-3), que cae en el día ANTERIOR.
+        Una columna `date` no tiene hora: no hay instante que reinterpretar.
+      */
+      expect(fechaHotel('2026-09-09')).toBe('8/9/2026')
+      expect(formatoFecha('2026-09-09')).toBe('09/09/2026')
     })
   })
 

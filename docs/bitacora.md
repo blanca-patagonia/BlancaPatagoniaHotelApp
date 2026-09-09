@@ -5112,3 +5112,48 @@ Typecheck 0 · lint 0 · build 0 · 1518 tests en verde (sin tests nuevos: no
 hay lógica de dominio nueva, solo una llamada más a `cotizarEstadia` ya
 cubierta). **No se verificó en un navegador** que el paso de preview se vea
 y se sienta bien — es lo que más falta de este cambio.
+
+## 2026-09-09 — Verificado contra base real: dos hallazgos, los dos corregidos
+
+Se levantó Docker y se aplicaron las migraciones 0087-0090 con
+`supabase migration up` (no `db reset`: no hace falta perder los usuarios de
+auth para esto). Con la base real y `EXIGIR_DB=1`, aparecieron dos fallos que
+sin base **no se podían ver**:
+
+1. **`registrar_acceso_huesped` quedaba ejecutable por PUBLIC.** Postgres le
+   da EXECUTE a PUBLIC por default a toda función nueva, y la 0088 se olvidó
+   del `revoke` que sí llevan las demás funciones `security definer` del
+   proyecto. Lo encontró `tests/funciones-sin-public.test.ts`. Como la 0088 ya
+   estaba aplicada, la corrección es la **migración 0091** (no se edita una
+   migración aplicada).
+2. **La matriz de auditoría RLS no conocía las tablas nuevas.**
+   `auditoria_accesos` y `gastos_operativos` no estaban declaradas en
+   `tests/rls-por-rol.test.ts`, y encima las dos nacen vacías: sin sembrar una
+   fila, el caso "recepción no puede leer" pasa por tabla vacía y no por la
+   política, que es exactamente el falso positivo que ese test-contrato existe
+   para impedir. Se sumaron a la matriz y a `sembrarParaCasosNegativos()`.
+
+Un tercer hallazgo, probando a mano en el navegador (no lo encontró ningún
+test): **la fecha de un gasto cargado el 9 se mostraba como del 8.**
+`fechaHotel(g.fecha)` arma `new Date('2026-09-09')` —medianoche UTC— y la
+reinterpreta en `America/Argentina/Rio_Gallegos` (UTC-3), que cae en el día
+anterior. Es el mismo tipo de trampa de huso horario que ya documentaba
+`AGENTS.md` para `hoyISO()`, pero en una variante nueva: una columna `date`
+(sin hora) no es un instante, y no hay que tratarla como uno.
+`formatoFechaCorta` ya evitaba esto para `DD/MM` (por texto, sin `Date`);
+se agregó `formatoFecha` como la misma idea con el año, y se corrigieron los
+dos lugares que tenían el bug: `/panel/conciliacion/gastos` y
+`/panel/cierre-diario`.
+
+Se probó a mano en el navegador, con sesión real: login, dashboard con los
+KPI nuevos, alta de un gasto de punta a punta (aparece en el listado y en
+el total, con la fecha ya correcta), y su eliminación con confirmación.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · **2028 tests en verde, 0 en rojo, 0
+salteados** — la primera corrida completa contra una base real de todo lo
+de esta rama. (Un fallo de `tests/ficha-reserva.test.ts` en una corrida
+intermedia no se reprodujo aislado ni en una segunda corrida completa: es un
+flake de los tests de integración compartiendo la base en paralelo, no algo
+que este trabajo haya causado.)

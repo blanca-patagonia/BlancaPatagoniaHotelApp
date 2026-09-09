@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { hoyISO, sumarDias, fechaHotel, parsearPeriodo } from '@/lib/fechas'
+import { hoyISO, sumarDias, formatoFecha, parsearPeriodo } from '@/lib/fechas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { resumenMovimientos, totalPorMedio, type MovimientoDelDia } from '@/lib/domain/cierre-diario'
 import { MEDIOS_PAGO, ETIQUETAS_MEDIO } from '@/lib/domain/pagos'
@@ -107,7 +107,7 @@ export default async function CierreDiarioPage({
       </Tarjeta>
 
       {!esHoy && (
-        <Mensaje tono="ok">Mostrando el cierre de {fechaHotel(fecha)}, no el de hoy.</Mensaje>
+        <Mensaje tono="ok">Mostrando el cierre de {formatoFecha(fecha)}, no el de hoy.</Mensaje>
       )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda, patronOr } from '@/lib/listados'
-import { fechaHotel } from '@/lib/fechas'
+import { formatoFecha } from '@/lib/fechas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import {
   CATEGORIAS_GASTO,
@@ -177,7 +177,7 @@ export default async function GastosPage({
                 {gastos.map((g) => (
                   <tr key={g.id} className={FILA}>
                     <td className={`${TD} tabular whitespace-nowrap text-stone-500`}>
-                      {fechaHotel(g.fecha)}
+                      {formatoFecha(g.fecha)}
                     </td>
                     <td className={`${TD} text-stone-700`}>{ETIQUETAS_CATEGORIA_GASTO[g.categoria]}</td>
                     <td className={`${TD} text-stone-700`}>{g.descripcion}</td>

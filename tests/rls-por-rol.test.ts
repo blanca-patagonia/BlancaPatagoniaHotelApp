@@ -114,6 +114,11 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // ── Auditoría: solo quien la audita ──
   auditoria: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  // ── Auditoría de LECTURA de fichas de huésped (migración 0088) ──
+  // Mismo criterio que `auditoria`: es el registro de quién miró qué, y
+  // quien lo mira tiene que ser el mismo que audita las escrituras.
+  auditoria_accesos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
   // ── Errores del sistema (migración 0068) ──
   // Mismos dos roles que `auditoria`, y por el mismo motivo: un error arrastra
   // rutas, ids y a veces el dato que lo causó. Recepción no tiene qué hacer con
@@ -153,6 +158,12 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // sólo lo que tiene que ver con las reservas. Recepción concilia cobros de
   // huéspedes desde la ficha de la reserva, no desde acá.
   movimientos_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
+  // ── Gastos operativos (migración 0089) ──
+  // Vive bajo la misma área que `movimientos_externos` (conciliación): plata
+  // que salió del hotel sin pasar por una reserva ni por la cuenta corriente
+  // de un proveedor. Mismos dos roles, mismo motivo.
+  gastos_operativos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
   // ── Numeración de comprobantes (migración 0069) ──
   // Sigue la línea de `facturas` desde la 0045: no lleva importes, pero sí qué
@@ -500,6 +511,52 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar movimientos_externos: ${error.message}`)
 
       sembradas.push({ tabla: 'movimientos_externos', columna: 'external_id', valor: externalId })
+    }
+
+    /*
+      ── auditoria_accesos (migración 0088) ────────────────────────────────────
+
+      Nace vacía —solo se llena cuando alguien abre de verdad la ficha de un
+      huésped, vía `registrar_acceso_huesped`—, así que sin sembrar, los dos
+      casos negativos (recepción y housekeeping) pasarían por tabla vacía y no
+      por la política. `service_role` sí puede insertar directo: el `revoke`
+      de la 0088/0091 es sobre `authenticated`/`anon`/`public`, no sobre él.
+    */
+    if ((await contar('auditoria_accesos')) === 0) {
+      const reservaId = await reservaParaSembrar()
+      const { data: fila, error: eReserva } = await admin
+        .from('reservas')
+        .select('huesped_id')
+        .eq('id', reservaId)
+        .single<{ huesped_id: string }>()
+      if (eReserva) throw new Error(`No se pudo leer el huésped de la reserva sembrada: ${eReserva.message}`)
+
+      const { data, error } = await admin
+        .from('auditoria_accesos')
+        .insert({ huesped_id: fila.huesped_id, origen: 'ficha_huesped' })
+        .select('id')
+        .single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar auditoria_accesos: ${error.message}`)
+
+      sembradas.push({ tabla: 'auditoria_accesos', columna: 'id', valor: data.id })
+    }
+
+    /*
+      ── gastos_operativos (migración 0089) ────────────────────────────────────
+
+      Nace vacía —se cargan a mano desde `/panel/conciliacion/gastos`—, mismo
+      motivo que `movimientos_externos`: sin sembrar, los casos negativos
+      pasarían por tabla vacía.
+    */
+    if ((await contar('gastos_operativos')) === 0) {
+      const { data, error } = await admin
+        .from('gastos_operativos')
+        .insert({ categoria: 'otro', descripcion: `fila de prueba de la matriz RLS ${sufijo}`, monto: 1 })
+        .select('id')
+        .single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar gastos_operativos: ${error.message}`)
+
+      sembradas.push({ tabla: 'gastos_operativos', columna: 'id', valor: data.id })
     }
 
     /*
