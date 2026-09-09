@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/ari",
       "schedule": "20 6 * * *"
+    },
+    {
+      "path": "/api/cron/recordatorios-pago",
+      "schedule": "50 6 * * *"
     }
   ]
 }

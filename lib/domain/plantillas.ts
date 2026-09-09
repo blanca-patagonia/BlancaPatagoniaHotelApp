@@ -11,6 +11,7 @@
 
 export const EVENTOS_EMAIL = [
   'confirmacion_reserva',
+  'recordatorio_saldo',
   'recordatorio_checkin',
   'encuesta_postcheckout',
   'cambio_nivel_fidelidad',
@@ -68,6 +69,33 @@ disponible para otros huéspedes.
       'nombre', 'codigo', 'check_in', 'check_out',
       'hora_check_in', 'hora_check_out', 'total', 'enlace',
     ],
+  },
+
+  /*
+    Patrón de referencia: los recordatorios de seña/depósito de Invoice Ninja.
+    Sin esto, una reserva `pendiente` solo se enteraba de que estaba por
+    perder la unidad cuando ya la perdió (`expirar_reservas_pendientes`, a los
+    5 días). Se manda a los 3, dejando 2 días de margen para reaccionar antes
+    de que la unidad se libere.
+  */
+  recordatorio_saldo: {
+    evento: 'recordatorio_saldo',
+    nombre: 'Recordatorio de seña pendiente',
+    disparador: 'A los 3 días de recibida la reserva, si sigue sin seña',
+    asunto: 'Tu reserva en Blanca Patagonia está por vencer ({{codigo}})',
+    cuerpo: `Hola {{nombre}},
+
+Tu reserva sigue pendiente de la seña. Si no la recibimos, la unidad se libera
+en {{dias_restantes}} y vuelve a quedar disponible para otros huéspedes.
+
+· Código: {{codigo}}
+· Total: {{total}}
+
+Podés abonarla en {{enlace}}.
+
+Si ya la pagaste, podés ignorar este mensaje: puede cruzarse con la
+confirmación.`,
+    variables: ['nombre', 'codigo', 'total', 'dias_restantes', 'enlace'],
   },
 
   recordatorio_checkin: {

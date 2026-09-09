@@ -4924,3 +4924,40 @@ manifiesto) · **1485 tests en verde, 0 en rojo** (7 nuevos, de dominio puro:
 `tests/gastos.test.ts`), 500 salteados por falta de base local. La migración
 y las pantallas **no se probaron contra una base real** — falta `db reset` y
 confirmar en un navegador antes de darlo por cerrado del todo.
+
+## 2026-09-09 — Recordatorio de seña pendiente, antes de que la reserva expire
+
+Patrón de referencia: los recordatorios de seña/depósito de Invoice Ninja.
+`recordatorio_checkin` ya probaba que la bandeja de salida podía avisar antes
+de un vencimiento; faltaba usarlo para el vencimiento más caro de todos: una
+reserva `pendiente` sin seña se libera sola a los 5 días
+(`expirar_reservas_pendientes`, migración 0011) y hasta ahora el huésped no
+se enteraba hasta perderla.
+
+Nuevo evento `recordatorio_saldo` en el catálogo (`lib/domain/plantillas.ts`)
+y un cron propio, `/api/cron/recordatorios-pago` (06:50, después de
+`mantenimiento`): busca reservas `pendiente` con más de 3 días desde el alta
+—dos de margen antes de los 5— y encola el aviso. No hace falta un
+discriminante en la clave de idempotencia: a diferencia del recordatorio de
+check-in, que se repite una vez por estadía, una reserva pasa por `pendiente`
+**una sola vez** en su vida, así que `recordatorio_saldo:<reserva_id>` alcanza
+para no mandarlo dos veces aunque el cron la vuelva a encontrar al día
+siguiente.
+
+El saldo se calcula con `resumenPagos`, no con `reservas.total` a secas: si
+ya se acreditó un pago parcial pero el estado todavía no pasó a `confirmada`
+—una demora del lado de la pasarela—, no corresponde apurar por el total
+completo, y si el saldo ya es cero directamente no se avisa.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (la ruta nueva aparece en el manifiesto) ·
+**1492 tests en verde, 0 en rojo** (7 nuevos, con mocks del cliente y de
+`encolar` — mismo patrón que los demás crons: lo que se prueba es que
+rechace sin el secreto y que la lógica de saldo decida bien, no la consulta
+real contra Postgres). 500 salteados por falta de base local.
+
+⚠️ Sin verificar en un entorno real: no se confirmó que Vercel efectivamente
+dispare el cron nuevo (`vercel.json`), ni que `CRON_SECRET` esté configurado
+en el proyecto — reutiliza la misma variable que ya usan los otros cuatro
+crons, así que si esos andan, este también debería.
