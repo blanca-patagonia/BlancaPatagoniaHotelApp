@@ -1,5 +1,6 @@
 import { requerirSesion } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { ETIQUETAS_ROL } from '@/lib/domain/roles'
 import { Encabezado, Pagina, Tarjeta } from '../_components/ui'
 import { FormularioCuenta } from './formulario'
@@ -26,12 +27,15 @@ export default async function CuentaPage() {
   // El teléfono no está en la sesión —que se arma para autorizar, no para
   // mostrar—, así que se lee acá. Si la consulta falla se muestra vacío: no
   // vale la pena romper la pantalla entera, y el resto sigue funcionando.
+  // Igual se loguea: "vacío por fallo" no debe confundirse con "sin teléfono
+  // cargado" cuando alguien audite por qué un campo no tiene valor.
   const supabase = await crearClienteServidor()
-  const { data: perfil } = await supabase
+  const { data: perfil, error: ePerfil } = await supabase
     .from('perfiles')
     .select('telefono')
     .eq('id', sesion.userId)
     .maybeSingle()
+  registrarFalla(ePerfil, 'cuenta:perfil')
 
   return (
     <Pagina ancho="angosto">

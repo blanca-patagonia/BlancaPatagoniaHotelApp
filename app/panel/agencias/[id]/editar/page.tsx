@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import {
   CAMPO,
   Campo,
@@ -48,12 +49,13 @@ export default async function EditarAgenciaPage({
   const { id } = await params
 
   const supabase = await crearClienteServidor()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('agencias')
     .select('id, nombre, tipo, cuit, email, telefono, descuento_pct, activo, condicion_iva')
     .eq('id', id)
     .single()
 
+  if (error) registrarFalla(error, 'agencias:editar_ficha')
   if (!data) notFound()
   const agencia = data as Agencia
 

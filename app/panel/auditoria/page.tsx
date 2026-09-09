@@ -21,6 +21,7 @@ import {
   type Tono,
 } from '../_components/ui'
 import { fechaHoraHotel } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
 
 /** Tablas auditadas (las que tienen trigger en la migración 0020). */
 const TABLAS = ['pagos', 'tarifas', 'reservas'] as const
@@ -105,7 +106,8 @@ export default async function AuditoriaPage({
     .order('id', { ascending: false })
   if (tabla) consulta = consulta.eq('tabla', tabla)
 
-  const { data, count } = await consulta.range(desde, hasta)
+  const { data, error: eAuditoria, count } = await consulta.range(desde, hasta)
+  registrarFalla(eAuditoria, 'auditoria:listado')
   const registros = (data ?? []) as Registro[]
   const total = count ?? 0
 
@@ -113,17 +115,19 @@ export default async function AuditoriaPage({
   // `auditoria`: un SELECT no dispara triggers, así que esto lo escribe la
   // propia pantalla al mostrarse, no la base. Solo los últimos 20: es para
   // detectar un patrón raro, no para paginar un historial completo.
-  const { data: accesosData } = await supabase
+  const { data: accesosData, error: eAccesos } = await supabase
     .from('auditoria_accesos')
     .select('id, usuario_id, rol, origen, creado_en, huesped:huespedes(apellido, nombre)')
     .order('id', { ascending: false })
     .limit(20)
+  registrarFalla(eAccesos, 'auditoria:accesos')
   const accesos = (accesosData ?? []) as unknown as AccesoHuesped[]
 
   // Los nombres del staff se resuelven con el cliente privilegiado porque un
   // registro puede referir a un usuario dado de baja.
   const admin = crearClienteAdmin()
-  const { data: perfiles } = await admin.from('perfiles').select('id, nombre')
+  const { data: perfiles, error: ePerfiles } = await admin.from('perfiles').select('id, nombre')
+  registrarFalla(ePerfiles, 'auditoria:perfiles')
   const nombres = new Map(
     ((perfiles ?? []) as { id: string; nombre: string }[]).map((p) => [p.id, p.nombre]),
   )

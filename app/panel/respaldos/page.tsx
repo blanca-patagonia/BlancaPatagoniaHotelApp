@@ -18,6 +18,7 @@ import {
   Etiqueta,
   FILA,
   Kpi,
+  Mensaje,
   Pagina,
   TD,
   TH,
@@ -26,6 +27,7 @@ import {
   botonClases,
 } from '../_components/ui'
 import { fechaHoraHotel } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
 
 /**
  * Respaldos.
@@ -64,11 +66,15 @@ export default async function RespaldosPage() {
   const sesion = await requerirAcceso('respaldos')
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('respaldos')
     .select('id, tablas, filas, bytes, archivo, generado_en, perfil:perfiles(nombre)')
     .order('generado_en', { ascending: false })
     .limit(20)
+  // Esta pantalla existe para ser honesta sobre el estado de los respaldos: que
+  // se vea "sin respaldos" por una lectura fallida, en vez de por no haber
+  // exportado nunca, contradice el propósito de la pantalla.
+  if (error) registrarFalla(error, 'respaldos:listado')
 
   const respaldos = (data ?? []) as unknown as RespaldoRow[]
   const ultimo = respaldos[0] ?? null
@@ -104,6 +110,13 @@ export default async function RespaldosPage() {
           ) : null
         }
       />
+
+      {error && (
+        <Mensaje tono="error">
+          No se pudo leer el historial de respaldos — si esta pantalla dice que no hay
+          ninguno reciente, no lo tomes como definitivo. Recargá antes de alarmarte.
+        </Mensaje>
+      )}
 
       {/* ── Lo que hay que decir antes que nada ────────────────────────────── */}
       <div className="mb-4 flex items-start gap-3 rounded-xl bg-lago-50 px-4 py-3 ring-1 ring-lago-200">

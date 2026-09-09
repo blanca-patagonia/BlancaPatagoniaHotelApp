@@ -29,6 +29,7 @@ import {
   formatoFechaCorta,
 } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
+import { registrarFalla } from '@/lib/acciones'
 import { MENSAJES_RECHAZO_ARRASTRE } from '@/lib/domain/arrastre-grilla'
 import { ArrastreDeReservas, type TramoDeUnidad } from './arrastre'
 import { Icono } from '../_components/iconos'
@@ -170,7 +171,10 @@ export default async function OcupacionPage({
   const dias = listaDias(desde, ventana)
 
   const supabase = await crearClienteServidor()
-  const [{ data: unidadesData }, { data: estadiasData }] = await Promise.all([
+  const [
+    { data: unidadesData, error: eUnidades },
+    { data: estadiasData, error: eEstadias },
+  ] = await Promise.all([
     supabase
       .from('unidades')
       .select('id, nombre, estado, piso, bloque, orden, tipo:tipos_unidad(codigo, nombre, categoria)')
@@ -183,6 +187,12 @@ export default async function OcupacionPage({
       .in('estado', [...ESTADOS_ACTIVOS])
       .overlaps('periodo', rangoISO(desde, hasta)),
   ])
+  registrarFalla(eUnidades, 'ocupacion:unidades')
+  registrarFalla(eEstadias, 'ocupacion:estadias')
+  // Si `estadias` falla y `unidades` no, la grilla se vería LIBRE por completo:
+  // el peor fallo posible acá es mostrar como vacío lo que en realidad está
+  // ocupado. El aviso de abajo evita leer eso como disponibilidad real.
+  const fallaLectura = Boolean(eUnidades || eEstadias)
 
   const todasUnidades = (unidadesData ?? []) as unknown as UnidadRow[]
   const estadias = (estadiasData ?? []) as unknown as EstadiaRow[]
@@ -332,6 +342,12 @@ export default async function OcupacionPage({
         </Mensaje>
       )}
       {sp.ok === 'mudanza' && <Mensaje tono="ok">La reserva cambió de habitación.</Mensaje>}
+      {fallaLectura && (
+        <Mensaje tono="error">
+          No se pudo leer la ocupación completa — esta grilla puede mostrar unidades libres que en
+          realidad están ocupadas. Revisá directamente en la reserva antes de vender.
+        </Mensaje>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi
@@ -562,6 +578,16 @@ export default async function OcupacionPage({
           No cambia nada visible: recorta en la caja de relleno, que es donde el
           contenedor de scroll ya recortaba.
         */}
+        {/*
+          Auditoría de calidad 2026-09-09: a 1024×768 (tablet) la grilla de 14
+          días corta la última columna sin ningún indicio de que sigue para el
+          costado — tiene scroll propio, no está rota, pero no se nota. Este
+          aviso es visible hasta `xl` porque de ahí para abajo el ancho de la
+          ventana no alcanza para mostrar los 14 días enteros.
+        */}
+        <p className="mb-2 text-xs text-stone-500 xl:hidden">
+          Deslizá la grilla hacia el costado para ver el resto de los días.
+        </p>
         <div className="max-h-[70vh] contain-paint overflow-auto overscroll-contain">
           <table className="min-w-full border-collapse text-sm">
             <caption className="sr-only">

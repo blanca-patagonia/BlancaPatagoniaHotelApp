@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
+import { registrarFalla } from '@/lib/acciones'
 import { fechaHoraHotel, fechaHotel, formatoFechaCorta, hoyISO } from '@/lib/fechas'
 import {
   ETIQUETAS_ESTADO_CONTRATO,
@@ -95,7 +96,7 @@ export default async function DetalleContratoPage({
   const sp = await searchParams
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  const { data, error: eContrato } = await supabase
     .from('contratos')
     .select(
       'id, tipo, entidad_id, titulo, contenido, estado, fecha_envio, fecha_firma, vigencia_desde, vigencia_hasta',
@@ -103,10 +104,16 @@ export default async function DetalleContratoPage({
     .eq('id', id)
     .single()
 
+  // Distinguir «falló la lectura» de «no existe»: sin esto, un corte de red se
+  // veía igual que un contrato borrado y disparaba un 404 falso.
+  if (eContrato) {
+    registrarFalla(eContrato, 'contratos:ficha')
+    throw new Error('No se pudo cargar el contrato')
+  }
   if (!data) notFound()
   const contrato = data as Contrato
 
-  const [{ data: firmaData }, entidad, cabeceras] = await Promise.all([
+  const [{ data: firmaData, error: eFirma }, entidad, cabeceras] = await Promise.all([
     // `token` va por el cliente privilegiado: desde la 0060 no es legible con
     // una sesión de staff (es la credencial de /firmar/<token>). El resto de la
     // constancia de firma sí, y sigue pasando por RLS.
@@ -120,6 +127,9 @@ export default async function DetalleContratoPage({
     nombreEntidad(supabase, contrato.tipo, contrato.entidad_id),
     headers(),
   ])
+  // Si falla, la pantalla vería "sin firma registrada" en un contrato que SÍ se
+  // firmó — el peor caso posible es reenviarlo a firmar de nuevo sin necesidad.
+  if (eFirma) registrarFalla(eFirma, 'contratos:firma')
   const firma = firmaData as Firma | null
 
   const hoy = hoyISO()
@@ -147,6 +157,12 @@ export default async function DetalleContratoPage({
       />
 
       {sp.error && <Mensaje tono="error">{MENSAJES_ERROR[sp.error] ?? 'Ocurrió un error.'}</Mensaje>}
+      {eFirma && (
+        <Mensaje tono="error">
+          No se pudo leer la constancia de firma — este contrato puede estar firmado igual. No lo
+          reenvíes a firmar sin confirmarlo a mano.
+        </Mensaje>
+      )}
       {sp.ok && (
         <Mensaje tono={sp.ok === 'alterado' ? 'error' : 'ok'}>
           {MENSAJES_OK[sp.ok] ?? 'Listo.'}

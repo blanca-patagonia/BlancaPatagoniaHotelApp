@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import {
   CAMPO,
   Campo,
@@ -34,12 +35,13 @@ export default async function EditarProveedorPage({
   const { id } = await params
 
   const supabase = await crearClienteServidor()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('proveedores')
     .select('id, nombre, rubro, cuit, email, telefono, activo')
     .eq('id', id)
     .single()
 
+  if (error) registrarFalla(error, 'proveedores:editar_ficha')
   if (!data) notFound()
   const proveedor = data as Proveedor
 

@@ -25,6 +25,7 @@ import {
 import { GrillaPos, type ProductoPos, type ReservaPos } from './grilla'
 import { anularComanda } from './actions'
 import { formatearUSD } from '@/lib/domain/moneda'
+import { registrarFalla } from '@/lib/acciones'
 
 /**
  * Punto de venta.
@@ -71,44 +72,56 @@ export default async function PuntoVentaPage({
   const supabase = await crearClienteServidor()
   const hoy = hoyISO()
 
-  const [{ data: productosData }, { data: estadiasData }, { data: consumosData }, { data: deptosData }] =
-    await Promise.all([
-      supabase
-        .from('productos_servicios')
-        .select('id, codigo, nombre, categoria, precio, stock')
-        .eq('activo', true)
-        .order('categoria')
-        .order('nombre'),
+  const [
+    { data: productosData, error: eProductos },
+    { data: estadiasData, error: eEstadias },
+    { data: consumosData, error: eConsumos },
+    { data: deptosData, error: eDeptos },
+  ] = await Promise.all([
+    supabase
+      .from('productos_servicios')
+      .select('id, codigo, nombre, categoria, precio, stock')
+      .eq('activo', true)
+      .order('categoria')
+      .order('nombre'),
 
-      // Sólo las estadías que tocan hoy: no tiene sentido cargarle un frigobar a
-      // alguien que llega el mes que viene, y la lista corta evita elegir mal.
-      supabase
-        .from('estadias')
-        .select(
-          'reserva_id, unidad:unidades(nombre), reserva:reservas(codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre))',
-        )
-        .in('estado', [...ESTADOS_ACTIVOS])
-        // ⚠️ `rangoISO(hoy, hoy)` sería `[hoy,hoy)`, que es un rango **VACÍO** y no
-        // se solapa con nada: la lista salía siempre en cero y el POS quedaba
-        // inutilizable diciendo «no hay nadie alojado hoy». Los períodos son
-        // `[desde, hasta)`, así que «la noche de hoy» es `[hoy, mañana)`.
-        .overlaps('periodo', rangoISO(hoy, sumarDias(hoy, 1))),
+    // Sólo las estadías que tocan hoy: no tiene sentido cargarle un frigobar a
+    // alguien que llega el mes que viene, y la lista corta evita elegir mal.
+    supabase
+      .from('estadias')
+      .select(
+        'reserva_id, unidad:unidades(nombre), reserva:reservas(codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre))',
+      )
+      .in('estado', [...ESTADOS_ACTIVOS])
+      // ⚠️ `rangoISO(hoy, hoy)` sería `[hoy,hoy)`, que es un rango **VACÍO** y no
+      // se solapa con nada: la lista salía siempre en cero y el POS quedaba
+      // inutilizable diciendo «no hay nadie alojado hoy». Los períodos son
+      // `[desde, hasta)`, así que «la noche de hoy» es `[hoy, mañana)`.
+      .overlaps('periodo', rangoISO(hoy, sumarDias(hoy, 1))),
 
-      // Comandas recientes, para poder revisar y anular.
-      supabase
-        .from('consumos')
-        .select(
-          'id, comanda, folio, cantidad, precio_unitario, nota, fecha, departamento_id, producto:productos_servicios(nombre), reserva:reservas(codigo, huesped:huespedes!reservas_huesped_id_fkey(apellido))',
-        )
-        .not('comanda', 'is', null)
-        .order('comanda', { ascending: false })
-        .limit(120),
+    // Comandas recientes, para poder revisar y anular.
+    supabase
+      .from('consumos')
+      .select(
+        'id, comanda, folio, cantidad, precio_unitario, nota, fecha, departamento_id, producto:productos_servicios(nombre), reserva:reservas(codigo, huesped:huespedes!reservas_huesped_id_fkey(apellido))',
+      )
+      .not('comanda', 'is', null)
+      .order('comanda', { ascending: false })
+      .limit(120),
 
-      // La tabla completa de departamentos, una vez. Son ~14 filas y sirven para
-      // resolver la jerarquía de todas las líneas sin un join por fila: el embed
-      // anidado de PostgREST no puede hacerlo (ver `lib/domain/departamentos.ts`).
-      supabase.from('departamentos').select('id, nombre, padre_id'),
-    ])
+    // La tabla completa de departamentos, una vez. Son ~14 filas y sirven para
+    // resolver la jerarquía de todas las líneas sin un join por fila: el embed
+    // anidado de PostgREST no puede hacerlo (ver `lib/domain/departamentos.ts`).
+    supabase.from('departamentos').select('id, nombre, padre_id'),
+  ])
+  registrarFalla(eProductos, 'punto_venta:productos')
+  registrarFalla(eEstadias, 'punto_venta:estadias')
+  registrarFalla(eConsumos, 'punto_venta:consumos')
+  registrarFalla(eDeptos, 'punto_venta:departamentos')
+  // Si `estadias` falla, la grilla queda igual de vacía que «no hay nadie
+  // alojado hoy» (el bug real que ya documenta el comentario de arriba): sin
+  // este aviso serían indistinguibles.
+  const fallaLectura = Boolean(eProductos || eEstadias || eConsumos || eDeptos)
 
   const resolverDepto = resolutorDepartamentos((deptosData ?? []) as DepartamentoFila[])
 
@@ -156,6 +169,12 @@ export default async function PuntoVentaPage({
       />
 
       {sp.error && <Mensaje tono="error">{MENSAJES_ERROR[sp.error] ?? 'Ocurrió un error.'}</Mensaje>}
+      {fallaLectura && (
+        <Mensaje tono="error">
+          No se pudo cargar todo el punto de venta — puede faltar catálogo, huéspedes alojados o
+          comandas recientes. Recargá la página antes de cobrar.
+        </Mensaje>
+      )}
       {sp.ok === 'anulada' && (
         <Mensaje tono="ok">
           Comanda {sp.comanda} anulada. Las líneas se quitaron de la cuenta del huésped.

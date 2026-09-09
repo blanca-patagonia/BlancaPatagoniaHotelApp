@@ -5,6 +5,7 @@ import { crearClienteNavegador } from '@/lib/supabase/client'
 import { agrupaConAnterior } from '@/lib/domain/conversaciones'
 import { enviarMensaje } from './actions'
 import { horaHotel } from '@/lib/fechas'
+import { botonClases } from '../_components/ui'
 
 /**
  * Panel de mensajes de un canal, con actualización en vivo.
@@ -126,7 +127,7 @@ export function Chat({ canalId, usuarioId, iniciales, nombres }: Props) {
              «Enviar» en vez de desbordar, y no hay scrollport que lo rescate. */
           className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
         />
-        <button className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800">
+        <button type="submit" className={botonClases('primario')}>
           Enviar
         </button>
       </form>

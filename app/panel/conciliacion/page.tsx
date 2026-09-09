@@ -458,7 +458,7 @@ export default async function ConciliacionPage({
                                 <input type="hidden" name="movimiento_id" value={m.id} />
                                 {candidatos.length > 0 && (
                                   <label className="flex flex-col gap-1 text-xs">
-                                    <span className="sr-only">Pago con el que se corresponde</span>
+                                    <span className="text-stone-500">Pago</span>
                                     <select name="pago_id" defaultValue="" className={CAMPO}>
                                       <option value="">Elegí el pago…</option>
                                       {candidatos.map((p) => (
@@ -470,7 +470,7 @@ export default async function ConciliacionPage({
                                   </label>
                                 )}
                                 <label className="flex flex-col gap-1 text-xs">
-                                  <span className="sr-only">Nota</span>
+                                  <span className="text-stone-500">Nota</span>
                                   <input
                                     name="nota"
                                     maxLength={500}

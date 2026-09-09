@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarAccesoHuesped } from '@/lib/auditoria/accesos'
+import { registrarFalla } from '@/lib/acciones'
 import {
   transicionesPosibles,
   ETIQUETAS_ESTADO_RESERVA,
@@ -149,6 +150,7 @@ const MENSAJES_ERROR: Record<string, string> = {
     cosas o no se crea ninguna: el mensaje ya no puede ocurrir (P1-7).
   */
   puntos: 'Se registró el check-out, pero no se pudieron acreditar los puntos de fidelidad. Cargalos a mano desde la ficha del huésped.',
+  checkin_inmediato: 'La reserva se creó, pero no se pudo marcar el check-in. Hacelo a mano cambiando el estado a "In house" acá abajo.',
   saldada: 'Se registró el pago, pero la reserva no quedó marcada como pagada. Revisá el estado antes de seguir.',
   consumo: 'No se pudo cargar el consumo. No se cobró ni se descontó del stock.',
   quitar_consumo: 'No se pudo quitar el consumo. Sigue cargado a la cuenta.',
@@ -306,7 +308,7 @@ export default async function DetalleReservaPage({
   } = await searchParams
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  const { data, error: eReserva } = await supabase
     .from('reservas')
     .select(
       'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, agencia_id, huesped_id, pago_desde_exterior, tarjeta_ultimos4, tarjeta_marca, tarjeta_vencimiento, tarjeta_verificacion, tarjeta_verificada_en, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip, residente_exterior), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
@@ -314,6 +316,10 @@ export default async function DetalleReservaPage({
     .eq('id', id)
     .single()
 
+  // `.single()` también deja `data` en null si la lectura falló por otro motivo
+  // que «no existe» (permisos, red): sin loguear, esos casos se ven idénticos a
+  // una reserva borrada y nadie se entera de que hubo un problema de verdad.
+  if (eReserva) registrarFalla(eReserva, 'reservas:ficha')
   if (!data) notFound()
   const reserva = data as unknown as Reserva
   if (reserva.huesped_id) await registrarAccesoHuesped(supabase, reserva.huesped_id, 'ficha_reserva')
@@ -422,11 +428,12 @@ export default async function DetalleReservaPage({
   // Preview del cargo por cancelación (política estándar).
   let cargo: { dias: number; monto: number } | null = null
   if (periodo && transiciones.includes('cancelada')) {
-    const { data: pol } = await supabase
+    const { data: pol, error: ePolitica } = await supabase
       .from('politicas_cancelacion')
       .select('reglas')
       .eq('codigo', 'estandar')
       .single()
+    if (ePolitica) registrarFalla(ePolitica, 'reservas:politica_cancelacion')
     const reglas = (pol?.reglas ?? []) as ReglaCancelacion[]
     const dias = diasEntre(hoyISO(), periodo.desde)
     const tipoCargo = cargoPorCancelacion(reglas, dias)
@@ -465,12 +472,16 @@ export default async function DetalleReservaPage({
     cargo = { dias, monto }
   }
 
-  const { data: pagosData } = await supabase
+  const { data: pagosData, error: ePagos } = await supabase
     .from('pagos')
     .select('id, medio, tipo, monto, estado, creado_en, moneda, monto_cobrado, cupon, ultimos4, tarjeta_marca')
     .eq('reserva_id', id)
     .order('creado_en')
+  if (ePagos) registrarFalla(ePagos, 'reservas:pagos')
   const pagos = (pagosData ?? []) as PagoRow[]
+  // Si esta lectura falla, la ficha mostraría "sin pagos" en una reserva que sí
+  // cobró: es el mismo riesgo que la alerta de overbooking del dashboard.
+  const fallaPagos = Boolean(ePagos)
 
   // Estado de cobro consolidado (alojamiento + consumos) y links de pago vivos.
   // Es la misma lectura que usa el portal público, para que el huésped y
@@ -549,6 +560,13 @@ export default async function DetalleReservaPage({
       {errorParam && (
         <Mensaje tono="error">
           {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+        </Mensaje>
+      )}
+
+      {fallaPagos && (
+        <Mensaje tono="error">
+          No se pudieron leer los pagos de esta reserva — el saldo que se ve abajo puede no ser el
+          real. Revisá directamente en Pagos antes de dar algo por cobrado.
         </Mensaje>
       )}
 

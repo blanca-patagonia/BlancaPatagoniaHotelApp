@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { Encabezado, Pagina, Tarjeta } from '../../../_components/ui'
 import { FormularioHuesped, type DatosHuesped } from '../../formulario'
 
@@ -20,7 +21,7 @@ export default async function EditarHuespedPage({
   const { id } = await params
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('huespedes')
     .select(
       'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, condicion_iva, residente_exterior, notas',
@@ -28,6 +29,13 @@ export default async function EditarHuespedPage({
     .eq('id', id)
     .single()
 
+  // Distinguir «falló la lectura» de «no existe»: sin esto, un corte de red se
+  // veía igual que un huésped borrado y disparaba un 404 falso en vez del
+  // aviso de error real.
+  if (error) {
+    registrarFalla(error, 'huespedes:editar_ficha')
+    throw new Error('No se pudo cargar el huésped')
+  }
   if (!data) notFound()
   const huesped = data as DatosHuesped
 

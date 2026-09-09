@@ -7,6 +7,7 @@ import { MONEDAS_EXTRANJERAS } from '@/lib/domain/divisas'
 import { urlDelSitio } from '@/lib/env'
 import { fechaHoraHotel, fechaHotel, formatoFechaCorta, horaHotel, hoyISO } from '@/lib/fechas'
 import { construirQuery } from '@/lib/listados'
+import { registrarFalla } from '@/lib/acciones'
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
 import {
@@ -304,16 +305,16 @@ export default async function CanalesPage({
   if (estado) consultaEntrantes = consultaEntrantes.eq('estado', estado)
 
   const [
-    { data: entrantesData },
-    { data: sincroData },
-    { data: mensajesData },
-    { data: resenasData },
-    { data: cargosData },
-    { data: tiposData },
-    { data: unidadesData },
-    { data: configData },
-    { data: mapeosData },
-    { data: salidaData },
+    { data: entrantesData, error: eEntrantes },
+    { data: sincroData, error: eSincro },
+    { data: mensajesData, error: eMensajes },
+    { data: resenasData, error: eResenas },
+    { data: cargosData, error: eCargos },
+    { data: tiposData, error: eTipos },
+    { data: unidadesData, error: eUnidades },
+    { data: configData, error: eConfig },
+    { data: mapeosData, error: eMapeos },
+    { data: salidaData, error: eSalida },
   ] = await Promise.all([
       consultaEntrantes,
       supabase
@@ -384,6 +385,25 @@ export default async function CanalesPage({
       .limit(1)
       .maybeSingle(),
   ])
+  registrarFalla(eEntrantes, 'canales:entrantes')
+  registrarFalla(eSincro, 'canales:sincronizaciones')
+  registrarFalla(eMensajes, 'canales:mensajes')
+  registrarFalla(eResenas, 'canales:resenas')
+  registrarFalla(eCargos, 'canales:cargos')
+  registrarFalla(eTipos, 'canales:tipos_unidad')
+  registrarFalla(eUnidades, 'canales:unidades')
+  registrarFalla(eConfig, 'canales:config')
+  registrarFalla(eMapeos, 'canales:mapeo_tipos')
+  registrarFalla(eSalida, 'canales:sincronizacion_salida')
+  // `entrantesData` trae `conflicto`, la base del KPI de posible overbooking de
+  // esta misma pantalla (`conConflicto`, más abajo): si esa lectura falla, ese
+  // KPI daría cero conflictos con datos vacíos, el fallo silencioso más caro
+  // que puede pasar acá.
+  const fallaConflictos = Boolean(eEntrantes)
+  const fallaLectura = Boolean(
+    eEntrantes || eSincro || eMensajes || eResenas || eCargos || eTipos || eUnidades || eConfig ||
+      eMapeos || eSalida,
+  )
 
   const entrantes = (entrantesData ?? []) as unknown as EntranteRow[]
 
@@ -402,17 +422,24 @@ export default async function CanalesPage({
   */
   const idsReservas = entrantes.map((e) => e.reserva_id).filter((x): x is string => Boolean(x))
 
-  const [{ data: pagosData }, { data: consumosData }, { data: totalesData }] =
-    idsReservas.length > 0
-      ? await Promise.all([
-          supabase.from('pagos').select('reserva_id, tipo, monto, estado').in('reserva_id', idsReservas),
-          supabase
-            .from('consumos')
-            .select('reserva_id, cantidad, precio_unitario')
-            .in('reserva_id', idsReservas),
-          supabase.from('reservas').select('id, total').in('id', idsReservas),
-        ])
-      : [{ data: [] }, { data: [] }, { data: [] }]
+  const [
+    { data: pagosData, error: ePagos },
+    { data: consumosData, error: eConsumosCobro },
+    { data: totalesData, error: eTotales },
+  ] = idsReservas.length > 0
+    ? await Promise.all([
+        supabase.from('pagos').select('reserva_id, tipo, monto, estado').in('reserva_id', idsReservas),
+        supabase
+          .from('consumos')
+          .select('reserva_id, cantidad, precio_unitario')
+          .in('reserva_id', idsReservas),
+        supabase.from('reservas').select('id, total').in('id', idsReservas),
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
+  registrarFalla(ePagos, 'canales:cobro_pagos')
+  registrarFalla(eConsumosCobro, 'canales:cobro_consumos')
+  registrarFalla(eTotales, 'canales:cobro_totales')
+  const fallaSaldos = Boolean(ePagos || eConsumosCobro || eTotales)
 
   const totalPorReserva = new Map<string, number>()
   for (const r of (totalesData ?? []) as { id: string; total: number | string }[]) {
@@ -489,7 +516,10 @@ export default async function CanalesPage({
 
   // Los contadores se cuentan sobre todo, no sobre lo filtrado: son la razón para
   // aplicar el filtro, así que no pueden depender de él.
-  const { data: todosEstados } = await supabase.from('canal_reservas').select('estado')
+  const { data: todosEstados, error: eTodosEstados } = await supabase
+    .from('canal_reservas')
+    .select('estado')
+  registrarFalla(eTodosEstados, 'canales:conteo_estados')
   const conteo = new Map<string, number>()
   for (const r of (todosEstados ?? []) as { estado: string }[]) {
     conteo.set(r.estado, (conteo.get(r.estado) ?? 0) + 1)
@@ -588,6 +618,19 @@ export default async function CanalesPage({
 
       {sp.error && (
         <Mensaje tono="error">{MENSAJES_ERROR[sp.error] ?? 'Ocurrió un error.'}</Mensaje>
+      )}
+      {fallaConflictos && (
+        <Mensaje tono="error">
+          No se pudo verificar el posible overbooking de canal — el KPI de abajo no es
+          confiable. Revisá las reservas entrantes a mano antes de confirmar algo.
+        </Mensaje>
+      )}
+      {!fallaConflictos && (fallaLectura || fallaSaldos) && (
+        <Mensaje tono="error">
+          No se pudo cargar toda la información de canales (mensajes, reseñas, cargos,
+          configuración o el saldo de cobro de las reservas importadas) — algunos datos de
+          esta pantalla pueden faltar.
+        </Mensaje>
       )}
       {sp.ok === 'sincro' && (
         <Mensaje tono="ok">
@@ -697,10 +740,16 @@ export default async function CanalesPage({
         */}
         <Kpi
           titulo="Posible overbooking"
-          valor={String(conConflicto)}
-          detalle={conConflicto > 0 ? 'el canal vendió de más' : 'el cupo cierra'}
+          valor={fallaConflictos ? '—' : String(conConflicto)}
+          detalle={
+            fallaConflictos
+              ? 'no se pudo verificar'
+              : conConflicto > 0
+                ? 'el canal vendió de más'
+                : 'el cupo cierra'
+          }
           icono="alerta"
-          tono={conConflicto > 0 ? 'peligro' : undefined}
+          tono={fallaConflictos || conConflicto > 0 ? 'peligro' : undefined}
         />
         <Kpi
           titulo="Mensajes sin atender"
@@ -919,7 +968,7 @@ export default async function CanalesPage({
                           <td className={`${TD} tabular text-right text-stone-600`}>
                             {Number(e.importe_canal ?? 0) > 0 ? (
                               <>
-                                {e.moneda_canal} {Number(e.importe_canal).toLocaleString('es-AR')}
+                                {e.moneda_canal} {importe(Number(e.importe_canal))}
                                 {e.comision != null && (
                                   <span className="block text-xs text-stone-500">
                                     comisión {importe(Number(e.comision))}
@@ -1494,9 +1543,7 @@ export default async function CanalesPage({
                             >
                               <input type="hidden" name="cargo_id" value={c.id} />
                               <label className="flex flex-col gap-1 text-xs">
-                                <span className="sr-only">
-                                  Estado de conciliación del cargo
-                                </span>
+                                <span className="text-stone-500">Estado</span>
                                 <select
                                   name="estado"
                                   defaultValue={
@@ -1516,9 +1563,7 @@ export default async function CanalesPage({
                                 </select>
                               </label>
                               <label className="flex flex-col gap-1 text-xs">
-                                <span className="sr-only">
-                                  Motivo (obligatorio para disputar)
-                                </span>
+                                <span className="text-stone-500">Motivo</span>
                                 <input
                                   name="nota"
                                   maxLength={500}

@@ -30,6 +30,7 @@ import {
 } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
 import { eliminarGasto } from './actions'
+import { registrarFalla } from '@/lib/acciones'
 
 const MENSAJES_ERROR: Record<string, string> = {
   eliminar: 'No se pudo eliminar el gasto.',
@@ -66,15 +67,20 @@ export default async function GastosPage({
   if (categoria) consulta = consulta.eq('categoria', categoria)
   if (q) consulta = consulta.ilike('descripcion', `%${patronOr(q)}%`)
 
-  const { data, count } = await consulta.range(desde, hasta)
+  const { data, count, error: eGastos } = await consulta.range(desde, hasta)
+  if (eGastos) registrarFalla(eGastos, 'conciliacion:gastos_listado')
   const gastos = (data ?? []) as Gasto[]
   const total = count ?? 0
 
   // Para el resumen por categoría se necesita el total SIN paginar: traer solo
   // la página actual daría un número que cambia según en qué página se esté.
-  const { data: todosData } = await supabase
+  const { data: todosData, error: eTodos } = await supabase
     .from('gastos_operativos')
     .select('categoria, monto')
+  // Si esto falla, el total por categoría se calcula con menos gastos de los
+  // reales: un resumen de reconciliación que no cierra sin que nadie lo sepa.
+  if (eTodos) registrarFalla(eTodos, 'conciliacion:gastos_totales')
+  const fallaLectura = Boolean(eGastos || eTodos)
   const totales = totalPorCategoria(
     ((todosData ?? []) as { categoria: CategoriaGasto; monto: number | string }[]).map((g) => ({
       categoria: g.categoria,
@@ -106,6 +112,12 @@ export default async function GastosPage({
       />
 
       {sp.error && <Mensaje tono="error">{MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}</Mensaje>}
+      {fallaLectura && (
+        <Mensaje tono="error">
+          No se pudieron leer todos los gastos — el total y el resumen por categoría pueden estar
+          incompletos.
+        </Mensaje>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi titulo="Total" valor={formatearUSD(totalGeneral)} detalle="todas las categorías" icono="conciliacion" />

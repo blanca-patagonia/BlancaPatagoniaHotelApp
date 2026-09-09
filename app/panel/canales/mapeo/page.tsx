@@ -16,6 +16,7 @@ import {
   Tarjeta,
 } from '../../_components/ui'
 import { borrarMapeo, guardarMapeo } from './actions'
+import { registrarFalla } from '@/lib/acciones'
 
 /**
  * Decirle al sistema qué columna del informe es cuál.
@@ -75,13 +76,14 @@ export default async function MapeoColumnasPage({
   const sp = await searchParams
 
   const supabase = await crearClienteServidor()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('canal_mapeos_columnas')
     .select('id, nombre, tipo_informe, activo, asignaciones, muestra, actualizado_en')
     // Los borradores primero: son lo que alguien vino a resolver.
     .order('activo', { ascending: true })
     .order('actualizado_en', { ascending: false })
     .limit(50)
+  registrarFalla(error, 'canales:mapeo_columnas')
 
   const mapeos = (data ?? []) as unknown as MapeoRow[]
 
@@ -100,6 +102,12 @@ export default async function MapeoColumnasPage({
         }
       />
 
+      {error && (
+        <Mensaje tono="error">
+          No se pudieron cargar los mapeos guardados — puede que falte alguno en la lista de
+          abajo.
+        </Mensaje>
+      )}
       {sp.error && (
         <Mensaje tono="error">
           {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
@@ -162,7 +170,18 @@ export default async function MapeoColumnasPage({
                           const obligatorio = CAMPOS_OBLIGATORIOS.includes(campo)
                           return (
                             <tr key={campo} className={FILA}>
-                              <td className={TD}>
+                              {/*
+                                `<th scope="row">` y no `<td>`: es lo que le dice
+                                a un lector de pantalla que esta celda es el
+                                encabezado de la fila, así que al llegar al
+                                `<select>` de al lado anuncia también a qué
+                                campo corresponde — no solo "combobox" (Fase 15,
+                                el mismo motivo por el que ningún campo lleva
+                                sólo `aria-label`). `font-normal text-left`
+                                porque un `<th>` por defecto sale centrado y en
+                                negrita, y acá tiene que verse igual que un `td`.
+                              */}
+                              <th scope="row" className={`${TD} text-left font-normal`}>
                                 <span className="font-medium text-stone-800">
                                   {ETIQUETAS_CAMPO[campo]}
                                 </span>
@@ -171,7 +190,7 @@ export default async function MapeoColumnasPage({
                                     obligatorio
                                   </span>
                                 )}
-                              </td>
+                              </th>
                               <td className={TD}>
                                 <select
                                   name={`campo_${campo}`}

@@ -1,5 +1,7 @@
 'use client'
 
+import { botonClases } from '../_components/ui'
+
 /**
  * Mismo patrón que `app/panel/reservas/[id]/factura/boton-imprimir.tsx`.
  *
@@ -10,10 +12,7 @@
  */
 export function BotonImprimir({ texto = 'Imprimir / Guardar PDF' }: { texto?: string }) {
   return (
-    <button
-      onClick={() => window.print()}
-      className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 print:hidden"
-    >
+    <button onClick={() => window.print()} className={botonClases('primario', 'print:hidden')}>
       {texto}
     </button>
   )
