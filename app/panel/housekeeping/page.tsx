@@ -66,21 +66,30 @@ function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
         ))}
       </div>
 
-      <form action={asignarMucama} className="flex items-center gap-1">
+      <form action={asignarMucama} className="flex items-center gap-1.5">
         <input type="hidden" name="unidad_id" value={u.id} />
-        <select
-          name="mucama_id"
-          defaultValue={u.asignada_a ?? ''}
-          aria-label={`Responsable de limpieza de ${u.nombre}`}
-          className="rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
-        >
-          <option value="">Sin asignar</option>
-          {mucamas.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.nombre}
-            </option>
-          ))}
-        </select>
+        {/*
+          `<label>` visible y no `aria-label` a secas (Fase 15): un lector de
+          pantalla que llega al control por tabulación, sin haber leído antes
+          el nombre de la unidad en la tarjeta, solo escuchaba "combobox" sin
+          contexto de a qué habitación correspondía.
+        */}
+        <label className="flex items-center gap-1 text-xs text-stone-500">
+          <span>Mucama</span>
+          <select
+            name="mucama_id"
+            defaultValue={u.asignada_a ?? ''}
+            aria-label={`Responsable de limpieza de ${u.nombre}`}
+            className="rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-800 focus:border-lago-500 focus:outline-none"
+          >
+            <option value="">Sin asignar</option>
+            {mucamas.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>Asignar</button>
       </form>
     </li>

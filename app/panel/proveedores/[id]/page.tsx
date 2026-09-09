@@ -18,7 +18,19 @@ import {
   formatearLocal,
 } from '@/lib/domain/divisas'
 import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
-import { Encabezado, Etiqueta, Mensaje, Pagina, botonClases } from '../../_components/ui'
+import {
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  FILA,
+  Mensaje,
+  Pagina,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+} from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
 import { BotonEnvio } from '../../_components/boton-envio'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
@@ -238,94 +250,90 @@ export default async function ProveedorDetallePage({
           href={`/portal/${tokenPortal}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-3 inline-block rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+          className={botonClases('secundario', 'mt-3')}
         >
           Abrir el portal
         </a>
       </section>
 
-      <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Movimientos</h2>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="px-4 py-2.5">Fecha</th>
-              <th className="px-4 py-2.5">Concepto</th>
-              <th className="px-4 py-2.5">Vencimiento</th>
-              <th className="px-4 py-2.5">Estado</th>
-              <th className="px-4 py-2.5 text-right">Factura</th>
-              <th className="px-4 py-2.5 text-right">Pago</th>
-            </tr>
-          </thead>
-          <tbody>
-            {movs.length === 0 && (
+      <Tarjeta titulo="Movimientos" className="mt-6 overflow-hidden">
+        {movs.length === 0 ? (
+          <EstadoVacio titulo="Sin movimientos" icono="proveedores" />
+        ) : (
+          <Tabla resumen="Movimientos de la cuenta del proveedor, con facturas y pagos">
+            <thead>
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-stone-600">
-                  Sin movimientos.
-                </td>
+                <th className={TH}>Fecha</th>
+                <th className={TH}>Concepto</th>
+                <th className={TH}>Vencimiento</th>
+                <th className={TH}>Estado</th>
+                <th className={`${TH} text-right`}>Factura</th>
+                <th className={`${TH} text-right`}>Pago</th>
               </tr>
-            )}
-            {movs.map((m) => (
-              <tr key={m.id} className="border-b border-stone-100 last:border-0">
-                <td className="px-4 py-2 text-stone-500">{m.fecha}</td>
-                <td className="px-4 py-2 text-stone-700">
-                  {m.concepto || (m.tipo === 'cargo' ? 'Factura' : 'Pago')}
-                  {m.comprobante && (
-                    <span className="ml-1.5 text-xs text-stone-600">{m.comprobante}</span>
-                  )}
-                  {/* El número que figura en el papel, cuando no fue en dólares:
-                      es contra ése que se concilia la factura del proveedor. */}
-                  {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
-                    <span className="block text-xs text-stone-500">
-                      {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-stone-500">
-                  {m.vencimiento ? (
-                    <>
-                      {formatoFechaCorta(m.vencimiento)}
-                      {m.estado !== 'pagado' && (
-                        <span className="ml-1.5 text-xs text-stone-600">
-                          {ETIQUETAS_TRAMO[clasificarTramo(m.vencimiento, hoy)]}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td className="px-4 py-2">
-                  {m.tipo === 'pago' ? (
-                    <Etiqueta tono="exito">Registrado</Etiqueta>
-                  ) : m.estado === 'pagado' ? (
-                    <Etiqueta tono="exito">Pagado</Etiqueta>
-                  ) : (
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <Etiqueta tono={m.estado === 'vencido' ? 'peligro' : 'alerta'}>
-                        {ETIQUETAS_ESTADO_COMPROBANTE[m.estado]}
-                      </Etiqueta>
-                      <form action={marcarComprobantePagado}>
-                        <input type="hidden" name="movimiento_id" value={m.id} />
-                        <input type="hidden" name="proveedor_id" value={proveedor.id} />
-                        <button className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 transition hover:bg-stone-200">
-                          Saldar
-                        </button>
-                      </form>
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right text-stone-800">
-                  {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
-                </td>
-                <td className="px-4 py-2 text-right text-emerald-700">
-                  {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {movs.map((m) => (
+                <tr key={m.id} className={FILA}>
+                  <td className={`${TD} text-stone-500`}>{m.fecha}</td>
+                  <td className={`${TD} text-stone-700`}>
+                    {m.concepto || (m.tipo === 'cargo' ? 'Factura' : 'Pago')}
+                    {m.comprobante && (
+                      <span className="ml-1.5 text-xs text-stone-600">{m.comprobante}</span>
+                    )}
+                    {/* El número que figura en el papel, cuando no fue en dólares:
+                        es contra ése que se concilia la factura del proveedor. */}
+                    {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
+                      <span className="block text-xs text-stone-500">
+                        {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${TD} text-stone-500`}>
+                    {m.vencimiento ? (
+                      <>
+                        {formatoFechaCorta(m.vencimiento)}
+                        {m.estado !== 'pagado' && (
+                          <span className="ml-1.5 text-xs text-stone-600">
+                            {ETIQUETAS_TRAMO[clasificarTramo(m.vencimiento, hoy)]}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className={TD}>
+                    {m.tipo === 'pago' ? (
+                      <Etiqueta tono="exito">Registrado</Etiqueta>
+                    ) : m.estado === 'pagado' ? (
+                      <Etiqueta tono="exito">Pagado</Etiqueta>
+                    ) : (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Etiqueta tono={m.estado === 'vencido' ? 'peligro' : 'alerta'}>
+                          {ETIQUETAS_ESTADO_COMPROBANTE[m.estado]}
+                        </Etiqueta>
+                        <form action={marcarComprobantePagado}>
+                          <input type="hidden" name="movimiento_id" value={m.id} />
+                          <input type="hidden" name="proveedor_id" value={proveedor.id} />
+                          <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
+                            Saldar
+                          </button>
+                        </form>
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${TD} tabular text-right text-stone-800`}>
+                    {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
+                  </td>
+                  <td className={`${TD} tabular text-right text-emerald-700`}>
+                    {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        )}
+      </Tarjeta>
     </Pagina>
   )
 }
