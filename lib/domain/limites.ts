@@ -18,6 +18,7 @@ export type AccionLimitada =
   | 'ical'
   | 'webhook_pago'
   | 'webhook_whatsapp'
+  | 'webhook_canal_externo'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -136,6 +137,15 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 20,
     minutos: 60,
     motivo: 'Martilleo del webhook de WhatsApp por parte de quien no tiene el secreto de Meta.',
+  },
+
+  // Mismo criterio que webhook_pago: se cuenta DESPUÉS de rechazar el token,
+  // nunca antes, para no bloquear una racha de reservas legítimas de un
+  // channel manager real (Fase 7, preparación).
+  webhook_canal_externo: {
+    maximo: 20,
+    minutos: 60,
+    motivo: 'Martilleo del webhook de canales externos por parte de quien no tiene el token.',
   },
 }
 
