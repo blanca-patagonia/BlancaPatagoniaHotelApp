@@ -32,10 +32,20 @@ export const ETIQUETAS_ESTADO_RESERVA: Record<EstadoReserva, string> = {
 }
 
 /**
- * Canales de venta. Debe coincidir con el default y los valores de
- * `reservas.canal` (ver `0005_reservas_ocupacion.sql`).
+ * Canales de venta. Debe coincidir con el constraint `reservas_canal_valido`
+ * de `reservas.canal` (migración 0062).
+ *
+ * `channel_manager` es el bucket genérico de la Fase 7 del análisis de
+ * referencia: cualquier reserva que entre por `POST
+ * /api/canales/externos/<token>` (Beds24, Hotelrunner, RateGain...) cae acá,
+ * sin importar CUÁL proveedor fue —eso vive en `canales_externos`, no en esta
+ * columna—. El motivo es el mismo que dejó escrito la 0062: esta lista es la
+ * dimensión de `resumen_canal_mes` y de la conciliación de comisiones, y tiene
+ * que quedar chica y curada a mano. Cuando un proveedor puntual merezca su
+ * propia fila en esos reportes, se lo agrega acá (una migración chica, el
+ * mismo trámite que ya pide sumar cualquier canal nuevo) — no antes.
  */
-export const CANALES = ['directo', 'web', 'booking', 'expedia'] as const
+export const CANALES = ['directo', 'web', 'booking', 'expedia', 'channel_manager'] as const
 
 export type Canal = (typeof CANALES)[number]
 
@@ -44,6 +54,7 @@ export const ETIQUETAS_CANAL: Record<Canal, string> = {
   web: 'Web propia',
   booking: 'Booking',
   expedia: 'Expedia',
+  channel_manager: 'Channel manager',
 }
 
 /** Estados que OCUPAN inventario (bloquean la unidad en el motor anti-overbooking). */
@@ -192,6 +203,37 @@ export const ETIQUETAS_SEGMENTO: Record<Segmento, string> = {
  * pantalla lo deja elegir.
  */
 export function segmentoDeCanal(canal: string): Segmento {
-  if (canal === 'booking' || canal === 'expedia') return 'ota'
+  if (canal === 'booking' || canal === 'expedia' || canal === 'channel_manager') return 'ota'
   return 'particular'
+}
+
+const RE_FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
+
+export interface BusquedaFechas {
+  /** Vacío si el parámetro no tenía forma de fecha AAAA-MM-DD. */
+  checkIn: string
+  checkOut: string
+  /** Las dos fechas son válidas y el rango tiene al menos una noche. */
+  buscado: boolean
+  /**
+   * Se mandaron los dos parámetros, pero el resultado no es una búsqueda
+   * válida (formato raro, o check-out anterior o igual al check-in).
+   *
+   * Auditoría de calidad 2026-09-09: sin esto, `app/panel/reservas/nueva`
+   * mostraba la pantalla en blanco —ni resultados ni error— ante fechas
+   * invertidas. Un botón que "no hace nada" es indistinguible de uno roto.
+   */
+  invalida: boolean
+}
+
+/** Interpreta los `searchParams` de fecha del alta de mostrador. Lógica pura, sin JSX. */
+export function parsearBusquedaFechas(
+  checkInParam: string | undefined,
+  checkOutParam: string | undefined,
+): BusquedaFechas {
+  const checkIn = RE_FECHA_ISO.test(checkInParam ?? '') ? checkInParam! : ''
+  const checkOut = RE_FECHA_ISO.test(checkOutParam ?? '') ? checkOutParam! : ''
+  const buscado = Boolean(checkIn && checkOut && checkOut > checkIn)
+  const invalida = Boolean(checkInParam && checkOutParam) && !buscado
+  return { checkIn, checkOut, buscado, invalida }
 }

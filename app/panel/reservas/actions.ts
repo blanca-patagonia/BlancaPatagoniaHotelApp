@@ -71,6 +71,8 @@ export interface EstadoNuevaReserva {
    * un error en un solo campo obligaba a escribir todo de nuevo.
    */
   valores?: {
+    tipo_unidad_id?: string
+    unidad_id?: string
     apellido?: string
     nombre?: string
     email?: string
@@ -89,6 +91,7 @@ export interface EstadoNuevaReserva {
     segmento?: string
     voucher?: string
     descuento_pct?: string
+    checkin_inmediato?: string
   }
 }
 
@@ -105,6 +108,8 @@ export async function crearReservaAction(
 ): Promise<EstadoNuevaReserva> {
   await requerirAcceso('reservas')
   const tipoUnidadId = String(formData.get('tipo_unidad_id') ?? '')
+  const unidadId = String(formData.get('unidad_id') ?? '').trim() || undefined
+  const checkinInmediato = formData.get('checkin_inmediato') === '1'
   const checkIn = String(formData.get('check_in') ?? '')
   const checkOut = String(formData.get('check_out') ?? '')
   const huespedesCant = Math.max(1, Number(formData.get('huespedes') ?? 1) || 1)
@@ -141,6 +146,8 @@ export async function crearReservaAction(
 
   // Se devuelve tal cual vino para reponer el formulario ante cualquier error.
   const valores = {
+    tipo_unidad_id: tipoUnidadId,
+    unidad_id: unidadId ?? '',
     apellido,
     nombre,
     email,
@@ -158,6 +165,7 @@ export async function crearReservaAction(
     segmento: segmentoCrudo,
     voucher,
     descuento_pct: String(descuentoPct),
+    checkin_inmediato: checkinInmediato ? '1' : '',
   }
 
   if (!tipoUnidadId || !checkIn || !checkOut) {
@@ -241,6 +249,7 @@ export async function crearReservaAction(
   // Alta atómica: unidad libre + cotización + anti-overbooking (helper compartido).
   const res = await crearReservaEnUnidadLibre(supabase, {
     tipoUnidadId,
+    unidadId,
     checkIn,
     checkOut,
     // `crear_reserva` deriva el pax del desglose, así que este valor queda como
@@ -295,6 +304,23 @@ export async function crearReservaAction(
     Es el mismo movimiento que la 0039 hizo con el desglose de ocupación, que
     dejó escrito el argumento y no alcanzó a este campo.
   */
+
+  // Check-in inmediato (patrón QloApps: marcar "In Progress" al confirmar el
+  // alta de mostrador). Es una escritura ACCESORIA sobre una reserva que ya
+  // quedó creada: si falla, no tiene sentido cortar ni mostrar el alta como
+  // fallida —la reserva existe—, así que se loguea con `registrarFalla` y
+  // recepción la pasa a `in_house` a mano desde la ficha (un clic).
+  if (checkinInmediato) {
+    const { error: eCheckin } = await supabase
+      .from('reservas')
+      .update({ estado: 'in_house' })
+      .eq('id', res.reserva.id)
+    if (eCheckin) {
+      registrarFalla(eCheckin, `check-in inmediato de la reserva ${res.reserva.id}`)
+      redirect(`/panel/reservas/${res.reserva.id}?error=checkin_inmediato`)
+    }
+  }
+
   redirect(`/panel/reservas/${res.reserva.id}`)
 }
 
