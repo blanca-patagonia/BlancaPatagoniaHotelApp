@@ -138,7 +138,10 @@ export function FormularioReserva({
         </div>
       </Tarjeta>
 
-      <Tarjeta titulo="3 · ¿A nombre de quién?">
+      <Tarjeta
+        titulo="3 · ¿A nombre de quién?"
+        descripcion="Solo el apellido es obligatorio."
+      >
         <div className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
           <Campo etiqueta="Apellido" requerido>
             <input name="apellido" required defaultValue={v.apellido ?? ''} className={CAMPO} />

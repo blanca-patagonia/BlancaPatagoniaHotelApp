@@ -4832,3 +4832,29 @@ Typecheck 0 · lint 0. La migración y el KPI nuevo **no se probaron contra una
 base**: esta sesión no tiene Docker levantado. Falta correr `npx supabase db
 reset` y confirmar en un navegador que el número sube al cancelar una reserva,
 antes de dar esto por cerrado del todo.
+
+## 2026-09-09 — «Reserva walk-in», revisado antes de tocar código
+
+Patrón de referencia: el alta rápida de mostrador de QloApps.
+
+Antes de escribir nada se leyó `app/panel/reservas/nueva/formulario.tsx`
+entero, porque **ya existía** un alta desde el panel y duplicarla sin mirar
+hubiera sido el error que pide evitar `AGENTS.md`. El hallazgo: de los ~19
+campos del formulario, **solo el apellido y la unidad son obligatorios** — plan,
+garantía, segmento, voucher, descuento, canal y la composición de huéspedes ya
+tienen un valor por defecto sensato (`desayuno`, `sin_garantia`, `directo`,
+adultos = los buscados, el resto en 0). La percepción de "no es walk-in" que
+había en el inventario de la Fase 0 era sobre la **cantidad de tarjetas en
+pantalla**, no sobre campos que de verdad haya que llenar.
+
+Por eso esto no se resolvió agregando un modo/pantalla nueva —que hubiera sido
+reimplementar un flujo que ya funciona, y encima escondiendo campos con algo
+tipo `<details>`, que `CLAUDE.md` prohíbe para acciones y formularios—, sino
+dejándolo **dicho**: la descripción de la pantalla y de la tarjeta 3 ahora
+avisan que con el apellido alcanza. Mismo formulario, mismo flujo, cero riesgo
+sobre `crear_reserva`.
+
+### Verificación
+
+Typecheck 0 · lint 0. Cambio de texto únicamente, sin migración ni lógica
+nueva — no había nada que probar contra base.

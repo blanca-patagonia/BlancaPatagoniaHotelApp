@@ -79,7 +79,7 @@ export default async function NuevaReservaPage({
 
       <Encabezado
         titulo="Nueva reserva"
-        descripcion="Primero buscá qué hay libre; después elegís la unidad y cargás al huésped."
+        descripcion="Primero buscá qué hay libre; después elegís la unidad y cargás al huésped. Para una reserva de mostrador alcanza con el apellido: el resto ya viene con los valores más comunes y se puede ajustar después desde la ficha."
         icono="reservas"
       />
 
