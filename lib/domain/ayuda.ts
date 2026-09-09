@@ -530,6 +530,11 @@ export const CAPITULOS: Capitulo[] = [
         detalle:
           'Casi todos los listados tienen "Exportar CSV" para abrirlos en Excel.',
       },
+      {
+        titulo: 'Cierre del día',
+        detalle:
+          'Repasa un día puntual: cuántos llegaron de los que tenían que llegar, quién no apareció, quién se fue y cuánto entró y por qué medio. Es de solo lectura — no marca no-shows ni cierra nada por su cuenta, eso lo decide una persona.',
+      },
     ],
   },
   {

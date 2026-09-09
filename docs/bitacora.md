@@ -4961,3 +4961,40 @@ real contra Postgres). 500 salteados por falta de base local.
 dispare el cron nuevo (`vercel.json`), ni que `CRON_SECRET` esté configurado
 en el proyecto — reutiliza la misma variable que ya usan los otros cuatro
 crons, así que si esos andan, este también debería.
+
+## 2026-09-09 — Cierre del día (night audit), de solo lectura
+
+Patrón de referencia: el night audit de Hotel PMS. El dashboard ya mostraba
+llegadas/salidas/nuevas/canceladas de HOY, pero no había forma de repasar un
+día ya pasado antes de darlo por cerrado.
+
+Decisión deliberada: **es de solo lectura**. Un night audit de manual
+convencional también marca no-shows y cierra el turno; ninguna de las dos
+cosas se automatizó acá. Inferir esas reglas sin que el hotel las confirme es
+justo el tipo de decisión que el ADR 0019 (cobro efectivo de la política de
+cancelación) dejó **sin decidir a propósito** — automatizarlo hoy hubiera
+sido decidir por el hotel algo que el propio proyecto ya marcó como
+pendiente. Esta pantalla es el repaso; actuar sobre lo que muestra sigue
+siendo de una persona.
+
+No entró al catálogo de `lib/domain/informes.ts` (los otros 5 informes) aunque
+vive al lado: esos son **por mes**, con un contrato que exige un selector de
+mes o ninguno; el cierre del día es **por fecha puntual**, un parámetro
+distinto que no encaja en `mesValido`/`rutaDeInforme`. Por eso es una pantalla
+aparte, `/panel/cierre-diario`, con su propio enlace visible desde el índice
+de Reportes.
+
+Un detalle que costó pensar: una reserva **cancelada** semanas atrás sigue
+teniendo su `estadias.check_in` en la fecha original — si se contara como
+«llegada prevista» de hoy, un día con varias cancelaciones viejas mostraría
+más llegadas previstas de las que alguna vez fueron reales. Se filtra antes
+de clasificar (`page.tsx`, no en el dominio: es una regla de qué datos entran,
+no de cómo se clasifican).
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (la ruta nueva aparece en el manifiesto) ·
+**1497 tests en verde, 0 en rojo** (5 nuevos, de dominio puro:
+`tests/cierre-diario.test.ts`), 500 salteados por falta de base local. La
+pantalla **no se probó contra una base real** — falta `db reset` y confirmar
+en un navegador que los números coinciden con lo que de verdad pasó ese día.
