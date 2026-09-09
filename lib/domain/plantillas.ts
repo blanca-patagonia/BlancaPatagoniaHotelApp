@@ -1,12 +1,17 @@
 /**
  * Plantillas de comunicaciones al huésped (lógica pura).
  *
- * Define QUÉ se comunica y CUÁNDO. El CÓMO (enviar el correo) queda detrás del
- * proveedor de email, que sigue siendo un stub: el proyecto no integra un
- * servicio real (ver ADR 0012).
+ * Define QUÉ se comunica y CUÁNDO. El CÓMO (enviar el correo) lo resuelve el
+ * proveedor de email (`lib/email`) — hoy Resend, real, por HTTP (ADR 0012 sigue
+ * vigente para lo que no tiene proveedor real: firma electrónica, facturación).
  *
  * El render es un reemplazo de marcadores `{{variable}}`, deliberadamente
- * simple: sin motor de plantillas ni dependencias nuevas.
+ * simple: sin motor de plantillas ni dependencias nuevas. Cada plantilla se
+ * escribe UNA vez, en texto plano con un formato mínimo (`**negrita**`,
+ * viñetas con `·`, párrafos separados por línea en blanco); `textoAHtml`
+ * deriva el cuerpo HTML de ese mismo texto en vez de mantener dos redacciones
+ * por evento, que es como el texto y el HTML de un correo terminan diciendo
+ * cosas distintas con el tiempo.
  */
 
 export const EVENTOS_EMAIL = [
@@ -149,6 +154,8 @@ Gracias por volver: nos alegra tenerte de nuevo frente al Lago Argentino.`,
 export interface EmailRenderizado {
   asunto: string
   cuerpo: string
+  /** Mismo contenido que `cuerpo`, como HTML — ver `textoAHtml`. */
+  cuerpoHtml: string
   /** Marcadores que quedaron sin valor (la plantilla se envía igual, incompleta). */
   faltantes: string[]
 }
@@ -161,6 +168,66 @@ function reemplazar(texto: string, variables: Record<string, string | number>): 
     const valor = variables[clave]
     return valor === undefined || valor === null ? `{{${clave}}}` : String(valor)
   })
+}
+
+function escaparHtml(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+// No incluye `.,;:!?)` al final: sin eso, «en https://x.com/y.» enlazaba el
+// punto de la oración y el link salía roto (verificado a mano en la vista
+// previa: `/ejemplo.` en vez de `/ejemplo`).
+const URL_ABSOLUTA = /https?:\/\/[^\s<]+[^\s<.,;:!?)]/g
+
+/** Convierte una línea ya escapada: `**negrita**` y URLs sueltas como enlace. */
+function formatearLinea(linea: string): string {
+  return linea
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(URL_ABSOLUTA, (url) => `<a href="${url}" style="color:#0f5c8c;">${url}</a>`)
+}
+
+/**
+ * Deriva el HTML de un cuerpo en texto plano ya con sus variables reemplazadas.
+ *
+ * Escapa ANTES de interpretar el formato propio (negrita, viñetas, enlaces):
+ * si el nombre de un huésped trajera `<` o `&`, escapar después reventaría las
+ * etiquetas que este mismo formateador acaba de escribir. `{{nombre}}` no se
+ * valida en ningún otro lado — puede traer lo que sea — y este es el único
+ * punto por el que ese texto se vuelve markup.
+ *
+ * El formato de entrada es deliberadamente chico (el mismo que ya usan las
+ * cinco plantillas): párrafos separados por una línea en blanco, líneas que
+ * empiezan con «· » como una lista, y nada más. No es Markdown completo a
+ * propósito — para lo que este sistema manda, no hace falta, y cada regla de
+ * más es una forma nueva de que un texto futuro la dispare sin querer.
+ */
+export function textoAHtml(texto: string): string {
+  const parrafos = escaparHtml(texto).split(/\n{2,}/)
+
+  const html = parrafos
+    .map((p) => {
+      const lineas = p.split('\n').filter((l) => l.length > 0)
+      if (lineas.length > 0 && lineas.every((l) => l.startsWith('· '))) {
+        const items = lineas.map((l) => `<li>${formatearLinea(l.slice(2))}</li>`).join('')
+        return `<ul style="margin:0 0 16px;padding-left:20px;">${items}</ul>`
+      }
+      return `<p style="margin:0 0 16px;">${lineas.map(formatearLinea).join('<br>')}</p>`
+    })
+    .join('')
+
+  // Estilos inline: la mayoría de los clientes de correo descartan un
+  // `<style>` en el `<head>`, así que un color o un ancho que no viaje en el
+  // atributo `style` de cada elemento simplemente no se ve.
+  return (
+    `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;` +
+    `max-width:560px;margin:0 auto;padding:24px;color:#1c1917;font-size:15px;` +
+    `line-height:1.5;">${html}` +
+    `<p style="margin:24px 0 0;font-size:12px;color:#78716c;">Blanca Patagonia — El Calafate, Santa Cruz</p>` +
+    `</div>`
+  )
 }
 
 /** Variables que la plantilla declara y no vinieron con valor. */
@@ -185,9 +252,11 @@ export function renderizar(
   variables: Record<string, string | number>,
 ): EmailRenderizado {
   const plantilla = PLANTILLAS[evento]
+  const cuerpo = reemplazar(plantilla.cuerpo, variables)
   return {
     asunto: reemplazar(plantilla.asunto, variables),
-    cuerpo: reemplazar(plantilla.cuerpo, variables),
+    cuerpo,
+    cuerpoHtml: textoAHtml(cuerpo),
     faltantes: variablesFaltantes(plantilla, variables),
   }
 }
