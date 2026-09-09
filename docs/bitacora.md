@@ -5033,3 +5033,54 @@ Sin test dedicado: la pantalla no tiene lógica propia más allá de reusar
 `cuentaConsolidada`, `caeVigente` y el resto del dominio de facturación, ya
 cubiertos. **No se probó contra una base real** ni se verificó en un
 navegador que imprimir de verdad produzca un PDF legible.
+
+## 2026-09-09 — WhatsApp por Cloud API oficial (Fase 3, ADR 0034)
+
+Patrón de referencia: Evolution API. Detalle completo, con el porqué de cada
+decisión, en el ADR 0034 — acá el resumen operativo.
+
+`notificaciones.canal` (migración 0075) tenía `whatsapp` como valor válido
+desde el día en que se creó la tabla, con un comentario que decía "previsto
+para no migrar al enchufarlo". Era aspiracional: `encolar` escribía
+`canal: 'email'` fijo y `despachar` solo sabía llamar al proveedor de correo.
+Lo nuevo:
+
+- **`lib/whatsapp/`** — adapter con el mismo patrón simulador/real que los
+  otros seis (Cloud API oficial de Meta por HTTP, sin SDK, sin puente sobre
+  WhatsApp Web que arriesgue el número real del hotel).
+- **`PLANTILLAS_WHATSAPP`** (`lib/domain/plantillas.ts`) — catálogo aparte
+  del de email: Meta exige plantillas aprobadas de antemano con parámetros
+  posicionales, no texto libre. Solo `confirmacion_reserva` tiene entrada
+  por ahora (ver el ADR, sección "lo que queda afuera").
+- **`claveDeNotificacion` distingue canal** cuando no es `email`, para que
+  mandar el mismo evento por los dos canales a la vez no choque contra sí
+  mismo — sin tocar la clave de nada ya encolado antes de hoy.
+- **Migración 0090**: `entregada`/`leida` en `notificaciones.estado` (antes
+  solo existían los que decide el propio sistema) + `id_externo` para
+  correlacionar. `esAvanceDeEntrega` evita que un webhook desordenado haga
+  retroceder de `leida` a `entregada`.
+- **`/api/webhooks/whatsapp`** — handshake de verificación de Meta (GET) +
+  recepción de estados de entrega y mensajes entrantes (POST), firmado con
+  HMAC-SHA256 sobre `X-Hub-Signature-256`, mismo criterio que el webhook de
+  pagos: 200 para lo que no interesa, 401 para firma inválida, límite de
+  intentos contado DESPUÉS de rechazar la firma.
+- Confirmación de reserva ahora sale por WhatsApp **además** del email
+  cuando el huésped dejó teléfono, no en su lugar.
+
+### Lo que NO entró, a propósito
+
+Recordatorio pre-checkin y bienvenida por WhatsApp necesitan plantillas
+aprobadas por Meta con la cuenta real del hotel — no es algo que el código
+resuelva solo. Los mensajes entrantes del huésped solo se registran en el
+log, no se enrutan a `conversaciones`: ese puente de dos vías es una
+integración más grande, y antes hay que decidir si conviene una instancia de
+WhatsApp compartida con otro proyecto del usuario o una propia.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (la ruta del webhook aparece en el
+manifiesto) · **1518 tests en verde, 0 en rojo** (21 nuevos: adapter,
+catálogo de plantillas, clave de idempotencia por canal, `esAvanceDeEntrega`
+y el webhook completo con HMAC real), 500 salteados por falta de base
+local. **Nada de esto se probó contra la Cloud API real**: no hay número de
+WhatsApp Business verificado ni plantillas aprobadas todavía.

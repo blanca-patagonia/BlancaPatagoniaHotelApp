@@ -2,15 +2,19 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
-import type { EventoEmail } from '@/lib/domain/plantillas'
+import { enviarWhatsApp } from '@/lib/whatsapp'
+import { armarMensajeWhatsApp, type EventoEmail } from '@/lib/domain/plantillas'
 import {
   agotoIntentos,
   claveDeNotificacion,
   cuandoEnviar,
   esperaDeReintento,
   motivoNoNotificar,
+  type CanalNotificacion,
   type PreferenciasHuesped,
 } from '@/lib/domain/notificaciones'
+
+export type { CanalNotificacion }
 
 /**
  * La bandeja de salida (migración 0075).
@@ -35,6 +39,7 @@ export interface PedidoDeNotificacion {
   evento: EventoEmail
   /** La entidad de la que habla el mensaje. Entra en la clave de idempotencia. */
   entidadId: string
+  /** Email o teléfono, según `canal`. */
   destinatario: string | null
   variables: Record<string, string | number>
   huespedId?: string | null
@@ -44,6 +49,12 @@ export interface PedidoDeNotificacion {
    * es legítimo. Ver `claveDeNotificacion`.
    */
   discriminante?: string
+  /**
+   * Por dónde sale. `email` por defecto: es el único canal que existía hasta
+   * la Fase 3 (WhatsApp). La columna ya admitía `whatsapp` desde la migración
+   * 0075 —"previsto para no migrar al enchufarlo"— pero nada la usaba todavía.
+   */
+  canal?: CanalNotificacion
 }
 
 export interface ResultadoEncolado {
@@ -63,8 +74,21 @@ export async function encolar(
   client: SupabaseClient,
   p: PedidoDeNotificacion,
 ): Promise<ResultadoEncolado> {
+  const canal = p.canal ?? 'email'
+
   if (!p.destinatario) {
-    return { ok: false, motivo: 'El huésped no tiene email cargado.' }
+    return {
+      ok: false,
+      motivo: canal === 'whatsapp' ? 'El huésped no tiene teléfono cargado.' : 'El huésped no tiene email cargado.',
+    }
+  }
+
+  // El canal WhatsApp exige una plantilla aprobada por Meta (ver
+  // `armarMensajeWhatsApp`). Se valida ACÁ, no al despachar: mejor enterarse
+  // en el momento de encolar que no hay plantilla para este evento, que
+  // descubrirlo recién cuando el cron intenta mandarlo.
+  if (canal === 'whatsapp' && !armarMensajeWhatsApp(p.evento, p.variables)) {
+    return { ok: false, motivo: `El evento "${p.evento}" no tiene plantilla de WhatsApp.` }
   }
 
   // Consentimiento. Se consulta acá y no al despachar: si el huésped pidió no
@@ -84,8 +108,8 @@ export async function encolar(
 
   const { error } = await client.from('notificaciones').insert({
     evento: p.evento,
-    canal: 'email',
-    clave: claveDeNotificacion(p.evento, p.entidadId, p.discriminante),
+    canal,
+    clave: claveDeNotificacion(p.evento, p.entidadId, p.discriminante, canal),
     destinatario: p.destinatario,
     variables: p.variables,
     huesped_id: p.huespedId ?? null,
@@ -108,6 +132,7 @@ export async function encolar(
 interface FilaPendiente {
   id: string
   evento: string
+  canal: CanalNotificacion
   destinatario: string
   variables: Record<string, string | number>
   intentos: number
@@ -118,6 +143,34 @@ export interface ResumenDespacho {
   enviadas: number
   reintentar: number
   fallidas: number
+}
+
+interface ResultadoDeEnvio {
+  ok: boolean
+  detalle: string
+  /** Id del mensaje del lado del proveedor, para que el webhook de entrega lo encuentre. */
+  idExterno?: string
+}
+
+/**
+ * Envía UNA fila ya encolada, por el canal que le corresponda.
+ *
+ * Separado de `despachar` para que la rama de WhatsApp no ensucie el bucle
+ * principal: quien lee el `for` de abajo no necesita saber cómo se arma un
+ * mensaje de WhatsApp, solo que hay algo que se puede enviar o no.
+ */
+async function despacharUna(n: FilaPendiente): Promise<ResultadoDeEnvio> {
+  if (n.canal === 'whatsapp') {
+    const armado = armarMensajeWhatsApp(n.evento as EventoEmail, n.variables ?? {})
+    if (!armado) {
+      // No debería pasar: `encolar` ya valida que la plantilla exista. Si
+      // pasa igual —un evento que perdió su plantilla de WhatsApp entre medio—
+      // se informa como fallo y no como una excepción que tumbe la corrida.
+      return { ok: false, detalle: `El evento "${n.evento}" ya no tiene plantilla de WhatsApp.` }
+    }
+    return enviarWhatsApp({ telefono: n.destinatario, plantilla: armado.plantilla, parametros: armado.parametros })
+  }
+  return enviarPlantilla(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
 }
 
 /**
@@ -151,7 +204,7 @@ export async function despachar(
   */
   const { data, error } = await client
     .from('notificaciones')
-    .select('id, evento, destinatario, variables, intentos')
+    .select('id, evento, canal, destinatario, variables, intentos')
     .eq('estado', 'pendiente')
     .lte('proximo_en', 'now')
     .order('proximo_en', { ascending: true })
@@ -166,16 +219,17 @@ export async function despachar(
   resumen.tomadas = pendientes.length
 
   for (const n of pendientes) {
-    const r = await enviarPlantilla(
-      n.evento as EventoEmail,
-      n.destinatario,
-      n.variables ?? {},
-    )
+    const r = await despacharUna(n)
 
     if (r.ok) {
       const { error: eOk } = await client
         .from('notificaciones')
-        .update({ estado: 'enviada', enviada_en: new Date().toISOString(), error: null })
+        .update({
+          estado: 'enviada',
+          enviada_en: new Date().toISOString(),
+          error: null,
+          ...(r.idExterno ? { id_externo: r.idExterno } : {}),
+        })
         .eq('id', n.id)
       registrarFalla(eOk, `marcar enviada la notificación ${n.id}`)
       resumen.enviadas++

@@ -191,3 +191,52 @@ export function renderizar(
     faltantes: variablesFaltantes(plantilla, variables),
   }
 }
+
+/**
+ * Plantillas de WhatsApp (Fase 3, patrón de referencia: Evolution API).
+ *
+ * ⚠️ No es lo mismo que una plantilla de email. WhatsApp Business no deja
+ * mandar texto libre a un huésped que no escribió antes (fuera de una ventana
+ * de 24 horas): hay que usar una plantilla **aprobada por Meta de antemano**,
+ * identificada por nombre, con parámetros posicionales (`{{1}}`, `{{2}}`…).
+ * Por eso esto no reusa `PLANTILLAS`/`reemplazar` — el texto no lo arma este
+ * sistema, lo tiene ya aprobado Meta del otro lado.
+ *
+ * `parametros` es la lista de claves de `variables`, EN EL ORDEN en que el
+ * texto aprobado las espera. Cruzar el orden no tira error: Meta valida la
+ * **cantidad** de parámetros, no su significado, así que un orden equivocado
+ * manda el código de reserva donde el texto dice la fecha, y el mensaje sale
+ * igual — hay que revisarlo a mano contra la plantilla real en Meta Business
+ * Manager antes de dar esto por andando.
+ *
+ * Solo `confirmacion_reserva` tiene plantilla de WhatsApp por ahora: es el
+ * único mensaje que el huésped espera activamente. Un evento sin entrada acá
+ * simplemente no se puede mandar por ese canal (`armarMensajeWhatsApp`
+ * devuelve `null`).
+ */
+export const PLANTILLAS_WHATSAPP: Partial<
+  Record<EventoEmail, { plantilla: string; parametros: readonly string[] }>
+> = {
+  confirmacion_reserva: {
+    plantilla: 'confirmacion_reserva',
+    parametros: ['nombre', 'codigo', 'check_in', 'total'],
+  },
+}
+
+export interface MensajeWhatsAppArmado {
+  plantilla: string
+  parametros: string[]
+}
+
+/** `null` cuando el evento no tiene plantilla de WhatsApp: no se puede mandar por ese canal. */
+export function armarMensajeWhatsApp(
+  evento: EventoEmail,
+  variables: Record<string, string | number>,
+): MensajeWhatsAppArmado | null {
+  const def = PLANTILLAS_WHATSAPP[evento]
+  if (!def) return null
+  return {
+    plantilla: def.plantilla,
+    parametros: def.parametros.map((clave) => String(variables[clave] ?? '')),
+  }
+}

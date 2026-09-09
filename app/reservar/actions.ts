@@ -166,5 +166,28 @@ export async function crearReservaPublica(
     },
   })
 
+  /*
+    WhatsApp además del email, no en lugar de él (Fase 3, patrón de referencia:
+    Evolution API). El huésped que dejó teléfono suele mirarlo antes que el
+    correo, pero el email sigue siendo el canal con comprobante y enlace de
+    pago completo — dos avisos del mismo hecho no es ruido, es alcance.
+  */
+  if (telefono) {
+    await encolar(admin, {
+      evento: 'confirmacion_reserva',
+      entidadId: nueva.id,
+      destinatario: telefono,
+      huespedId,
+      reservaId: nueva.id,
+      canal: 'whatsapp',
+      variables: {
+        nombre: nombre || apellido,
+        codigo: nueva.codigo,
+        check_in: formatoFechaCorta(checkIn),
+        total: formatearUSD(Number(nueva.total)),
+      },
+    })
+  }
+
   redirect(`/reservar/confirmacion/${token}`)
 }

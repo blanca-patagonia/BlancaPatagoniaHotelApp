@@ -144,6 +144,9 @@ export function motivoNoNotificar(
 
 /* ──────────────────────────────────────────────────────── la clave ──── */
 
+/** Por dónde sale un aviso (Fase 3: WhatsApp se suma al email). */
+export type CanalNotificacion = 'email' | 'whatsapp'
+
 /**
  * Clave de idempotencia del mensaje.
  *
@@ -154,11 +157,45 @@ export function motivoNoNotificar(
  * la misma entidad —un recordatorio por cada estadía, no uno por reserva— y por
  * eso es explícito: que quien agrega un evento nuevo tenga que pensar si el suyo
  * se manda una vez o varias.
+ *
+ * `canal` sólo entra en la clave cuando NO es `email`: agregarlo siempre habría
+ * cambiado la clave de cada fila ya encolada antes de la Fase 3 (WhatsApp), y
+ * una migración de datos por esto sería mover una montaña para no romper nada
+ * que en los hechos no cambió — el email sigue siendo el canal por defecto.
+ * Pero un mismo evento sobre la misma entidad SÍ puede mandarse por los dos
+ * canales a la vez (confirmación por email y por WhatsApp): sin distinguir el
+ * canal en la clave, el segundo insert chocaría contra el primero y el
+ * segundo canal nunca saldría.
  */
 export function claveDeNotificacion(
   evento: EventoEmail,
   entidadId: string,
   discriminante?: string,
+  canal: CanalNotificacion = 'email',
 ): string {
-  return discriminante ? `${evento}:${entidadId}:${discriminante}` : `${evento}:${entidadId}`
+  const base = discriminante ? `${evento}:${entidadId}:${discriminante}` : `${evento}:${entidadId}`
+  return canal === 'email' ? base : `${base}:${canal}`
+}
+
+/* ────────────────────────────────────────────── estado de entrega real ──── */
+
+export type EstadoNotificacion = 'pendiente' | 'enviada' | 'entregada' | 'leida' | 'fallida' | 'cancelada'
+
+const ORDEN_ENTREGA: Record<string, number> = { pendiente: 0, enviada: 1, entregada: 2, leida: 3 }
+
+/**
+ * ¿Este estado que informa el webhook es de verdad un avance?
+ *
+ * Patrón de referencia: Evolution API — los eventos de WhatsApp llegan
+ * DESORDENADOS (el de apertura puede entrar antes que el de entrega). Sin
+ * esto, aplicarlos a ciegas haría retroceder de `leida` a `entregada` con un
+ * evento tardío.
+ *
+ * `fallida` solo se acepta si todavía no se sabía nada del destino: un
+ * rebote informado después de que ya se confirmó la lectura es casi
+ * seguro un evento viejo que llegó tarde, no una novedad real.
+ */
+export function esAvanceDeEntrega(actual: EstadoNotificacion, nuevo: 'entregada' | 'leida' | 'fallida'): boolean {
+  if (nuevo === 'fallida') return actual === 'pendiente' || actual === 'enviada'
+  return (ORDEN_ENTREGA[nuevo] ?? -1) > (ORDEN_ENTREGA[actual] ?? -1)
 }

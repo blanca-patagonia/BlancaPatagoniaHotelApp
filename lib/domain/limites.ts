@@ -17,6 +17,7 @@ export type AccionLimitada =
   | 'recuperar_password'
   | 'ical'
   | 'webhook_pago'
+  | 'webhook_whatsapp'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -127,6 +128,14 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 20,
     minutos: 60,
     motivo: 'Martilleo del webhook de pagos por parte de quien no tiene el secreto.',
+  },
+
+  // Mismo criterio que webhook_pago: se cuenta DESPUÉS de rechazar la firma,
+  // nunca antes, para no descartar avisos legítimos de entrega en un pico.
+  webhook_whatsapp: {
+    maximo: 20,
+    minutos: 60,
+    motivo: 'Martilleo del webhook de WhatsApp por parte de quien no tiene el secreto de Meta.',
   },
 }
 

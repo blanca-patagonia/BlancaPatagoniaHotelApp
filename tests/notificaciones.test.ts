@@ -9,6 +9,7 @@ import {
   dentroDeHorario,
   esInmediato,
   esperaDeReintento,
+  esAvanceDeEntrega,
   horaDelHotel,
   motivoNoNotificar,
 } from '@/lib/domain/notificaciones'
@@ -154,5 +155,39 @@ describe('clave de idempotencia', () => {
     const a = claveDeNotificacion('recordatorio_checkin', 'r1', '2027-03-10')
     const b = claveDeNotificacion('recordatorio_checkin', 'r1', '2027-04-20')
     expect(a).not.toBe(b)
+  })
+
+  it('el canal WhatsApp no colisiona con el mismo evento por email', () => {
+    const porEmail = claveDeNotificacion('confirmacion_reserva', 'r1')
+    const porWhatsApp = claveDeNotificacion('confirmacion_reserva', 'r1', undefined, 'whatsapp')
+    expect(porEmail).not.toBe(porWhatsApp)
+  })
+
+  it('el canal email no cambia la clave de antes de la Fase 3 (compatibilidad)', () => {
+    expect(claveDeNotificacion('confirmacion_reserva', 'r1')).toBe(
+      claveDeNotificacion('confirmacion_reserva', 'r1', undefined, 'email'),
+    )
+  })
+})
+
+describe('esAvanceDeEntrega', () => {
+  it('entregada es avance sobre enviada, pero no sobre sí misma', () => {
+    expect(esAvanceDeEntrega('enviada', 'entregada')).toBe(true)
+    expect(esAvanceDeEntrega('entregada', 'entregada')).toBe(false)
+  })
+
+  it('leida es avance sobre entregada, pero no al revés', () => {
+    expect(esAvanceDeEntrega('entregada', 'leida')).toBe(true)
+    expect(esAvanceDeEntrega('leida', 'entregada')).toBe(false)
+  })
+
+  it('un evento de entrega tardío después de leída no retrocede nada', () => {
+    expect(esAvanceDeEntrega('leida', 'entregada')).toBe(false)
+  })
+
+  it('fallida solo se acepta si todavía no se sabía nada del destino', () => {
+    expect(esAvanceDeEntrega('enviada', 'fallida')).toBe(true)
+    expect(esAvanceDeEntrega('entregada', 'fallida')).toBe(false)
+    expect(esAvanceDeEntrega('leida', 'fallida')).toBe(false)
   })
 })

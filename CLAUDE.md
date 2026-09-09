@@ -205,16 +205,17 @@ Tarifario 2025/2026 (Anexo A).
   protege `hayDB` pero **no** `hayAnon` (`tests/db.ts:40`), así que sin la clave
   publicable los 4 tests del borde público del ADR 0016 saltean en silencio. En CI
   no pasa: el workflow la exporta (`ci.yml:72`).
-- **Siete adapters** con el mismo patrón (interfaz + simulador, se cambia por env):
+- **Ocho adapters** con el mismo patrón (interfaz + simulador, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
   `FacturacionElectronicaProvider`, `EmailProvider` (`lib/email/index.ts`, el único
-  camino para mandar correo), `CanalVentaProvider` (`lib/canales/`, OTA) y
+  camino para mandar correo), `WhatsAppProvider` (`lib/whatsapp/`, Cloud API
+  oficial de Meta, ADR 0034), `CanalVentaProvider` (`lib/canales/`, OTA) y
   `CotizacionProvider` (`lib/divisas/`, tipo de cambio).
   ⚠️ Los dos últimos son distintos de los cinco primeros: **no tienen simulador que
   mienta**, porque sus fuentes son públicas y sin credenciales. El respaldo de
   divisas es `manual` (no inventa: usa lo que un admin cargó) y el de canales es
   `simulado` (ése sí no habla con nadie).
-  **El octavo es `ExtractoProvider`** (`lib/conciliacion/`, ADR 0030) y rompe el
+  **El noveno es `ExtractoProvider`** (`lib/conciliacion/`, ADR 0030) y rompe el
   patrón a propósito: **no tiene variable de entorno**. No se elige una fuente —el
   hotel usa el banco y MercadoPago a la vez, como `PAGO_PROVIDER`— y su respaldo
   (`archivo`) no es un simulador sino la implementación real y única para un banco
@@ -222,8 +223,9 @@ Tarifario 2025/2026 (Anexo A).
   `MERCADOPAGO_ACCESS_TOKEN`, que es el mismo del cobro.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 33 ADRs.** El último es el **0033** (el arrastre en la grilla cambia de
-  habitación y no de fechas). Los anteriores: **ADR 0016** el precio neto fuera del alcance
+- **Hay 34 ADRs.** El último es el **0034** (WhatsApp por Cloud API oficial de
+  Meta). El anterior, el **0033** (el arrastre en la grilla cambia de
+  habitación y no de fechas). Los previos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
   política de cancelación (**sin decidir**, pero ya tiene el dato que le faltaba:
@@ -436,6 +438,26 @@ Tarifario 2025/2026 (Anexo A).
      la caché devolvería JavaScript viejo.
   4. **Cero escrituras diferidas.** Sin background sync: una escritura reproducida
      más tarde se aplicaría sobre una realidad distinta de la que la originó.
+- **Fase 25 (2026-09-09) — patrones de sistemas de referencia** (QloApps, Hotel
+  PMS, Evolution API, Invoice Ninja; ver `docs/analisis-pendientes-2026-09-09.md`
+  para el inventario completo de qué ya existía). Siete piezas nuevas:
+  reservas nuevas/canceladas en el tablero (migración 0087, con
+  `reservas.cancelada_en`); auditoría de LECTURA de fichas de huésped, no solo
+  de escritura (migración 0088, `lib/auditoria/accesos.ts`); gastos
+  operativos sin factura de proveedor, bajo el área `conciliacion` que ya
+  existía (migración 0089); recordatorio automático de seña pendiente antes
+  de que `expirar_reservas_pendientes` libere la unidad; cierre del día
+  (night audit) de solo lectura en `/panel/cierre-diario`; el huésped puede
+  ver y descargar su propia factura por el mismo token de confirmación
+  (`/reservar/factura/[token]`); y WhatsApp por Cloud API oficial (ADR 0034,
+  migración 0090). ⚠️ Ninguna pieza se verificó contra una base real (esta
+  sesión no tuvo Docker levantado) ni en un navegador — falta `db reset` y un
+  recorrido manual antes de darlas por cerradas del todo. Y a propósito **no**
+  se tocaron: permisos por acción (hoy es rol→área completa, cambiarlo toca
+  las 51 Server Actions), CSRF propio (Next ya protege el origen nativamente
+  en Server Actions), facturación recurrente con auto-cobro y el channel
+  manager bidireccional real — las cuatro son decisiones de negocio o de
+  arquitectura mayor, no huecos de código que se llenen en una pasada.
 - **1914 tests verdes** (118 archivos), **cero salteados**, verificados contra la base
   local con las **83** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
@@ -526,11 +548,14 @@ Tarifario 2025/2026 (Anexo A).
   verificado en Resend (ver `COMO-LEVANTARLO.md`).
 - ⚠️ **Variables obligatorias en producción** (ADR 0018: si faltan, el sistema falla
   al arrancar, a propósito): `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,
-  `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER`, `CANAL_PROVIDER` y **`PAGO_PROVIDER`**
+  `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER`, `CANAL_PROVIDER`,
+  `WHATSAPP_PROVIDER` y **`PAGO_PROVIDER`**
   (ésta admite **varias separadas por comas**: `mercadopago,stripe`; es el único
   adapter plural, porque el hotel ofrece varios medios a la vez). Con las pasarelas
   van `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`
-  y `STRIPE_WEBHOOK_SECRET`. Opcionales:
+  y `STRIPE_WEBHOOK_SECRET`. Con WhatsApp (`WHATSAPP_PROVIDER=meta`, ADR 0034) van
+  `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET` (firma
+  del webhook) y `WHATSAPP_VERIFY_TOKEN` (handshake de Meta). Opcionales:
   `BOOKING_ICAL_FEEDS` (pares `CODIGO_TIPO=url`), `DOLARAPI_URL` y
   `ARGENTINADATOS_URL`. Revisarlas **antes** del deploy.
 - Admin de la **base local de tests**: `admin@blancapatagonia.local` / `blancadev1234`
