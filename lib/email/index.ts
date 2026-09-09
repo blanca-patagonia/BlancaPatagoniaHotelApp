@@ -8,10 +8,9 @@ import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
  * `FirmaElectronicaProvider`, `AsistenteProvider` y
  * `FacturacionElectronicaProvider`.
  *
- * Proveedor real: `resend` (`ProveedorResend`, HTTP directo, sin SDK). El de
- * consola es el respaldo — no envía nada, solo deja metadatos en el log — y es
- * el que rige si falta `EMAIL_PROVIDER`, razón por la que es obligatoria en
- * producción (ADR 0018).
+ * ⚠️ El proveedor vigente **no envía nada**: registra el correo en la consola
+ * del servidor. Integrar Resend o SMTP es escribir una clase que implemente la
+ * interfaz y cambiar `EMAIL_PROVIDER` (ver ADR 0012).
  */
 
 import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
@@ -21,14 +20,23 @@ export interface MensajeEmail {
   para: string
   asunto: string
   cuerpo: string
-  /** Variante HTML del mismo mensaje (Fase 5). Opcional: un proveedor puede ignorarla. */
-  cuerpoHtml?: string
 }
 
 export interface ResultadoEnvio {
   ok: boolean
   /** Detalle para mostrar en pantalla (motivo del rechazo o confirmación). */
   detalle: string
+  /**
+   * Id que le dio el proveedor al mensaje.
+   *
+   * Es con lo que el webhook de entrega (`/api/webhooks/email/[proveedor]`) casa
+   * el evento contra la fila de la bandeja: sin él, un rebote no tiene a qué
+   * imputarse y el estado se queda en `enviada` para siempre — que es
+   * indistinguible de «salió bien y todavía no informaron».
+   *
+   * Opcional porque el proveedor de consola no manda nada y no tiene ninguno.
+   */
+  proveedorId?: string
 }
 
 export interface EmailProvider {
@@ -117,7 +125,7 @@ export async function enviarPlantilla(
 ): Promise<ResultadoEnvio> {
   if (!para) return { ok: false, detalle: 'El destinatario no tiene email cargado.' }
 
-  const { asunto, cuerpo, cuerpoHtml, faltantes } = renderizar(evento, variables)
+  const { asunto, cuerpo, faltantes } = renderizar(evento, variables)
   if (faltantes.length > 0) {
     return {
       ok: false,
@@ -125,5 +133,5 @@ export async function enviarPlantilla(
     }
   }
 
-  return obtenerProveedorEmail().enviar({ para, asunto, cuerpo, cuerpoHtml })
+  return obtenerProveedorEmail().enviar({ para, asunto, cuerpo })
 }

@@ -182,13 +182,90 @@ Conectada al limitador de §1: 3 respuestas por hora y por IP.
 
 ---
 
+## 🟠 6. `anon` conservaba INSERT, UPDATE y DELETE *(2026-09-08, migración 0089)*
+
+### Qué encontré
+
+Escribiendo el test que audita el borde público en escritura tabla por tabla:
+el rol público —el que cualquiera alcanza desde internet, sin credenciales—
+conservaba el grant de **escritura sobre las seis tablas del catálogo**
+(`tipos_unidad`, `tarifas`, `temporadas`, `temporada_rangos`, `promociones`,
+`politicas_cancelacion`), que son las que la migración 0072 dejó legibles para
+que funcione el portal.
+
+No venía de ninguna migración de este proyecto: la 0006 le da a `anon` **sólo**
+`select`, y su `alter default privileges` también. El grant sale de los
+privilegios por omisión de la **plataforma**, y nadie lo había mirado — la 0072
+revocó `select` sobre lo que no es catálogo y ahí se detuvo.
+
+⚠️ Y sobre el resto de las tablas probablemente estaba también. No se nota
+porque, sin `select`, PostgREST no expone la tabla al rol y responde «no existe»
+antes de llegar a la base: la barrera que actúa ahí no es el permiso, es que el
+cliente no encuentra la puerta.
+
+### Por qué es riesgo
+
+**Exposición real: ninguna, hoy.** Las seis tablas tienen políticas RLS de
+escritura acotadas a `admin` y `gerencia`, y `rol_actual()` es NULL para el rol
+público, así que un `update` de `anon` filtra cero filas.
+
+El riesgo es de forma, y es exactamente el que ya se pagó dos veces en este
+sistema (`cotizar_estadia`, la 0070): **la capa que la documentación daba por
+puesta no estaba**, y la protección efectiva dependía de una sola política. El
+día que una migración agregue una política de escritura `using (true)` a una
+tabla de catálogo —o que alguien copie una de las públicas de lectura sin mirar
+el `for all`— `anon` pasa a poder editar las tarifas del hotel desde internet, y
+no habría nada más que lo frene.
+
+### Qué hice
+
+`revoke insert, update, delete on all tables in schema public from anon`, en
+bloque, **más** `alter default privileges`. Sin lo segundo el arreglo duraría
+hasta el próximo `create table`: la plataforma se lo vuelve a conceder.
+
+Se puede revocar en bloque porque **ninguna escritura pública de este sistema usa
+el rol `anon`**. Las tres que existen —reservar desde el portal, responder la
+encuesta y firmar un contrato— resuelven con `service_role` desde el servidor,
+con el token de la URL como credencial.
+
+### Cómo verificarlo
+
+```sql
+select * from privilegios_de_escritura('anon');         -- cero filas
+select count(*) from privilegios_de_escritura('authenticated');  -- muchas
+select has_table_privilege('anon', 'tarifas', 'select');         -- t
+```
+
+El test de contrato es `tests/anon-no-escribe.test.ts`, con sus dos contrapesos:
+que el catálogo siga siendo legible (un `revoke` de más rompe el portal en
+silencio) y que `authenticated` siga escribiendo (un `revoke` dirigido a `public`
+alcanzaría a los dos roles).
+
+⚠️ **Ese test pregunta `has_table_privilege`; no sondea con un `insert`.** La
+primera versión sondeaba y leía el código de error —`42501` es «denegado»,
+cualquier otra cosa es «pasó»— y tiene dos falsos negativos que no se ven: una
+**vista** responde `55000` y una tabla con **trigger BEFORE INSERT** responde lo
+que lance el trigger. En los dos casos el error no es de permiso y el test lo leía
+como si la barrera hubiera actuado.
+
+---
+
 ## Pendiente — lo más importante que queda
 
-**Auditar cada política RLS, una por una.** Están activadas en las 32 tablas,
-pero *activada* no es *correcta*: hay que leer las ~60 políticas y probar cada
-una contra la base con los cuatro roles, verificando que ninguna deje ver de
-más. Es el control central de autorización de este sistema y merece una sesión
-dedicada.
+**Auditar cada política RLS, una por una.** *(Actualizado el 2026-09-08.)*
+
+Lo que ya está cubierto de forma **exhaustiva**:
+
+- **Lectura**, los cuatro roles × todas las tablas: `tests/rls-por-rol.test.ts`,
+  con la lista traída de la base para que una tabla nueva sin declarar haga
+  fallar el test.
+- **Escritura de `anon`**, todas las tablas: `tests/anon-no-escribe.test.ts` (§6).
+
+Lo que sigue siendo **dirigido y no exhaustivo**: la escritura de los tres roles
+de staff (`tests/rls-escritura-por-rol.test.ts`), que elige los casos por
+consecuencia —escalada de privilegio, dinero, inventario, borrado—. Ahí hace falta
+una cuenta del hotel, así que el riesgo es escalada interna y no exposición
+pública; sigue mereciendo una sesión dedicada, pero ya no es el hueco más grande.
 
 También queda: validación con Zod en el borde público (hoy es una expresión
 regular), y revisar qué campos exactos devuelven las respuestas públicas.

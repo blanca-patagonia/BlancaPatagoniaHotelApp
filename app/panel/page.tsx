@@ -110,7 +110,7 @@ export default async function DashboardPage() {
       .select('*', { count: 'exact', head: true })
       .gte('creada_en', hoy)
       .lt('creada_en', mañana),
-    // `cancelada_en` (migración 0087): sin esa fecha, «canceladas hoy» y
+    // `cancelada_en` (migración 0090): sin esa fecha, «canceladas hoy» y
     // «canceladas el mes pasado» eran indistinguibles.
     supabase
       .from('reservas')

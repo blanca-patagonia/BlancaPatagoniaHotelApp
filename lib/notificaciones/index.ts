@@ -2,19 +2,18 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
-import { enviarWhatsApp } from '@/lib/whatsapp'
-import { armarMensajeWhatsApp, type EventoEmail } from '@/lib/domain/plantillas'
+import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
+import { canalDelAviso, telefonoParaWhatsApp } from '@/lib/domain/whatsapp'
+import { enviarPorWhatsApp, whatsappActivo } from '@/lib/whatsapp'
 import {
   agotoIntentos,
   claveDeNotificacion,
   cuandoEnviar,
   esperaDeReintento,
   motivoNoNotificar,
-  type CanalNotificacion,
+  rolDelAviso,
   type PreferenciasHuesped,
 } from '@/lib/domain/notificaciones'
-
-export type { CanalNotificacion }
 
 /**
  * La bandeja de salida (migración 0075).
@@ -39,9 +38,21 @@ export interface PedidoDeNotificacion {
   evento: EventoEmail
   /** La entidad de la que habla el mensaje. Entra en la clave de idempotencia. */
   entidadId: string
-  /** Email o teléfono, según `canal`. */
-  destinatario: string | null
+  /**
+   * A quién. En los eventos del huésped es su correo, y sin él no hay nada que
+   * hacer. En los **internos** se omite: lo pone `rolDelAviso`, porque ahí el
+   * destinatario es un puesto del hotel y no una dirección.
+   */
+  destinatario?: string | null
   variables: Record<string, string | number>
+  /**
+   * Teléfono del huésped, si se conoce.
+   *
+   * Cuando el hotel tiene WhatsApp enchufado y el evento tiene plantilla
+   * aprobada, el aviso sale por ahí en vez de por correo (ver `canalDelAviso`).
+   * Sin teléfono, todo sigue como antes.
+   */
+  telefono?: string | null
   huespedId?: string | null
   reservaId?: string | null
   /**
@@ -49,12 +60,6 @@ export interface PedidoDeNotificacion {
    * es legítimo. Ver `claveDeNotificacion`.
    */
   discriminante?: string
-  /**
-   * Por dónde sale. `email` por defecto: es el único canal que existía hasta
-   * la Fase 3 (WhatsApp). La columna ya admitía `whatsapp` desde la migración
-   * 0075 —"previsto para no migrar al enchufarlo"— pero nada la usaba todavía.
-   */
-  canal?: CanalNotificacion
 }
 
 export interface ResultadoEncolado {
@@ -74,21 +79,45 @@ export async function encolar(
   client: SupabaseClient,
   p: PedidoDeNotificacion,
 ): Promise<ResultadoEncolado> {
-  const canal = p.canal ?? 'email'
+  /*
+    El destinatario de un aviso interno lo pone el sistema, no el call site.
 
-  if (!p.destinatario) {
+    Dejarlo en manos de quien encola significaría que el rol de cada aviso queda
+    escrito en veinte lugares distintos, y que cambiar «los errores de canal los
+    ve gerencia» obliga a encontrarlos todos. Acá hay uno solo: `ROL_DEL_AVISO`.
+  */
+  const rol = rolDelAviso(p.evento)
+
+  /*
+    Por dónde sale.
+
+    La decisión vive en el dominio (`canalDelAviso`) y devuelve **un solo** canal:
+    mandar el mismo aviso por correo y por WhatsApp le duplica el mensaje al
+    huésped y además rompe la idempotencia, cuya clave no incluye el canal —las
+    dos filas chocarían contra el `unique` y una se descartaría en silencio—.
+  */
+  const canal = canalDelAviso(p.evento, {
+    telefono: p.telefono,
+    whatsappActivo: whatsappActivo(),
+  })
+
+  const destinatario =
+    canal === 'interno'
+      ? rol
+      : canal === 'whatsapp'
+        ? telefonoParaWhatsApp(p.telefono)
+        : p.destinatario
+
+  if (!destinatario) {
+    // El motivo nombra el canal: «no tiene email» sobre un aviso que iba a salir
+    // por WhatsApp manda a revisar el campo equivocado.
     return {
       ok: false,
-      motivo: canal === 'whatsapp' ? 'El huésped no tiene teléfono cargado.' : 'El huésped no tiene email cargado.',
+      motivo:
+        canal === 'whatsapp'
+          ? 'El huésped no tiene un teléfono usable para WhatsApp.'
+          : 'El huésped no tiene email cargado.',
     }
-  }
-
-  // El canal WhatsApp exige una plantilla aprobada por Meta (ver
-  // `armarMensajeWhatsApp`). Se valida ACÁ, no al despachar: mejor enterarse
-  // en el momento de encolar que no hay plantilla para este evento, que
-  // descubrirlo recién cuando el cron intenta mandarlo.
-  if (canal === 'whatsapp' && !armarMensajeWhatsApp(p.evento, p.variables)) {
-    return { ok: false, motivo: `El evento "${p.evento}" no tiene plantilla de WhatsApp.` }
   }
 
   // Consentimiento. Se consulta acá y no al despachar: si el huésped pidió no
@@ -109,8 +138,8 @@ export async function encolar(
   const { error } = await client.from('notificaciones').insert({
     evento: p.evento,
     canal,
-    clave: claveDeNotificacion(p.evento, p.entidadId, p.discriminante, canal),
-    destinatario: p.destinatario,
+    clave: claveDeNotificacion(p.evento, p.entidadId, p.discriminante),
+    destinatario,
     variables: p.variables,
     huesped_id: p.huespedId ?? null,
     reserva_id: p.reservaId ?? null,
@@ -132,7 +161,7 @@ export async function encolar(
 interface FilaPendiente {
   id: string
   evento: string
-  canal: CanalNotificacion
+  canal: string
   destinatario: string
   variables: Record<string, string | number>
   intentos: number
@@ -143,34 +172,56 @@ export interface ResumenDespacho {
   enviadas: number
   reintentar: number
   fallidas: number
+  /** Cuántas aterrizaron en la cartelera interna en vez de salir por correo. */
+  internas: number
 }
 
-interface ResultadoDeEnvio {
+/** Lo que devuelve un intento de entrega, sea por correo o a la cartelera. */
+interface Entrega {
   ok: boolean
   detalle: string
-  /** Id del mensaje del lado del proveedor, para que el webhook de entrega lo encuentre. */
-  idExterno?: string
+  /** Id del envío en el proveedor, cuando lo hay. Ver `ResultadoEnvio`. */
+  proveedorId?: string
 }
 
 /**
- * Envía UNA fila ya encolada, por el canal que le corresponda.
+ * Publica un aviso interno en la cartelera que el staff ya mira (`avisos`).
  *
- * Separado de `despachar` para que la rama de WhatsApp no ensucie el bucle
- * principal: quien lee el `for` de abajo no necesita saber cómo se arma un
- * mensaje de WhatsApp, solo que hay algo que se puede enviar o no.
+ * ── Por qué la cartelera y no un correo a una casilla del hotel ─────────────
+ *
+ * Porque una casilla obliga a decidir y mantener quién recibe qué —y a
+ * acordarse de cambiarlo cuando esa persona se va—, mientras que la cartelera
+ * existe desde la 0016, la abre todo el staff y ya tiene su lugar en el panel.
+ *
+ * ⚠️ El aviso nace **sin autor** (`autor_id` null): no lo escribió nadie. Poner
+ * ahí al usuario que disparó la acción sería atribuirle un texto que no
+ * escribió, y encima haría que «borra el autor» de la 0016 le diera permiso de
+ * borrar avisos del sistema.
  */
-async function despacharUna(n: FilaPendiente): Promise<ResultadoDeEnvio> {
-  if (n.canal === 'whatsapp') {
-    const armado = armarMensajeWhatsApp(n.evento as EventoEmail, n.variables ?? {})
-    if (!armado) {
-      // No debería pasar: `encolar` ya valida que la plantilla exista. Si
-      // pasa igual —un evento que perdió su plantilla de WhatsApp entre medio—
-      // se informa como fallo y no como una excepción que tumbe la corrida.
-      return { ok: false, detalle: `El evento "${n.evento}" ya no tiene plantilla de WhatsApp.` }
-    }
-    return enviarWhatsApp({ telefono: n.destinatario, plantilla: armado.plantilla, parametros: armado.parametros })
-  }
-  return enviarPlantilla(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
+async function publicarEnCartelera(
+  client: SupabaseClient,
+  n: FilaPendiente,
+): Promise<Entrega> {
+  const { asunto, cuerpo } = renderizar(n.evento as EventoEmail, n.variables ?? {})
+
+  /*
+    El asunto es el titular y el cuerpo el detalle. Van juntos en `mensaje`
+    porque `avisos` guarda un texto solo, y agregarle una columna `titulo`
+    obligaría a tocar la pantalla que ya existe para ganar muy poco: las
+    plantillas internas son de una línea a propósito.
+  */
+  const mensaje = cuerpo.trim() && cuerpo.trim() !== asunto ? `${asunto}\n${cuerpo.trim()}` : asunto
+
+  const { error } = await client.from('avisos').insert({
+    mensaje,
+    autor_id: null,
+    automatico: true,
+    evento: n.evento,
+    rol: n.destinatario,
+  })
+
+  if (error) return { ok: false, detalle: `${error.code ?? ''} ${error.message}`.trim() }
+  return { ok: true, detalle: 'publicado en la cartelera' }
 }
 
 /**
@@ -184,7 +235,13 @@ export async function despachar(
   client: SupabaseClient,
   limite = 25,
 ): Promise<ResumenDespacho> {
-  const resumen: ResumenDespacho = { tomadas: 0, enviadas: 0, reintentar: 0, fallidas: 0 }
+  const resumen: ResumenDespacho = {
+    tomadas: 0,
+    enviadas: 0,
+    reintentar: 0,
+    fallidas: 0,
+    internas: 0,
+  }
 
   /*
     ⚠️ El «ahora» lo pone la BASE, no la aplicación.
@@ -219,20 +276,59 @@ export async function despachar(
   resumen.tomadas = pendientes.length
 
   for (const n of pendientes) {
-    const r = await despacharUna(n)
+    const interno = n.canal === 'interno'
+
+    /*
+      Tres destinos posibles, uno por canal. La fila ya trae decidido cuál: la
+      elección se hizo al encolar (`canalDelAviso`) y **no se rehace acá**.
+
+      Si se recalculara al despachar, un aviso encolado como correo podría salir
+      por WhatsApp porque entre medio alguien configuró el canal —o al revés, si
+      se cayó el token—, y el `destinatario` guardado en la fila sería del canal
+      equivocado: se le mandaría un correo a un número de teléfono.
+    */
+    const r: Entrega = interno
+      ? await publicarEnCartelera(client, n)
+      : n.canal === 'whatsapp'
+        ? await enviarPorWhatsApp(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
+        : await enviarPlantilla(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
 
     if (r.ok) {
+      const ahora = new Date().toISOString()
+
+      /*
+        ⚠️ Un aviso interno nace **entregado**, y el del huésped no.
+
+        La cartelera es el destino: si la fila se insertó, el aviso está donde
+        tiene que estar y no hay ningún tercero que pueda rebotarlo. Con el
+        correo es al revés —el proveedor acepta el mensaje mucho antes de saber
+        si el servidor del destinatario lo aceptó—, y entre `enviada` y
+        `entregada` está justamente el rebote, que es el caso que el hotel
+        necesita ver. Marcarlo entregado de una sería mentir sobre eso.
+
+        `leida` no se toca en ninguno de los dos: eso lo informa quien lee.
+      */
       const { error: eOk } = await client
         .from('notificaciones')
         .update({
-          estado: 'enviada',
-          enviada_en: new Date().toISOString(),
+          estado: interno ? 'entregada' : 'enviada',
+          enviada_en: ahora,
+          ...(interno ? { entregada_en: ahora } : {}),
+          /*
+            El id del proveedor, cuando lo hay. Es con lo que el webhook de
+            entrega encuentra esta fila para marcarla entregada, leída o rebotada.
+
+            Sólo se escribe si vino: pisarlo con `null` en un reintento del
+            proveedor de consola borraría el id del envío real anterior.
+          */
+          ...(r.proveedorId ? { proveedor_id: r.proveedorId } : {}),
           error: null,
-          ...(r.idExterno ? { id_externo: r.idExterno } : {}),
         })
         .eq('id', n.id)
       registrarFalla(eOk, `marcar enviada la notificación ${n.id}`)
+
       resumen.enviadas++
+      if (interno) resumen.internas++
       continue
     }
 

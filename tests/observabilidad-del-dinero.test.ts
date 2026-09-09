@@ -67,8 +67,6 @@ const EXCEPCIONES: Record<string, string> = {
   'app/panel/_components/pwa.tsx': 'Componente de cliente: corre en el navegador, sin acceso a la base.',
   'lib/email/index.ts':
     'El proveedor «consola» ES la consola: escribir el correo ahí es literalmente lo que hace.',
-  'lib/whatsapp/index.ts':
-    'El proveedor «simulado» ES la consola: mismo motivo que el de email, escribir el WhatsApp ahí es lo que hace.',
   'lib/integraciones/seleccion.ts':
     'Advertencia de arranque: corre al elegir proveedor, antes de que haya nada cableado.',
   'lib/divisas/index.ts':

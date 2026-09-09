@@ -34,6 +34,7 @@ import {
   type FilaAri,
   type MapeoTipo,
   type PrecioDelDia,
+  type RestriccionDeFecha,
   type ResumenAri,
 } from '@/lib/domain/ari'
 import { obtenerProveedorCanal, type CanalVenta } from '.'
@@ -197,20 +198,83 @@ export async function publicarAri(
     hasta,
   )
 
-  /* ── 5. Las filas ── */
+  /* ── 5. Las restricciones por fecha (0087) ── */
 
-  const { filas, sinPrecio } = calcularAri(mapeos, estadias, precios, {
-    // La moneda del canal: la del tarifario. Publicar en otra exigiría convertir
-    // 365 días con una cotización que cambia, y el canal cobraría distinto del
-    // sitio del hotel el mismo día.
-    moneda: precios[0]?.moneda ?? 'USD',
-    desde,
-    hasta,
+  /*
+    Sólo las que se solapan con la ventana: `desde < hasta_restriccion` y
+    `hasta > desde_restriccion` es el solapamiento de dos rangos con fin
+    excluido, y lo resuelve el índice GiST.
+
+    Se pide el rango crudo y se parsea con `parsearPeriodo`, igual que las
+    estadías: PostgREST devuelve el `daterange` como texto y armar las dos fechas
+    a mano es donde se cuela el error de un día.
+  */
+  const { data: restriccionesData, error: eRestricciones } = await admin
+    .from('canal_restricciones')
+    .select('tipo_unidad_id, periodo, minimo_noches, cerrado, cerrado_llegada, cerrado_salida')
+    .eq('canal', canal)
+    .overlaps('periodo', `[${desde},${hasta})`)
+
+  if (eRestricciones) {
+    /*
+      ⚠️ Acá **sí se corta**, y es la decisión que importa de este bloque.
+
+      Seguir sin las restricciones publicaría el cupo completo de unas fechas que
+      el hotel cerró a mano —el fin de semana que guardó para un grupo, por
+      ejemplo— y el canal las vendería. Publicar de más es exactamente el daño
+      que este módulo tiene que evitar; no publicar nada sólo deja al canal con
+      lo de ayer, que es peor sólo si nunca se corrige.
+    */
+    return {
+      ok: false,
+      resumen: VACIO,
+      aceptadas: 0,
+      noSoportado: false,
+      detalle: `No se pudieron leer las restricciones por fecha: ${eRestricciones.message}`,
+    }
+  }
+
+  const restricciones: RestriccionDeFecha[] = (restriccionesData ?? []).map((r) => {
+    const fila = r as {
+      tipo_unidad_id: string | null
+      periodo: string
+      minimo_noches: number | null
+      cerrado: boolean
+      cerrado_llegada: boolean
+      cerrado_salida: boolean
+    }
+    const periodo = parsearPeriodo(fila.periodo)
+    return {
+      tipoUnidadId: fila.tipo_unidad_id,
+      desde: periodo.desde,
+      hasta: periodo.hasta,
+      minimoNoches: fila.minimo_noches,
+      cerrado: fila.cerrado,
+      cerradoLlegada: fila.cerrado_llegada,
+      cerradoSalida: fila.cerrado_salida,
+    }
   })
+
+  /* ── 6. Las filas ── */
+
+  const { filas, sinPrecio } = calcularAri(
+    mapeos,
+    estadias,
+    precios,
+    {
+      // La moneda del canal: la del tarifario. Publicar en otra exigiría convertir
+      // 365 días con una cotización que cambia, y el canal cobraría distinto del
+      // sitio del hotel el mismo día.
+      moneda: precios[0]?.moneda ?? 'USD',
+      desde,
+      hasta,
+    },
+    restricciones,
+  )
 
   const resumen = resumirAri(filas, sinPrecio)
 
-  /* ── 6. El envío ── */
+  /* ── 7. El envío ── */
 
   const motivo = motivoNoPublicar({
     mapeos: mapeos.length,

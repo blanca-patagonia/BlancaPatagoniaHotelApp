@@ -4,6 +4,7 @@ import {
   cupoPublicable,
   motivoNoPublicar,
   ocupacionPorTipoYNoche,
+  restriccionDelDia,
   resumirAri,
   DIAS_DE_VENTANA,
   MENSAJES_NO_PUBLICAR,
@@ -250,5 +251,138 @@ describe('por qué no se puede publicar', () => {
   it('todos los motivos tienen mensaje en español', () => {
     const motivos: MotivoNoPublicar[] = ['sin_mapeos', 'proveedor_no_publica', 'sin_filas']
     for (const m of motivos) expect(MENSAJES_NO_PUBLICAR[m], `falta el mensaje de ${m}`).toBeTruthy()
+  })
+})
+
+describe('restricciones por fecha (migración 0087)', () => {
+  const MAPEO = {
+    tipoUnidadId: 't1',
+    codigoCanal: 'DBL',
+    unidadesActivas: 4,
+    topeCupo: null,
+    minimoNoches: null,
+    cerrado: false,
+  }
+
+  const RESTRICCION = {
+    tipoUnidadId: null,
+    desde: '2027-10-09',
+    hasta: '2027-10-13',
+    minimoNoches: 3,
+    cerrado: false,
+    cerradoLlegada: false,
+    cerradoSalida: false,
+  }
+
+  it('el rango tiene el fin EXCLUIDO', () => {
+    /*
+      ⚠️ El error de un día. `[2027-10-09, 2027-10-13)` alcanza al 9, 10, 11 y 12,
+      **no al 13**. Con `<=` la restricción se pasaría un día: el hotel pediría
+      tres noches mínimo el día que quería volver a vender sueltas, y nadie
+      relacionaría el síntoma con esta línea.
+
+      Es la misma convención de `estadias.periodo` y de los rangos de temporada.
+    */
+    expect(restriccionDelDia(MAPEO, [RESTRICCION], '2027-10-09').minimoNoches).toBe(3)
+    expect(restriccionDelDia(MAPEO, [RESTRICCION], '2027-10-12').minimoNoches).toBe(3)
+    expect(restriccionDelDia(MAPEO, [RESTRICCION], '2027-10-13').minimoNoches).toBeNull()
+    expect(restriccionDelDia(MAPEO, [RESTRICCION], '2027-10-08').minimoNoches).toBeNull()
+  })
+
+  it('`tipoUnidadId: null` alcanza a TODOS los tipos', () => {
+    // Es el caso más común: «del 24 al 26 no acepto llegadas» es del hotel
+    // entero. Si `null` se interpretara como «ninguno», la restricción más usada
+    // no haría nada y no habría error que lo delatara.
+    expect(restriccionDelDia(MAPEO, [RESTRICCION], '2027-10-10').minimoNoches).toBe(3)
+
+    const otroTipo = { ...MAPEO, tipoUnidadId: 't9' }
+    expect(restriccionDelDia(otroTipo, [RESTRICCION], '2027-10-10').minimoNoches).toBe(3)
+  })
+
+  it('una restricción de otro tipo no alcanza a éste', () => {
+    const soloT9 = { ...RESTRICCION, tipoUnidadId: 't9' }
+    expect(restriccionDelDia(MAPEO, [soloT9], '2027-10-10').minimoNoches).toBeNull()
+  })
+
+  it('gana la MÁS restrictiva cuando dos reglas se pisan', () => {
+    /*
+      ⚠️ La decisión de este módulo.
+
+      Quedarse corto vende una noche que el hotel no quería vender, y esa venta ya
+      no se deshace sin cancelarle a alguien. Quedarse largo sólo pierde una
+      reserva que todavía se puede recuperar por teléfono.
+    */
+    const conMinimoDeTipo = { ...MAPEO, minimoNoches: 2 }
+    expect(restriccionDelDia(conMinimoDeTipo, [RESTRICCION], '2027-10-10').minimoNoches).toBe(3)
+
+    const dosNoches = { ...RESTRICCION, minimoNoches: 2 }
+    const cincoNoches = { ...RESTRICCION, minimoNoches: 5 }
+    expect(
+      restriccionDelDia(MAPEO, [dosNoches, cincoNoches], '2027-10-10').minimoNoches,
+    ).toBe(5)
+
+    // Y un cerrado no se «abre» porque otra regla no lo cierre.
+    const cierra = { ...RESTRICCION, minimoNoches: null, cerrado: true }
+    const noCierra = { ...RESTRICCION, minimoNoches: null, cerrado: false }
+    expect(restriccionDelDia(MAPEO, [cierra, noCierra], '2027-10-10').cerrado).toBe(true)
+  })
+
+  it('cerrar por fecha pone el cupo en cero y marca la fila', () => {
+    const cierra = { ...RESTRICCION, minimoNoches: null, cerrado: true }
+    const { filas } = calcularAri(
+      [MAPEO],
+      [],
+      [
+        { tipoUnidadId: 't1', fecha: '2027-10-10', precio: 100 },
+        { tipoUnidadId: 't1', fecha: '2027-10-20', precio: 100 },
+      ],
+      { moneda: 'USD', desde: '2027-10-10', hasta: '2027-10-21' },
+      [cierra],
+    )
+
+    const cerrada = filas.find((f) => f.fecha === '2027-10-10')
+    const abierta = filas.find((f) => f.fecha === '2027-10-20')
+
+    expect(cerrada?.cupo, 'un día cerrado publicó cupo').toBe(0)
+    expect(cerrada?.cerrado).toBe(true)
+    // Fuera del rango, el hotel sigue vendiendo normal: cerrar unas fechas no
+    // puede apagar el resto de la ventana.
+    expect(abierta?.cupo).toBe(4)
+    expect(abierta?.cerrado).toBe(false)
+  })
+
+  it('CTA y CTD sólo se informan cuando son true', () => {
+    /*
+      Son instrucciones, no estados. Mandar `cerradoLlegada: false` en las 365
+      filas es ruido, y con algunos canales es peor: levanta una restricción que
+      el hotel puso a mano desde el extranet.
+    */
+    const cta = { ...RESTRICCION, minimoNoches: null, cerradoLlegada: true }
+    const { filas } = calcularAri(
+      [MAPEO],
+      [],
+      [{ tipoUnidadId: 't1', fecha: '2027-10-10', precio: 100 }],
+      { moneda: 'USD', desde: '2027-10-10', hasta: '2027-10-11' },
+      [cta],
+    )
+
+    expect(filas[0].cerradoLlegada).toBe(true)
+    expect(filas[0].cerradoSalida, 'se informó un CTD que nadie pidió').toBeUndefined()
+    // Y no cierra la venta: se puede estar ese día, sólo que no empezar ahí.
+    expect(filas[0].cupo).toBe(4)
+  })
+
+  it('sin restricciones, el resultado es exactamente el de antes', () => {
+    // El parámetro es opcional para no romper a quien ya llamaba a `calcularAri`.
+    const opciones = { moneda: 'USD', desde: '2027-10-10', hasta: '2027-10-12' } as const
+    const precios = [
+      { tipoUnidadId: 't1', fecha: '2027-10-10', precio: 100 },
+      { tipoUnidadId: 't1', fecha: '2027-10-11', precio: 100 },
+    ]
+
+    const sin = calcularAri([MAPEO], [], precios, opciones)
+    const conVacias = calcularAri([MAPEO], [], precios, opciones, [])
+
+    expect(conVacias).toEqual(sin)
   })
 })

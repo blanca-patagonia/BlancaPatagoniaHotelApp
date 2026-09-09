@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Migración 0088 — Auditoría de LECTURA de datos de huésped
+-- Migración 0091 — Auditoría de LECTURA de datos de huésped
 --
 -- `auditoria` (migración 0020) registra quién ESCRIBIÓ qué en pagos, tarifas y
 -- reservas. No dice nada de quién ABRIÓ la ficha de un huésped — un dato

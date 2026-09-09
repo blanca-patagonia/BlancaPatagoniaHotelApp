@@ -111,7 +111,7 @@ export default async function AuditoriaPage({
   const registros = (data ?? []) as Registro[]
   const total = count ?? 0
 
-  // Quién ABRIÓ una ficha de huésped (migración 0088). Es un registro aparte de
+  // Quién ABRIÓ una ficha de huésped (migración 0091). Es un registro aparte de
   // `auditoria`: un SELECT no dispara triggers, así que esto lo escribe la
   // propia pantalla al mostrarse, no la base. Solo los últimos 20: es para
   // detectar un patrón raro, no para paginar un historial completo.

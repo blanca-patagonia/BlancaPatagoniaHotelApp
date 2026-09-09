@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Migración 0092 — Preparación para un channel manager genérico
+-- Migración 0094 — Preparación para un channel manager genérico
 --
 -- ── Por qué esto NO toca `canal_tipos`/`canal_config`/`canal_reservas` ───────
 --

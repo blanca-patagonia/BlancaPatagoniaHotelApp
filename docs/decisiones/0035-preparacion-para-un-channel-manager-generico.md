@@ -37,7 +37,7 @@ proveedor del catálogo pueda usar. Eso es lo nuevo de este ADR.
 
 `canales_externos` (catálogo: código, nombre, activo, token) y
 `canal_externo_tipos` (tipo de unidad ↔ código con el que ESE proveedor lo
-conoce) — migración 0092. Agregar un proveedor el día de mañana es un `INSERT`,
+conoce) — migración 0094. Agregar un proveedor el día de mañana es un `INSERT`,
 no una migración: la diferencia concreta con `canal_tipos` (0081), que sigue
 atada a los dos valores fijos de siempre porque sigue resolviendo el problema de
 Booking/Expedia, no éste.
@@ -48,7 +48,7 @@ Booking/Expedia, no éste.
 porque es la dimensión de `resumen_canal_mes` y de la conciliación de
 comisiones; un CHECK más ancho que el dominio no protege de nada. En vez de
 pelear contra esa decisión (correcta), se le sumó **un** valor genérico —
-`channel_manager` (migración 0093)— que agrupa a CUALQUIER proveedor conectado
+`channel_manager` (migración 0095)— que agrupa a CUALQUIER proveedor conectado
 por acá. Cuál proveedor fue puntualmente no vive en `canal`: vive en el prefijo
 de `reservas.voucher` (`<codigo_del_proveedor>:<referencia_externa>`). Si algún
 día un proveedor puntual necesita su propia fila en los reportes de comisión,

@@ -5709,3 +5709,265 @@ el mismo patrón que ya usaba `pwa.tsx`.
 **Verificación:** `npm run check` completo — **138/138 archivos, 2118/2118
 tests, 0 salteados**, build compila. Reserva de prueba creada y borrada de
 la base local después de confirmar el flujo.
+---
+
+## 2026-09-08 — El sistema avisa: catálogo de 21 eventos, cartelera interna, WhatsApp y registro de envíos
+
+**Resumen:** los objetivos 6 (recordatorios automáticos) y 7 (alertas ante pagos
+y cambios de estado) del pedido, más los entregables 8, 15 y 16. Migración
+**0086**. PR #42.
+
+### El punto de partida, que era peor de lo que parecía
+
+Había tres cosas separadas y ninguna cerraba el circuito:
+
+1. **Cuatro plantillas** en el catálogo, para un sistema que hace reservas,
+   cobra, factura, cancela y reprograma.
+2. **La tabla `notificaciones` existía desde la 0075 y nadie podía verla.** Es
+   exactamente el defecto que la Fase 2 de la auditoría corrigió con
+   `/panel/errores`: un dato que se guarda y nadie mira no sirve, y encima da la
+   sensación de que el problema está resuelto.
+3. **Cuatro de esas plantillas no las disparaba nadie.** Una plantilla que existe
+   y nunca se manda es peor que no tenerla: da la sensación de que el hotel avisa.
+
+### Lo que se hizo
+
+**El catálogo pasa de 4 a 21 eventos** (`lib/domain/plantillas.ts`). Seis son
+**internos**: le avisan al hotel, no al huésped.
+
+La tentación era mandarlos por correo a una casilla del hotel. Se descartó por
+dos motivos: obliga a configurar y mantener destinatarios —¿quién recibe qué, y
+qué pasa cuando esa persona se va?— y compite con algo que **ya existe y el staff
+ya mira**, la cartelera de `avisos` de la 0016. Así que ahí aterrizan.
+
+**Migración 0086.** Canal `interno`, los dos estados que faltaban de los cinco
+del pedido (`entregada` y `leida`), `proveedor_id` con índice único parcial, y
+tres columnas en `avisos`: `automatico`, `evento` y `rol`.
+
+⚠️ **`avisos.rol` no estaba en el diseño original y hubo que agregarla.** Sin
+ella, la notificación diría «recepcion» y la cartelera se la mostraría igual a
+housekeeping: un aviso de «pago acreditado: USD 120» no le sirve a quien está
+limpiando una habitación, y el ruido es lo que hace que después nadie mire la
+cartelera. Es **ruteo, no un secreto** —admin y gerencia ven todo— y la política
+está escrita para que las filas existentes (`rol is null`) no cambien de
+comportamiento.
+
+**Pantalla `/panel/notificaciones`**, área nueva del panel con sus cinco
+declaraciones. Los cinco estados, filtro, búsqueda por destinatario, reintento de
+lo fallido y cancelación de lo pendiente.
+
+**Los 21 eventos se disparan solos.** `lib/notificaciones/eventos.ts` da un
+disparador por evento, con parámetros con nombre y tipo, enchufados en el webhook
+de pagos, el mostrador, la cancelación, el no-show, la reprogramación, el alta
+del portal, la habitación inspeccionada, la orden urgente y la diferencia entre
+lo facturado y lo devengado por el canal.
+
+**Cron nuevo `/api/cron/recordatorios`**, a las 9 del hotel: llegada, saldo,
+salida, reserva por vencer y pedido de reseña.
+
+**Webhook de entrega** (`/api/webhooks/email/[proveedor]`) con firma Svix, que es
+la que usa Resend.
+
+**WhatsApp por la Cloud API oficial de Meta** (`lib/whatsapp/`), noveno adapter.
+
+**`docs/despliegue.md`** — entregables 8, 15 y 16.
+
+### Las decisiones que conviene poder defender
+
+**1. `enviada` no es `entregada`, y la diferencia es el rebote.**
+El proveedor acepta el mensaje y responde 200 mucho antes de saber si el servidor
+del destinatario lo aceptó. Entre esas dos cosas está el caso que el hotel
+necesita ver —«le escribimos y no le llegó»— y tratarlas como una sola lo deja
+invisible: un huésped con la dirección mal cargada figuraba avisado.
+
+`leida` llega por el pixel de apertura y es **la más imprecisa de las cinco**: un
+cliente de correo que bloquea imágenes nunca la reporta, así que su ausencia no
+prueba nada. Se guarda igual porque su **presencia** sí prueba algo, y la
+pantalla lo dice con esas palabras.
+
+**2. Los eventos del webhook llegan desordenados.**
+No hay garantía de orden: el de apertura puede entrar antes que el de entrega, y
+aplicarlos a ciegas haría retroceder de `leida` a `entregada` — el sistema
+olvidaría que el huésped abrió el correo. Lo decide `esAvance`, que sí deja que
+un rebote pise una entrega, porque eso es información nueva y mala.
+
+**3. Un canal por aviso, decidido al encolar.**
+`canalDelAviso` devuelve **uno solo**. La clave de idempotencia no incluye el
+canal: mandar el mismo aviso por correo y por WhatsApp haría chocar las dos filas
+contra el `unique` y una se descartaría en silencio. Y se decide **al encolar**,
+no al despachar: si se recalculara, un aviso encolado como correo saldría por
+WhatsApp con un `destinatario` que es una dirección de mail.
+
+**4. La ventana de 24 horas manda sobre todo el diseño de WhatsApp.**
+Meta no deja mandar texto libre fuera de las 24 horas posteriores al último
+mensaje del huésped: sólo **plantillas aprobadas por ellos**. Los cuerpos del
+catálogo son el texto del correo y **no se pueden mandar tal cual**. Por eso
+`PLANTILLAS_WHATSAPP` cubre cuatro eventos y no veintiuno: los que vale la pena
+hacer aprobar.
+
+⚠️ Y el **orden de los parámetros es el contrato**: WhatsApp numera los huecos
+(`{{1}}`, `{{2}}`) y Meta valida la **cantidad**, no el significado. Cruzarlos
+manda el código de reserva donde va la fecha y el mensaje sale igual. Hay un test
+que compara cada parámetro contra la plantilla del catálogo.
+
+**5. La API oficial y no un puente sobre WhatsApp Web.**
+Los puentes funcionan hasta que Meta bloquea el número — y el número bloqueado es
+el del hotel, el que está publicado en su web y en Booking. El prompt lo pedía
+explícitamente y la razón es ésa.
+
+**6. Dos módulos que existen sólo para no duplicar una regla de plata.**
+`lib/notificaciones/cobros.ts` (los avisos de un cobro, desde el webhook y desde
+el mostrador) y `lib/reservas/cancelacion.ts` (el cargo por cancelar, desde la
+ficha y desde el correo). Es la misma situación que ya se dio con
+`saldarSiCorresponde`: escrita dos veces, **divergió**, y el síntoma fue una
+reserva marcada «pagada» debiendo el frigobar. Anunciarle al huésped un cargo en
+pantalla y mandarle otro por correo es la clase de diferencia que termina en el
+mostrador, con el tarifario publicado del otro lado.
+
+**7. El alta del mostrador NO avisa a la cartelera.**
+La persona que la cargó está mirando la pantalla. El aviso sale del portal
+público y del cron de canales, que son los caminos donde entra una reserva sin
+que haya nadie.
+
+**8. Sólo se le pide reseña a quien puntuó ≥ 8.**
+Pedirle una reseña pública a quien puntuó bajo es pedirle que publique su queja:
+el hotel se estaría pagando la mala reseña que quizás no iba a escribir. Y a
+quien **no respondió** tampoco: sin señal, la apuesta es a ciegas y el costo de
+equivocarse es público y permanente.
+
+### Dos huecos que aparecieron al enchufar las cosas
+
+**`rechazadas > 0` del cron de canales se devolvía en el body y no lo leía
+nadie** — el cron le responde a Vercel, no a una persona. Una fila rechazada es
+una reserva de Booking que no entró, o sea que el hotel puede estar por vender
+una unidad que el canal ya vendió. Ahora sale a la cartelera.
+
+**El cron aterriza pero no importa** (ADR 0021, y está bien que sea así), pero el
+corolario es que una reserva que llegó el viernes a la noche sigue sin ocupar
+inventario hasta que alguien entre a la pantalla. El KPI se enciende solo; el
+problema es que hay que estar mirándolo. Plantilla nueva
+`interno_canal_por_revisar`.
+
+### Una constante que estaba escrita dos veces
+
+`DIAS_EXPIRACION` vivía en el cron de mantenimiento, y el aviso de «tu reserva se
+libera mañana» necesitaba el mismo número. Con dos constantes, subir una sin la
+otra haría que el aviso saliera **después** de que el sistema ya soltó la unidad:
+un correo diciéndole al huésped que tiene 24 horas para señar algo que ya no
+existe. Ahora está una sola vez, en `lib/domain/recordatorios.ts`.
+
+### Lo que NO cierra este trabajo
+
+- **Las plantillas de WhatsApp las aprueba Meta**, con la cuenta del hotel, y
+  tarda. Los pasos están en `docs/despliegue.md` §1.5.
+- **El envío real de correo** necesita `RESEND_API_KEY` y un dominio verificado.
+- **Nada de esto se probó contra un proveedor vivo.** Misma limitación que el
+  resto del sistema: nunca corrió en producción.
+
+**Verificación:** typecheck 0 · lint 0 · build 0 · **1574 tests puros en verde**.
+Los que tocan la base —canal interno, los cinco estados, unicidad del
+`proveedor_id`— los corre el CI del PR, que es el único lugar con Docker.
+
+---
+
+## 2026-09-08 (segunda mitad) — Dejar el correo listo para usar, y un hallazgo que apareció de paso
+
+**Resumen:** el diagnóstico de configuración del correo, el botón de prueba de
+envío, las restricciones de canal por fecha (0087), la reserva que el canal
+modifica (0088) y el borde público en escritura (0089). Mismo PR #42.
+
+### El problema de fondo del correo: todo funciona sin configurar nada
+
+La bandeja encola, el cron despacha y el proveedor de consola devuelve `ok`. O
+sea que **un hotel sin configurar ve exactamente lo mismo que uno configurado**:
+filas en verde que dicen «enviada». La diferencia recién se nota cuando un
+huésped llama para decir que no le llegó nada, que es tarde.
+
+Se agregaron dos cosas a `/panel/notificaciones`, las dos para admin y gerencia
+—recepción no puede hacer nada con «falta RESEND_API_KEY», y mostrárselo
+convierte una pantalla operativa en una lista de cosas que no puede resolver—:
+
+1. **El diagnóstico** (`lib/notificaciones/diagnostico.ts`): seis requisitos con
+   **qué pasa si falta cada uno**, en la consecuencia concreta y no en «revisar
+   la configuración». ⚠️ Nunca devuelve el valor de un secreto, sólo si está: una
+   pantalla que muestra media clave para «ayudar a verificar» es una clave
+   filtrada —queda en el historial, en una captura y en el hombro de quien pasa—.
+2. **El botón de prueba**: manda un correo real a una dirección que se escribe, y
+   **devuelve el motivo verbatim del proveedor**. Ahí es donde aparece lo que hay
+   que corregir («domain is not verified», «API key is invalid»); traducirlo a «no
+   se pudo enviar» sería quedarse justo con la parte inútil.
+
+⚠️ El botón **no pasa por la bandeja**, a propósito: un correo de prueba no es una
+comunicación al huésped, no tiene entidad a la que imputarse y no debe ensuciar el
+registro de lo que el hotel le dijo a la gente. Y si el proveedor es el de
+consola, la prueba **devuelve error** aunque el envío diga `ok`: decir «listo, se
+envió» sería la mentira más cara de esa pantalla.
+
+### El hallazgo: `anon` podía escribir (migración 0089)
+
+Apareció escribiendo `tests/anon-no-escribe.test.ts`, que audita el borde público
+en escritura tabla por tabla. La primera corrida encontró que el rol público
+—el que cualquiera alcanza desde internet, sin credenciales— conservaba
+`update` y `delete` sobre las **seis tablas del catálogo**.
+
+No venía de ninguna migración de este proyecto: la 0006 le da a `anon` sólo
+`select`. Sale de los privilegios por omisión de la **plataforma**, y nadie lo
+había mirado — la 0072 revocó `select` sobre lo que no es catálogo y ahí se
+detuvo.
+
+**Exposición real: ninguna.** Las políticas RLS de esas tablas acotan la escritura
+a admin y gerencia. Pero es la forma exacta del hallazgo de `cotizar_estadia`: la
+capa que la documentación daba por puesta no estaba, y la protección efectiva
+dependía de una sola política.
+
+⚠️ Y sobre el resto de las tablas probablemente estaba también. No se nota porque,
+sin `select`, PostgREST no expone la tabla al rol y responde «no existe» antes de
+llegar a la base: **la barrera que actúa ahí no es el permiso**, es que el cliente
+no encuentra la puerta.
+
+Se revoca en bloque —ninguna escritura pública usa `anon`; las tres que existen
+resuelven con `service_role` y el token de la URL— más `alter default privileges`,
+sin lo cual el arreglo duraría hasta el próximo `create table`.
+
+### Dónde me equivoqué escribiendo el test
+
+**La primera versión sondeaba con un `insert` vacío y leía el código de error.**
+Parece elegante —`42501` es «denegado», cualquier otra cosa es «la barrera dejó
+pasar»— y tiene dos falsos negativos que no se ven:
+
+- una **vista** responde `55000` («no se puede insertar en una vista»);
+- una tabla con **trigger BEFORE INSERT** responde lo que lance el trigger.
+
+En los dos casos el error no es de permiso, y el test lo leía como si la barrera
+hubiera actuado. Lo destapó el CI mostrando cinco tablas que «dejaban pasar» y que
+en realidad eran cuatro vistas y una tabla con trigger.
+
+Ahora pregunta `has_table_privilege` vía `privilegios_de_escritura(rol)`. Sin
+ambigüedad, cubre vistas, y no depende de que PostgREST muestre la tabla. Con dos
+contrapesos que hacían falta: que el catálogo **siga** siendo legible —un `revoke`
+de más rompe el portal de la forma más silenciosa posible— y que `authenticated`
+**siga** escribiendo, porque un `revoke` dirigido a `public` alcanzaría a los dos
+roles.
+
+### Lo otro que entró
+
+**Restricciones por fecha del canal (0087).** `canal_tipos` guardaba el mínimo de
+noches y el cierre por tipo y **para siempre**: se podía decir «la Doble Vista
+pide 2 noches» pero no «el fin de semana largo pide 3». Ahora hay un rango, con
+CTA y CTD —«se puede estar el sábado, pero no se puede llegar el sábado»—, que es
+lo que evita que un fin de semana largo se parta al medio. Al resolver un día gana
+**la más restrictiva**: quedarse corto vende una noche que el hotel no quería
+vender, y esa venta ya no se deshace sin cancelarle a alguien.
+
+**La reserva que el canal modifica (0088).** La otra mitad de lo que cerró la
+0074. Aquélla cubre la que desaparece; ésta, la que cambia: el huésped mueve las
+fechas en Booking, la fila del canal se actualiza —correcto— y la reserva del
+hotel se queda con las viejas, sin ningún síntoma. Se detecta y se muestra en
+rojo; **no se reprograma solo**, porque mover el período va contra la exclusión
+del ADR 0002 y el precio no se recotiza — quedaría cobrando la tarifa de otras
+fechas.
+
+**El RCE de Next.** Lo destapó el `npm audit` del CI: 16.0.0–16.3.2 tenía dos RCE
+sin autenticar, uno crítico. Se subió a 16.3.4 y el árbol quedó en cero
+vulnerabilidades. No es una dependencia nueva; la alternativa era desplegar con un
+RCE conocido.

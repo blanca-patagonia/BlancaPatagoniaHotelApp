@@ -15,7 +15,7 @@ import { validarReservaExterna } from '@/lib/domain/canal-externo'
  * proveedor real conectado: es la arquitectura para que conectar uno el día
  * de mañana (Beds24, Hotelrunner, RateGain) sea agregar una fila en
  * `canales_externos` y su mapeo de tipos, no reescribir el sistema (ver el
- * comentario largo de la migración 0092).
+ * comentario largo de la migración 0094).
  *
  * ── Por qué NO es lo mismo que `lib/canales/*` (Booking/Expedia) ────────────
  *
@@ -35,7 +35,7 @@ import { validarReservaExterna } from '@/lib/domain/canal-externo'
  *
  * `reservas_canal_valido` (migración 0062) fija la lista de canales a propósito
  * chica: es la dimensión de `resumen_canal_mes` y de la conciliación de
- * comisiones. La 0093 le sumó `channel_manager` como bucket genérico —CUALQUIER
+ * comisiones. La 0095 le sumó `channel_manager` como bucket genérico —CUALQUIER
  * proveedor conectado por acá cae ahí—, así que qué proveedor fue puntualmente
  * viaja en el prefijo de `reservas.voucher` (`<codigo>:<referencia_externa>`),
  * no en `canal`.
@@ -107,7 +107,7 @@ export async function POST(
   const d = validado.datos
 
   // `reservas.canal` es un bucket genérico ('channel_manager', ver migración
-  // 0093): CUÁL proveedor fue no vive ahí, vive en el prefijo del voucher. Sin
+  // 0095): CUÁL proveedor fue no vive ahí, vive en el prefijo del voucher. Sin
   // el prefijo, dos proveedores distintos que numeren sus reservas igual
   // («12345») se pisarían en la comprobación de idempotencia de más abajo.
   const voucher = `${canalExterno.codigo}:${d.referenciaExterna}`

@@ -78,10 +78,6 @@ export class ProveedorResend implements EmailProvider {
           to: [m.para],
           subject: m.asunto,
           text: m.cuerpo,
-          // Resend acepta las dos partes en la misma llamada: el cliente de
-          // correo elige cuál mostrar. Sin `html`, algunos clientes muestran
-          // el texto plano sin ningún salto de línea propio.
-          ...(m.cuerpoHtml ? { html: m.cuerpoHtml } : {}),
         }),
         signal: corte,
       })
@@ -100,6 +96,13 @@ export class ProveedorResend implements EmailProvider {
       return {
         ok: true,
         detalle: datos.id ? `Enviado por Resend (${datos.id}).` : 'Enviado por Resend.',
+        /*
+          El id se devuelve para que la bandeja lo guarde: es lo único con lo que
+          el webhook de entrega puede encontrar esta fila cuando llegue el rebote
+          o la apertura. Sin él, el estado se congela en `enviada`, que se lee
+          igual que «salió bien».
+        */
+        proveedorId: datos.id,
       }
     } catch (e) {
       // Incluye el corte por tiempo. No se relanza: la bandeja decide si

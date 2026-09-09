@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Migración 0087 — `cancelada_en`, para saber CUÁNDO se canceló una reserva
+-- Migración 0090 — `cancelada_en`, para saber CUÁNDO se canceló una reserva
 --
 -- El tablero principal (`app/panel/page.tsx`) muestra llegadas y salidas de
 -- hoy, pero no cancelaciones de hoy: `reservas` no guardaba cuándo pasó a

@@ -73,6 +73,81 @@ export interface PrecioDelDia {
   precio: number
 }
 
+/**
+ * Una restricción por fecha (migración 0087).
+ *
+ * ── Por qué existe, además de la del tipo ───────────────────────────────────
+ *
+ * `MapeoTipo` guarda `minimoNoches` y `cerrado` **para siempre**. Con eso el
+ * hotel puede decir «la Doble Vista pide 2 noches» pero no puede decir «el fin de
+ * semana largo de octubre pide 3»: para imponerlo tendría que ponérselo al tipo
+ * todo el año, y entonces deja de vender las noches sueltas de temporada baja.
+ */
+export interface RestriccionDeFecha {
+  /** `null` = aplica a **todos** los tipos. Es el caso más común. */
+  tipoUnidadId: string | null
+  /** Primera fecha alcanzada. */
+  desde: string
+  /** Fin **excluido**, igual que el resto de los rangos del sistema. */
+  hasta: string
+  minimoNoches: number | null
+  cerrado: boolean
+  /** CTA: se puede estar ese día, pero no empezar la estadía. */
+  cerradoLlegada: boolean
+  /** CTD: se puede estar ese día, pero no terminarla ahí. */
+  cerradoSalida: boolean
+}
+
+/** Lo que rige para un tipo en un día, ya resueltas todas las reglas. */
+export interface RestriccionResuelta {
+  minimoNoches: number | null
+  cerrado: boolean
+  cerradoLlegada: boolean
+  cerradoSalida: boolean
+}
+
+/**
+ * Combina la restricción del tipo con las de fecha que caen ese día.
+ *
+ * ⚠️ **Gana la más restrictiva, siempre.** Dos reglas que se pisan tienen que
+ * resolverse hacia el lado seguro: quedarse corto vende una noche que el hotel
+ * no quería vender —y esa venta ya no se deshace sin cancelarle a alguien—,
+ * mientras que quedarse largo sólo pierde una reserva que todavía se puede
+ * recuperar por teléfono.
+ *
+ * Los booleanos se combinan con `or` y el mínimo de noches con `max`, que es lo
+ * mismo dicho de dos maneras.
+ */
+export function restriccionDelDia(
+  mapeo: Pick<MapeoTipo, 'tipoUnidadId' | 'minimoNoches' | 'cerrado'>,
+  restricciones: readonly RestriccionDeFecha[],
+  fecha: string,
+): RestriccionResuelta {
+  const resuelta: RestriccionResuelta = {
+    minimoNoches: mapeo.minimoNoches,
+    cerrado: mapeo.cerrado,
+    cerradoLlegada: false,
+    cerradoSalida: false,
+  }
+
+  for (const r of restricciones) {
+    // `[desde, hasta)` con el fin EXCLUIDO. Con `<=` la restricción se pasaría un
+    // día, que es justamente el error que la convención existe para evitar.
+    if (fecha < r.desde || fecha >= r.hasta) continue
+    // `null` en la restricción significa «todos los tipos», no «ninguno».
+    if (r.tipoUnidadId !== null && r.tipoUnidadId !== mapeo.tipoUnidadId) continue
+
+    if (r.minimoNoches !== null) {
+      resuelta.minimoNoches = Math.max(resuelta.minimoNoches ?? 0, r.minimoNoches)
+    }
+    resuelta.cerrado = resuelta.cerrado || r.cerrado
+    resuelta.cerradoLlegada = resuelta.cerradoLlegada || r.cerradoLlegada
+    resuelta.cerradoSalida = resuelta.cerradoSalida || r.cerradoSalida
+  }
+
+  return resuelta
+}
+
 export interface FilaAri {
   tipoUnidadCodigo: string
   fecha: string
@@ -81,6 +156,10 @@ export interface FilaAri {
   moneda: string
   minimoNoches?: number
   cerrado?: boolean
+  /** CTA. Sólo se informa cuando es `true`: es una instrucción, no un estado. */
+  cerradoLlegada?: boolean
+  /** CTD. Ídem. */
+  cerradoSalida?: boolean
 }
 
 /* ────────────────────────────────────────────────────────── el cálculo ──── */
@@ -168,6 +247,11 @@ export function calcularAri(
   estadias: readonly EstadiaOcupada[],
   precios: readonly PrecioDelDia[],
   opciones: OpcionesAri,
+  /*
+    Restricciones por fecha (0087). Opcional para no romper a quien ya llamaba a
+    esta función: sin ellas, el comportamiento es exactamente el de antes.
+  */
+  restricciones: readonly RestriccionDeFecha[] = [],
 ): { filas: FilaAri[]; sinPrecio: number } {
   const noches = diasEntre(opciones.desde, opciones.hasta)
   if (noches <= 0) return { filas: [], sinPrecio: 0 }
@@ -191,8 +275,12 @@ export function calcularAri(
         continue
       }
 
+      // Lo del tipo más lo que rija ese día en particular, quedándose siempre con
+      // lo más restrictivo (ver `restriccionDelDia`).
+      const regla = restriccionDelDia(m, restricciones, fecha)
+
       const ocupadas = nochesDelTipo?.get(fecha)?.size ?? 0
-      const cupo = m.cerrado ? 0 : cupoPublicable(m.unidadesActivas, ocupadas, m.topeCupo)
+      const cupo = regla.cerrado ? 0 : cupoPublicable(m.unidadesActivas, ocupadas, m.topeCupo)
 
       const fila: FilaAri = {
         tipoUnidadCodigo: m.codigoCanal,
@@ -202,9 +290,18 @@ export function calcularAri(
         moneda: opciones.moneda,
         // Cupo cero se informa como cerrado. Un canal que recibe cupo 0 sin la
         // marca puede seguir aceptando reservas «en lista de espera».
-        cerrado: m.cerrado || cupo === 0,
+        cerrado: regla.cerrado || cupo === 0,
       }
-      if (m.minimoNoches && m.minimoNoches > 1) fila.minimoNoches = m.minimoNoches
+      if (regla.minimoNoches && regla.minimoNoches > 1) fila.minimoNoches = regla.minimoNoches
+      /*
+        CTA y CTD sólo se informan cuando son `true`.
+
+        Son instrucciones, no estados: mandar `cerradoLlegada: false` en todas las
+        filas es ruido, y con algunos canales es peor —levanta una restricción que
+        el hotel puso a mano desde el extranet—.
+      */
+      if (regla.cerradoLlegada) fila.cerradoLlegada = true
+      if (regla.cerradoSalida) fila.cerradoSalida = true
 
       filas.push(fila)
     }

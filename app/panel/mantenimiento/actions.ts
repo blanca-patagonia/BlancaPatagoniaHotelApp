@@ -7,6 +7,7 @@ import { requerirAcceso, requerirRol } from '@/lib/auth/session'
 import { periodicidadValida, primeraEjecucionSugerida } from '@/lib/domain/preventivo'
 import { hoyISO } from '@/lib/fechas'
 import { cortarSiFalla } from '@/lib/acciones'
+import { avisarIncidenteMantenimiento } from '@/lib/notificaciones/eventos'
 
 export interface EstadoOrden {
   error?: string
@@ -26,10 +27,36 @@ export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promis
   if (!PRIORIDADES.includes(prioridad)) return { error: 'Prioridad inválida.' }
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase
+  const { data: creada, error } = await supabase
     .from('ordenes_mantenimiento')
     .insert({ titulo, descripcion, prioridad, unidad_id: unidadId || null })
+    .select('id, unidad:unidades(nombre)')
+    .single()
   if (error) return { error: `No se pudo crear: ${error.message}` }
+
+  /*
+    Sólo lo urgente sale a la cartelera.
+
+    Una orden de prioridad baja —«cambiar la lamparita del pasillo»— no necesita
+    interrumpir a nadie, y si todas avisaran, la cartelera se llenaría de cosas
+    que pueden esperar y se dejaría de mirar. La que no puede esperar es la que
+    deja una habitación fuera de servicio.
+  */
+  if (prioridad === 'alta') {
+    const orden = creada as unknown as {
+      id: string
+      // ⚠️ PostgREST tipa el embed como arreglo aunque la relación sea a-uno.
+      unidad: { nombre: string }[] | null
+    }
+    await avisarIncidenteMantenimiento(supabase, {
+      ordenId: orden.id,
+      // Una orden puede no tener unidad (algo del edificio, no de una habitación).
+      unidad: orden.unidad?.[0]?.nombre ?? 'Sin unidad asignada',
+      titulo,
+      prioridad: 'alta',
+    })
+  }
+
   revalidatePath('/panel/mantenimiento')
   return { ok: 'Orden creada.' }
 }

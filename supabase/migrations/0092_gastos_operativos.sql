@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Migración 0089 — Gastos operativos
+-- Migración 0092 — Gastos operativos
 --
 -- Patrón de referencia: el módulo de gastos de Invoice Ninja. `proveedores` ya
 -- cubre las facturas formales de terceros (cuentas por pagar), pero el hotel

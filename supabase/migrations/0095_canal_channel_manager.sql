@@ -1,12 +1,12 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Migración 0093 — `channel_manager` se suma a los canales válidos
+-- Migración 0095 — `channel_manager` se suma a los canales válidos
 --
 -- La 0062 fijó `reservas_canal_valido` a la lista exacta de `CANALES`
 -- (`lib/domain/reservas.ts`), a propósito acotada: es la dimensión de
 -- `resumen_canal_mes` y de la conciliación de comisiones, y un CHECK más ancho
 -- que el dominio no protege de nada.
 --
--- El webhook de la 0092 (`POST /api/canales/externos/<token>`, Fase 7 del
+-- El webhook de la 0094 (`POST /api/canales/externos/<token>`, Fase 7 del
 -- análisis de referencia) necesita guardar `reservas.canal` para algo que no es
 -- Booking ni Expedia. Se agrega UN valor genérico —`channel_manager`— y no uno
 -- por proveedor: cuál proveedor específico fue fue una reserva ya lo dice
@@ -24,4 +24,4 @@ alter table reservas
   check (canal in ('directo', 'web', 'booking', 'expedia', 'channel_manager'));
 
 comment on constraint reservas_canal_valido on reservas is
-  'Sin esto, un typo creaba un canal fantasma en `resumen_canal_mes` y en la conciliación de comisiones, sin fallar. Al sumar un canal nuevo hay que ampliar esta lista y `segmentoDeCanal()` en `lib/domain/reservas.ts`. `channel_manager` (0093) es el bucket genérico de cualquier proveedor conectado por `canales_externos`.';
+  'Sin esto, un typo creaba un canal fantasma en `resumen_canal_mes` y en la conciliación de comisiones, sin fallar. Al sumar un canal nuevo hay que ampliar esta lista y `segmentoDeCanal()` en `lib/domain/reservas.ts`. `channel_manager` (0095) es el bucket genérico de cualquier proveedor conectado por `canales_externos`.';

@@ -133,7 +133,7 @@ describe.skipIf(!hayDB)('Webhook · canal externo', () => {
       .single<{ huesped_id: string; canal: string; voucher: string; tarifa_tipo: string; estado: string }>()
     ctx.aBorrar.push({ tabla: 'huespedes', id: reserva!.huesped_id })
 
-    // `reservas.canal` es el bucket genérico, no el proveedor puntual (0093):
+    // `reservas.canal` es el bucket genérico, no el proveedor puntual (0095):
     // eso viaja en el prefijo del voucher.
     expect(reserva!.canal).toBe('channel_manager')
     expect(reserva!.voucher).toBe(`${codigo}:ref-${ctx.sufijo}-1`)

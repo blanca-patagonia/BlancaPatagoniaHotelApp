@@ -8,7 +8,7 @@ export type OrigenAccesoHuesped = 'ficha_huesped' | 'ficha_reserva'
  * Deja constancia de que el rol actual abrió la ficha de un huésped.
  *
  * Patrón de referencia: la auditoría de acceso a PII de Hotel PMS. Se hace por
- * RPC (`registrar_acceso_huesped`, migración 0088) y no por un `insert` directo
+ * RPC (`registrar_acceso_huesped`, migración 0091) y no por un `insert` directo
  * porque un SELECT no dispara triggers en Postgres — a diferencia de
  * `auditoria` (migración 0020), que sí puede colgarse de un trigger porque
  * audita escrituras. El usuario y el rol los toma la función del lado del

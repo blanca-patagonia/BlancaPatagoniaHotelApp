@@ -377,6 +377,36 @@ export const CAPITULOS: Capitulo[] = [
           'Las reservas de Booking aterrizan en una lista aparte y no ocupan habitación hasta que alguien aprieta "Importar". Es a propósito: Booking llama a las habitaciones con sus propios nombres, y hay que confirmar a qué tipo corresponde antes de darla por buena.',
       },
       {
+        titulo: 'Si el huésped cambia las fechas en Booking',
+        detalle:
+          'La reserva vuelve a llegar con los datos nuevos, pero la que está cargada en el sistema NO se mueve sola: aparece un cartel rojo en la lista diciendo qué cambió, y hay que corregirla a mano desde la ficha. Es a propósito. Moverla sola puede chocar con otra habitación ocupada, y el precio no se recalcula: quedaría cobrando la tarifa de las fechas viejas.',
+      },
+      {
+        titulo: 'El sistema avisa cuando entra algo',
+        detalle:
+          'Si la sincronización trae reservas nuevas, aparece un aviso en el tablón de Avisos marcado "Del sistema". Así una reserva que entró el viernes a la noche no espera hasta que alguien abra esta pantalla. Si la sincronización falla, también avisa.',
+      },
+      {
+        titulo: 'Cerrar fechas o pedir un mínimo de noches',
+        detalle:
+          'En la pestaña Publicación hay dos niveles. La tabla de arriba vale siempre: "esta habitación pide 2 noches, todo el año". La de abajo vale para un tramo de fechas: "el fin de semana largo pide 3", "esas dos semanas las guardo para el grupo que reservó por teléfono".',
+      },
+      {
+        titulo: 'El "hasta" de una restricción queda AFUERA',
+        detalle:
+          'Del 9 al 13 alcanza al 9, 10, 11 y 12. Es la misma forma de contar que las temporadas y las estadías. La lista muestra el último día incluido, así que lo que se lee ahí es lo que rige.',
+      },
+      {
+        titulo: '"Sin llegadas" no es lo mismo que "cerrado"',
+        detalle:
+          'Cerrado no vende nada ese día. "Sin llegadas" deja que alguien pase esa noche pero no que empiece ahí, y es lo que evita que un fin de semana largo se parta al medio: sin eso, un mínimo de tres noches igual permite reservar sábado, domingo y lunes.',
+      },
+      {
+        titulo: 'Ojo: estas restricciones todavía no salen',
+        detalle:
+          'Se calculan y quedan registradas, pero con el proveedor actual no llegan a Booking, porque la conexión que tiene el hotel es de solo lectura. Sirven para el día que se contrate un channel manager. Mientras tanto, cerrar fechas en Booking se sigue haciendo desde el extranet.',
+      },
+      {
         titulo: 'Cómo traerlas',
         detalle:
           'En el extranet de Booking: Administración → Informe de reservas. Se descarga el CSV y se sube en esta pantalla. No hay que abrirlo en Excel antes: si se abre y se guarda, las fechas y los precios cambian de formato y algunas filas dejan de leerse.',
@@ -503,6 +533,47 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Se limpia sola',
         detalle:
           'Los errores de más de 90 días se borran automáticamente. Un error de hace tres meses ya no le sirve a nadie y la lista se volvería imposible de leer.',
+      },
+    ],
+  },
+  {
+    area: 'notificaciones',
+    resumen: 'Qué avisos salieron, a quién y en qué estado quedaron.',
+    pasos: [
+      {
+        titulo: 'Para qué es esta pantalla',
+        detalle:
+          'Cada vez que el sistema tiene algo que comunicar —una reserva confirmada, un pago recibido, un recordatorio de llegada— lo anota acá antes de mandarlo. Sirve para responder la pregunta que llega al mostrador todo el tiempo: "no me llegó nada".',
+      },
+      {
+        titulo: 'Los cinco estados',
+        detalle:
+          'Pendiente: todavía no salió, está esperando su turno. Enviada: el proveedor de correo la aceptó. Entregada: el correo del huésped la recibió. Leída: la abrió. Fallida: se intentó varias veces y no se pudo.',
+      },
+      {
+        titulo: '"Enviada" no es "entregada"',
+        detalle:
+          'Entre las dos está el rebote: el proveedor acepta el mensaje mucho antes de saber si la casilla del huésped existe. Si algo quedó en "enviada" y nunca pasó a "entregada", vale la pena revisar la dirección de correo.',
+      },
+      {
+        titulo: 'Que no diga "leída" no significa que no la haya leído',
+        detalle:
+          'La apertura se detecta con una imagen diminuta dentro del correo, y muchos programas de correo las bloquean. O sea: si dice leída, la abrió seguro; si no lo dice, no se sabe.',
+      },
+      {
+        titulo: 'Los avisos internos no salen del sistema',
+        detalle:
+          'Los que dicen "interno" no le llegan a ningún huésped: aparecen en el tablón de Avisos, marcados como "Del sistema", para el rol que corresponda.',
+      },
+      {
+        titulo: 'Reintentar a mano',
+        detalle:
+          'Si algo quedó fallido y ya se arregló el motivo —la dirección estaba mal, el proveedor estuvo caído—, se puede volver a poner en cola. Nunca manda dos veces el mismo aviso por error: cada uno tiene su clave.',
+      },
+      {
+        titulo: 'Frenar un aviso antes de que salga',
+        detalle:
+          'Sólo se puede cancelar lo que está "pendiente": es lo único que todavía no salió. Un aviso ya enviado no vuelve, así que cancelarlo no está permitido —diría que no se mandó algo que sí se mandó—. Lo cancelado se puede volver a encolar más tarde.',
       },
     ],
   },

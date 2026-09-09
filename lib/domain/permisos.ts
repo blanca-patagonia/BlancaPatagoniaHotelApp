@@ -25,6 +25,7 @@ export const AREAS = [
   'conciliacion',
   'auditoria',
   'errores',
+  'notificaciones',
   'reportes',
   'config',
   'usuarios',
@@ -53,6 +54,7 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   conciliacion: 'Conciliación y gastos',
   auditoria: 'Auditoría',
   errores: 'Errores del sistema',
+  notificaciones: 'Avisos enviados',
   reportes: 'Reportes',
   config: 'Configuración',
   usuarios: 'Usuarios',
@@ -85,6 +87,13 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
     // llamar a alguien. La política RLS de `errores` (migración 0068) declara
     // los mismos dos roles: si acá se agregara uno más, vería la pantalla vacía.
     'errores',
+    /*
+      El registro de envíos. Va para los mismos tres roles que la política de
+      lectura de `notificaciones` (migración 0075) — admin, gerencia y
+      recepción—: si acá se agregara housekeeping, vería la pantalla vacía y no
+      entendería por qué.
+    */
+    'notificaciones',
     // Gerencia **ve** el estado de los respaldos —saber que hace 40 días que nadie
     // exporta es información de gestión— pero **no puede exportar**: eso lo
     // restringe la propia pantalla y el endpoint, porque el archivo concentra los
@@ -96,7 +105,14 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   // atiende quien está en el mostrador, no gerencia. Es trabajo diario.
   recepcion: [
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'objetos_perdidos',
-    'avisos', 'conversaciones', 'agencias', 'canales', 'ayuda',
+    'avisos', 'conversaciones', 'agencias', 'canales',
+    /*
+      Recepción entra al registro de envíos porque es quien atiende el «no me
+      llegó nada». Mirar si el correo salió, rebotó o nunca se intentó es parte
+      de esa conversación, y tener que pedírselo a un admin la vuelve inútil.
+    */
+    'notificaciones',
+    'ayuda',
   ],
   housekeeping: [
     'dashboard', 'housekeeping', 'mantenimiento', 'avisos', 'conversaciones', 'ayuda',

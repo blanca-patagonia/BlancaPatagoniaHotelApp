@@ -1,7 +1,7 @@
 /**
  * Validación del payload que un channel manager externo manda al webhook de
  * reservas entrantes (Fase 7 del análisis de referencia: preparación, sin
- * proveedor real conectado todavía — ver migración 0092).
+ * proveedor real conectado todavía — ver migración 0094).
  *
  * Lógica pura y sin `fetch`/Supabase a propósito: así se puede probar cada
  * caso borde del formato sin levantar el endpoint ni la base.

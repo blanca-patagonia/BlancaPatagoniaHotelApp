@@ -86,23 +86,6 @@ export default async function PlantillasPage({
                   </p>
                 </div>
 
-                {/* Vista de cómo llega en un cliente que sí muestra HTML.
-                    `sandbox` sin `allow-scripts`: el HTML es propio (deriva
-                    del texto de arriba, `textoAHtml`), pero un iframe aislado
-                    no cuesta nada y evita que un estilo de la plantilla se
-                    filtre al resto del panel. */}
-                <div className="mt-3 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                  <p className="border-b border-stone-200 bg-stone-50 px-4 py-1.5 text-xs tracking-wide text-stone-600 uppercase">
-                    Vista HTML
-                  </p>
-                  <iframe
-                    title={`Vista HTML de «${plantilla.nombre}»`}
-                    srcDoc={vista.cuerpoHtml}
-                    sandbox=""
-                    className="h-48 w-full"
-                  />
-                </div>
-
                 {puedeEditar && (
                   <form
                     action={enviarPlantillaPrueba}

@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Migración 0094 — Conexiones de proveedores (OAuth2 e iCal), un solo hotel
+-- Migración 0096 — Conexiones de proveedores (OAuth2 e iCal), un solo hotel
 --
 -- Objetivo: que vincular Mercado Pago, el correo de Google, Booking y Expedia
 -- sea un botón que abre una ventana del propio proveedor —o pegar un link,

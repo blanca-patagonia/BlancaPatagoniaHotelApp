@@ -114,7 +114,7 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // ── Auditoría: solo quien la audita ──
   auditoria: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
-  // ── Auditoría de LECTURA de fichas de huésped (migración 0088) ──
+  // ── Auditoría de LECTURA de fichas de huésped (migración 0091) ──
   // Mismo criterio que `auditoria`: es el registro de quién miró qué, y
   // quien lo mira tiene que ser el mismo que audita las escrituras.
   auditoria_accesos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
@@ -159,7 +159,7 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // huéspedes desde la ficha de la reserva, no desde acá.
   movimientos_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
-  // ── Gastos operativos (migración 0089) ──
+  // ── Gastos operativos (migración 0092) ──
   // Vive bajo la misma área que `movimientos_externos` (conciliación): plata
   // que salió del hotel sin pasar por una reserva ni por la cuenta corriente
   // de un proveedor. Mismos dos roles, mismo motivo.
@@ -196,7 +196,21 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // cerrados en cada OTA. Eso es estrategia comercial, no operación de mostrador.
   canal_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
-  // ── Channel manager genérico (Fase 7 del análisis de referencia, migración 0092) ──
+  /*
+    ── Restricciones por fecha (migración 0087) ──────────────────────────────
+
+    Acá SÍ lee todo el staff, al revés que `canal_tipos`, y la diferencia no es
+    un descuido: `canal_tipos` guarda el tope de inventario que el hotel se
+    reserva y el porcentaje del canal —estrategia comercial—, mientras que esto
+    es «del 9 al 12 pedimos tres noches». Recepción necesita saberlo para
+    contestar el teléfono sin contradecir lo que el canal está publicando.
+
+    Escribir sigue siendo de admin y gerencia: leer qué fechas están cerradas es
+    operación, decidir cerrarlas es una decisión de venta.
+  */
+  canal_restricciones: { todos: 'si' },
+
+  // ── Channel manager genérico (Fase 7 del análisis de referencia, migración 0094) ──
   //
   // Mismo nivel que `canal_config`: el token es un secreto (va en la URL del
   // webhook) y el mapeo es estrategia comercial, no algo que housekeeping o
@@ -204,7 +218,7 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   canales_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
   canal_externo_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
-  // ── Conexiones OAuth2/iCal con proveedores externos (migración 0094) ──
+  // ── Conexiones OAuth2/iCal con proveedores externos (migración 0096) ──
   //
   // Más restrictivo todavía que `canal_config`: la fila puede contener
   // tokens cifrados de la cuenta real de Mercado Pago o de Google del hotel.
@@ -547,13 +561,13 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
     }
 
     /*
-      ── auditoria_accesos (migración 0088) ────────────────────────────────────
+      ── auditoria_accesos (migración 0091) ────────────────────────────────────
 
       Nace vacía —solo se llena cuando alguien abre de verdad la ficha de un
       huésped, vía `registrar_acceso_huesped`—, así que sin sembrar, los dos
       casos negativos (recepción y housekeeping) pasarían por tabla vacía y no
       por la política. `service_role` sí puede insertar directo: el `revoke`
-      de la 0088/0091 es sobre `authenticated`/`anon`/`public`, no sobre él.
+      de la 0091/0093 es sobre `authenticated`/`anon`/`public`, no sobre él.
     */
     if ((await contar('auditoria_accesos')) === 0) {
       const reservaId = await reservaParaSembrar()
@@ -575,7 +589,7 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
     }
 
     /*
-      ── gastos_operativos (migración 0089) ────────────────────────────────────
+      ── gastos_operativos (migración 0092) ────────────────────────────────────
 
       Nace vacía —se cargan a mano desde `/panel/conciliacion/gastos`—, mismo
       motivo que `movimientos_externos`: sin sembrar, los casos negativos
@@ -590,6 +604,28 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar gastos_operativos: ${error.message}`)
 
       sembradas.push({ tabla: 'gastos_operativos', columna: 'id', valor: data.id })
+    }
+
+    /*
+      ── canal_restricciones (migración 0087) ─────────────────────────────────
+
+      Nace vacía, igual que `canal_tipos`: cerrar fechas es una decisión del
+      hotel. Sin sembrar, los casos positivos pasarían por tabla vacía en vez de
+      por la política, que es exactamente el falso verde que este archivo existe
+      para evitar.
+    */
+    if ((await contar('canal_restricciones')) === 0) {
+      const nota = `AUDIT-RLS-${sufijo}`
+      const { error } = await admin.from('canal_restricciones').insert({
+        canal: 'booking',
+        // Fechas lejanas para no pisarse con nada real del hotel.
+        periodo: '[2099-01-01,2099-01-05)',
+        minimo_noches: 2,
+        nota,
+      })
+      if (error) throw new Error(`No se pudo sembrar canal_restricciones: ${error.message}`)
+
+      sembradas.push({ tabla: 'canal_restricciones', columna: 'nota', valor: nota })
     }
 
     /*
@@ -619,7 +655,7 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
     }
 
     /*
-      ── canales_externos / canal_externo_tipos (migración 0092) ────────────────
+      ── canales_externos / canal_externo_tipos (migración 0094) ────────────────
 
       Nacen vacías —qué channel manager se contrata es una decisión del hotel,
       y hoy no hay ninguno contratado (Fase 7, preparación)— así que sin
@@ -652,7 +688,7 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
         })
         if (eMapeo) throw new Error(`No se pudo sembrar canal_externo_tipos: ${eMapeo.message}`)
         // No se agrega a `sembradas`: el borrado de `canales_externos` de arriba
-        // lo arrastra por `on delete cascade` (migración 0092).
+        // lo arrastra por `on delete cascade` (migración 0094).
       }
     }
 
@@ -666,7 +702,7 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       sembradas.push({ tabla: 'canal_config', columna: 'canal', valor: 'booking' })
     }
 
-    // ── conexiones_proveedores (migración 0094) ─────────────────────────────────
+    // ── conexiones_proveedores (migración 0096) ─────────────────────────────────
     // Nace vacía (nadie conectó Mercado Pago todavía en la base de test). Sin una
     // fila, «recepción no puede leer» pasaría por tabla vacía en vez de por la
     // política.

@@ -61,6 +61,20 @@ export interface DisponibilidadCanal {
   minimoNoches?: number
   /** Cierra la venta de ese día sin tocar el cupo. */
   cerrado?: boolean
+  /**
+   * CTA: se puede estar ese día, pero no **empezar** la estadía ahí.
+   *
+   * Es lo que hace posible un fin de semana largo de verdad: sin esto, un mínimo
+   * de tres noches igual deja que alguien reserve sábado-domingo-lunes y parta el
+   * fin de semana en dos.
+   *
+   * Sólo se informa cuando es `true`: es una instrucción, no un estado, y
+   * mandarla en `false` en todas las filas puede levantar una restricción que el
+   * hotel puso a mano desde el extranet.
+   */
+  cerradoLlegada?: boolean
+  /** CTD: se puede estar ese día, pero no **terminar** la estadía ahí. Ídem. */
+  cerradoSalida?: boolean
 }
 
 export interface ResultadoEnvio {

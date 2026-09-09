@@ -5,6 +5,8 @@ import { puedeAvanzarEstadoPago, type EstadoPago } from '@/lib/domain/pagos'
 import { coincideElImporte, imputarEnUSD, MONEDA_BASE } from '@/lib/domain/cobro'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { saldarSiCorresponde } from '@/lib/reservas/saldar'
+import { avisarCobroAprobado, avisarCobroRechazado } from '@/lib/notificaciones/cobros'
+import { urlDelSitio } from '@/lib/env'
 import { registrarError } from '@/lib/registro'
 
 type ClienteAdmin = ReturnType<typeof crearClienteAdmin>
@@ -167,8 +169,45 @@ async function confirmarCobroConocido(
     reenviar el evento se convierte en el modo de arreglarlo.
   */
   if (evento.estado === 'aprobado') {
-    const falla = await saldarReserva(admin, previo.reserva_id)
-    if (falla) return Response.json({ error: falla }, { status: 500 })
+    const r = await saldarReserva(admin, previo.reserva_id)
+    if (r.error) return Response.json({ error: r.error }, { status: 500 })
+
+    /*
+      Los avisos van DESPUÉS de saldar y nunca cortan la respuesta.
+
+      Después, porque el saldo que se le informa al huésped es el de ya haber
+      imputado este cobro; antes, diría que sigue debiendo lo que acaba de pagar.
+
+      Y sin cortar, porque para una pasarela un 500 significa «reintentá»: fallar
+      el webhook por un correo que no se pudo anotar haría reprocesar el cobro
+      entero para arreglar un aviso.
+    */
+    await avisarCobroAprobado(admin, {
+      reservaId: previo.reserva_id,
+      pagoId: previo.id,
+      // El importe en USD congelado al crear el link, no el que informa la
+      // pasarela: es el mismo criterio con el que se salda la reserva.
+      importe: Number(previo.monto),
+      medio: evento.medio,
+      confirmada: r.confirmada,
+    })
+  }
+
+  /*
+    El rechazo también se avisa, y es lo que convierte una venta perdida en un
+    reintento: el huésped se entera en el momento y puede poner otra tarjeta.
+
+    ⚠️ `rechazado` no es final para un pago (la misma referencia externa puede
+    prosperar después), así que este aviso puede convivir con el de aprobado.
+    Son dos claves distintas y ninguna pisa a la otra.
+  */
+  if (evento.estado === 'rechazado') {
+    await avisarCobroRechazado(admin, {
+      reservaId: previo.reserva_id,
+      pagoId: previo.id,
+      importe: Number(previo.monto),
+      enlace: `${urlDelSitio()}/reservar`,
+    })
   }
 
   return Response.json({ ok: true })
@@ -250,8 +289,23 @@ async function registrarCobroAjeno(
   }
 
   if (evento.estado === 'aprobado') {
-    const falla = await saldarReserva(admin, evento.reservaId)
-    if (falla) return Response.json({ error: falla }, { status: 500 })
+    const r = await saldarReserva(admin, evento.reservaId)
+    if (r.error) return Response.json({ error: r.error }, { status: 500 })
+
+    /*
+      Igual que en el cobro conocido: después de saldar y sin cortar la respuesta.
+
+      La clave de idempotencia del aviso es el `external_id`, que es lo único que
+      identifica a este cobro: la fila del pago se acaba de insertar y no se leyó
+      de vuelta su `id`. Reprocesar el evento encuentra el aviso que ya está.
+    */
+    await avisarCobroAprobado(admin, {
+      reservaId: evento.reservaId,
+      pagoId: evento.externalId,
+      importe: montoUSD,
+      medio: evento.medio,
+      confirmada: r.confirmada,
+    })
   }
 
   return Response.json({ ok: true })
@@ -266,19 +320,27 @@ async function registrarCobroAjeno(
  * separar. Esta función queda solo para traducir el resultado a lo que el webhook
  * necesita responder.
  *
- * Devuelve `null` cuando no hay nada que hacer o salió bien, y el motivo cuando
- * falló algo de base. Los errores de lectura importan tanto como los de escritura:
- * si no se pudo leer el total o los pagos, el resumen daría «no saldada» y se
- * saltearía la transición **por un problema de infraestructura**, respondiendo `ok`.
- * Eso es exactamente el fallo silencioso que hay que evitar.
+ * Devuelve `error: null` cuando no hay nada que hacer o salió bien, y el motivo
+ * cuando falló algo de base. Los errores de lectura importan tanto como los de
+ * escritura: si no se pudo leer el total o los pagos, el resumen daría «no saldada»
+ * y se saltearía la transición **por un problema de infraestructura**, respondiendo
+ * `ok`. Eso es exactamente el fallo silencioso que hay que evitar.
+ *
+ * `confirmada` dice si **este** cobro fue el que pasó la reserva a firme. Es lo que
+ * distingue el aviso de «recibimos tu pago» del de «tu reserva está confirmada»: sin
+ * ese dato habría que elegir entre prometer de más al recibir la primera seña o no
+ * avisar nunca que la habitación quedó asegurada.
  */
-async function saldarReserva(admin: ClienteAdmin, reservaId: string): Promise<string | null> {
-  const { error, noExiste } = await saldarSiCorresponde(admin, reservaId)
+async function saldarReserva(
+  admin: ClienteAdmin,
+  reservaId: string,
+): Promise<{ error: string | null; confirmada: boolean }> {
+  const { error, noExiste, confirmada } = await saldarSiCorresponde(admin, reservaId)
 
   // Una reserva inexistente NO es motivo de 500: reintentar no la va a hacer
   // aparecer, y un reintento eterno es peor que aceptar el evento. Por eso el módulo
   // compartido lo devuelve aparte del error.
-  if (noExiste) return null
+  if (noExiste) return { error: null, confirmada: false }
 
-  return error
+  return { error, confirmada }
 }

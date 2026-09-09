@@ -626,13 +626,22 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
 
     it('marca in_house de una vez con "check-in inmediato"', async () => {
       const { desde, hasta } = await fechasConTarifa()
-      const { data: tipo } = await ctx.db.from('tipos_unidad').select('id').limit(1).single()
+      // Un tipo con unidad libre de verdad para estas fechas: otro test del
+      // archivo pudo haber ocupado la primera unidad del primer tipo, y un
+      // `.limit(1)` ciego elegiría una que ya no está libre (ver el test de
+      // arriba).
+      const { data: libres } = await ctx.db.rpc('unidades_disponibles', {
+        desde,
+        hasta,
+        p_categoria: null,
+      })
+      const unidad = (libres as { id: string; tipo_unidad_id: string }[])[0]
 
       const destino = await destinoDe(() =>
         crearReservaAction(
           {},
           formulario({
-            tipo_unidad_id: (tipo as { id: string }).id,
+            tipo_unidad_id: unidad.tipo_unidad_id,
             check_in: desde,
             check_out: hasta,
             huespedes: 1,

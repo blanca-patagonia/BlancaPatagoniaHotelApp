@@ -1,5 +1,5 @@
 /**
- * Gastos operativos del hotel sin factura formal de proveedor (migración 0089).
+ * Gastos operativos del hotel sin factura formal de proveedor (migración 0092).
  *
  * Patrón de referencia: el módulo de gastos de Invoice Ninja, adaptado —
  * `proveedores` ya cubre las facturas con contraparte; esto es para lo que no
