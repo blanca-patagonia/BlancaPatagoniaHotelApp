@@ -187,8 +187,12 @@ Tarifario 2025/2026 (Anexo A).
   forma exacta del hallazgo de `cotizar_estadia`. Lo cierra la **0089**, que
   revoca en bloque y toca los `default privileges` — sin eso el arreglo duraría
   hasta el próximo `create table`.
-  **Pendiente:** auditar las 103 políticas RLS una por una — que estén activadas en
-  las 51 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
+  **Pendiente:** auditar las 105 políticas RLS una por una — que estén activadas en
+  las 52 tablas no dice qué permite cada una. ⚠️ Acotado desde el 2026-09-08: la
+  **lectura** de los cuatro roles y la **escritura de `anon`** ya son exhaustivas
+  (`rls-por-rol` y `anon-no-escribe`). Lo que sigue dirigido es la escritura de
+  los tres roles de staff, donde el riesgo es escalada interna y no exposición
+  pública. ⚠️ La modernización WinPAX sumó **6
   tablas y 14 políticas** a ese pendiente (`cotizaciones`, `canal_reservas`,
   `canal_sincronizaciones`, `canal_mensajes`, `canal_resenas`, `departamentos`,
   `respaldos`); todas revocan `select` a `anon` explícitamente, pero eso no
@@ -510,8 +514,8 @@ Tarifario 2025/2026 (Anexo A).
      la caché devolvería JavaScript viejo.
   4. **Cero escrituras diferidas.** Sin background sync: una escritura reproducida
      más tarde se aplicaría sobre una realidad distinta de la que la originó.
-- **1914 tests verdes** (118 archivos), **cero salteados**, verificados contra la base
-  local con las **83** migraciones aplicadas en orden. El feed iCal de salida (B7,
+- **2107 tests verdes** (129 archivos), **cero salteados**, verificados contra la base
+  local con las **89** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
   0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos
   migraciones con el mismo número **no conviven**: Supabase registra la versión por
