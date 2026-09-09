@@ -84,6 +84,13 @@ export default async function CierreDiarioPage({
 
   return (
     <Pagina>
+      <Link
+        href="/panel/reportes"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a reportes
+      </Link>
+
       <Encabezado
         titulo="Cierre del día"
         descripcion="Repaso de fin de día: quién llegó, quién no apareció, quién se fue y cuánto entró."
