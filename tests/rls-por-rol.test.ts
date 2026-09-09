@@ -196,6 +196,20 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // cerrados en cada OTA. Eso es estrategia comercial, no operación de mostrador.
   canal_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  // ── Channel manager genérico (Fase 7 del análisis de referencia, migración 0092) ──
+  //
+  // Mismo nivel que `canal_config`: el token es un secreto (va en la URL del
+  // webhook) y el mapeo es estrategia comercial, no algo que housekeeping o
+  // recepción necesiten ver.
+  canales_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+  canal_externo_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
+  // ── Conexiones OAuth2/iCal con proveedores externos (migración 0094) ──
+  //
+  // Más restrictivo todavía que `canal_config`: la fila puede contener
+  // tokens cifrados de la cuenta real de Mercado Pago o de Google del hotel.
+  conexiones_proveedores: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
   // ── Divisas y respaldos ──
   cotizaciones: { todos: 'si' },
   respaldos: { todos: 'si' },
@@ -467,27 +481,46 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       Nace vacía y su caso negativo (housekeeping) pasaría por eso. Cuelga de una
       factura, así que se siembra una si no hay: los triggers de la 0076 exigen
       que la letra siga a la factura y que no se acredite de más.
+
+      Auditoría de calidad 2026-09-09: esto se saltaba en silencio cuando
+      `reservaParaSembrar()` devolvía una reserva PREEXISTENTE sin factura propia
+      (la de `facturas` ya no estaba vacía por otra corrida, así que el bloque de
+      arriba no creaba una para ESTA reserva). El resultado era el mismo bug que
+      esta función existe para evitar: la matriz quedaba sin auditar y nadie se
+      enteraba. Ahora se crea la factura para la reserva sembrada si no existe,
+      en vez de resignarse a no sembrar la nota de crédito.
     */
     if ((await contar('notas_credito')) === 0) {
       const reservaId = await reservaParaSembrar()
 
-      const { data: fac } = await admin
-        .from('facturas')
-        .select('id, total, tipo_comprobante')
-        .eq('reserva_id', reservaId)
-        .maybeSingle<{ id: string; total: number; tipo_comprobante: string | null }>()
+      let fac = (
+        await admin
+          .from('facturas')
+          .select('id, total, tipo_comprobante')
+          .eq('reserva_id', reservaId)
+          .maybeSingle<{ id: string; total: number; tipo_comprobante: string | null }>()
+      ).data
 
-      if (fac) {
-        const { error } = await admin.from('notas_credito').insert({
-          factura_id: fac.id,
-          tipo_comprobante: fac.tipo_comprobante ?? 'B',
-          total: 0.01,
-          motivo: `auditoria rls ${sufijo}`,
-        })
-        if (error) throw new Error(`No se pudo sembrar notas_credito: ${error.message}`)
-
-        sembradas.push({ tabla: 'notas_credito', columna: 'motivo', valor: `auditoria rls ${sufijo}` })
+      if (!fac) {
+        const { data: nuevaFac, error: eFac } = await admin
+          .from('facturas')
+          .insert({ reserva_id: reservaId, numero: `AUDIT-NC-${sufijo}`, total: 1 })
+          .select('id, total, tipo_comprobante')
+          .single<{ id: string; total: number; tipo_comprobante: string | null }>()
+        if (eFac) throw new Error(`No se pudo crear factura para notas_credito: ${eFac.message}`)
+        sembradas.push({ tabla: 'facturas', columna: 'numero', valor: `AUDIT-NC-${sufijo}` })
+        fac = nuevaFac
       }
+
+      const { error } = await admin.from('notas_credito').insert({
+        factura_id: fac.id,
+        tipo_comprobante: fac.tipo_comprobante ?? 'B',
+        total: 0.01,
+        motivo: `auditoria rls ${sufijo}`,
+      })
+      if (error) throw new Error(`No se pudo sembrar notas_credito: ${error.message}`)
+
+      sembradas.push({ tabla: 'notas_credito', columna: 'motivo', valor: `auditoria rls ${sufijo}` })
     }
 
     /*
@@ -585,6 +618,44 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       }
     }
 
+    /*
+      ── canales_externos / canal_externo_tipos (migración 0092) ────────────────
+
+      Nacen vacías —qué channel manager se contrata es una decisión del hotel,
+      y hoy no hay ninguno contratado (Fase 7, preparación)— así que sin
+      sembrar, los dos casos negativos pasarían por tabla vacía en vez de por
+      la política.
+    */
+    if ((await contar('canales_externos')) === 0) {
+      const { data: canalExterno, error: eCanalExterno } = await admin
+        .from('canales_externos')
+        .insert({ codigo: `audit-rls-${sufijo}`, nombre: `Canal de prueba ${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (eCanalExterno) {
+        throw new Error(`No se pudo sembrar canales_externos: ${eCanalExterno.message}`)
+      }
+      sembradas.push({ tabla: 'canales_externos', columna: 'id', valor: canalExterno.id })
+
+      const { data: tipo } = await admin
+        .from('tipos_unidad')
+        .select('id')
+        .order('codigo')
+        .limit(1)
+        .maybeSingle<{ id: string }>()
+
+      if (tipo) {
+        const { error: eMapeo } = await admin.from('canal_externo_tipos').insert({
+          canal_externo_id: canalExterno.id,
+          tipo_unidad_id: tipo.id,
+          codigo_externo: `AUDIT-RLS-EXT-${sufijo}`,
+        })
+        if (eMapeo) throw new Error(`No se pudo sembrar canal_externo_tipos: ${eMapeo.message}`)
+        // No se agrega a `sembradas`: el borrado de `canales_externos` de arriba
+        // lo arrastra por `on delete cascade` (migración 0092).
+      }
+    }
+
     // ── canal_config ──────────────────────────────────────────────────────────
     // Nace vacía (la migración 0049 no siembra: qué proveedor contabiliza el canal
     // es una decisión del hotel). Sin una fila, «recepción no puede leer» pasaría
@@ -593,6 +664,18 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       const { error } = await admin.from('canal_config').insert({ canal: 'booking' })
       if (error) throw new Error(`No se pudo sembrar canal_config: ${error.message}`)
       sembradas.push({ tabla: 'canal_config', columna: 'canal', valor: 'booking' })
+    }
+
+    // ── conexiones_proveedores (migración 0094) ─────────────────────────────────
+    // Nace vacía (nadie conectó Mercado Pago todavía en la base de test). Sin una
+    // fila, «recepción no puede leer» pasaría por tabla vacía en vez de por la
+    // política.
+    if ((await contar('conexiones_proveedores')) === 0) {
+      const { error } = await admin
+        .from('conexiones_proveedores')
+        .insert({ proveedor: 'mercadopago', tipo_conexion: 'oauth2' })
+      if (error) throw new Error(`No se pudo sembrar conexiones_proveedores: ${error.message}`)
+      sembradas.push({ tabla: 'conexiones_proveedores', columna: 'proveedor', valor: 'mercadopago' })
     }
 
     // ── firmas ────────────────────────────────────────────────────────────────

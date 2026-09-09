@@ -613,6 +613,64 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     await noPuedeActualizar(comoAnon(), 'tarifas', data!.id, { precio_rack: 1 })
   })
 
+  // ── 5. Credenciales de terceros, integridad de estadías y datos personales ──
+  //
+  // Auditoría de calidad 2026-09-09: al medir la cobertura real de este archivo
+  // contra `pg_policies` (112 políticas, 49 tablas con alguna política de
+  // escritura) aparecieron 39 tablas con política de escritura y CERO caso acá.
+  // No se cubren las 39 —el propio criterio de este archivo es por consecuencia,
+  // no por cobertura, y la mayoría son catálogo de bajo riesgo (`promociones`,
+  // `temporadas`...)—, pero estas tres SÍ entran en las categorías que el
+  // archivo ya declara importantes: credenciales de terceros, integridad de
+  // `estadias` (la tabla del anti-overbooking) y datos personales.
+
+  it('recepcion NO puede escribir una conexión con un proveedor externo', async () => {
+    // `conexiones_proveedores` (migración 0094) guarda tokens de OAuth2
+    // CIFRADOS de la cuenta real de Mercado Pago o de Google del hotel. Es
+    // `admin`/`gerencia` exclusivo — igual que la lectura (ver la matriz de
+    // `rls-por-rol.test.ts`) pero acá importa más: escribir es lo que deja
+    // conectar o desconectar una cuenta de cobro real.
+    await noPuedeInsertar(usuarios.recepcion, 'conexiones_proveedores', {
+      proveedor: 'mercadopago',
+      tipo_conexion: 'oauth2',
+    })
+  })
+
+  it('housekeeping NO puede escribir una conexión con un proveedor externo', async () => {
+    await noPuedeInsertar(usuarios.housekeeping, 'conexiones_proveedores', {
+      proveedor: 'google_mail',
+      tipo_conexion: 'oauth2',
+    })
+  })
+
+  it('housekeeping NO puede modificar el período de una estadía', async () => {
+    // `estadias.periodo` es la columna que protege la restricción de exclusión
+    // GiST del ADR 0002. La política de escritura es `admin/gerencia/recepcion`
+    // —housekeeping queda afuera a propósito, porque no gestiona fechas de
+    // estadía, solo el estado de limpieza de la unidad (ya cubierto arriba)—.
+    const admin = clienteDePrueba()
+    const { data } = await admin.from('estadias').select('id, periodo').limit(1).single<{
+      id: string
+      periodo: string
+    }>()
+    await noPuedeActualizar(usuarios.housekeeping, 'estadias', data!.id, {
+      periodo: '[2030-01-01,2030-01-02)',
+    })
+  })
+
+  it('housekeeping NO puede modificar los datos de un huésped', async () => {
+    // Mismo criterio que la lectura (ADR 0005): housekeeping no maneja datos
+    // personales. La política de escritura es `admin/gerencia/recepcion`.
+    const admin = clienteDePrueba()
+    const { data } = await admin.from('huespedes').select('id, nombre').limit(1).single<{
+      id: string
+      nombre: string
+    }>()
+    await noPuedeActualizar(usuarios.housekeeping, 'huespedes', data!.id, {
+      nombre: `Alterado-${sufijo}`,
+    })
+  })
+
   /*
     ── Borrado de dinero (migración 0061) ─────────────────────────────────────
 
