@@ -5084,3 +5084,31 @@ catálogo de plantillas, clave de idempotencia por canal, `esAvanceDeEntrega`
 y el webhook completo con HMAC real), 500 salteados por falta de base
 local. **Nada de esto se probó contra la Cloud API real**: no hay número de
 WhatsApp Business verificado ni plantillas aprobadas todavía.
+
+## 2026-09-09 — Re-precio inline al reprogramar (Reservation 360)
+
+Patrón de referencia: la vista unificada de reserva ("Reservation 360") de
+Hotel PMS. La reprogramación ya vivía inline en la ficha —no en una pantalla
+aparte, como se había asumido en el inventario de la Fase 0— y ya avisaba
+"recotiza el total", pero recién **después** de confirmar. No había forma de
+ver el total nuevo antes de comprometerse al cambio.
+
+Se agrega un paso de GET encima del formulario que reprograma de verdad,
+mismo criterio que "Buscar disponibilidad" en el alta de reservas: las
+fechas candidatas viajan en la URL porque son una consulta, no una acción
+con efecto. Reusa `cotizarEstadia` —la misma función que ya usa el alta y el
+cálculo de cancelación de esta misma pantalla— así que el precio que se
+previsualiza es matemáticamente el mismo que se cobraría, no una
+aproximación separada que pueda divergir.
+
+El formulario que **de verdad** reprograma (`reprogramarReserva`, sin
+tocar) solo aparece una vez que hay un precio válido para mostrar: evita un
+"Confirmar" siempre visible que, sin haber pedido antes el precio nuevo,
+reprogramaría con las fechas actuales sin que nadie lo haya pedido.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · 1518 tests en verde (sin tests nuevos: no
+hay lógica de dominio nueva, solo una llamada más a `cotizarEstadia` ya
+cubierta). **No se verificó en un navegador** que el paso de preview se vea
+y se sienta bien — es lo que más falta de este cambio.

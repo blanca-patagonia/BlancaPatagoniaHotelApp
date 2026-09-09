@@ -289,11 +289,21 @@ export default async function DetalleReservaPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string; ok?: string }>
+  searchParams: Promise<{
+    error?: string
+    ok?: string
+    nuevo_check_in?: string
+    nuevo_check_out?: string
+  }>
 }) {
   await requerirAcceso('reservas')
   const { id } = await params
-  const { error: errorParam, ok: okParam } = await searchParams
+  const {
+    error: errorParam,
+    ok: okParam,
+    nuevo_check_in: nuevoCheckIn,
+    nuevo_check_out: nuevoCheckOut,
+  } = await searchParams
   const supabase = await crearClienteServidor()
 
   const { data } = await supabase
@@ -321,6 +331,35 @@ export default async function DetalleReservaPage({
   const periodo = estadia ? parsearPeriodo(estadia.periodo) : null
   const noches = periodo ? diasEntre(periodo.desde, periodo.hasta) : 0
   const transiciones = transicionesPosibles(reserva.estado)
+
+  /*
+    Re-precio inline de la reprogramación (patrón de referencia: Hotel PMS,
+    "Reservation 360"). Antes había que apretar «Reprogramar» a ciegas para
+    enterarse del total nuevo — el propio botón ya avisaba «recotiza el
+    total», pero recién después de confirmar.
+
+    Es un paso de GET, mismo patrón que «Buscar disponibilidad» en el alta de
+    reservas (`nueva/page.tsx`): la fecha vive en la URL porque es un paso de
+    consulta, no una acción con efecto. Reusa `cotizarEstadia`, la misma
+    función que ya usa el alta y el cálculo de cancelación de acá arriba —
+    ninguna regla de precio se repite a mano.
+  */
+  const RE_FECHA_PREVIEW = /^\d{4}-\d{2}-\d{2}$/
+  const previewValido =
+    periodo &&
+    estadia?.unidad?.tipo_unidad_id &&
+    RE_FECHA_PREVIEW.test(nuevoCheckIn ?? '') &&
+    RE_FECHA_PREVIEW.test(nuevoCheckOut ?? '') &&
+    nuevoCheckOut! > nuevoCheckIn! &&
+    (nuevoCheckIn !== periodo.desde || nuevoCheckOut !== periodo.hasta)
+  const previewCotizacion = previewValido
+    ? await cotizarEstadia({
+        tipoUnidadId: estadia!.unidad!.tipo_unidad_id,
+        checkIn: nuevoCheckIn!,
+        checkOut: nuevoCheckOut!,
+        tarifaTipo: reserva.tarifa_tipo as 'neto' | 'rack',
+      }).catch(() => null)
+    : null
 
   /*
     Exención de IVA al turista del exterior (RG 3971, ADR 0024).
@@ -806,22 +845,71 @@ export default async function DetalleReservaPage({
       {periodo && !['cancelada', 'no_show', 'checkout'].includes(reserva.estado) && (
         <div className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-medium text-stone-700">Reprogramar</h2>
-          <form action={reprogramarReserva} className="flex flex-wrap items-end gap-2">
-            <input type="hidden" name="reserva_id" value={reserva.id} />
+
+          {/*
+            Paso de consulta, no de acción: por eso es GET y las fechas viajan
+            en la URL, mismo criterio que «Buscar disponibilidad» en el alta
+            de reservas. Antes había que reprogramar a ciegas para enterarse
+            del total nuevo — el aviso de abajo ya decía «recotiza el total»,
+            pero recién después de confirmar (patrón de referencia: Hotel
+            PMS, re-precio inline en la ficha de reserva).
+          */}
+          <form method="get" className="flex flex-wrap items-end gap-2">
             <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Nuevo check-in</span>
-              <input type="date" name="check_in" defaultValue={periodo.desde} className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+              <input
+                type="date"
+                name="nuevo_check_in"
+                defaultValue={nuevoCheckIn || periodo.desde}
+                className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+              />
             </label>
             <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
               <span className="text-stone-500">Nuevo check-out</span>
-              <input type="date" name="check_out" defaultValue={periodo.hasta} className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+              <input
+                type="date"
+                name="nuevo_check_out"
+                defaultValue={nuevoCheckOut || periodo.hasta}
+                className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+              />
             </label>
-            <BotonEnvio extra="w-full sm:w-auto" cargando="Reprogramando…">
-              Reprogramar
-            </BotonEnvio>
+            <button
+              type="submit"
+              className="w-full rounded-md border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 sm:w-auto"
+            >
+              Ver nuevo precio
+            </button>
           </form>
+
+          {previewValido && (
+            <div className="mt-3 rounded-lg bg-lago-50 p-3 text-sm ring-1 ring-lago-200">
+              {!previewCotizacion || previewCotizacion.faltanTarifas ? (
+                <p className="text-lago-900">
+                  No hay tarifa cargada para esas fechas: no se puede calcular el nuevo total.
+                </p>
+              ) : (
+                <p className="text-lago-900">
+                  Nuevo total: <span className="font-semibold">{formatearUSD(previewCotizacion.resumen.total)}</span>{' '}
+                  <span className="text-lago-700">(antes {formatearUSD(Number(reserva.total))})</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {previewValido && previewCotizacion && !previewCotizacion.faltanTarifas && (
+            <form action={reprogramarReserva} className="mt-3 flex flex-wrap items-end gap-2">
+              <input type="hidden" name="reserva_id" value={reserva.id} />
+              <input type="hidden" name="check_in" value={nuevoCheckIn!} />
+              <input type="hidden" name="check_out" value={nuevoCheckOut!} />
+              <BotonEnvio extra="w-full sm:w-auto" cargando="Reprogramando…">
+                Confirmar reprogramación
+              </BotonEnvio>
+            </form>
+          )}
           <p className="mt-2 text-xs text-stone-600">
-            Recotiza el total; se rechaza si la unidad ya está ocupada en esas fechas.
+            {previewValido
+              ? 'Se rechaza si la unidad ya está ocupada en esas fechas.'
+              : 'Elegí las fechas nuevas y mirá el precio antes de confirmar.'}
           </p>
         </div>
       )}
