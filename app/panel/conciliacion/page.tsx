@@ -245,6 +245,11 @@ export default async function ConciliacionPage({
         titulo="Conciliación y gastos"
         descripcion="Lo que de verdad entró a la cuenta, cruzado contra lo que el sistema dice que cobró."
         icono="conciliacion"
+        acciones={
+          <Link href="/panel/conciliacion/gastos" className={botonClases('secundario')}>
+            Gastos operativos
+          </Link>
+        }
       />
 
       {sp.error && (

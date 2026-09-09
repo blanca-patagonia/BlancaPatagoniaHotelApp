@@ -453,9 +453,14 @@ export const CAPITULOS: Capitulo[] = [
           'Un movimiento sin contrapartida en el sistema —un gasto, una transferencia entre cuentas propias— se marca "Ignorado" con una nota. Deja de aparecer como pendiente pero sigue contando en los gastos del mes.',
       },
       {
-        titulo: 'Los gastos del mes',
+        titulo: 'Los gastos del mes (movimientos sin conciliar)',
         detalle:
           'Se calculan sobre los movimientos que salieron de la cuenta, agrupados por mes y por concepto. Cada moneda se muestra por separado: sumar pesos con dólares daría un total que no significa nada.',
+      },
+      {
+        titulo: 'Gastos operativos, otra pantalla',
+        detalle:
+          'El botón "Gastos operativos" del encabezado abre un registro aparte: sueldos, servicios y todo lo que el hotel paga sin una factura de proveedor de por medio. No es lo mismo que "los gastos del mes" de arriba, que sale de los movimientos bancarios sin cruzar; acá se carga cada gasto a mano, con su categoría.',
       },
     ],
   },

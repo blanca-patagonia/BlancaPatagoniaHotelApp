@@ -4894,3 +4894,33 @@ falta de base local (sin Docker en esta sesión). La migración, el `rpc` y la
 pantalla nueva **no se probaron contra una base real** — falta `npx supabase
 db reset` y confirmar en un navegador que abrir una ficha efectivamente deja
 la fila antes de dar esto por cerrado del todo.
+
+## 2026-09-09 — Gastos operativos (migración 0089)
+
+Patrón de referencia: el módulo de gastos de Invoice Ninja. `proveedores` ya
+cubre las facturas formales de terceros; faltaba dónde cargar lo que el hotel
+paga SIN factura de proveedor — sueldos, servicios, un arreglo de caja chica.
+«Gasto» ya existía como palabra en el sistema, pero solo como la etiqueta que
+la conciliación bancaria le pone a un movimiento sin contrapartida
+(`lib/domain/conciliacion.ts`), no como un registro con categoría y monto.
+
+Se sumó bajo el área `conciliacion` que ya existe —su etiqueta ya decía
+«Conciliación y gastos»— en vez de abrir una de las **cinco** áreas nuevas que
+pide `AGENTS.md`: es la misma gente (admin/gerencia) la que necesita verlo, y
+así no hace falta tocar `permisos.ts`, `navegacion.ts`, `shell.tsx` ni
+`iconos.tsx`. Sí se sumó un paso al capítulo de Ayuda de conciliación,
+aclarando que no es lo mismo que «los gastos del mes» (que sale de
+movimientos bancarios sin cruzar).
+
+`gastos_operativos` (migración 0089) sigue el mismo criterio de RLS que
+`movimientos_externos`: solo admin/gerencia. El listado tiene búsqueda,
+filtro por categoría, paginación y exportación CSV (`/panel/exportar/gastos`),
+para no reabrir la lista de listados sin eso que la Fase 9 dejó en cero.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (las tres rutas nuevas aparecen en el
+manifiesto) · **1485 tests en verde, 0 en rojo** (7 nuevos, de dominio puro:
+`tests/gastos.test.ts`), 500 salteados por falta de base local. La migración
+y las pantallas **no se probaron contra una base real** — falta `db reset` y
+confirmar en un navegador antes de darlo por cerrado del todo.

@@ -28,6 +28,7 @@ import {
   numeroVisible,
 } from '@/lib/domain/comprobante-qr'
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
+import { ETIQUETAS_CATEGORIA_GASTO, type CategoriaGasto } from '@/lib/domain/gastos'
 
 /**
  * Punto único de exportación a CSV del panel.
@@ -272,6 +273,27 @@ const RECURSOS: Record<string, Definicion> = {
       { titulo: 'Email', valor: (a) => a.email ?? '' },
       { titulo: 'Descuento %', valor: (a) => a.descuento_pct },
       { titulo: 'Activa', valor: (a) => SI_NO(a.activo) },
+    ]),
+  },
+
+  gastos: {
+    area: 'conciliacion',
+    archivo: 'gastos-operativos',
+    generar: simple<{
+      fecha: string
+      categoria: string
+      descripcion: string
+      monto: number | string
+      moneda: string
+    }>('gastos_operativos', 'fecha, categoria, descripcion, monto, moneda', 'fecha', [
+      { titulo: 'Fecha', valor: (g) => g.fecha },
+      {
+        titulo: 'Categoría',
+        valor: (g) => ETIQUETAS_CATEGORIA_GASTO[g.categoria as CategoriaGasto] ?? g.categoria,
+      },
+      { titulo: 'Descripción', valor: (g) => g.descripcion },
+      { titulo: 'Monto', valor: (g) => String(g.monto) },
+      { titulo: 'Moneda', valor: (g) => g.moneda },
     ]),
   },
 
