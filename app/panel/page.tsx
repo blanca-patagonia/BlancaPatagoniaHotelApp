@@ -4,7 +4,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ESTADOS_ACTIVOS, ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
-import { hoyISO, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
+import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { areasDe, estaOculta, type Area } from '@/lib/domain/permisos'
@@ -79,11 +79,14 @@ export default async function DashboardPage() {
   const sesion = await requerirAcceso('dashboard')
   const supabase = await crearClienteServidor()
   const hoy = hoyISO()
+  const mañana = sumarDias(hoy, 1)
 
   const [
     { data: unidades },
     { data: estadias },
     { count: reservasActivas },
+    { count: reservasNuevasHoy },
+    { count: canceladasHoy },
     { count: mantPendiente },
     { count: objetosGuardados },
     { count: conflictosCanal },
@@ -98,6 +101,20 @@ export default async function DashboardPage() {
       )
       .in('estado', [...ESTADOS_ACTIVOS]),
     supabase.from('reservas').select('*', { count: 'exact', head: true }).in('estado', [...ESTADOS_ACTIVOS]),
+    // Altas del día: por cuándo se CARGÓ la reserva, no por cuándo empieza la
+    // estadía (eso ya lo cuentan «Llegadas hoy»).
+    supabase
+      .from('reservas')
+      .select('*', { count: 'exact', head: true })
+      .gte('creada_en', hoy)
+      .lt('creada_en', mañana),
+    // `cancelada_en` (migración 0087): sin esa fecha, «canceladas hoy» y
+    // «canceladas el mes pasado» eran indistinguibles.
+    supabase
+      .from('reservas')
+      .select('*', { count: 'exact', head: true })
+      .gte('cancelada_en', hoy)
+      .lt('cancelada_en', mañana),
     supabase
       .from('ordenes_mantenimiento')
       .select('*', { count: 'exact', head: true })
@@ -227,7 +244,7 @@ export default async function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <Kpi
           titulo="Ocupación hoy"
           valor={`${ocupacionPct}%`}
@@ -254,6 +271,22 @@ export default async function DashboardPage() {
           valor={String(reservasActivas ?? 0)}
           detalle="en curso"
           icono="reservas"
+          href={puede('reservas') ? '/panel/reservas' : undefined}
+        />
+        <Kpi
+          titulo="Nuevas hoy"
+          valor={String(reservasNuevasHoy ?? 0)}
+          detalle="reservas cargadas hoy"
+          icono="reservas"
+          tono="exito"
+          href={puede('reservas') ? '/panel/reservas' : undefined}
+        />
+        <Kpi
+          titulo="Canceladas hoy"
+          valor={String(canceladasHoy ?? 0)}
+          detalle="bajas de hoy"
+          icono="reservas"
+          tono={(canceladasHoy ?? 0) > 0 ? 'alerta' : undefined}
           href={puede('reservas') ? '/panel/reservas' : undefined}
         />
       </div>

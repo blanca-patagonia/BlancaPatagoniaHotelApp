@@ -4808,3 +4808,27 @@ variables (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y
 **Lo que no se puede verificar leyendo:** el gesto mismo. El arrastre se probó
 por sus reglas y por el tipado, no moviendo un bloque en un navegador. Queda para
 la primera corrida con `npm run dev`.
+
+## 2026-09-09 — El tablero suma reservas nuevas y canceladas de hoy
+
+Patrón de referencia: el dashboard operativo diario de QloApps (llegadas,
+salidas, altas y bajas juntas en una sola pantalla). Se compara contra el
+código propio, no se copia nada de ahí: `app/panel/page.tsx` ya tenía llegadas,
+salidas y ocupación de hoy; faltaban altas y bajas del día.
+
+Reservas nuevas fue directo: `reservas.creada_en` ya existía. Cancelaciones no:
+la tabla solo guardaba el estado actual, no cuándo pasó a `cancelada`, así que
+«canceladas hoy» y «canceladas el mes pasado» eran indistinguibles.
+
+**Migración 0087** agrega `reservas.cancelada_en`, escrito por un trigger
+`before update of estado` (mismo patrón que `reservas_estado_sync`, migración
+0005) en vez de que cada Server Action lo escriba a mano — una reserva se
+cancela desde el panel y también desde `expirar_reservas_pendientes`, y las dos
+vías quedan cubiertas sin acordarse de repetir la escritura.
+
+### Verificación
+
+Typecheck 0 · lint 0. La migración y el KPI nuevo **no se probaron contra una
+base**: esta sesión no tiene Docker levantado. Falta correr `npx supabase db
+reset` y confirmar en un navegador que el número sube al cancelar una reserva,
+antes de dar esto por cerrado del todo.
