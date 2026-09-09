@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarAccesoHuesped } from '@/lib/auditoria/accesos'
 import {
   transicionesPosibles,
   ETIQUETAS_ESTADO_RESERVA,
@@ -224,6 +225,7 @@ interface Reserva {
   segmento: Segmento
   voucher: string
   agencia_id: string | null
+  huesped_id: string | null
   /** Origen del pago para la exención de IVA (RG 3971). `null` = sin definir. */
   pago_desde_exterior: boolean | null
   /* Garantía de tarjeta (ADR 0025). NUNCA hay acá un número de tarjeta. */
@@ -297,13 +299,14 @@ export default async function DetalleReservaPage({
   const { data } = await supabase
     .from('reservas')
     .select(
-      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, agencia_id, pago_desde_exterior, tarjeta_ultimos4, tarjeta_marca, tarjeta_vencimiento, tarjeta_verificacion, tarjeta_verificada_en, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip, residente_exterior), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
+      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, agencia_id, huesped_id, pago_desde_exterior, tarjeta_ultimos4, tarjeta_marca, tarjeta_vencimiento, tarjeta_verificacion, tarjeta_verificada_en, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip, residente_exterior), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
     )
     .eq('id', id)
     .single()
 
   if (!data) notFound()
   const reserva = data as unknown as Reserva
+  if (reserva.huesped_id) await registrarAccesoHuesped(supabase, reserva.huesped_id, 'ficha_reserva')
   const estadia = reserva.estadias?.[0]
 
   // Desglose de ocupantes en la forma del dominio. Se arma una vez y se reusa,

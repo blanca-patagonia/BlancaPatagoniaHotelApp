@@ -38,6 +38,20 @@ const TONO_ACCION: Record<string, Tono> = {
   DELETE: 'peligro',
 }
 
+const ETIQUETAS_ORIGEN_ACCESO: Record<string, string> = {
+  ficha_huesped: 'Ficha del huésped',
+  ficha_reserva: 'Ficha de una reserva',
+}
+
+interface AccesoHuesped {
+  id: number
+  usuario_id: string | null
+  rol: Rol | null
+  origen: string
+  creado_en: string
+  huesped: { apellido: string; nombre: string } | null
+}
+
 interface Registro {
   id: number
   tabla: string
@@ -94,6 +108,17 @@ export default async function AuditoriaPage({
   const { data, count } = await consulta.range(desde, hasta)
   const registros = (data ?? []) as Registro[]
   const total = count ?? 0
+
+  // Quién ABRIÓ una ficha de huésped (migración 0088). Es un registro aparte de
+  // `auditoria`: un SELECT no dispara triggers, así que esto lo escribe la
+  // propia pantalla al mostrarse, no la base. Solo los últimos 20: es para
+  // detectar un patrón raro, no para paginar un historial completo.
+  const { data: accesosData } = await supabase
+    .from('auditoria_accesos')
+    .select('id, usuario_id, rol, origen, creado_en, huesped:huespedes(apellido, nombre)')
+    .order('id', { ascending: false })
+    .limit(20)
+  const accesos = (accesosData ?? []) as unknown as AccesoHuesped[]
 
   // Los nombres del staff se resuelven con el cliente privilegiado porque un
   // registro puede referir a un usuario dado de baja.
@@ -221,6 +246,58 @@ export default async function AuditoriaPage({
             </Tabla>
             <Paginacion base="/panel/auditoria" params={filtros} pagina={pagina} total={total} />
           </>
+        )}
+      </Tarjeta>
+
+      {/*
+        Quién LEYÓ un dato de huésped, no quién lo cambió. Va en tarjeta aparte
+        porque es información distinta: la de arriba es un registro completo y
+        paginado, esta es «los últimos 20 accesos», para notar algo raro (un rol
+        que abre fichas que no tiene por qué mirar), no para auditar uno por uno.
+      */}
+      <Tarjeta
+        className="mt-6 overflow-hidden"
+        titulo="Accesos recientes a fichas de huéspedes"
+        descripcion="Quién abrió qué ficha, aunque no haya cambiado nada."
+      >
+        {accesos.length === 0 ? (
+          <EstadoVacio
+            titulo="Sin accesos registrados todavía"
+            descripcion="Se registra cada vez que alguien abre la ficha de un huésped o de una de sus reservas."
+            icono="huespedes"
+          />
+        ) : (
+          <Tabla resumen="Últimos accesos a fichas de huéspedes, con fecha, usuario y origen">
+            <thead>
+              <tr>
+                <th className={TH}>Fecha</th>
+                <th className={TH}>Usuario</th>
+                <th className={TH}>Huésped</th>
+                <th className={TH}>Desde</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accesos.map((a) => (
+                <tr key={a.id} className={FILA}>
+                  <td className={`${TD} tabular whitespace-nowrap text-stone-500`}>
+                    {fechaHoraHotel(a.creado_en)}
+                  </td>
+                  <td className={`${TD} text-stone-700`}>
+                    {a.usuario_id ? (nombres.get(a.usuario_id) ?? 'Usuario dado de baja') : 'Sistema'}
+                    {a.rol && (
+                      <span className="ml-1.5 text-xs text-stone-600">{ETIQUETAS_ROL[a.rol]}</span>
+                    )}
+                  </td>
+                  <td className={`${TD} text-stone-700`}>
+                    {a.huesped ? `${a.huesped.apellido}, ${a.huesped.nombre}` : '—'}
+                  </td>
+                  <td className={`${TD} text-stone-600`}>
+                    {ETIQUETAS_ORIGEN_ACCESO[a.origen] ?? a.origen}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
         )}
       </Tarjeta>
     </div>

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarAccesoHuesped } from '@/lib/auditoria/accesos'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { TONO_ESTADO } from '../../_components/estilos'
 import {
@@ -79,6 +80,7 @@ export default async function DetalleHuespedPage({
   ])
 
   if (!huespedData) notFound()
+  await registrarAccesoHuesped(supabase, id, 'ficha_huesped')
   const huesped = huespedData as Huesped
   const reservas = (reservasData ?? []) as unknown as ReservaHist[]
   const nivel = nivelFidelidad(huesped.puntos)

@@ -4858,3 +4858,39 @@ sobre `crear_reserva`.
 
 Typecheck 0 · lint 0. Cambio de texto únicamente, sin migración ni lógica
 nueva — no había nada que probar contra base.
+
+## 2026-09-09 — Auditoría de LECTURA de datos de huésped (migración 0088)
+
+Patrón de referencia: la auditoría de PII de Hotel PMS. `auditoria` (migración
+0020) registra quién ESCRIBIÓ en pagos/tarifas/reservas; no decía nada de quién
+ABRIÓ la ficha de un huésped, y un dato personal se filtra igual mirándolo que
+modificándolo.
+
+No se pudo resolver con un trigger, a diferencia de la 0020: un `SELECT` no
+dispara triggers en Postgres. Por eso `registrar_acceso_huesped(huesped_id,
+origen)` es una función `security definer` que la propia página llama al
+renderizar (`lib/auditoria/accesos.ts`), con el mismo motivo que
+`registrar_auditoria()`: cualquier rol puede dejar el registro sin necesitar
+permiso de escritura directo sobre la tabla, y el usuario/rol los toma el
+propio servidor —`auth.uid()`/`rol_actual()`—, no un parámetro que la pantalla
+podría mentir.
+
+Queda enganchado en las dos fichas que muestran PII de un huésped: la propia
+(`app/panel/huespedes/[id]`) y la de una de sus reservas
+(`app/panel/reservas/[id]`). Es una escritura **accesoria**
+(`registrarFalla`, no `cortarSiFalla`): si el registro de auditoría fallara,
+cortarle a recepción la ficha que vino a ver sería peor que el problema que
+se está previniendo.
+
+La pantalla de `/panel/auditoria` suma una segunda tarjeta con los últimos 20
+accesos — separada de la tabla de escrituras porque son datos de forma
+distinta, y sin paginar porque el objetivo es notar un patrón raro (un rol
+mirando fichas que no le corresponden), no auditar registro por registro.
+
+### Verificación
+
+Typecheck 0 · lint 0 · **1478 tests en verde, 0 en rojo**, 500 salteados por
+falta de base local (sin Docker en esta sesión). La migración, el `rpc` y la
+pantalla nueva **no se probaron contra una base real** — falta `npx supabase
+db reset` y confirmar en un navegador que abrir una ficha efectivamente deja
+la fila antes de dar esto por cerrado del todo.
