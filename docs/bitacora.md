@@ -5157,3 +5157,555 @@ de esta rama. (Un fallo de `tests/ficha-reserva.test.ts` en una corrida
 intermedia no se reprodujo aislado ni en una segunda corrida completa: es un
 flake de los tests de integración compartiendo la base en paralelo, no algo
 que este trabajo haya causado.)
+
+## 2026-09-09 — El tarifario, rehecho: una fila, un guardado, etiquetas visibles
+
+A pedido del usuario, con una captura de pantalla como referencia. Cada celda
+(tipo × temporada) era su propio `<form>` con dos números pegados por una
+`/` y un botón «OK» sin más etiqueta que un `aria-label` — invisible para
+quien no usa lector de pantalla. Guardar las tres temporadas de un tipo eran
+tres clics y **tres recargas completas** de la pantalla, cada una devolviendo
+a quien cargaba precios al principio del tarifario. Iba en contra de dos
+reglas fijas del proyecto: toda pantalla la usa "gente que no usa mucho la
+computadora", y todo campo lleva etiqueta VISIBLE, nunca solo `aria-label`.
+
+### La reescritura
+
+- **`actualizarTarifasDeFila`** (`app/panel/config/actions.ts`) reemplaza a
+  `actualizarTarifa`: guarda las tres temporadas de una fila en un solo
+  envío, valida las tres ANTES de escribir nada (si una viene mal, no se
+  guarda ninguna), y devuelve `{error?, ok?}` en vez de `redirect` — mismo
+  patrón moderno que ya usan `objetos_perdidos`/`gastos`, no el de
+  `?ok=tarifa` con el que había nacido esta pantalla.
+- **`fila-tarifario.tsx`**, componente cliente con `useActionState`: la fila
+  entera es un solo `<form>`, con «Temporada baja · Neto» y «Rack» como
+  etiquetas de verdad (no `aria-label`), un único botón «Guardar», y el
+  resultado (✓ o el error) se muestra AL LADO, sin navegar a ningún lado ni
+  perder el lugar en la tabla.
+- La vista de solo lectura (gerencia sin permiso de edición) se actualizó
+  igual, cambiando «130 / 130» por «Neto 130 · Rack 130»: la ambigüedad no
+  era solo de quien edita.
+- Se sacó el código muerto que quedaba de la redirección vieja
+  (`?ok=tarifa`, `?error=importes/neto_mayor/guardar`).
+
+Probado de punta a punta en el navegador: un envío con neto mayor al rack
+mostró el error de validación al lado de la fila sin moverse de la pantalla;
+un envío válido guardó, mostró «✓ Tarifas guardadas.» y el valor quedó
+persistido; se restauró el valor original al terminar la prueba.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · 2028 tests en verde. Probado en el
+navegador con sesión real, incluidos el caso de error y el de éxito.
+
+## 2026-09-09 — Configuración partida en pantallas propias, y un «no hay vuelta atrás» en Reportes
+
+A pedido del usuario («rediseñá todo lo de configuración para que se vea
+mejor»), se aplicó a `/panel/config` el mismo criterio que ya tenía
+`/panel/reportes`: una pantalla de 974 líneas con seis temas apilados en
+scroll (tarifario, plantillas, inventario, datos fiscales, divisas,
+ubicaciones) pasó a ser un índice con una tarjeta por tema y una pantalla
+propia para cada uno.
+
+- Nuevas pantallas: `tarifario/`, `plantillas/`, `inventario/`,
+  `datos-fiscales/`, `divisas/` y `ubicaciones/`, cada una con su propio
+  `Encabezado`, sus propios `?error=`/`?ok=` y el enlace «‹ Volver a
+  configuración» arriba (mismo patrón que `/panel/conciliacion/gastos`).
+- `app/panel/config/page.tsx` quedó como índice puro: sin consultas pesadas,
+  solo una tarjeta por sección con un aviso corto cuando corresponde (sin
+  tarifas cargadas, stock bajo, cotización vencida, datos fiscales sin
+  cargar) para que el problema se note **antes** de entrar a buscarlo.
+- Los `redirect`/`revalidatePath` de `actions.ts` y `plantillas-actions.ts`
+  se retargetearon a las rutas nuevas, y los dos enlaces de
+  `_components/cotizacion.tsx` que apuntaban a `/panel/config#divisas`
+  pasaron a `/panel/config/divisas`: un ancla en una pantalla que ya no
+  existe como tal no rompe (el navegador simplemente no encuentra el `id`),
+  pero tampoco hace nada.
+
+**El hallazgo del usuario:** al revisar el patrón contra
+`/panel/conciliacion/gastos` (que sí tiene el enlace de vuelta), el usuario
+encontró que **ninguna de las cinco pantallas de `/panel/reportes`**
+(`ocupacion`, `categorias`, `canales`, `satisfaccion`, `estados`) lo tenía:
+se podía entrar a un informe y la única forma de volver al índice era el
+botón «atrás» del navegador. Es el mismo split que ya existía desde antes
+de esta sesión, y se le había pasado por alto el enlace en su momento. Se
+agregó a las cinco con el mismo texto y estilo que usa el resto del panel
+(«‹ Volver a reportes»). Un barrido sobre todo `app/panel` (páginas a
+profundidad ≥ 3, sin contar `nuevo/`/`editar/`/`[id]/`) no encontró más
+casos: la única que no tiene el texto literal «Volver a» es
+`housekeeping/mi-trabajo`, y ésa sí tiene salida — un botón «Tablero
+completo» en el encabezado, deliberado porque es la vista para el celular
+de la mucama y un botón grande es más usable ahí que un enlace de texto
+chico.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · **2028/2028 tests en verde, 0 salteados**,
+contra la base local con las cuatro variables de entorno exportadas
+(`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+y `NEXT_PUBLIC_SUPABASE_URL` — esta última no está en la lista de
+`AGENTS.md`, pero `crearClienteAdmin` la exige y sin ella dos archivos
+fallan por «Variables de entorno inválidas», no por este cambio).
+
+## 2026-09-09 — Auditoría contra QloApps y tres huecos cerrados (Fases 3, 5 y 7)
+
+A pedido del usuario, con QloApps (PHP/PrestaShop, OSL-3.0+AFL-3.0) como
+material de lectura —nunca copiado, siempre reimplementado en este stack— se
+hizo primero un inventario de qué de lo pedido ya existía. Resultado: **de 7
+fases pedidas, 4 ya estaban hechas** (motor de reservas público, dashboard
+operativo, y en gran parte el alta de mostrador y la abstracción de pagos —
+ésta última, Fase 23/ADR 0027, ya tenía interfaz + MercadoPago + Stripe reales
+antes de que se pidiera). Quedaban huecos puntuales, no fases enteras. El
+usuario descartó encarar permisos granulares por ahora (revertía una decisión
+ya tomada a propósito en la Fase 25: «cambiarlo toca las 51 Server Actions») y
+pidió el resto de punta a punta.
+
+### Fase 3 — Unidad específica y check-in inmediato en el alta de mostrador
+
+`app/panel/reservas/nueva` ya dejaba elegir el TIPO de unidad; faltaban dos
+cosas puntuales del pedido (patrón QloApps
+`AdminHotelRoomsBookingController`: tipo + habitación específica, y marcar
+«en curso» al confirmar):
+
+- **`lib/reservas/crear.ts`**: `crearReservaEnUnidadLibre` acepta ahora
+  `unidadId` opcional. Sin él, sigue tomando la primera libre del tipo
+  (comportamiento histórico, el que usa el portal público); con él, busca esa
+  unidad puntual entre las libres —pudo ocuparse entre que recepción la vio en
+  pantalla y confirmó— y si ya no está, un mensaje claro en vez de asignar
+  cualquier otra.
+- **`formulario.tsx`**: la pantalla ya traía `unidadesDisponibles()` sin usar
+  para este flujo (si existía para mudanzas). Debajo del tipo elegido aparece
+  «¿Cuál en particular?» con «Cualquiera disponible» + cada unidad libre,
+  marcando con una etiqueta si está sucia/inspeccionada.
+- **Check-in inmediato**: checkbox nuevo. Si se marca, después de crear la
+  reserva (que nace `confirmada`) se la pasa a `in_house` en el mismo
+  request — es una transición válida directa (`TRANSICIONES.confirmada`
+  incluye `in_house`). Es una escritura ACCESORIA: si falla, no se corta el
+  alta (la reserva ya existe), se loguea con `registrarFalla` y queda un
+  `?error=checkin_inmediato` con instrucción de hacerlo a mano.
+
+Probado en el navegador con sesión real: se buscó disponibilidad, se eligió
+una unidad puntual («Hostería 102») y se tildó el check-in; la reserva quedó
+con esa unidad exacta y en estado «In house» sin pasos extra.
+
+### Fase 5 — Email transaccional: la mitad HTML que faltaba
+
+Las 5 plantillas, sus triggers automáticos y el proveedor real (Resend) ya
+existían (contradiciendo un comentario viejo en `lib/email/index.ts` que
+decía «no hay proveedor real, ver ADR 0012» — corregido de paso). Faltaba
+sólo el cuerpo HTML.
+
+- **`textoAHtml()`** (`lib/domain/plantillas.ts`) deriva el HTML del MISMO
+  texto plano que ya tenía cada plantilla —párrafos, viñetas `·`, `**negrita**`
+  y URLs sueltas—, en vez de mantener dos redacciones por evento que con el
+  tiempo terminan diciendo cosas distintas. Escapa HTML ANTES de aplicar el
+  formato propio: el texto que llega ahí ya tiene variables reemplazadas
+  (`{{nombre}}` → el nombre real de un huésped) y puede traer cualquier cosa.
+- `EmailRenderizado`/`MensajeEmail` llevan ahora `cuerpoHtml`, y
+  `ProveedorResend` lo manda junto con `text` en la misma llamada — cero
+  cambios en los triggers, que siguen pasando por el único funnel
+  (`enviarPlantilla`).
+- `/panel/config/plantillas` ganó una «Vista HTML» en `<iframe sandbox="">`
+  junto a la vista de texto plano.
+
+**Un bug real, encontrado probando la vista en el navegador** (no al escribir
+el código): el enlace automático de una URL que termina una oración
+(«...en {{enlace}}.») incluía el punto final adentro del `href`
+(`/ejemplo.` en vez de `/ejemplo`) — un enlace roto en el único correo que
+lleva una URL en ese lugar de la frase. Se corrigió el regex para no capturar
+puntuación de cierre de oración, con test que lo cubre.
+
+### Fase 7 — Preparación para un channel manager genérico
+
+Ver **ADR 0035** para el razonamiento completo. Resumen: NO se tocó
+`lib/canales/*` (Booking/Expedia) —esas 5 tablas están hardcodeadas a
+`check (canal in ('booking','expedia'))` a propósito, y hasta la pantalla del
+panel filtra `.eq('canal','booking')` en cada consulta: resuelven el CSV y el
+scraping de Booking, que un channel manager real no usa—. Se agregó, nuevo y
+aparte:
+
+- **Migración 0092**: `canales_externos` (catálogo: cualquier proveedor es un
+  `INSERT`, no una migración) + `canal_externo_tipos` (mapeo tipo de
+  unidad ↔ código del proveedor).
+- **Migración 0093**: `reservas_canal_valido` (0062) suma `channel_manager`
+  como bucket genérico — CUÁL proveedor fue viaja en el prefijo de
+  `reservas.voucher`, no en `canal`, para no ensuciar la dimensión que usan
+  `resumen_canal_mes` y la conciliación de comisiones.
+- **`POST /api/canales/externos/<token>`**: token al portador (mismo patrón
+  que el iCal de salida), idempotente por `referencia_externa`, y llama
+  DIRECTO a `crearReservaEnUnidadLibre` — el mismo helper que ya usan el
+  portal público y el mostrador. No es lógica nueva: demuestra que el
+  descuento de inventario ya era agnóstico al origen. Una unidad ya ocupada
+  responde 409 (el overbooking real que las advertencias de canales ya
+  describían), no un 500 genérico.
+- Sin pantalla de administración a propósito: cargar un proveedor hoy es por
+  Studio, hasta que haya uno real contratado — construir un CRUD antes sería
+  diseñar para un formulario que nadie puede probar todavía.
+
+Verificado con una base real: 5 tests de integración contra Postgres
+(token inválido → 404, payload inválido, código sin mapear, alta real con
+`canal`/`voucher` correctos, reintento idempotente sin duplicar) + 11 tests
+puros de validación del payload. Se sumaron las dos tablas nuevas a la
+matriz de RLS por rol (`tests/rls-por-rol.test.ts`), con seed para que los
+casos negativos no pasen por tabla vacía.
+
+### Verificación
+
+`npm run check` completo: typecheck 0 · lint 0 · **2063/2063 tests en verde,
+0 salteados** contra la base local con las 4 variables de entorno · build
+compilado. Las dos pantallas nuevas (alta de mostrador, vista de plantillas)
+se probaron a mano en el navegador con sesión real, incluido el bug del
+enlace roto que sólo apareció mirando el HTML renderizado.
+
+## 2026-09-09 — Pulido visual módulo por módulo, con tres bugs reales encontrados
+
+A pedido del usuario («mejorá estéticamente la app... y testeá que no haya
+ningún bug»). Se auditó `app/panel/**` completo contra el sistema de diseño
+de `ui.tsx` y se probó cada módulo a mano en el navegador (sesión real,
+Supabase local) y a ancho de teléfono (375 px).
+
+**Hallazgos de consistencia** (arreglados): 5 botones hand-rolled que
+duplicaban `botonClases('primario')` a mano —incluido el error boundary del
+panel, que resultó seguro de tocar porque ya importaba `Icono` del mismo
+directorio— y 5 cajas de alerta roja hand-rolled que pasaron a
+`<Mensaje tono="error">`. Dos tablas crudas en `agencias/[id]` y
+`proveedores/[id]` pasaron a `<Tabla>`/`<Tarjeta>`/`<EstadoVacio>`.
+
+**Tres bugs reales, encontrados con un barrido automatizado de las 53 rutas
+del panel a 375 px** (`document.documentElement.scrollWidth` contra
+`clientWidth`, después confirmado a ojo con capturas):
+
+1. **`Encabezado` desbordaba la página con un título largo.** Un nombre de
+   agencia («Turismo Internacional Patagonia Austral Sociedad Anónima») no
+   tenía `min-w-0` en la fila que lo contiene —mismo bug que `Tarjeta` ya
+   documentaba y arreglaba, pero que nunca llegó al encabezado—. Se agregó
+   `min-w-0` en las dos filas anidadas.
+2. **La descripción del encabezado, con un email largo, seguía desbordando**
+   aun con el `min-w-0` de arriba: una palabra sin espacios no tiene dónde
+   cortar. Se agregó `break-words`.
+3. **Un `<select className={CAMPO}>` dentro de una fila de tabla angosta
+   inflaba `<html>` entero**, sin que se viera nada roto en el viewport — la
+   página completa scrolleaba de costado revelando espacio en blanco. La
+   causa real, tras medir el árbol de ancestros elemento por elemento: un
+   `<span className="sr-only">` usado como etiqueta oculta del `<select>`
+   —patrón que bypasea `Campo`/su etiqueta VISIBLE, en contra de la Fase
+   15— calculaba una posición estática absoluta rarísima dentro de esa fila
+   angosta, y esa posición se filtraba al `scrollWidth` de `<html>` saltándose
+   el `overflow-x-auto` de la tabla. Encontrado en `proveedores/comprobantes`
+   y reproducido también en `conciliacion` y `canales` (mismo patrón exacto,
+   copiado). Se sacó el `sr-only` y se puso una etiqueta visible corta
+   («Proveedor», «Vencimiento», «Pago», «Nota», «Estado», «Motivo») en las 6
+   ocurrencias — arregla el bug Y corrige de paso la violación de Fase 15 que
+   lo causaba. Se sumó `min-w-0` a `CAMPO` (afecta ~90 campos del panel) como
+   endurecimiento adicional para el caso de un `<select>` con una opción muy
+   larga.
+
+Barrido final: 0 de 53 rutas con desborde horizontal a 375 px.
+
+### Verificación
+
+`npm run check`: typecheck 0 · lint 0 · **2063/2063 tests en verde** · build
+compilado. Los tres bugs se confirmaron en el navegador antes y después del
+arreglo (no solo por la medición automatizada).
+
+## 2026-09-09 — Conexiones con proveedores externos: OAuth2 y cifrado (fase 1 de 4, Mercado Pago)
+
+Pedido del usuario: que vincular Mercado Pago, el correo, Booking y Expedia
+sea un botón —o pegar un link, cuando no hay OAuth— y nunca pegar una clave a
+mano. Encargo explícito de ir proveedor por proveedor, con pausa para revisar
+cada uno. Esta entrada cierra la primera pausa: Mercado Pago.
+
+Antes de escribir código se verificaron dos supuestos del pedido que no
+coincidían con el repo real: **no hay `hotel_id`** en ninguna de las 93
+migraciones anteriores (el sistema es de un solo hotel, confirmado con el
+usuario) y **no existe ningún mecanismo de cifrado de secretos en reposo**
+—los tokens que hoy viven en la base (`agencias.token`, `proveedores.token`)
+son UUIDs sin cifrar, protegidos por RLS, no por cifrado; los secretos reales
+viven en variables de entorno, nunca en Postgres—. Confirmado con el usuario:
+sistema de un hotel, y construir el cifrado ahora.
+
+- **Migración 0094**: `conexiones_proveedores`, una fila por proveedor
+  (`proveedor` como clave primaria, mismo criterio que `canal_config.canal`).
+  RLS admin/gerencia, igual que `canal_config` — acá con más motivo, porque
+  puede contener tokens cifrados de la cuenta real del hotel en Mercado Pago.
+- **ADR 0036**: cifrado AES-256-GCM a nivel de aplicación con
+  `crypto.subtle` (mismo mecanismo que ya usa `firma-webhook.ts` para HMAC,
+  no una dependencia nueva), clave en `ENCRYPTION_KEY` — nunca en la base.
+  IV aleatorio por cada valor cifrado.
+- **`lib/conexiones/estado-oauth.ts`**: `state` de OAuth2 firmado con HMAC
+  (reusa `hmacHex`/`comparacionConstante` de `firma-webhook.ts`, no una
+  librería de JWT nueva), de un solo uso implícito por nonce + ventana de 5
+  minutos.
+- **`lib/conexiones/mercadopago.ts`**: OAuth2 con PKCE, por HTTP directo y no
+  con el SDK oficial —el pedido pedía el SDK, pero se mantuvo el criterio ya
+  establecido en `lib/payments/mercadopago.ts` (ADR 0027): tres llamadas no
+  justifican una dependencia nueva y su ciclo de vida propio—.
+- **`POST /api/conexiones/mercadopago/autorizar` y `.../callback`**: el
+  primero abre la pantalla real de Mercado Pago en una ventana emergente
+  (`window.open`, no navegación de la pestaña principal); el segundo canjea
+  el código, cifra los tokens, los guarda, y le avisa a la ventana principal
+  por `postMessage` (con `targetOrigin` explícito, nunca `'*'`) antes de
+  cerrarse sola.
+- **`/panel/config/conexiones`**: las cuatro tarjetas en una sola pantalla,
+  mismo estilo visual para las que usan OAuth2 y las que van a usar un link
+  de calendario. Mercado Pago ya conecta de verdad; Correo, Booking y
+  Expedia muestran «Próximamente» — el layout final ya está a la vista, sin
+  fingir una función que no existe todavía.
+
+Probado de punta a punta contra la base local (sin credenciales reales de
+Mercado Pago, que las tiene que dar el usuario): el endpoint de autorización
+falla fuerte y explica exactamente qué variable falta
+(`Falta ENCRYPTION_KEY...`), capturado en `/panel/errores` como cualquier
+otro error del servidor — no un 500 mudo.
+
+### Verificación
+
+`npm run check`: typecheck 0 · lint 0 · **2105/2105 tests en verde** (42
+nuevos: cifrado, `state` de OAuth2, adapter de Mercado Pago con la red
+simulada, y el callback de punta a punta contra la base real) · build
+compilado. Probado en el navegador con sesión real: la pantalla de
+conexiones renderiza las cuatro tarjetas, y el botón de Mercado Pago
+efectivamente dispara la ruta protegida por sesión.
+
+**Pendiente para conectar de verdad:** el usuario tiene que registrar una
+aplicación en el panel de developers de Mercado Pago y cargar
+`ENCRYPTION_KEY`, `MERCADOPAGO_APP_ID` y `MERCADOPAGO_APP_SECRET` como
+variables de entorno reales — sin eso, el botón sigue fallando fuerte a
+propósito.
+
+## 2026-09-09 — Auditoría de calidad (QA/UX): hallazgos corregidos en el camino
+
+Auditoría de calidad pedida por el usuario (inventario, consistencia visual,
+flujo de uso, rendimiento, integridad de datos, detección de bugs), con
+autorización explícita de ir corrigiendo lo confirmado en vez de esperar al
+informe final («podés ir arreglando»). Entrada que junta lo corregido hasta
+ahora; los hallazgos de seguridad quedan fuera a propósito, ya cubiertos por
+el trabajo de hardening anterior.
+
+### Tablero (`app/panel/page.tsx`): errores de lectura descartados en silencio
+
+Las 10 consultas del dashboard desestructuraban `{ data }` sin mirar
+`{ error }` (la trampa que `AGENTS.md` señala como «el bug clásico de este
+stack»). Con una consulta fallida, el KPI mostraba `0` en vez de avisar que
+no se pudo leer — un «no hay overbooking» que en realidad es «no se pudo
+comprobar» es la peor confusión posible ahí, porque es justo el dato más caro
+si se lee mal. Se agregó `registrarFalla` por consulta y un `kpi()` que
+muestra `—` en degradado. La alerta de conflictos de canal ahora distingue
+tres casos en vez de dos: cero conflictos confirmados, N conflictos, y «no se
+pudo verificar» — este último con su propio aviso, nunca leído como «cero».
+
+### Tres violaciones de la regla de la Fase 15 (etiqueta visible, nunca solo `aria-label`)
+
+`app/panel/housekeeping/page.tsx`, `app/panel/usuarios/page.tsx` y
+`app/panel/canales/mapeo/page.tsx` tenían un `<select>` con `aria-label` como
+única etiqueta. Se envolvieron en un `<label>` con texto visible corto
+(`Mucama`, `Rol`) o se cambió el `<td>` de la fila a `<th scope="row">` para
+que el lector de pantalla anuncie el campo antes que el control. De paso
+apareció un bug funcional: un `<span className="sr-only">` dentro de una
+celda de tabla se posicionaba en `absolute` y escapaba del `overflow-x-auto`
+de la tabla, corriendo el `scrollWidth` del `<html>` 117px por encima del
+`clientWidth` — la página completa arrastraba de costado en el teléfono, sin
+que ningún elemento visible mostrara el desborde. Se corrigieron las mismas 6
+ocurrencias del patrón en todo el panel (`proveedores/comprobantes`,
+`conciliacion`, `canales` incluidos) y se agregó `min-w-0` a la constante
+compartida `CAMPO` como defensa adicional.
+
+### Fechas invertidas en el alta de mostrador
+
+`app/panel/reservas/nueva` mostraba una pantalla en blanco —ni resultados ni
+error— si se cargaba un check-out anterior o igual al check-in por URL. Se
+agregó `parsearBusquedaFechas()` a `lib/domain/reservas.ts` (lógica pura,
+testeada) que distingue «no se buscó nada» de «se buscó algo inválido», y la
+pantalla ahora muestra un `Mensaje` de error explícito en el segundo caso.
+
+### Importes en moneda de origen formateados con `toLocaleString` en vez de `importe()`
+
+En `app/panel/reservas/[id]/cuenta/page.tsx` (importe cobrado en la moneda
+original de un pago) y `app/panel/canales/page.tsx` (importe que reporta el
+canal externo) el monto se mostraba con `Number(x).toLocaleString('es-AR')`
+en vez de `importe()` de `lib/domain/moneda.ts` — el mismo antipatrón que
+`lib/domain/moneda.ts` ya documenta y que se había migrado en otros 67
+lugares del panel, pero no en estos dos. Con `toLocaleString` una misma
+columna puede mostrar `45000`, `45000,5` y `45000,55` para el mismo importe
+en pesos, según cuántos decimales traiga: parece un número cortado. Se
+migraron los dos a `importe()`.
+
+### Verificado a mano en el navegador (edge cases)
+
+Con el servidor real: un apellido con comilla, `<script>alert(1)</script>`,
+`&` y un emoji se guarda y se muestra tal cual —React escapa, no hay
+inyección ni error de consola— y un descuento adicional negativo lo bloquea
+la validación nativa del `<input type=number min=0>` antes de llegar al
+servidor, que además lo vuelve a acotar a `[0, 100]` en
+`app/panel/reservas/actions.ts:145` por si alguien lo salteara.
+
+### Verificación
+
+`npm run typecheck` y `npm run lint` en verde después de cada cambio;
+`npm run check` completo corrido con 2111/2111 tests en verde tras el primer
+lote de correcciones (dashboard + accesibilidad).
+
+## 2026-09-09 — Auditoría de calidad (QA/UX): cierre de las lecturas silenciosas
+
+**Resumen:** se completó el hallazgo más grande de la auditoría (Fase 1):
+las ~53 lecturas de Supabase de páginas del panel que descartaban `{ error }`
+quedaron todas cubiertas, y se cerró un bug de segundo orden que apareció al
+verificar contra la base local: un test de auditoría de RLS que se saltaba en
+silencio su propio caso negativo.
+
+**Detalle de lo realizado:**
+- Cubiertas con `registrarFalla` (y, donde el dato es crítico, un `Mensaje`
+  visible) las lecturas de: ocupación y punto de venta, canales (12 lecturas
+  + mapeo), reservas (ficha, cuenta, factura, alta), las cuatro fichas de
+  edición (huésped, agencia, proveedor, contrato), config (tarifario,
+  inventario, ubicaciones, conexiones, mi cuenta) y los cinco módulos
+  secundarios (respaldos, conversaciones, auditoría, mantenimiento,
+  conciliación de gastos).
+- En `reservas/[id]/page.tsx` y `reservas/[id]/cuenta/page.tsx`, la lectura
+  del registro **principal** ahora distingue «no existe» de «falló la
+  lectura»: antes un corte de red se veía igual que una reserva borrada y
+  disparaba un 404 falso. Mismo tratamiento en huéspedes, contratos y las
+  fichas de agencia/proveedor.
+- Grilla de ocupación en tablet (1024×768): la última columna de la ventana
+  de 14 días quedaba cortada sin ningún indicio de que hay más para el
+  costado. Se agregó un aviso de texto (visible hasta el breakpoint `xl`)
+  arriba de la grilla.
+- **Bug de segundo orden, encontrado al correr la suite contra la base
+  local:** `tests/rls-por-rol.test.ts` audita que cada tabla nueva tenga su
+  caso negativo (un rol sin acceso) verificado contra una fila real, no
+  contra una tabla vacía —si no, el test pasaría por el motivo equivocado y
+  la política nunca se probaría de verdad—. Su propio seed de
+  `notas_credito` caía en exactamente ese error: si `reservaParaSembrar()`
+  devolvía una reserva preexistente sin factura propia, el bloque que crea
+  la factura se saltaba (la tabla `facturas` ya no estaba vacía por otra
+  corrida) y la nota de crédito nunca se sembraba. Se corrigió para que
+  cree la factura que le falta a ESA reserva puntual, en vez de resignarse.
+- Barrido final de `rg` sobre `app/` y `lib/` enteros: cero
+  `toLocaleDateString`/`toLocaleString` sin `timeZone`, cero recurrencias de
+  `rangoISO(hoy, hoy)`, y los ~29 usos de `new Date().toISOString()` que
+  quedan son todos sellos de instante (`actualizado_en`, `conciliado_en`,
+  `cae_solicitado_en`...) sobre columnas `timestamptz` — un caso distinto
+  del bug de `hoyISO()` (ese era sobre fechas de calendario, no instantes) y
+  no requieren corrección.
+
+**Decisiones tomadas:**
+- Ninguna nueva: se aplicó en todos los casos el patrón ya establecido por
+  el dashboard (`registrarFalla` siempre, `Mensaje` visible cuando el dato
+  es crítico para una decisión de dinero o de disponibilidad).
+
+**Pendiente, dejado a criterio del usuario (no son bugs, son alcance):**
+- El alta de reserva de mostrador (6 pasos en una sola pantalla) no guarda
+  borrador si se navega hacia atrás. Es un cambio de UX más grande que un
+  bugfix puntual.
+
+**Verificación:** `npm run check` completo contra la base local con las 4
+variables de entorno y `EXIGIR_DB=1` — **137/137 archivos, 2111/2111 tests,
+0 salteados**, build compila. Corrida más de una vez a lo largo de la
+sesión, en verde cada vez.
+
+## 2026-09-09 — Auditoría RLS: de "pendiente" vago a preciso, y 4 casos nuevos de escritura
+
+**Resumen:** el `CLAUDE.md` venía arrastrando un pendiente escrito el
+2026-08-14 («auditar las 103 políticas RLS una por una») que ya estaba
+desactualizado en el número de políticas y, más importante, en el estado
+real: `tests/rls-por-rol.test.ts` y `tests/rls-escritura-por-rol.test.ts`
+—escritos en una sesión posterior— ya hacen buena parte de ese trabajo. Se
+midió el estado real contra la base local y se documentó con precisión, y
+se sumaron 4 casos de escritura de alto impacto que faltaban.
+
+**Detalle de lo realizado:**
+- Medido contra `pg_policies` de la base local: **112 políticas sobre 56
+  tablas** (no 103/51, el esquema creció desde agosto). 56 son `select`, 39
+  `all`, 8 `insert`, 6 `update`, 3 `delete`.
+- `tests/rls-por-rol.test.ts` audita el `select` de las **56 tablas y
+  vistas sin excepción** (tiene su propio test de cobertura contra
+  `pg_tables`/vistas). Corrido contra la base local: **verde**.
+- `tests/rls-escritura-por-rol.test.ts` audita 39 tablas con política de
+  escritura, pero **por consecuencia y no por cobertura** (lo dice su propio
+  encabezado): antes de esta pasada cubría 10 — `perfiles`, `unidades`,
+  `pagos`, `facturas`, `consumos`, `tarifas`, `canal_cargos`,
+  `canal_config`, `cotizaciones`, `tipos_unidad`.
+- Se compararon las 49 tablas con alguna política de escritura contra las
+  cubiertas por el test dirigido, y de las 39 sin caso se eligieron 3 por el
+  mismo criterio que ya usa el archivo (escalada de privilegio/credenciales,
+  integridad de inventario, datos personales) — 4 casos nuevos en total:
+  - `recepcion` y `housekeeping` **no pueden insertar una fila en
+    `conexiones_proveedores`** (guarda tokens de OAuth2 cifrados de la
+    cuenta real de Mercado Pago o Google del hotel; es admin/gerencia
+    exclusivo).
+  - `housekeeping` **no puede modificar el `periodo` de una `estadia`**
+    (la tabla que protege la restricción de exclusión GiST del ADR 0002;
+    housekeeping solo gestiona el estado de limpieza de la unidad, ya
+    cubierto).
+  - `housekeeping` **no puede modificar los datos de un huésped** (mismo
+    criterio que la lectura, ADR 0005).
+- Los 4 casos se verificaron corriendo el archivo solo (33/33, antes 29) y
+  después la suite completa.
+- `CLAUDE.md` reescrito con el estado preciso: qué está cerrado (lectura,
+  exhaustiva), qué está cubierto y por qué de la escritura (13 tablas por
+  consecuencia), y **nombradas las 36 tablas que siguen sin caso dirigido**
+  en vez de dejar un «pendiente» genérico — para que quien retome esto sepa
+  exactamente por dónde seguir sin tener que volver a medir.
+
+**Decisiones tomadas:**
+- No se intentó cubrir las 36 tablas restantes: la mayoría son catálogo de
+  bajo riesgo (`promociones`, `temporadas`...) y el propio archivo ya
+  declaró ese límite a propósito, para no sumar «andamiaje frágil» sin
+  impacto real. Ampliarlo es una decisión a tomar caso por caso, no una
+  tarea mecánica.
+
+**Verificación:** `npm run check` completo — **137/137 archivos, 2115/2115
+tests, 0 salteados**, build compila.
+
+## 2026-09-09 — Prop de scroll horizontal, tiempos reales y borrador del alta
+
+**Resumen:** tres pendientes que había quedado documentados en la auditoría
+QA/UX. Los dos primeros salieron rápido; el tercero (borrador de la reserva
+de mostrador) rompió la hidratación en el primer intento y se corrigió con
+el mismo patrón que ya usaba `pwa.tsx`.
+
+**Detalle de lo realizado:**
+- `Tabla` (`app/panel/_components/ui.tsx`) tiene el prop opt-in
+  `indicarScrollHorizontal`. Se probó aplicarlo al tarifario —el candidato
+  obvio, según el propio comentario del componente— y **no hacía falta**:
+  medido con `scrollWidth`/`clientWidth` reales en el navegador a 1024 px y
+  a 640 px, ya no desborda desde la Fase 25. Queda disponible, sin uso
+  todavía, para la próxima tabla que sí corte columnas.
+- Medido con Playwright, en `dev` y con sesión real: dashboard 214 ms,
+  ocupación 465 ms, listado de reservas 199 ms — las tres sin ningún error
+  de consola. Son números de referencia en desarrollo, no de un build de
+  producción.
+- **Borrador del alta de reserva de mostrador** (`app/panel/reservas/nueva`):
+  `lib/domain/borrador-reserva.ts` (la única lógica pura, la clave de
+  `sessionStorage`, con test) + lectura/escritura en
+  `formulario.tsx`. `sessionStorage`, no `localStorage`, a propósito: en una
+  recepción con la computadora compartida entre turnos, el nombre de un
+  huésped a medio cargar no debería sobrevivir a que alguien cierre la
+  pestaña.
+- **Bug real encontrado en el primer intento, con el navegador y no
+  leyendo el código:** ajustar el estado con
+  `if (typeof window !== 'undefined')` rompió la hidratación —"Hydration
+  failed because the server rendered HTML didn't match the client"—, porque
+  esa condición ya es verdadera en el PRIMER render del cliente, el mismo
+  que React usa para comparar contra el HTML del servidor. El aviso del
+  borrador aparecía en ese primer render y el árbol no coincidía con lo que
+  el servidor había mandado. Se corrigió reemplazando la condición por
+  `useSyncExternalStore` con `getServerSnapshot` fijo en `false` —el mismo
+  mecanismo que ya usa `pwa.tsx` para esto exacto—, que fuerza que la pasada
+  de hidratación coincida con el servidor y recién difiere en un render
+  posterior, ya no sensible a la comparación de hidratación.
+- Verificado de punta a punta en el navegador, no solo con tests: cargar
+  apellido y unidad puntual → navegar a otra pantalla y volver a la misma
+  búsqueda → aparece "Recuperamos lo que tenías cargado" con los datos
+  correctos → "Descartar y empezar de cero" limpia todo → confirmar la
+  reserva la sigue creando bien (verificado contra la fila real en
+  Postgres). Cero errores de consola en cualquiera de los pasos.
+
+**Decisiones tomadas:**
+- El prop `indicarScrollHorizontal` se deja sin aplicar en ningún lugar por
+  ahora: aplicarlo donde no hace falta es peor que no tenerlo (un aviso de
+  "hay más para el costado" cuando no lo hay es un mensaje falso).
+
+**Verificación:** `npm run check` completo — **138/138 archivos, 2118/2118
+tests, 0 salteados**, build compila. Reserva de prueba creada y borrada de
+la base local después de confirmar el flujo.

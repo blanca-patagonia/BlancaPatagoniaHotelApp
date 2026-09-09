@@ -32,7 +32,7 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 | **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | verificado, exit 0 |
 | Lint | `npm run lint` | verificado, exit 0 |
 | Typecheck | `npm run typecheck` | verificado, exit 0 |
-| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **1914 pasan · 0 saltean** con base y las 3 variables |
+| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **2111 pasan · 0 saltean** con base y las 4 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
 | Base local **(solo para tests)** | `npx supabase start` · `npx supabase db reset` | necesita Docker |
@@ -75,6 +75,7 @@ Reglas de dependencia, verificables con `rg`:
 | Autorización | `requerirAcceso(area)` en toda página y acción del panel | `lib/auth/session.ts:50` |
 | Escrituras que cortan | `cortarSiFalla(error, destino, motivo)` | `lib/acciones.ts:43` |
 | Escrituras accesorias | `registrarFalla(error, contexto)` — loguea, no corta | `lib/acciones.ts:71` |
+| Lecturas de página | `registrarFalla(error, contexto)` siempre; `Mensaje` visible si el dato es crítico | `app/panel/ocupacion/page.tsx` |
 | Server Action con estado | `(prev, formData) => Promise<EstadoX>` con `{ error }` / `{ ok }` | `app/panel/huespedes/actions.ts:67` |
 | Después de escribir | `revalidatePath(...)`; no redirigir en silencio | `app/panel/huespedes/actions.ts:92` |
 | UI | Componentes de `app/panel/_components/ui.tsx` y `boton-envio.tsx` | `app/panel/proveedores/page.tsx` |
@@ -111,9 +112,13 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **Segunda trampa, la que `EXIGIR_DB` NO cubre:** esa guarda mira `hayDB`, no `hayAnon`
   (`tests/db.ts:40`). Vitest no lee `.env.local`, así que sin exportar
   `NEXT_PUBLIC_SUPABASE_ANON_KEY` los **4 tests del borde público (ADR 0016) saltean en
-  silencio** aun con `EXIGIR_DB=1`. Localmente hay que exportar las tres variables:
-  `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`. En CI ya se
-  exportan (`ci.yml:72`).
+  silencio** aun con `EXIGIR_DB=1`. Localmente hay que exportar **cuatro** variables:
+  `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` **y
+  `NEXT_PUBLIC_SUPABASE_URL`** — esta última no la pide ningún test directamente, pero
+  `envServidor()` (`lib/env.ts`) la exige para construir el cliente admin, y sin ella
+  `crearClienteAdmin` no falla en silencio: tira `Error` y hace fallar (no saltear)
+  `tests/ari-servicio.test.ts` y `tests/registro.test.ts`. En CI ya se exportan las
+  cuatro (`ci.yml:77-80`).
 - Todo bugfix entra con un test que fallaba antes del fix.
 
 ## Definition of Done
@@ -160,6 +165,14 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   `app/panel/{canales,punto-venta}/actions.ts`.
 - **`lib/env.ts`** dice que falla "al arrancar", pero `envPublico()`/`envServidor()` son perezosas y
   no validan `MERCADOPAGO_*`, `STRIPE_*` ni `RESEND_API_KEY`.
+- **Un seed de test que se salta en silencio auditó menos de lo que decía auditar.**
+  `tests/rls-por-rol.test.ts` exige que cada tabla nueva tenga su caso negativo probado contra una
+  fila REAL, no contra una tabla vacía (si no, el test pasa por el motivo equivocado). Su propio
+  seed de `notas_credito` caía en eso: si `reservaParaSembrar()` devolvía una reserva preexistente
+  sin factura propia, el bloque que crea la factura se saltaba —la tabla `facturas` ya no estaba
+  vacía por otra corrida— y la nota de crédito nunca se sembraba. Al agregar un seed condicional a
+  `if (contar(tabla) === 0)`, verificar que la condición de guarda sea sobre la fila que hace falta
+  para ESTE caso, no sobre si la tabla en general tiene algo.
 - **PostgREST corta en 1000 filas** (`max_rows`, `supabase/config.toml:10`), sin error y sin aviso.
   Toda lectura que agregue sobre una tabla entera tiene que ir por `traerTodo` (`lib/paginado.ts`).
 - **Los simuladores fallan fuerte en producción:** `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,

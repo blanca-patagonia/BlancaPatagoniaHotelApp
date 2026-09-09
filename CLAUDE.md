@@ -178,15 +178,34 @@ Tarifario 2025/2026 (Anexo A).
   (`tests/funciones-sin-public.test.ts`) para que ninguna función nazca abierta.
   ⚠️ **No hacer `cotizar_estadia` `security definer`**: ahí `current_user` es el
   dueño de la función y la guarda quedaría siempre en verdadero.
-  **Pendiente:** auditar las 103 políticas RLS una por una — que estén activadas en
-  las 51 tablas no dice qué permite cada una. ⚠️ La modernización WinPAX sumó **6
-  tablas y 14 políticas** a ese pendiente (`cotizaciones`, `canal_reservas`,
-  `canal_sincronizaciones`, `canal_mensajes`, `canal_resenas`, `departamentos`,
-  `respaldos`); todas revocan `select` a `anon` explícitamente, pero eso no
-  reemplaza la auditoría. ⚠️ **No se puede hacer en un entorno
-  sin Docker**: exige ejecutar las políticas contra una base con los cuatro roles, y
-  el *pull* de las imágenes de Supabase está bloqueado por política de egreso en el
-  entorno remoto (403 contra las CDN de los registries). Hay que hacerlo en local.
+  **Auditoría de las políticas RLS rol por rol — cerrada del lado de lectura,
+  acotada a propósito del lado de escritura (verificado 2026-09-09 contra la
+  base local: hoy son 112 políticas sobre 56 tablas, no 103/51 — el esquema
+  siguió creciendo).** `tests/rls-por-rol.test.ts` prueba el `select` de
+  **las 56 tablas y vistas, sin excepción**: lee la lista real de
+  `pg_tables`/vistas y hace fallar el test de cobertura si aparece una sin
+  declarar en la matriz — así que un `select` de más o de menos en cualquier
+  tabla nueva se detecta solo. `tests/rls-escritura-por-rol.test.ts` cubre el
+  resto (`insert`/`update`/`delete`/`all`), y lo dice de frente en su propio
+  encabezado: es **por consecuencia, no por cobertura** — una matriz completa
+  serían 51 tablas × 4 roles × 3 operaciones, y la mayoría son catálogo de
+  bajo riesgo. Cubre 13 tablas elegidas por impacto: escalada de privilegio
+  (`perfiles`), dinero (`pagos`, `facturas`, `consumos`, `tarifas`,
+  `canal_cargos`, `cotizaciones`), inventario (`unidades`, `tipos_unidad`),
+  configuración de canal (`canal_config`) y, sumadas en esta pasada,
+  credenciales de terceros (`conexiones_proveedores`, con tokens de OAuth2
+  cifrados de la cuenta real de Mercado Pago o Google del hotel), integridad
+  de `estadias` (la tabla del anti-overbooking, ADR 0002) y datos personales
+  (`huespedes`). **Quedan sin caso dirigido 36 tablas con alguna política de
+  escritura** (`avisos`, `contratos`, `departamentos`, `firmas`,
+  `movimientos_cuenta`, `movimientos_externos`, `movimientos_proveedor`,
+  `notas_credito`, `proveedores`, `reserva_huespedes`, `temporadas` y otras
+  25 mayormente de catálogo) — no es una omisión silenciosa, es la línea que
+  el propio archivo traza y explica por qué. ⚠️ **No se puede hacer en un
+  entorno sin Docker**: exige ejecutar las políticas contra una base con los
+  cuatro roles, y el *pull* de las imágenes de Supabase está bloqueado por
+  política de egreso en el entorno remoto (403 contra las CDN de los
+  registries). Hay que hacerlo en local.
   **Fase 3 ✅** (escrita sin Docker, **aplicada y verificada el 2026-08-14**): alta de
   usuario sin privilegios (ADR 0017, migraciones `0032` + `0035`), la baja de un
   usuario revoca acceso en la base y la numeración de facturas vuelve a funcionar
@@ -223,8 +242,55 @@ Tarifario 2025/2026 (Anexo A).
   `MERCADOPAGO_ACCESS_TOKEN`, que es el mismo del cobro.
 - **Trabajo futuro documentado (ADR 0013):** gestión documental con Storage,
   seguridad por campo y multi-propiedad. No implementar sin releer ese ADR.
-- **Hay 34 ADRs.** El último es el **0034** (WhatsApp por Cloud API oficial de
-  Meta). El anterior, el **0033** (el arrastre en la grilla cambia de
+- **Oportunidades detectadas en la auditoría QA/UX (2026-09-09), sin implementar
+  —quedan para cuando el usuario las priorice, no son huecos que se llenen solos:**
+  1. **Cero tests de componente.** Vitest corre en `environment: 'node'`: no hay
+     ni un test que renderice JSX o simule un click. Los dos bugs de UI reales
+     de esta auditoría (fechas invertidas en blanco, `<select>` que arrastraba
+     la página) solo se encontraron probando a mano con Playwright. Sumar
+     React Testing Library (o similar) daría cobertura de regresión a esa
+     clase de bug, que hoy no la tiene ningún test automático.
+  2. ✅ **Hecho (2026-09-09):** `Tabla` (`ui.tsx`) tiene ahora el prop
+     `indicarScrollHorizontal` (opt-in, no por omisión) para no repetir el
+     texto pantalla por pantalla. Se probó aplicarlo al tarifario —el
+     candidato obvio, porque el propio comentario de `Tabla` lo señalaba
+     como el peor caso— y **no hacía falta**: medido con
+     `scrollWidth`/`clientWidth` real en el navegador a 1024 px y a 640 px,
+     ya no desborda desde que la Fase 25 lo rehizo en tarjetas. Mismo
+     resultado en el informe por categorías. Queda disponible para la
+     próxima tabla que sí corte columnas.
+  3. ✅ **Hecho (2026-09-09):** `app/panel/reservas/nueva` guarda un borrador
+     en `sessionStorage` (no `localStorage`: en una recepción con la
+     computadora compartida, el nombre de un huésped a medio cargar no
+     debería sobrevivir a que alguien cierre la pestaña), scoped por
+     `claveBorradorReserva(checkIn, checkOut, huespedes)` — otra búsqueda no
+     reabre un borrador ajeno. Un aviso visible ofrece descartarlo. ⚠️ **Un
+     intento inicial rompió la hidratación**: ajustar estado leyendo
+     `sessionStorage` bajo `if (typeof window !== 'undefined')` se ve
+     "verdadero" ya en el primer render del cliente —el de hidratación
+     también—, así que React terminaba de comparar contra el HTML del
+     servidor con un árbol que ya incluía el aviso del borrador, y tiraba
+     "Hydration failed" (se reprodujo de verdad en el navegador). Se resolvió
+     igual que `pwa.tsx`: `useSyncExternalStore` con `getServerSnapshot` en
+     `false`, que fuerza que la pasada de hidratación coincida con el
+     servidor y recién differ en un render posterior y normal. Verificado en
+     el navegador de punta a punta: cargar datos → navegar afuera y volver →
+     se restaura con el aviso → "Descartar" limpia todo → confirmar la
+     reserva sigue creándola bien, sin ningún error de consola en ningún
+     paso.
+  4. **Lighthouse y React DevTools Profiler siguen sin correrse de forma
+     sistemática** (medir re-renders innecesarios pide la extensión del
+     navegador, no una herramienta de línea de comandos). Sí se midió con
+     Playwright, en `dev` y con sesión real, el tiempo de carga de las 3
+     pantallas más usadas — dashboard 214 ms, ocupación 465 ms, listado de
+     reservas 199 ms, los tres sin ningún error de consola — más el tamaño
+     del bundle (~1.6 MB) y los planes de consulta con `EXPLAIN ANALYZE`.
+     Son números de referencia en desarrollo, no un build de producción.
+- **Hay 35 ADRs.** El último es el **0035** (preparación para un channel
+  manager genérico: catálogo `canales_externos` + webhook receptor, sin
+  tocar el módulo de Booking/Expedia que sigue siendo de un solo canal a
+  propósito). El anterior, el **0034** (WhatsApp por Cloud API oficial de
+  Meta). El previo, el **0033** (el arrastre en la grilla cambia de
   habitación y no de fechas). Los previos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
@@ -440,7 +506,7 @@ Tarifario 2025/2026 (Anexo A).
      más tarde se aplicaría sobre una realidad distinta de la que la originó.
 - **Fase 25 (2026-09-09) — patrones de sistemas de referencia** (QloApps, Hotel
   PMS, Evolution API, Invoice Ninja; ver `docs/analisis-pendientes-2026-09-09.md`
-  para el inventario completo de qué ya existía). Siete piezas nuevas:
+  para el inventario completo de qué ya existía). Nueve piezas nuevas:
   reservas nuevas/canceladas en el tablero (migración 0087, con
   `reservas.cancelada_en`); auditoría de LECTURA de fichas de huésped, no solo
   de escritura (migración 0088, `lib/auditoria/accesos.ts`); gastos
@@ -449,21 +515,54 @@ Tarifario 2025/2026 (Anexo A).
   de que `expirar_reservas_pendientes` libere la unidad; cierre del día
   (night audit) de solo lectura en `/panel/cierre-diario`; el huésped puede
   ver y descargar su propia factura por el mismo token de confirmación
-  (`/reservar/factura/[token]`); y WhatsApp por Cloud API oficial (ADR 0034,
-  migración 0090). ⚠️ Ninguna pieza se verificó contra una base real (esta
-  sesión no tuvo Docker levantado) ni en un navegador — falta `db reset` y un
-  recorrido manual antes de darlas por cerradas del todo. Y a propósito **no**
-  se tocaron: permisos por acción (hoy es rol→área completa, cambiarlo toca
-  las 51 Server Actions), CSRF propio (Next ya protege el origen nativamente
-  en Server Actions), facturación recurrente con auto-cobro y el channel
-  manager bidireccional real — las cuatro son decisiones de negocio o de
-  arquitectura mayor, no huecos de código que se llenen en una pasada.
+  (`/reservar/factura/[token]`); WhatsApp por Cloud API oficial (ADR 0034,
+  migración 0090); re-precio inline al reprogramar una reserva; y el
+  tarifario rehecho —una fila, un «Guardar», etiquetas visibles en vez de
+  `aria-label` («Reservation 360», patrón QloApps para el alta rápida—el
+  hallazgo real ahí fue que ya era rápida, solo faltaba decirlo—). Migraciones
+  0087-0091 (la 0091 corrige un `revoke` que le faltaba a la 0088).
+  ✅ **Verificado contra una base real** (`supabase migration up`, sin
+  `db reset`) y a mano en el navegador con sesión real: dashboard, alta y
+  baja de un gasto, guardado del tarifario con su caso de error y de éxito.
+  **2028 tests en verde, 0 salteados.** De paso aparecieron y se corrigieron
+  3 hallazgos que sin base no se podían ver: una función `security definer`
+  sin `revoke` de PUBLIC, dos tablas nuevas sin auditar en la matriz RLS, y
+  un bug de huso horario mostrando fechas (`formatoFecha`, `lib/fechas.ts`).
+  Y a propósito **no** se tocaron: permisos por acción (hoy es rol→área
+  completa, cambiarlo toca las 51 Server Actions), CSRF propio (Next ya
+  protege el origen nativamente en Server Actions), facturación recurrente
+  con auto-cobro y el channel manager bidireccional real — las cuatro son
+  decisiones de negocio o de arquitectura mayor, no huecos de código que se
+  llenen en una pasada.
 - **1914 tests verdes** (118 archivos), **cero salteados**, verificados contra la base
   local con las **83** migraciones aplicadas en orden. El feed iCal de salida (B7,
   ADR 0022) entró junto con el relevamiento: su migración es la **0065** y no la
   0058 con la que nació, porque el número ya lo ocupaba la exención de IVA. Dos
   migraciones con el mismo número **no conviven**: Supabase registra la versión por
   el prefijo, da la segunda por aplicada y la saltea en silencio.
+- **Auditoría de calidad QA/UX (2026-09-09).** Relevamiento en vivo con
+  Playwright de accesibilidad, flujos, rendimiento e integridad de datos.
+  El hallazgo más grande, por volumen: **~53 lecturas de Supabase en páginas
+  del panel descartaban `{ error }`** — el mismo antipatrón que la Fase 20 ya
+  había cerrado del lado de las escrituras, pero nunca se había mirado del
+  lado de las lecturas. Todas quedaron cubiertas con `registrarFalla`, y
+  donde el dato es crítico para una decisión de dinero o de disponibilidad
+  (el dashboard, la ficha de reserva, el tarifario, el punto de venta, la
+  grilla de ocupación) se agregó además un aviso visible que distingue «cero
+  confirmado» de «no se pudo leer» — antes eran indistinguibles, y el caso
+  más caro era la alerta de overbooking de canal, que desaparecía sin avisar
+  si su propia lectura fallaba. Dos bugs de UI reales encontrados y
+  corregidos con test de regresión: fechas invertidas en el alta de
+  mostrador que dejaban la pantalla en blanco (`parsearBusquedaFechas()` en
+  `lib/domain/reservas.ts`), y un `<select>` con `w-full` más una etiqueta
+  `sr-only` que hacía arrastrar la página entera de costado en el teléfono.
+  De paso, corriendo la suite contra la base local, apareció un bug de
+  segundo orden en el propio test de auditoría de RLS: su seed de
+  `notas_credito` se saltaba en silencio si la reserva de prueba no tenía
+  factura propia, dejando esa fila de la matriz sin auditar de verdad. **2111
+  tests verdes** (137 archivos), 0 salteados. **Regla nueva a partir de
+  acá:** toda página nueva del panel que lea de Supabase revisa `{ error }`
+  con `registrarFalla`, igual que ya es obligatorio para las escrituras.
 - **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.
@@ -494,6 +593,18 @@ Tarifario 2025/2026 (Anexo A).
   - ⚠️ Un mensaje de error **no arregla la atomicidad**: en los flujos de varios
     pasos de `reservas`, si falla el paso 3 los datos quedan a medias. Está anotado
     en el código; resolverlo pide una función SQL transaccional.
+- **Lecturas de la base (auditoría QA/UX 2026-09-09) — OBLIGATORIO en toda
+  página nueva del panel:** *nunca descartar el error de un `select`.* La
+  Fase 20 ya exigía esto para escrituras; del lado de las lecturas había
+  **~53 pantallas** que solo tomaban `{ data }` y tiraban el `error`. El
+  problema no es solo el log perdido: una lectura fallida devuelve `data:
+  null`, que el código vacío (`?? []`) confunde con «no hay nada» — la
+  grilla de ocupación se veía toda libre, el punto de venta decía «no hay
+  nadie alojado hoy», la alerta de overbooking de canal desaparecía. Regla:
+  `registrarFalla(error, 'modulo:que_se_leyó')` siempre, sin condicional; y
+  cuando el dato es crítico para una decisión de dinero o de disponibilidad,
+  sumar un `<Mensaje tono="error">` visible que diga explícitamente «no se
+  pudo leer», nunca solo mostrar la pantalla vacía.
 - **Precios al público — OBLIGATORIO:** `tarifas.precio_rack` se guarda **sin
   IVA** (ADR 0004) y el checkout lo suma en `calcularEstadia`. Toda pantalla que
   le muestre un precio a un huésped tiene que pasarlo por `conIva()` de
