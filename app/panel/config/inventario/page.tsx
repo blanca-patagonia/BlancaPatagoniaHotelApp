@@ -1,25 +1,21 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { llevaStock, stockBajo, faltantes as articulosFaltantes } from '@/lib/domain/inventario'
+import { llevaStock, faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
-import { importe } from '@/lib/domain/moneda'
 import { registrarFalla } from '@/lib/acciones'
-import { reponerStock, crearProducto, alternarProducto } from '../actions'
+import { crearProducto } from '../actions'
+import { FilaProducto } from '../fila-producto'
 import {
   CAMPO,
   Campo,
   Encabezado,
   EstadoVacio,
-  Etiqueta,
-  FILA,
   Kpi,
   Mensaje,
-  TD,
   TH,
   Tabla,
   Tarjeta,
-  botonClases,
   Pagina,
 } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
@@ -115,78 +111,9 @@ export default async function InventarioPage({
               </tr>
             </thead>
             <tbody>
-              {inventario.map((p) => {
-                // Un servicio (una excursión, un traslado) no lleva stock: la
-                // columna viene en null. Las dos reglas salen del dominio.
-                const controla = llevaStock(p)
-                const bajo = stockBajo(p)
-                return (
-                  <tr key={p.id} className={`${FILA} ${p.activo ? '' : 'opacity-50'}`}>
-                    <td className={`${TD} font-medium text-stone-800`}>{p.nombre}</td>
-                    <td className={`${TD} text-stone-500 capitalize`}>{p.categoria}</td>
-                    <td className={`${TD} tabular text-right text-stone-700`}>
-                      {importe(Number(p.precio))}
-                    </td>
-                    <td className={`${TD} tabular text-right`}>
-                      {controla ? (
-                        <>
-                          <span className={bajo ? 'font-semibold text-red-600' : 'text-stone-800'}>
-                            {p.stock}
-                          </span>
-                          <span className="ml-1 text-xs text-stone-600">
-                            / mín. {p.stock_minimo ?? 0}
-                          </span>
-                          {bajo && (
-                            <span className="ml-2">
-                              <Etiqueta tono="peligro">bajo</Etiqueta>
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-stone-600">servicio</span>
-                      )}
-                    </td>
-                    <td className={TD}>
-                      {p.activo ? (
-                        <Etiqueta tono="exito">Activo</Etiqueta>
-                      ) : (
-                        <Etiqueta tono="neutro">Inactivo</Etiqueta>
-                      )}
-                    </td>
-                    {puedeEditar && (
-                      <td className={TD}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {controla && (
-                            <form action={reponerStock} className="flex items-center gap-1">
-                              <input type="hidden" name="producto_id" value={p.id} />
-                              <input
-                                name="cantidad"
-                                type="number"
-                                min="1"
-                                defaultValue={12}
-                                aria-label={`Unidades a reponer de ${p.nombre}`}
-                                className="tabular w-16 rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none"
-                              />
-                              <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
-                                + Reponer
-                              </button>
-                            </form>
-                          )}
-                          {/* Se desactiva en lugar de borrar: los consumos ya
-                              cargados siguen apuntando al producto. */}
-                          <form action={alternarProducto}>
-                            <input type="hidden" name="producto_id" value={p.id} />
-                            <input type="hidden" name="activo" value={String(p.activo)} />
-                            <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
-                              {p.activo ? 'Desactivar' : 'Activar'}
-                            </button>
-                          </form>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
+              {inventario.map((p) => (
+                <FilaProducto key={p.id} producto={p} puedeEditar={puedeEditar} />
+              ))}
             </tbody>
           </Tabla>
         )}

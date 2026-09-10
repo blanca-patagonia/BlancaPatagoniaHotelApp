@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { terminoBusqueda } from '@/lib/listados'
+import { registrarFalla } from '@/lib/acciones'
 import {
   BarraHerramientas,
   Buscador,
@@ -105,7 +106,11 @@ export default async function AvisosPage({
   const termino = terminoBusqueda(q)
   if (termino) consulta = consulta.ilike('mensaje', `%${termino}%`)
 
-  const { data } = await consulta
+  const { data, error: eAvisos } = await consulta
+  // Sin esto, un aviso que se publicó bien pero que esta lectura no pudo traer
+  // (columna sin migrar, corte de red) se ve igual que «no hay avisos»: quien
+  // acaba de escribir uno lo ve desaparecer y no tiene forma de saber por qué.
+  if (eAvisos) registrarFalla(eAvisos, 'avisos:listado')
   const avisos = (data ?? []) as unknown as Aviso[]
   const fijados = avisos.filter((a) => a.fijado).length
 
@@ -121,6 +126,15 @@ export default async function AvisosPage({
         <div className="mb-4">
           <Mensaje tono="error">
             {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
+
+      {eAvisos && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            No se pudo leer el tablón. Puede haber avisos que no se ven acá, incluido uno que
+            acabás de publicar — probá recargar la página.
           </Mensaje>
         </div>
       )}

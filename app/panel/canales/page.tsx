@@ -35,6 +35,7 @@ import {
   TH,
   Tabla,
   Tarjeta,
+  botonClases,
 } from '../_components/ui'
 import { ImportarCsv } from './importar-csv'
 import { ImportarResenas } from './importar-resenas'
@@ -654,14 +655,21 @@ export default async function CanalesPage({
         descripcion="Reservas, mensajes y reseñas que llegan de Booking."
         icono="canales"
         acciones={
-          capacidades.traeReservas ? (
-            <form action={sincronizarCanal}>
-              <BotonEnvio variante="secundario" cargando="Sincronizando…">
-                <Icono nombre="siguiente" tam={16} />
-                Sincronizar ahora
-              </BotonEnvio>
-            </form>
-          ) : null
+          <>
+            {(sesion.rol === 'admin' || sesion.rol === 'gerencia') && (
+              <Link href="/panel/canales/externos" className={botonClases('secundario')}>
+                Channel managers
+              </Link>
+            )}
+            {capacidades.traeReservas && (
+              <form action={sincronizarCanal}>
+                <BotonEnvio variante="secundario" cargando="Sincronizando…">
+                  <Icono nombre="siguiente" tam={16} />
+                  Sincronizar ahora
+                </BotonEnvio>
+              </form>
+            )}
+          </>
         }
       />
 

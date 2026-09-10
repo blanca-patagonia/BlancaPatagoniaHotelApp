@@ -341,7 +341,7 @@ export default async function MantenimientoPage({
                   ) : pronto ? (
                     <Etiqueta tono="alerta">En {dias} días</Etiqueta>
                   ) : (
-                    <Etiqueta tono="neutro">En {dias} días</Etiqueta>
+                    <Etiqueta tono="exito">Al día · en {dias} días</Etiqueta>
                   )}
                   <form action={marcarPlanHecho}>
                     <input type="hidden" name="id" value={p.id} />

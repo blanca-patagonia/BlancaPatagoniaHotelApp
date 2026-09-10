@@ -236,6 +236,50 @@ describe('catálogo de avisos', () => {
     expect(r.cuerpoHtml).toContain('<strong>tu reserva está confirmada</strong>')
     expect(r.cuerpoHtml).toContain('Ana')
   })
+
+  /*
+    Plantillas editables desde el panel (migración 0097, `plantillas_email`):
+    `lib/domain/plantillas.ts` sigue siendo puro y no sabe leer la base, así que
+    el override llega ya resuelto como parámetro. Estos tests cubren esa
+    prioridad sin pasar por Supabase.
+  */
+  it('usa el override de asunto/cuerpo cuando viene', () => {
+    const r = renderizar(
+      'confirmacion_reserva',
+      { nombre: 'Ana', codigo: 'BP-1', enlace: 'https://x.com', total: 'USD 1' },
+      { asunto: 'Asunto editado {{codigo}}', cuerpo: 'Hola {{nombre}}, texto editado.' },
+    )
+    expect(r.asunto).toBe('Asunto editado BP-1')
+    expect(r.cuerpo).toBe('Hola Ana, texto editado.')
+  })
+
+  it('sin override, usa el texto original de PLANTILLAS', () => {
+    const sinOverride = renderizar('confirmacion_reserva', {
+      nombre: 'Ana',
+      codigo: 'BP-1',
+      enlace: 'https://x.com',
+      total: 'USD 1',
+    })
+    const conOverrideVacio = renderizar(
+      'confirmacion_reserva',
+      { nombre: 'Ana', codigo: 'BP-1', enlace: 'https://x.com', total: 'USD 1' },
+      { asunto: null, cuerpo: null },
+    )
+    expect(conOverrideVacio.asunto).toBe(sinOverride.asunto)
+    expect(conOverrideVacio.cuerpo).toBe(sinOverride.cuerpo)
+  })
+
+  it('variables/opcionales del override siguen viniendo del catálogo, no se editan', () => {
+    // Si el texto editado deja afuera un marcador obligatorio, `faltantes` lo
+    // sigue marcando: el contrato de qué datos hacen falta no cambia con el
+    // contenido.
+    const r = renderizar(
+      'confirmacion_reserva',
+      { nombre: 'Ana' },
+      { asunto: 'Aviso', cuerpo: 'Sin marcadores del todo.' },
+    )
+    expect(r.faltantes).toContain('codigo')
+  })
 })
 
 /*

@@ -3,6 +3,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda } from '@/lib/listados'
 import { fechaHoraHotel, hoyISO } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
 import {
   BarraHerramientas,
   Buscador,
@@ -12,6 +13,7 @@ import {
   Etiqueta,
   FILA,
   Kpi,
+  Mensaje,
   Paginacion,
   TD,
   TH,
@@ -87,17 +89,23 @@ export default async function ErroresPage({
   // sintaxis del filtro. `patronOr()` haría falta solo dentro de un `.or()`.
   if (termino) consulta = consulta.ilike('evento', `%${termino}%`)
 
-  const { data, count } = await consulta.range(desde, hasta)
+  const { data, count, error: eRegistros } = await consulta.range(desde, hasta)
+  // Ni siquiera esta pantalla está exenta de la regla: si la lectura falla, se
+  // registra igual (con `catch` interno, no reentra en un loop) y se avisa,
+  // en vez de mostrar «no hay errores registrados» — que es la peor mentira
+  // posible acá.
+  if (eRegistros) registrarFalla(eRegistros, 'errores:listado')
   const registros = (data ?? []) as Registro[]
   const total = count ?? 0
 
   // Cuántos hoy: es el número que dice si hay algo pasando AHORA, que es la
   // pregunta que trae a alguien a esta pantalla. `hoyISO()` resuelve en la zona
   // del hotel, no en UTC (ver `lib/fechas.ts`).
-  const { count: deHoy } = await supabase
+  const { count: deHoy, error: eDeHoy } = await supabase
     .from('errores')
     .select('id', { count: 'exact', head: true })
     .gte('creado_en', `${hoyISO()}T00:00:00-03:00`)
+  if (eDeHoy) registrarFalla(eDeHoy, 'errores:conteo_hoy')
 
   const filtros = { nivel, q: sp.q }
 
@@ -108,6 +116,12 @@ export default async function ErroresPage({
         descripcion="Qué falló, cuándo y en qué pantalla. Se borra solo a los 90 días."
         icono="alerta"
       />
+
+      {eRegistros && (
+        <Mensaje tono="error">
+          No se pudo leer el listado de errores. Puede haber más de lo que se ve acá abajo.
+        </Mensaje>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="En el filtro" valor={String(total)} detalle="registros" icono="alerta" />

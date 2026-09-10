@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
+import { obtenerDolarBlueInformativo } from '@/lib/divisas'
 import {
   DESCRIPCION_FUENTE,
   ETIQUETAS_FUENTE,
@@ -64,7 +65,7 @@ function tonos(c: CotizacionVigente) {
 }
 
 export async function WidgetCotizacion() {
-  const c = await cotizacionVigente('ARS')
+  const [c, blue] = await Promise.all([cotizacionVigente('ARS'), obtenerDolarBlueInformativo()])
 
   // Sin ninguna cotización utilizable no se muestra un error: se dice qué implica.
   // El USD es la moneda base del sistema (ADR 0003), así que operar sin
@@ -114,6 +115,17 @@ export async function WidgetCotizacion() {
           <p className="tabular mt-1 text-xs text-stone-500">
             venta · compra {formatearLocal(c.compra, 'ARS')}
           </p>
+
+          {/* Solo informativo: lo que se cobra según el Tarifario es SIEMPRE
+              el oficial de arriba (ADR 0020). Este número no alimenta ningún
+              cálculo, es para que quien mira el tablero tenga el dato a mano. */}
+          {blue && (
+            <p className="tabular mt-1.5 text-xs text-stone-500">
+              Blue: {formatearLocal(blue.venta, 'ARS')}
+              <span className="text-stone-400"> venta · {formatearLocal(blue.compra, 'ARS')} compra</span>
+              <span className="ml-1 text-stone-400">(no se cobra a este valor)</span>
+            </p>
+          )}
         </div>
 
         <Link

@@ -15,6 +15,7 @@ import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
  */
 
 import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { ProveedorResend } from './resend'
 
 export interface MensajeEmail {
@@ -116,10 +117,32 @@ export function obtenerProveedorEmail(
 }
 
 /**
+ * Trae el override de asunto/cuerpo de `plantillas_email` (migración 0097),
+ * si alguien lo editó desde el panel.
+ *
+ * Por `crearClienteAdmin()` y no el cliente del usuario: `enviarPlantilla` se
+ * llama también desde cron y webhooks, donde no hay sesión ni cookies. El
+ * contenido de una plantilla no es un dato sensible por rol — la RLS de la
+ * tabla ya deja leerla a cualquier staff, esto solo evita depender de que
+ * haya una petición HTTP con sesión detrás.
+ */
+async function obtenerOverridePlantilla(
+  evento: EventoEmail,
+): Promise<{ asunto: string | null; cuerpo: string | null } | null> {
+  const { data } = await crearClienteAdmin()
+    .from('plantillas_email')
+    .select('asunto, cuerpo')
+    .eq('evento', evento)
+    .maybeSingle()
+  return data
+}
+
+/**
  * Renderiza una plantilla y la envía.
  *
  * Es el único punto por el que salen las comunicaciones al huésped: así el
- * texto siempre viene del catálogo de plantillas y nunca se arma a mano.
+ * texto siempre viene del catálogo de plantillas (o de su override editado
+ * desde el panel) y nunca se arma a mano.
  */
 export async function enviarPlantilla(
   evento: EventoEmail,
@@ -128,7 +151,8 @@ export async function enviarPlantilla(
 ): Promise<ResultadoEnvio> {
   if (!para) return { ok: false, detalle: 'El destinatario no tiene email cargado.' }
 
-  const { asunto, cuerpo, cuerpoHtml, faltantes } = renderizar(evento, variables)
+  const override = await obtenerOverridePlantilla(evento)
+  const { asunto, cuerpo, cuerpoHtml, faltantes } = renderizar(evento, variables, override ?? undefined)
   if (faltantes.length > 0) {
     return {
       ok: false,

@@ -94,6 +94,7 @@ export default async function DashboardPage() {
     { count: conflictosCanal, error: eConflictos },
     { data: stockBajo, error: eStock },
     { data: comprobantes, error: eComprobantes },
+    { count: avisosFijados, error: eAvisos },
   ] = await Promise.all([
     supabase.from('unidades').select('estado').eq('activo', true),
     supabase
@@ -142,6 +143,10 @@ export default async function DashboardPage() {
       .select('tipo, monto, estado, vencimiento')
       .eq('tipo', 'cargo')
       .in('estado', ['pendiente', 'vencido']),
+    // Avisos fijados por el equipo: son los que alguien marcó a propósito
+    // como «esto hay que verlo», a diferencia del resto del tablón que se lee
+    // por orden cronológico.
+    supabase.from('avisos').select('*', { count: 'exact', head: true }).eq('fijado', true),
   ])
 
   /*
@@ -165,6 +170,7 @@ export default async function DashboardPage() {
   registrarFalla(eConflictos, 'dashboard:conflictos_canal')
   registrarFalla(eStock, 'dashboard:stock_bajo')
   registrarFalla(eComprobantes, 'dashboard:comprobantes_proveedor')
+  registrarFalla(eAvisos, 'dashboard:avisos_fijados')
 
   /** `null` cuando la lectura fallida no puede distinguirse de «no hay ninguno». */
   const kpi = (valor: number | null, huboError: unknown): string =>
@@ -247,6 +253,13 @@ export default async function DashboardPage() {
       icono: 'objetos' as NombreIcono,
       cantidad: objetosGuardados ?? 0,
       texto: objetosGuardados === 1 ? 'objeto perdido guardado' : 'objetos perdidos guardados',
+    },
+    {
+      area: 'avisos' as Area,
+      href: '/panel/avisos',
+      icono: 'avisos' as NombreIcono,
+      cantidad: avisosFijados ?? 0,
+      texto: avisosFijados === 1 ? 'aviso fijado por el equipo' : 'avisos fijados por el equipo',
     },
   ]
     .filter((p) => p.cantidad > 0 && puede(p.area))
