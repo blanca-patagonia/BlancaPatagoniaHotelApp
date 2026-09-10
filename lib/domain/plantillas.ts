@@ -640,15 +640,24 @@ export function variablesFaltantes(
  * Los marcadores sin valor se dejan visibles (`{{nombre}}`) en lugar de quedar
  * vacíos: es preferible que un error se note antes de enviar y no que el
  * huésped reciba «Hola ,».
+ *
+ * `override` es el asunto/cuerpo editado desde el panel
+ * (`plantillas_email`, migración 0097) — este módulo es puro y no sabe leer
+ * la base, así que quien llama (`lib/email`) lo trae resuelto. `variables` y
+ * `opcionales` siguen saliendo SIEMPRE del catálogo de código: son el
+ * contrato de qué datos hacen falta, y ese contrato no se edita desde acá.
  */
 export function renderizar(
   evento: EventoEmail,
   variables: Record<string, string | number>,
+  override?: { asunto?: string | null; cuerpo?: string | null },
 ): EmailRenderizado {
   const plantilla = PLANTILLAS[evento]
-  const cuerpo = reemplazar(plantilla.cuerpo, variables, plantilla.opcionales)
+  const asuntoFuente = override?.asunto ?? plantilla.asunto
+  const cuerpoFuente = override?.cuerpo ?? plantilla.cuerpo
+  const cuerpo = reemplazar(cuerpoFuente, variables, plantilla.opcionales)
   return {
-    asunto: reemplazar(plantilla.asunto, variables, plantilla.opcionales),
+    asunto: reemplazar(asuntoFuente, variables, plantilla.opcionales),
     cuerpo,
     cuerpoHtml: textoAHtml(cuerpo),
     faltantes: variablesFaltantes(plantilla, variables),

@@ -67,6 +67,11 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   departamentos: { todos: 'si' },
   puntos_venta: { todos: 'si' },
   planes_mantenimiento: { todos: 'si' },
+  // Override editable del asunto/cuerpo de una plantilla (migración 0097). Mismo
+  // criterio que `planes_mantenimiento`: cualquiera del staff puede necesitar ver
+  // qué dice el correo que le llega a un huésped; la escritura queda acotada en
+  // la acción del panel (`requerirRol('admin', 'gerencia')`), no en esta lectura.
+  plantillas_email: { todos: 'si' },
 
   // ── El tarifario: precio neto de agencia ──
   // Lo lee todo el staff; el borde que importa es que `anon` NO pueda, y eso ya lo

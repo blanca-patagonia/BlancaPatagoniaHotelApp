@@ -155,6 +155,47 @@ export async function crearProducto(formData: FormData): Promise<void> {
   redirect(error ? '/panel/config/inventario?error=producto' : '/panel/config/inventario?ok=producto')
 }
 
+export interface EstadoProducto {
+  error?: string
+  ok?: string
+}
+
+/**
+ * Edita nombre, categoría y precio de un producto ya cargado.
+ *
+ * Antes solo se podía dar de alta uno nuevo: un precio mal cargado o un typo
+ * en el nombre («Cocacola» en vez de «Coca-Cola») quedaba así para siempre, o
+ * había que desactivarlo y crear otro —perdiendo el historial de consumos
+ * que ya lo referencian, porque `consumos.producto_id` sigue apuntando al
+ * viejo—. El `codigo` no se toca: es la clave estable que usan los consumos
+ * ya cargados y el punto de venta.
+ */
+export async function editarProducto(
+  _prev: EstadoProducto,
+  formData: FormData,
+): Promise<EstadoProducto> {
+  await requerirAcceso('config')
+
+  const id = String(formData.get('id') ?? '')
+  const nombre = String(formData.get('nombre') ?? '').trim()
+  const categoria = String(formData.get('categoria') ?? '')
+  const precio = Number(formData.get('precio'))
+
+  if (!id) return { error: 'Falta el producto a editar.' }
+  if (!nombre) return { error: 'Ingresá un nombre.' }
+  if (!Number.isFinite(precio) || precio < 0) return { error: 'El precio tiene que ser un número positivo.' }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('productos_servicios')
+    .update({ nombre, categoria, precio })
+    .eq('id', id)
+  if (error) return { error: `No se pudo guardar: ${error.message}` }
+
+  revalidatePath('/panel/config/inventario')
+  return { ok: 'Producto actualizado.' }
+}
+
 /** Activa o desactiva un producto sin borrarlo (conserva el historial de consumos). */
 export async function alternarProducto(formData: FormData): Promise<void> {
   await requerirAcceso('config')

@@ -1,10 +1,18 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
+import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
 import { obtenerProveedorEmail } from '@/lib/email'
 import { enviarPlantillaPrueba } from '../plantillas-actions'
+import { PlantillaEditable } from '../plantilla-editable'
 import { CAMPO, Campo, Encabezado, Mensaje, Pagina, Tarjeta } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
+
+interface OverridePlantilla {
+  asunto: string | null
+  cuerpo: string | null
+}
 
 /** Datos de muestra para previsualizar cada plantilla. */
 const MUESTRA = {
@@ -35,6 +43,15 @@ export default async function PlantillasPage({
   const puedeEditar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
   const proveedorEmail = obtenerProveedorEmail()
 
+  const supabase = await crearClienteServidor()
+  const { data: overridesData, error: eOverrides } = await supabase
+    .from('plantillas_email')
+    .select('evento, asunto, cuerpo')
+  if (eOverrides) registrarFalla(eOverrides, 'config:plantillas')
+  const overrides = new Map<string, OverridePlantilla>(
+    (overridesData ?? []).map((o) => [o.evento as string, o as OverridePlantilla]),
+  )
+
   return (
     <Pagina>
       <Link
@@ -58,12 +75,19 @@ export default async function PlantillasPage({
         <Mensaje tono="error">{sp.detalle ?? MENSAJES_ERROR[sp.error] ?? 'No se pudo enviar.'}</Mensaje>
       )}
       {sp.ok === 'envio' && <Mensaje tono="ok">{sp.detalle ?? 'Correo procesado.'}</Mensaje>}
+      {eOverrides && (
+        <Mensaje tono="error">
+          No se pudo leer qué plantillas están editadas — puede mostrarse el texto original de
+          alguna que en realidad tiene un cambio guardado.
+        </Mensaje>
+      )}
 
       <Tarjeta>
         <div className="flex flex-col gap-3 p-5">
           {EVENTOS_EMAIL.map((evento) => {
             const plantilla = PLANTILLAS[evento]
-            const vista = renderizar(evento, MUESTRA)
+            const override = overrides.get(evento)
+            const vista = renderizar(evento, MUESTRA, override)
             return (
               <div
                 key={evento}
@@ -119,6 +143,14 @@ export default async function PlantillasPage({
                     </BotonEnvio>
                   </form>
                 )}
+
+                <PlantillaEditable
+                  evento={evento}
+                  asuntoFuente={override?.asunto ?? plantilla.asunto}
+                  cuerpoFuente={override?.cuerpo ?? plantilla.cuerpo}
+                  editada={Boolean(override)}
+                  puedeEditar={puedeEditar}
+                />
               </div>
             )
           })}

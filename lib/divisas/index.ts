@@ -244,6 +244,31 @@ class ProveedorDolarApi implements CotizacionProvider {
   }
 }
 
+/**
+ * Dólar blue, SOLO informativo (dashboard).
+ *
+ * Deliberadamente por fuera de `CotizacionProvider`/`resolverVigente`: el
+ * Tarifario dice que se cobra al oficial (ADR 0020), y mezclar el blue en esa
+ * cadena de respaldo —pensada para no dejar una reserva sin cotizar— abriría
+ * la puerta a que algún día se cobre sin querer al blue. Esta función no se
+ * persiste, no tiene caché ni reintento: si falla, el dashboard simplemente no
+ * muestra el dato, sin degradar nada que dependa de cobrar.
+ */
+export async function obtenerDolarBlueInformativo(): Promise<{
+  compra: number
+  venta: number
+} | null> {
+  const j = await traerJson(`${DOLARAPI_BASE}/dolares/blue`, 'dolarapi-blue')
+  if (!j || typeof j !== 'object') return null
+
+  const d = j as Record<string, unknown>
+  const compra = numero(d.compra)
+  const venta = numero(d.venta)
+  if (!(compra > 0) || !(venta > 0)) return null
+
+  return { compra, venta }
+}
+
 /* ────────────────────────────────────────────────────── ArgentinaDatos ──── */
 
 const ARGENTINADATOS_BASE =
