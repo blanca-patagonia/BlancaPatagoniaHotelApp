@@ -81,6 +81,20 @@ export default async function PlantillasPage({
                   <p className="text-sm font-medium text-stone-800">{vista.asunto}</p>
                   <p className="mt-3 text-xs tracking-wide text-stone-600 uppercase">Cuerpo (texto plano)</p>
                   <p className="mt-1 text-sm whitespace-pre-line text-stone-700">{vista.cuerpo}</p>
+                  <p className="mt-3 text-xs tracking-wide text-stone-600 uppercase">Vista HTML</p>
+                  {/*
+                    `sandbox` sin valor es la caja más chica que existe: ni scripts, ni
+                    formularios, ni same-origin. Es una vista previa, no contenido de
+                    confianza — el texto de origen viene de {{nombre}} y compañía, y
+                    aunque `textoAHtml` ya escapa antes de formatear, esta es la segunda
+                    barrera si algún día una plantilla nueva no pasa por ese camino.
+                  */}
+                  <iframe
+                    title={`Vista HTML — ${plantilla.nombre}`}
+                    srcDoc={vista.cuerpoHtml}
+                    sandbox=""
+                    className="mt-1 h-72 w-full rounded-lg border border-stone-200"
+                  />
                   <p className="mt-3 text-xs text-stone-600">
                     Variables: {plantilla.variables.join(', ')}
                   </p>
