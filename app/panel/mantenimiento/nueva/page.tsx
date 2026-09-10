@@ -3,6 +3,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
 import { FormularioOrden } from '../formulario'
+import { registrarFalla } from '@/lib/acciones'
 
 /** Alta de una orden de trabajo, en su propia pantalla. */
 export default async function NuevaOrdenPage({
@@ -14,11 +15,12 @@ export default async function NuevaOrdenPage({
   const sp = await searchParams
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('unidades')
     .select('id, nombre')
     .eq('activo', true)
     .order('nombre')
+  registrarFalla(error, 'mantenimiento:nueva_unidades')
 
   const unidades = (data ?? []) as { id: string; nombre: string }[]
 

@@ -572,6 +572,100 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       expect(r.valores?.doc_numero).toBe('30111222')
       expect(r.valores?.canal).toBe('booking')
     })
+
+    it('respeta la unidad puntual elegida a mano (walk-in)', async () => {
+      const { desde, hasta } = await fechasConTarifa()
+      // Se toma de `unidades_disponibles` (la misma función que usa la
+      // pantalla) en vez de la primera fila de `unidades_unidad`: otro test de
+      // este archivo ya pudo haber ocupado la primera unidad del primer tipo
+      // para las mismas fechas, y `.limit(1)` ciego habría elegido una que ya
+      // no está libre.
+      const { data: libres } = await ctx.db.rpc('unidades_disponibles', {
+        desde,
+        hasta,
+        p_categoria: null,
+      })
+      const unidad = (libres as { id: string; tipo_unidad_id: string }[])[0]
+
+      const destino = await destinoDe(() =>
+        crearReservaAction(
+          {},
+          formulario({
+            tipo_unidad_id: unidad.tipo_unidad_id,
+            unidad_id: unidad.id,
+            check_in: desde,
+            check_out: hasta,
+            huespedes: 1,
+            apellido: `UnidadPuntual-${ctx.sufijo}`,
+            canal: 'directo',
+          }),
+        ),
+      )
+      expect(destino, 'el alta no redirigió a la reserva creada').toMatch(
+        /^\/panel\/reservas\/[0-9a-f-]{36}$/,
+      )
+
+      const reservaId = destino.split('/').pop()!
+      const { data: est } = await ctx.db
+        .from('estadias')
+        .select('unidad_id')
+        .eq('reserva_id', reservaId)
+        .single()
+
+      const { data: reservaCreada } = await ctx.db
+        .from('reservas')
+        .select('huesped_id')
+        .eq('id', reservaId)
+        .single()
+      ctx.aBorrar.push({ tabla: 'huespedes', id: (reservaCreada as { huesped_id: string }).huesped_id })
+      ctx.aBorrar.push({ tabla: 'reservas', id: reservaId })
+
+      // El punto del test: no cualquier unidad libre del tipo, la QUE se pidió.
+      expect((est as { unidad_id: string }).unidad_id).toBe(unidad.id)
+    })
+
+    it('marca in_house de una vez con "check-in inmediato"', async () => {
+      const { desde, hasta } = await fechasConTarifa()
+      // Un tipo con unidad libre de verdad para estas fechas: otro test del
+      // archivo pudo haber ocupado la primera unidad del primer tipo, y un
+      // `.limit(1)` ciego elegiría una que ya no está libre (ver el test de
+      // arriba).
+      const { data: libres } = await ctx.db.rpc('unidades_disponibles', {
+        desde,
+        hasta,
+        p_categoria: null,
+      })
+      const unidad = (libres as { id: string; tipo_unidad_id: string }[])[0]
+
+      const destino = await destinoDe(() =>
+        crearReservaAction(
+          {},
+          formulario({
+            tipo_unidad_id: unidad.tipo_unidad_id,
+            check_in: desde,
+            check_out: hasta,
+            huespedes: 1,
+            apellido: `CheckinYa-${ctx.sufijo}`,
+            canal: 'directo',
+            checkin_inmediato: '1',
+          }),
+        ),
+      )
+      expect(destino, 'el alta no redirigió a la reserva creada').toMatch(
+        /^\/panel\/reservas\/[0-9a-f-]{36}$/,
+      )
+
+      const reservaId = destino.split('/').pop()!
+      const { data } = await ctx.db.from('reservas').select('estado, huesped_id').eq('id', reservaId).single()
+      const r = data as { estado: string; huesped_id: string }
+      ctx.aBorrar.push({ tabla: 'huespedes', id: r.huesped_id })
+      ctx.aBorrar.push({ tabla: 'reservas', id: reservaId })
+
+      // Sin el checkbox, una reserva de mostrador nace `confirmada` (ver el
+      // primer test de este describe): el punto acá es que salta directo a
+      // `in_house` sin pasar por la ficha para un segundo clic.
+      expect(r.estado).toBe('in_house')
+    })
   })
 
   describe('cambiarEstadoReserva', () => {

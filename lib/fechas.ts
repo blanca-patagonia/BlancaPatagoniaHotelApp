@@ -145,6 +145,22 @@ export function formatoFechaCorta(iso: string): string {
   return `${d}/${m}`
 }
 
+/**
+ * `DD/MM/AAAA` de una fecha (columna `date`, sin hora), con el año.
+ *
+ * Por texto, no por `Date` — mismo motivo que `formatoFechaCorta`. Una
+ * columna `date` de Postgres llega como `"2026-09-09"`, sin hora. Pasarla por
+ * `fechaHotel` (que arma `new Date(iso)`) la interpreta como medianoche UTC, y
+ * en `America/Argentina/Rio_Gallegos` (UTC-3) eso cae en el día ANTERIOR: un
+ * gasto cargado el 9 se mostraba como del 8. `formatoFechaCorta` ya evitaba
+ * esto para `DD/MM`; esta es la misma idea para cuando además hace falta el
+ * año (un listado que puede acumular más de un año de filas).
+ */
+export function formatoFecha(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
 /** ¿La fecha `dia` cae dentro del período `[desde, hasta)`? */
 export function contieneDia(p: Periodo, dia: string): boolean {
   return dia >= p.desde && dia < p.hasta

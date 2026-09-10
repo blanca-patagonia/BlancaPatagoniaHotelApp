@@ -83,7 +83,7 @@ export async function WidgetCotizacion() {
               sistema.
             </p>
             <Link
-              href="/panel/config#divisas"
+              href="/panel/config/divisas"
               className="mt-2 inline-block text-xs font-medium text-lago-700 hover:underline"
             >
               Cargar una a mano
@@ -117,7 +117,7 @@ export async function WidgetCotizacion() {
         </div>
 
         <Link
-          href="/panel/config#divisas"
+          href="/panel/config/divisas"
           className="shrink-0 text-xs font-medium text-lago-700 hover:underline"
         >
           Ajustar

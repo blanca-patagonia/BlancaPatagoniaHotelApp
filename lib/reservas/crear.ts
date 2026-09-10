@@ -43,6 +43,15 @@ export interface ParamsReserva {
   noMover?: boolean
 
   /**
+   * Unidad física puntual, si recepción la eligió a mano (walk-in — patrón de
+   * QloApps `AdminHotelRoomsBookingController`, que deja elegir habitación
+   * además de tipo). Sin esto se asigna la primera libre del tipo, que es lo
+   * único que necesita el portal público: ahí nadie elige entre la Cabaña 3 y
+   * la 4, así que el parámetro es opcional y no le llega.
+   */
+  unidadId?: string
+
+  /**
    * Agencia con convenio, si la reserva es de una.
    *
    * Viaja acá y **no** en un `update` posterior (auditoría 2026-09, P1-7). No es
@@ -92,11 +101,21 @@ export async function crearReservaEnUnidadLibre(
     registrarFalla(eLibres, 'consulta de unidades libres al crear una reserva')
     return { ok: false, error: 'No se pudo consultar la disponibilidad. Volvé a intentar.' }
   }
-  const unidad = ((libres ?? []) as { id: string; tipo_unidad_id: string }[]).find(
+  const delTipo = ((libres ?? []) as { id: string; tipo_unidad_id: string }[]).filter(
     (u) => u.tipo_unidad_id === p.tipoUnidadId,
   )
+  // Con `unidadId` se busca esa unidad puntual entre las libres: pudo ocuparse
+  // entre que recepción la vio libre en pantalla y confirmó el alta. Sin él, se
+  // toma la primera del tipo (comportamiento histórico, el único que usa el
+  // portal público).
+  const unidad = p.unidadId ? delTipo.find((u) => u.id === p.unidadId) : delTipo[0]
   if (!unidad) {
-    return { ok: false, error: 'No hay unidades disponibles de ese tipo para esas fechas.' }
+    return {
+      ok: false,
+      error: p.unidadId
+        ? 'Esa unidad ya no está disponible para esas fechas. Elegí otra.'
+        : 'No hay unidades disponibles de ese tipo para esas fechas.',
+    }
   }
 
   // 2) Cotizar según el canal.

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { mesActual } from '@/lib/fechas'
 import { etiquetaMes } from '@/lib/domain/metricas'
@@ -86,6 +87,13 @@ export default async function InformeCanalesPage({
 
   return (
     <Pagina>
+      <Link
+        href="/panel/reportes"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a reportes
+      </Link>
+
       <Encabezado
         titulo="Rentabilidad por canal"
         descripcion={`Qué deja cada canal en ${etiquetaMes(mes)}, después de su comisión.`}

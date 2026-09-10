@@ -42,6 +42,14 @@ export default async function ConfirmacionPage({
   const periodo = estadia ? parsearPeriodo(estadia.periodo) : null
   const noches = periodo ? diasEntre(periodo.desde, periodo.hasta) : 0
 
+  // Solo se ofrece el enlace si ya hay algo que mostrar: antes del check-out
+  // no existe factura, y un botón que lleva a una pantalla vacía es peor que
+  // no tener botón.
+  const { count: tieneFactura } = await admin
+    .from('facturas')
+    .select('*', { count: 'exact', head: true })
+    .eq('reserva_id', reserva.id)
+
   // El estado de cobro sale de la base, no de la vuelta de la pasarela: la URL
   // de retorno de un checkout se puede abrir a mano sin haber pagado nada.
   // Quien confirma un cobro es el webhook, y esto lee lo que él escribió.
@@ -120,6 +128,11 @@ export default async function ConfirmacionPage({
           <EstadoDePago token={token} reserva={reserva} cobro={cobro} />
 
           <div className="mt-5 flex flex-wrap gap-2">
+            {Boolean(tieneFactura) && (
+              <Link href={`/reservar/factura/${token}`} className={botonPublico('secundario')}>
+                Ver mi factura
+              </Link>
+            )}
             <Link href="/" className={botonPublico('secundario')}>
               Volver al inicio
             </Link>

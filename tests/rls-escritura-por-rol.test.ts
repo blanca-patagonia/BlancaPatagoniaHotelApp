@@ -613,6 +613,100 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
     await noPuedeActualizar(comoAnon(), 'tarifas', data!.id, { precio_rack: 1 })
   })
 
+  // ── 5. Credenciales de terceros, integridad de estadías y datos personales ──
+  //
+  // Auditoría de calidad 2026-09-09: al medir la cobertura real de este archivo
+  // contra `pg_policies` (112 políticas, 49 tablas con alguna política de
+  // escritura) aparecieron 39 tablas con política de escritura y CERO caso acá.
+  // No se cubren las 39 —el propio criterio de este archivo es por consecuencia,
+  // no por cobertura, y la mayoría son catálogo de bajo riesgo (`promociones`,
+  // `temporadas`...)—, pero estas tres SÍ entran en las categorías que el
+  // archivo ya declara importantes: credenciales de terceros, integridad de
+  // `estadias` (la tabla del anti-overbooking) y datos personales.
+
+  it('recepcion NO puede escribir una conexión con un proveedor externo', async () => {
+    // `conexiones_proveedores` (migración 0096) guarda tokens de OAuth2
+    // CIFRADOS de la cuenta real de Mercado Pago o de Google del hotel. Es
+    // `admin`/`gerencia` exclusivo — igual que la lectura (ver la matriz de
+    // `rls-por-rol.test.ts`) pero acá importa más: escribir es lo que deja
+    // conectar o desconectar una cuenta de cobro real.
+    await noPuedeInsertar(usuarios.recepcion, 'conexiones_proveedores', {
+      proveedor: 'mercadopago',
+      tipo_conexion: 'oauth2',
+    })
+  })
+
+  it('housekeeping NO puede escribir una conexión con un proveedor externo', async () => {
+    await noPuedeInsertar(usuarios.housekeeping, 'conexiones_proveedores', {
+      proveedor: 'google_mail',
+      tipo_conexion: 'oauth2',
+    })
+  })
+
+  it('housekeeping NO puede modificar el período de una estadía', async () => {
+    // `estadias.periodo` es la columna que protege la restricción de exclusión
+    // GiST del ADR 0002. La política de escritura es `admin/gerencia/recepcion`
+    // —housekeeping queda afuera a propósito, porque no gestiona fechas de
+    // estadía, solo el estado de limpieza de la unidad (ya cubierto arriba)—.
+    //
+    // La estadía se crea acá con `crear_reserva` (único camino que las hace
+    // nacer) en vez de tomar una preexistente: en un CI limpio no hay ninguna,
+    // y `.single()` ciego daba `null` → el test fallaba por el motivo equivocado.
+    const admin = clienteDePrueba()
+    const { data: u } = await admin
+      .from('unidades')
+      .select('id, tipo_unidad_id')
+      .limit(1)
+      .single<{ id: string; tipo_unidad_id: string }>()
+    const { data: h } = await admin
+      .from('huespedes')
+      .insert({ apellido: `Periodo-${sufijo}`, nombre: 'Prueba' })
+      .select('id')
+      .single<{ id: string }>()
+    const { data: r, error: eReserva } = await admin.rpc('crear_reserva', {
+      p_huesped_id: h!.id,
+      p_unidad_id: u!.id,
+      p_tipo_unidad_id: u!.tipo_unidad_id,
+      p_check_in: '2031-03-01',
+      p_check_out: '2031-03-03',
+      p_huespedes: 1,
+      p_precio_noche: 100,
+      p_total: 200,
+      p_canal: 'directo',
+      p_tarifa_tipo: 'rack',
+      p_estado: 'confirmada',
+    })
+    if (eReserva) throw new Error(`no se pudo montar la reserva: ${eReserva.message}`)
+    const reservaId = (r as { id: string }).id
+
+    try {
+      const { data: est } = await admin
+        .from('estadias')
+        .select('id')
+        .eq('reserva_id', reservaId)
+        .single<{ id: string }>()
+      await noPuedeActualizar(usuarios.housekeeping, 'estadias', est!.id, {
+        periodo: '[2031-04-01,2031-04-03)',
+      })
+    } finally {
+      await admin.from('reservas').delete().eq('id', reservaId)
+      await admin.from('huespedes').delete().eq('id', h!.id)
+    }
+  })
+
+  it('housekeeping NO puede modificar los datos de un huésped', async () => {
+    // Mismo criterio que la lectura (ADR 0005): housekeeping no maneja datos
+    // personales. La política de escritura es `admin/gerencia/recepcion`.
+    const admin = clienteDePrueba()
+    const { data } = await admin.from('huespedes').select('id, nombre').limit(1).single<{
+      id: string
+      nombre: string
+    }>()
+    await noPuedeActualizar(usuarios.housekeeping, 'huespedes', data!.id, {
+      nombre: `Alterado-${sufijo}`,
+    })
+  })
+
   /*
     ── Borrado de dinero (migración 0061) ─────────────────────────────────────
 

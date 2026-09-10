@@ -18,7 +18,7 @@ export async function enviarPlantillaPrueba(formData: FormData): Promise<void> {
   const evento = String(formData.get('evento') ?? '') as EventoEmail
   const para = String(formData.get('para') ?? '').trim()
 
-  if (!EVENTOS_EMAIL.includes(evento)) redirect('/panel/config?error=plantilla')
+  if (!EVENTOS_EMAIL.includes(evento)) redirect('/panel/config/plantillas?error=plantilla')
 
   // Datos de muestra: alcanzan para ver el resultado sin tocar una reserva real.
   const resultado = await enviarPlantilla(evento, para || sesion.email, {
@@ -35,6 +35,6 @@ export async function enviarPlantillaPrueba(formData: FormData): Promise<void> {
   })
 
   redirect(
-    `/panel/config?${resultado.ok ? 'ok' : 'error'}=envio&detalle=${encodeURIComponent(resultado.detalle)}`,
+    `/panel/config/plantillas?${resultado.ok ? 'ok' : 'error'}=envio&detalle=${encodeURIComponent(resultado.detalle)}`,
   )
 }

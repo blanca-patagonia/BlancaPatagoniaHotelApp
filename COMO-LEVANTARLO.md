@@ -145,6 +145,25 @@ de los huéspedes se queda sin poder pagar.
 El detalle y el porqué de cada decisión está en
 `docs/decisiones/0027-cobro-en-linea-dos-pasarelas-y-una-sola-moneda-de-saldo.md`.
 
+## Para conectar el correo de verdad (Resend)
+
+Tampoco hay que tocar código: el adapter (`lib/email/resend.ts`) ya está escrito.
+Se cargan estas variables:
+
+```
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_...
+EMAIL_FROM=reservas@tu-dominio.com
+```
+
+⚠️ `EMAIL_FROM` tiene que ser de un dominio **verificado en Resend** (Resend →
+Domains). Con un dominio sin verificar el envío falla, y el huésped se queda sin
+la confirmación de reserva, el enlace de firma o la encuesta — justo lo que el
+simulador `consola` nunca avisa, porque no habla con nadie.
+
+Sin `EMAIL_PROVIDER=resend` el sistema sigue con el simulador `consola`: el correo
+queda escrito en el log del servidor y no sale.
+
 ## Variables obligatorias en producción
 
 Si faltan, el sistema **falla al arrancar a propósito** (ADR 0018): quedarse con un

@@ -112,6 +112,20 @@ export default async function ReportesPage({
         />
       </div>
 
+      <Tarjeta className="mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <h3 className="font-display text-base font-semibold text-stone-900">Cierre del día</h3>
+            <p className="mt-1 text-sm text-stone-600">
+              Llegadas, no-shows, salidas y lo cobrado, para repasar antes de cerrar la jornada.
+            </p>
+          </div>
+          <Link href="/panel/cierre-diario" className={botonClases('secundario')}>
+            Abrir
+          </Link>
+        </div>
+      </Tarjeta>
+
       <h2 className="mt-8 mb-3 font-display text-lg font-semibold text-lago-900">Informes</h2>
       {/*
         `columns` y no una grilla: las tarjetas tienen alturas distintas (la

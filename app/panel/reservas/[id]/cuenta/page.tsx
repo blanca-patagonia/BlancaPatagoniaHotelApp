@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import {
   ETIQUETAS_FOLIO,
   FOLIOS,
@@ -20,7 +21,6 @@ import {
   type DepartamentoFila,
 } from '@/lib/domain/departamentos'
 import { formatoFechaCorta, parsearPeriodo } from '@/lib/fechas'
-import { Icono } from '../../../_components/iconos'
 import { BotonEnvio } from '../../../_components/boton-envio'
 import {
   CAMPO,
@@ -96,7 +96,7 @@ export default async function CuentaPage({
   const sp = await searchParams
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  const { data, error: eReserva } = await supabase
     .from('reservas')
     .select(
       'id, codigo, estado, total, folio_alojamiento, folio_b_titular, creada_en, ' +
@@ -106,6 +106,7 @@ export default async function CuentaPage({
     .eq('id', id)
     .single()
 
+  if (eReserva) registrarFalla(eReserva, 'reservas:cuenta_ficha')
   if (!data) notFound()
 
   const reserva = data as unknown as {
@@ -120,7 +121,11 @@ export default async function CuentaPage({
     estadias: { periodo: string; unidad: { nombre: string } | null }[]
   }
 
-  const [{ data: consumosData }, { data: pagosData }, { data: deptosData }] = await Promise.all([
+  const [
+    { data: consumosData, error: eConsumos },
+    { data: pagosData, error: ePagos },
+    { data: deptosData, error: eDeptos },
+  ] = await Promise.all([
     supabase
       .from('consumos')
       .select(
@@ -142,6 +147,12 @@ export default async function CuentaPage({
       .eq('activo', true)
       .order('orden'),
   ])
+  registrarFalla(eConsumos, 'reservas:cuenta_consumos')
+  registrarFalla(ePagos, 'reservas:cuenta_pagos')
+  registrarFalla(eDeptos, 'reservas:cuenta_departamentos')
+  // Si `consumos` o `pagos` fallan, la cuenta se arma con menos líneas de las
+  // reales y el chequeo "la cuenta no cierra" de más abajo queda ciego a eso.
+  const fallaLectura = Boolean(eConsumos || ePagos || eDeptos)
 
   const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
   const pagos = (pagosData ?? []) as unknown as PagoRow[]
@@ -245,18 +256,20 @@ export default async function CuentaPage({
       {sp.ok === 'movido' && <Mensaje tono="ok">El cargo cambió de folio.</Mensaje>}
       {sp.ok === 'titular' && <Mensaje tono="ok">Titular del folio B guardado.</Mensaje>}
 
+      {fallaLectura && (
+        <Mensaje tono="error">
+          No se pudieron leer todos los consumos o pagos de esta cuenta — puede faltar alguna línea.
+          No factures hasta revisarlo a mano.
+        </Mensaje>
+      )}
+
       {/* La invariante: si los folios no suman el total general, se dice acá. */}
       {!cierran && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl bg-red-50 px-4 py-3 ring-1 ring-red-200">
-          <span className="mt-0.5 shrink-0 text-red-700">
-            <Icono nombre="alerta" tam={18} />
-          </span>
-          <p className="text-sm text-red-900">
-            <strong className="font-semibold">La cuenta no cierra:</strong> la suma de los folios no
-            coincide con el total general. Hay alguna línea con un folio no válido. No factures hasta
-            revisarlo.
-          </p>
-        </div>
+        <Mensaje tono="error">
+          <strong className="font-semibold">La cuenta no cierra:</strong> la suma de los folios no
+          coincide con el total general. Hay alguna línea con un folio no válido. No factures hasta
+          revisarlo.
+        </Mensaje>
       )}
 
       {/* ── Totales ─────────────────────────────────────────────────────────── */}
@@ -389,8 +402,7 @@ export default async function CuentaPage({
                                   con lo que pagó y nadie sabe explicar por qué. */}
                               {l.monedaOrigen && (
                                 <span className="block text-xs text-stone-500">
-                                  cobrado en {l.monedaOrigen}{' '}
-                                  {Number(l.importeOrigen).toLocaleString('es-AR')}
+                                  cobrado en {l.monedaOrigen} {importe(Number(l.importeOrigen))}
                                 </span>
                               )}
                             </td>

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import {
   resumenNps,
@@ -32,6 +33,13 @@ export default async function InformeSatisfaccionPage() {
 
   return (
     <Pagina>
+      <Link
+        href="/panel/reportes"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a reportes
+      </Link>
+
       <Encabezado
         titulo="Satisfacción del huésped"
         descripcion="Net Promoter Score de las encuestas posteriores al check-out."

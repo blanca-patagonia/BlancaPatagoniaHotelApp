@@ -114,6 +114,11 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // ── Auditoría: solo quien la audita ──
   auditoria: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  // ── Auditoría de LECTURA de fichas de huésped (migración 0091) ──
+  // Mismo criterio que `auditoria`: es el registro de quién miró qué, y
+  // quien lo mira tiene que ser el mismo que audita las escrituras.
+  auditoria_accesos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
   // ── Errores del sistema (migración 0068) ──
   // Mismos dos roles que `auditoria`, y por el mismo motivo: un error arrastra
   // rutas, ids y a veces el dato que lo causó. Recepción no tiene qué hacer con
@@ -153,6 +158,12 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // sólo lo que tiene que ver con las reservas. Recepción concilia cobros de
   // huéspedes desde la ficha de la reserva, no desde acá.
   movimientos_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
+  // ── Gastos operativos (migración 0092) ──
+  // Vive bajo la misma área que `movimientos_externos` (conciliación): plata
+  // que salió del hotel sin pasar por una reserva ni por la cuenta corriente
+  // de un proveedor. Mismos dos roles, mismo motivo.
+  gastos_operativos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
   // ── Numeración de comprobantes (migración 0069) ──
   // Sigue la línea de `facturas` desde la 0045: no lleva importes, pero sí qué
@@ -198,6 +209,20 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
     operación, decidir cerrarlas es una decisión de venta.
   */
   canal_restricciones: { todos: 'si' },
+
+  // ── Channel manager genérico (Fase 7 del análisis de referencia, migración 0094) ──
+  //
+  // Mismo nivel que `canal_config`: el token es un secreto (va en la URL del
+  // webhook) y el mapeo es estrategia comercial, no algo que housekeeping o
+  // recepción necesiten ver.
+  canales_externos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+  canal_externo_tipos: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
+
+  // ── Conexiones OAuth2/iCal con proveedores externos (migración 0096) ──
+  //
+  // Más restrictivo todavía que `canal_config`: la fila puede contener
+  // tokens cifrados de la cuenta real de Mercado Pago o de Google del hotel.
+  conexiones_proveedores: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
   // ── Divisas y respaldos ──
   cotizaciones: { todos: 'si' },
@@ -470,27 +495,46 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       Nace vacía y su caso negativo (housekeeping) pasaría por eso. Cuelga de una
       factura, así que se siembra una si no hay: los triggers de la 0076 exigen
       que la letra siga a la factura y que no se acredite de más.
+
+      Auditoría de calidad 2026-09-09: esto se saltaba en silencio cuando
+      `reservaParaSembrar()` devolvía una reserva PREEXISTENTE sin factura propia
+      (la de `facturas` ya no estaba vacía por otra corrida, así que el bloque de
+      arriba no creaba una para ESTA reserva). El resultado era el mismo bug que
+      esta función existe para evitar: la matriz quedaba sin auditar y nadie se
+      enteraba. Ahora se crea la factura para la reserva sembrada si no existe,
+      en vez de resignarse a no sembrar la nota de crédito.
     */
     if ((await contar('notas_credito')) === 0) {
       const reservaId = await reservaParaSembrar()
 
-      const { data: fac } = await admin
-        .from('facturas')
-        .select('id, total, tipo_comprobante')
-        .eq('reserva_id', reservaId)
-        .maybeSingle<{ id: string; total: number; tipo_comprobante: string | null }>()
+      let fac = (
+        await admin
+          .from('facturas')
+          .select('id, total, tipo_comprobante')
+          .eq('reserva_id', reservaId)
+          .maybeSingle<{ id: string; total: number; tipo_comprobante: string | null }>()
+      ).data
 
-      if (fac) {
-        const { error } = await admin.from('notas_credito').insert({
-          factura_id: fac.id,
-          tipo_comprobante: fac.tipo_comprobante ?? 'B',
-          total: 0.01,
-          motivo: `auditoria rls ${sufijo}`,
-        })
-        if (error) throw new Error(`No se pudo sembrar notas_credito: ${error.message}`)
-
-        sembradas.push({ tabla: 'notas_credito', columna: 'motivo', valor: `auditoria rls ${sufijo}` })
+      if (!fac) {
+        const { data: nuevaFac, error: eFac } = await admin
+          .from('facturas')
+          .insert({ reserva_id: reservaId, numero: `AUDIT-NC-${sufijo}`, total: 1 })
+          .select('id, total, tipo_comprobante')
+          .single<{ id: string; total: number; tipo_comprobante: string | null }>()
+        if (eFac) throw new Error(`No se pudo crear factura para notas_credito: ${eFac.message}`)
+        sembradas.push({ tabla: 'facturas', columna: 'numero', valor: `AUDIT-NC-${sufijo}` })
+        fac = nuevaFac
       }
+
+      const { error } = await admin.from('notas_credito').insert({
+        factura_id: fac.id,
+        tipo_comprobante: fac.tipo_comprobante ?? 'B',
+        total: 0.01,
+        motivo: `auditoria rls ${sufijo}`,
+      })
+      if (error) throw new Error(`No se pudo sembrar notas_credito: ${error.message}`)
+
+      sembradas.push({ tabla: 'notas_credito', columna: 'motivo', valor: `auditoria rls ${sufijo}` })
     }
 
     /*
@@ -514,6 +558,52 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar movimientos_externos: ${error.message}`)
 
       sembradas.push({ tabla: 'movimientos_externos', columna: 'external_id', valor: externalId })
+    }
+
+    /*
+      ── auditoria_accesos (migración 0091) ────────────────────────────────────
+
+      Nace vacía —solo se llena cuando alguien abre de verdad la ficha de un
+      huésped, vía `registrar_acceso_huesped`—, así que sin sembrar, los dos
+      casos negativos (recepción y housekeeping) pasarían por tabla vacía y no
+      por la política. `service_role` sí puede insertar directo: el `revoke`
+      de la 0091/0093 es sobre `authenticated`/`anon`/`public`, no sobre él.
+    */
+    if ((await contar('auditoria_accesos')) === 0) {
+      const reservaId = await reservaParaSembrar()
+      const { data: fila, error: eReserva } = await admin
+        .from('reservas')
+        .select('huesped_id')
+        .eq('id', reservaId)
+        .single<{ huesped_id: string }>()
+      if (eReserva) throw new Error(`No se pudo leer el huésped de la reserva sembrada: ${eReserva.message}`)
+
+      const { data, error } = await admin
+        .from('auditoria_accesos')
+        .insert({ huesped_id: fila.huesped_id, origen: 'ficha_huesped' })
+        .select('id')
+        .single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar auditoria_accesos: ${error.message}`)
+
+      sembradas.push({ tabla: 'auditoria_accesos', columna: 'id', valor: data.id })
+    }
+
+    /*
+      ── gastos_operativos (migración 0092) ────────────────────────────────────
+
+      Nace vacía —se cargan a mano desde `/panel/conciliacion/gastos`—, mismo
+      motivo que `movimientos_externos`: sin sembrar, los casos negativos
+      pasarían por tabla vacía.
+    */
+    if ((await contar('gastos_operativos')) === 0) {
+      const { data, error } = await admin
+        .from('gastos_operativos')
+        .insert({ categoria: 'otro', descripcion: `fila de prueba de la matriz RLS ${sufijo}`, monto: 1 })
+        .select('id')
+        .single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar gastos_operativos: ${error.message}`)
+
+      sembradas.push({ tabla: 'gastos_operativos', columna: 'id', valor: data.id })
     }
 
     /*
@@ -564,6 +654,44 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       }
     }
 
+    /*
+      ── canales_externos / canal_externo_tipos (migración 0094) ────────────────
+
+      Nacen vacías —qué channel manager se contrata es una decisión del hotel,
+      y hoy no hay ninguno contratado (Fase 7, preparación)— así que sin
+      sembrar, los dos casos negativos pasarían por tabla vacía en vez de por
+      la política.
+    */
+    if ((await contar('canales_externos')) === 0) {
+      const { data: canalExterno, error: eCanalExterno } = await admin
+        .from('canales_externos')
+        .insert({ codigo: `audit-rls-${sufijo}`, nombre: `Canal de prueba ${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (eCanalExterno) {
+        throw new Error(`No se pudo sembrar canales_externos: ${eCanalExterno.message}`)
+      }
+      sembradas.push({ tabla: 'canales_externos', columna: 'id', valor: canalExterno.id })
+
+      const { data: tipo } = await admin
+        .from('tipos_unidad')
+        .select('id')
+        .order('codigo')
+        .limit(1)
+        .maybeSingle<{ id: string }>()
+
+      if (tipo) {
+        const { error: eMapeo } = await admin.from('canal_externo_tipos').insert({
+          canal_externo_id: canalExterno.id,
+          tipo_unidad_id: tipo.id,
+          codigo_externo: `AUDIT-RLS-EXT-${sufijo}`,
+        })
+        if (eMapeo) throw new Error(`No se pudo sembrar canal_externo_tipos: ${eMapeo.message}`)
+        // No se agrega a `sembradas`: el borrado de `canales_externos` de arriba
+        // lo arrastra por `on delete cascade` (migración 0094).
+      }
+    }
+
     // ── canal_config ──────────────────────────────────────────────────────────
     // Nace vacía (la migración 0049 no siembra: qué proveedor contabiliza el canal
     // es una decisión del hotel). Sin una fila, «recepción no puede leer» pasaría
@@ -572,6 +700,18 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       const { error } = await admin.from('canal_config').insert({ canal: 'booking' })
       if (error) throw new Error(`No se pudo sembrar canal_config: ${error.message}`)
       sembradas.push({ tabla: 'canal_config', columna: 'canal', valor: 'booking' })
+    }
+
+    // ── conexiones_proveedores (migración 0096) ─────────────────────────────────
+    // Nace vacía (nadie conectó Mercado Pago todavía en la base de test). Sin una
+    // fila, «recepción no puede leer» pasaría por tabla vacía en vez de por la
+    // política.
+    if ((await contar('conexiones_proveedores')) === 0) {
+      const { error } = await admin
+        .from('conexiones_proveedores')
+        .insert({ proveedor: 'mercadopago', tipo_conexion: 'oauth2' })
+      if (error) throw new Error(`No se pudo sembrar conexiones_proveedores: ${error.message}`)
+      sembradas.push({ tabla: 'conexiones_proveedores', columna: 'proveedor', valor: 'mercadopago' })
     }
 
     // ── firmas ────────────────────────────────────────────────────────────────

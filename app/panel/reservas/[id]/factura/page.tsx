@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 import {
   ETIQUETAS_COMPROBANTE,
@@ -69,30 +70,34 @@ export default async function FacturaPage({
   const sp = await searchParams
   const supabase = await crearClienteServidor()
 
-  const { data } = await supabase
+  const { data, error: eReserva } = await supabase
     .from('reservas')
     .select(
       'codigo, total, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, doc_numero, email), estadias(periodo, unidad:unidades(nombre, tipo:tipos_unidad(nombre)))',
     )
     .eq('id', id)
     .single()
+  if (eReserva) registrarFalla(eReserva, 'reservas:factura_ficha')
   if (!data) notFound()
   const reserva = data as unknown as Reserva
 
-  const [{ data: consumosData }, { data: factura }] = await Promise.all([
-    supabase
-      .from('consumos')
-      .select('cantidad, precio_unitario, producto:productos_servicios(nombre)')
-      .eq('reserva_id', id)
-      .order('creado_en'),
-    supabase
-      .from('facturas')
-      .select(
-        'id, total, numero, emitida_en, tipo_comprobante, numero_fiscal, neto, iva, alicuota_iva, exento, motivo_exencion, cae, cae_vto, cuit_receptor, condicion_iva_receptor',
-      )
-      .eq('reserva_id', id)
-      .maybeSingle(),
-  ])
+  const [{ data: consumosData, error: eConsumos }, { data: factura, error: eFactura }] =
+    await Promise.all([
+      supabase
+        .from('consumos')
+        .select('cantidad, precio_unitario, producto:productos_servicios(nombre)')
+        .eq('reserva_id', id)
+        .order('creado_en'),
+      supabase
+        .from('facturas')
+        .select(
+          'id, total, numero, emitida_en, tipo_comprobante, numero_fiscal, neto, iva, alicuota_iva, exento, motivo_exencion, cae, cae_vto, cuit_receptor, condicion_iva_receptor',
+        )
+        .eq('reserva_id', id)
+        .maybeSingle(),
+    ])
+  registrarFalla(eConsumos, 'reservas:factura_consumos')
+  registrarFalla(eFactura, 'reservas:factura_factura')
   const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
 
   const estadia = reserva.estadias?.[0]
@@ -132,11 +137,15 @@ export default async function FacturaPage({
     dice de verdad, y una factura de 100 con una nota de 40 acreditados no vale
     100. Mostrar sólo la factura sería publicar un número que ya no es cierto.
   */
-  const { data: notasData } = await supabase
+  const { data: notasData, error: eNotas } = await supabase
     .from('notas_credito')
     .select('id, numero, numero_fiscal, total, motivo, emitida_en, cae')
     .eq('factura_id', fac?.id ?? '00000000-0000-0000-0000-000000000000')
     .order('emitida_en')
+  // Si esto falla, se ve la factura ENTERA sin descontar lo acreditado —el
+  // motivo exacto por el que este comentario dice que se leen siempre.
+  if (eNotas) registrarFalla(eNotas, 'reservas:factura_notas_credito')
+  const fallaLectura = Boolean(eConsumos || eFactura || eNotas)
 
   const notas = (notasData ?? []) as {
     id: string
@@ -159,6 +168,15 @@ export default async function FacturaPage({
         </Link>
         <BotonImprimir />
       </div>
+
+      {fallaLectura && (
+        <div className="mb-4 print:hidden">
+          <Mensaje tono="error">
+            No se pudieron leer todos los datos de este comprobante (consumos, factura o notas de
+            crédito) — el importe de abajo puede no ser el real. No lo entregues así.
+          </Mensaje>
+        </div>
+      )}
 
       <div className="rounded-xl border border-stone-200 bg-white p-8 print:border-0 print:p-0">
         <div className="flex items-start justify-between border-b border-stone-200 pb-4">

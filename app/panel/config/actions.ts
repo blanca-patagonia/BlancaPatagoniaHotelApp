@@ -11,38 +11,72 @@ import { esMonedaExtranjera, validarCotizacionManual } from '@/lib/domain/divisa
 import { registrarCotizacionManual } from '@/lib/divisas/servicio'
 import { cuitValido, normalizarCuit } from '@/lib/domain/facturacion'
 
+export interface EstadoTarifasFila {
+  error?: string
+  ok?: string
+}
+
 /**
- * Actualiza el precio neto y rack de una tarifa (tipo de unidad × temporada).
+ * Actualiza las tarifas (neto y rack) de un tipo de unidad, para las
+ * temporadas que tenga cargadas — hasta tres (baja/media/alta) en un solo
+ * envío.
  *
  * Solo admin/gerencia. El tarifario es la base de toda cotización, así que se
  * validan los importes antes de tocar la base: nada de precios negativos ni de
- * un neto por encima del rack (el neto es siempre el precio de agencia).
+ * un neto por encima del rack (el neto es siempre el precio de agencia). Se
+ * valida TODO antes de escribir nada: si una sola temporada viene mal, no se
+ * guarda ninguna, así una fila nunca queda a medio actualizar.
+ *
+ * ── Por qué una fila entera y no una tarifa por vez ─────────────────────────
+ *
+ * Antes cada celda (tipo × temporada) era su propio formulario con su propio
+ * botón «OK»: guardar las tres temporadas de un tipo eran tres clics y tres
+ * recargas completas de la pantalla, cada una devolviendo a quien cargaba los
+ * precios al principio del tarifario. Juntarlas en un solo envío por fila es
+ * un clic, una sola recarga, y no se pierde el lugar en la tabla.
  */
-export async function actualizarTarifa(formData: FormData): Promise<void> {
+export async function actualizarTarifasDeFila(
+  _prev: EstadoTarifasFila,
+  formData: FormData,
+): Promise<EstadoTarifasFila> {
   await requerirAcceso('config')
 
-  const id = String(formData.get('tarifa_id') ?? '')
-  const neto = Number(formData.get('precio_neto'))
-  const rack = Number(formData.get('precio_rack'))
+  const TEMPORADAS = ['baja', 'media', 'alta'] as const
+  const cambios: { id: string; neto: number; rack: number }[] = []
 
-  if (!id || !Number.isFinite(neto) || !Number.isFinite(rack) || neto < 0 || rack < 0) {
-    redirect('/panel/config?error=importes')
+  for (const t of TEMPORADAS) {
+    const id = String(formData.get(`tarifa_id_${t}`) ?? '')
+    if (!id) continue // Este tipo no tiene tarifa cargada para esta temporada.
+
+    const neto = Number(formData.get(`precio_neto_${t}`))
+    const rack = Number(formData.get(`precio_rack_${t}`))
+    if (!Number.isFinite(neto) || !Number.isFinite(rack) || neto < 0 || rack < 0) {
+      return { error: 'Los importes tienen que ser números positivos.' }
+    }
+    if (neto > rack) {
+      return { error: 'El precio neto (agencia) no puede superar al rack (mostrador).' }
+    }
+    cambios.push({ id, neto, rack })
   }
-  if (neto > rack) redirect('/panel/config?error=neto_mayor')
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase
-    .from('tarifas')
-    .update({ precio_neto: neto, precio_rack: rack })
-    .eq('id', id)
+  for (const c of cambios) {
+    const { error } = await supabase
+      .from('tarifas')
+      .update({ precio_neto: c.neto, precio_rack: c.rack })
+      .eq('id', c.id)
+    // Ver el aviso de atomicidad en `lib/reservas/actions.ts`: si falla la
+    // segunda o tercera temporada, las anteriores ya quedaron guardadas. No
+    // hay función SQL transaccional para esto todavía.
+    if (error) return { error: `No se pudo guardar: ${error.message}` }
+  }
 
   // El precio rack se publica en `/alojamientos`, que lo lee cacheado: sin esto,
-  // el nuevo precio tardaría hasta 5 minutos en verse en la web. `updateTag` y no
-  // `revalidateTag` porque esto es una Server Action y quien acaba de guardar
-  // tiene que ver su cambio ya.
-  if (!error) updateTag(ETIQUETA_CATALOGO)
+  // el nuevo precio tardaría hasta 5 minutos en verse en la web.
+  updateTag(ETIQUETA_CATALOGO)
+  revalidatePath('/panel/config/tarifario')
 
-  redirect(error ? '/panel/config?error=guardar' : '/panel/config?ok=tarifa')
+  return { ok: 'Tarifas guardadas.' }
 }
 
 /** Repone stock de un producto (suma unidades). Solo admin/gerencia. */
@@ -65,10 +99,10 @@ export async function reponerStock(formData: FormData): Promise<void> {
         .eq('id', id)
       // Un reposición que no se guarda deja el stock mostrando menos de lo que
       // hay, y el próximo consumo lo descuenta de un número equivocado.
-      cortarSiFalla(error, '/panel/config', 'stock')
+      cortarSiFalla(error, '/panel/config/inventario', 'stock')
     }
   }
-  redirect('/panel/config')
+  redirect('/panel/config/inventario')
 }
 
 /**
@@ -88,7 +122,7 @@ export async function crearProducto(formData: FormData): Promise<void> {
   const controlaStock = String(formData.get('controla_stock') ?? '') === '1'
 
   if (!nombre || !Number.isFinite(precio) || precio < 0) {
-    redirect('/panel/config?error=producto')
+    redirect('/panel/config/inventario?error=producto')
   }
 
   // El código es único: se deriva del nombre y se completa si ya existe.
@@ -117,8 +151,8 @@ export async function crearProducto(formData: FormData): Promise<void> {
     stock_minimo: controlaStock && Number.isFinite(stockMinimo) ? stockMinimo : null,
   })
 
-  revalidatePath('/panel/config')
-  redirect(error ? '/panel/config?error=producto' : '/panel/config?ok=producto')
+  revalidatePath('/panel/config/inventario')
+  redirect(error ? '/panel/config/inventario?error=producto' : '/panel/config/inventario?ok=producto')
 }
 
 /** Activa o desactiva un producto sin borrarlo (conserva el historial de consumos). */
@@ -133,10 +167,10 @@ export async function alternarProducto(formData: FormData): Promise<void> {
       .from('productos_servicios')
       .update({ activo: !activo })
       .eq('id', id)
-    cortarSiFalla(error, '/panel/config', 'producto_estado')
+    cortarSiFalla(error, '/panel/config/inventario', 'producto_estado')
   }
-  revalidatePath('/panel/config')
-  redirect('/panel/config')
+  revalidatePath('/panel/config/inventario')
+  redirect('/panel/config/inventario')
 }
 
 /**
@@ -163,7 +197,7 @@ export async function cargarCotizacion(formData: FormData): Promise<void> {
   if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
 
   const moneda = String(formData.get('moneda') ?? '')
-  if (!esMonedaExtranjera(moneda)) redirect('/panel/config?error=moneda#divisas')
+  if (!esMonedaExtranjera(moneda)) redirect('/panel/config/divisas?error=moneda')
 
   const compra = formData.get('compra')
   const venta = formData.get('venta')
@@ -172,7 +206,7 @@ export async function cargarCotizacion(formData: FormData): Promise<void> {
   // debajo de la compra (que significaría regalar el spread) no llegan a la base.
   const problema = validarCotizacionManual(compra, venta)
   if (problema) {
-    redirect(`/panel/config?error=cotizacion&detalle=${encodeURIComponent(problema)}#divisas`)
+    redirect(`/panel/config/divisas?error=cotizacion&detalle=${encodeURIComponent(problema)}`)
   }
 
   const supabase = await crearClienteServidor()
@@ -183,11 +217,11 @@ export async function cargarCotizacion(formData: FormData): Promise<void> {
     perfilId: sesion.userId,
   })
 
-  if (error) redirect(`/panel/config?error=cotizacion&detalle=${encodeURIComponent(error)}#divisas`)
+  if (error) redirect(`/panel/config/divisas?error=cotizacion&detalle=${encodeURIComponent(error)}`)
 
-  revalidatePath('/panel/config')
+  revalidatePath('/panel/config/divisas')
   revalidatePath('/panel')
-  redirect('/panel/config?ok=cotizacion#divisas')
+  redirect('/panel/config/divisas?ok=cotizacion')
 }
 
 /**
@@ -205,7 +239,7 @@ export async function guardarUbicacionUnidad(formData: FormData): Promise<void> 
   if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
 
   const id = String(formData.get('unidad_id') ?? '')
-  if (!id) redirect('/panel/config?error=unidad#ubicaciones')
+  if (!id) redirect('/panel/config/ubicaciones?error=unidad')
 
   const bloque = String(formData.get('bloque') ?? '').trim().slice(0, 60)
   const piso = String(formData.get('piso') ?? '').trim().slice(0, 20)
@@ -215,10 +249,10 @@ export async function guardarUbicacionUnidad(formData: FormData): Promise<void> 
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('unidades').update({ bloque, piso, orden }).eq('id', id)
 
-  cortarSiFalla(error, '/panel/config', 'ubicacion')
-  revalidatePath('/panel/config')
+  cortarSiFalla(error, '/panel/config/ubicaciones', 'ubicacion')
+  revalidatePath('/panel/config/ubicaciones')
   revalidatePath('/panel/ocupacion')
-  redirect('/panel/config?ok=ubicacion#ubicaciones')
+  redirect('/panel/config/ubicaciones?ok=ubicacion')
 }
 
 /**
@@ -233,12 +267,12 @@ export async function guardarUbicacionUnidad(formData: FormData): Promise<void> 
  */
 export async function guardarDatosFiscales(formData: FormData): Promise<void> {
   const sesion = await obtenerSesion()
-  if (!sesion || sesion.rol !== 'admin') redirect('/panel/config?error=fiscales_rol#fiscales')
+  if (!sesion || sesion.rol !== 'admin') redirect('/panel/config/datos-fiscales?error=fiscales_rol')
 
   const razonSocial = String(formData.get('razon_social') ?? '').trim().slice(0, 120)
   const cuit = normalizarCuit(String(formData.get('cuit') ?? ''))
 
-  if (!razonSocial) redirect('/panel/config?error=fiscales_razon#fiscales')
+  if (!razonSocial) redirect('/panel/config/datos-fiscales?error=fiscales_razon')
   /*
     Se valida el dígito verificador, no sólo la longitud.
 
@@ -246,7 +280,7 @@ export async function guardarDatosFiscales(formData: FormData): Promise<void> {
     los comprobantes contra ARCA, con un error que no dice que el CUIT esté mal.
     `cuitValido` ya existe y se usa para el receptor; el emisor merece lo mismo.
   */
-  if (!cuitValido(cuit)) redirect('/panel/config?error=fiscales_cuit#fiscales')
+  if (!cuitValido(cuit)) redirect('/panel/config/datos-fiscales?error=fiscales_cuit')
 
   const condicion = String(formData.get('condicion_iva') ?? 'responsable_inscripto')
   const inicio = String(formData.get('inicio_actividades') ?? '').trim()
@@ -270,8 +304,8 @@ export async function guardarDatosFiscales(formData: FormData): Promise<void> {
     { onConflict: 'id' },
   )
 
-  cortarSiFalla(error, '/panel/config', 'fiscales')
-  revalidatePath('/panel/config')
+  cortarSiFalla(error, '/panel/config/datos-fiscales', 'fiscales')
+  revalidatePath('/panel/config/datos-fiscales')
   revalidatePath('/panel/proveedores/comprobantes')
-  redirect('/panel/config?ok=fiscales#fiscales')
+  redirect('/panel/config/datos-fiscales?ok=fiscales')
 }

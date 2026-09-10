@@ -20,6 +20,7 @@ import {
   TH,
   Tabla,
   Tarjeta,
+  botonClases,
 } from '../_components/ui'
 import { BotonImprimir } from './imprimir'
 import { registrarError } from '@/lib/registro'
@@ -273,10 +274,7 @@ export default async function ServicioPage({
             className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
           />
         </label>
-        <button
-          type="submit"
-          className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800"
-        >
+        <button type="submit" className={botonClases('primario')}>
           Ver
         </button>
       </form>

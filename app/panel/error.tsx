@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { Icono } from './_components/iconos'
+import { botonClases } from './_components/ui'
 
 /**
  * Pantalla de error del panel.
@@ -45,10 +46,7 @@ export default function ErrorPanel({
       {error.digest && (
         <p className="font-mono text-xs text-stone-600">Referencia: {error.digest}</p>
       )}
-      <button
-        onClick={reset}
-        className="mt-2 rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-lago-800"
-      >
+      <button onClick={reset} className={botonClases('primario', 'mt-2')}>
         Reintentar
       </button>
     </div>

@@ -102,21 +102,37 @@ interface EncabezadoProps {
   acciones?: ReactNode
 }
 
-/** Encabezado estándar de cada pantalla del panel. */
+/**
+ * Encabezado estándar de cada pantalla del panel.
+ *
+ * `min-w-0` en las dos filas anidadas — no es decorativo, es el mismo motivo
+ * que documenta `Tarjeta`: sin él, un `<h1>` es ítem de un flex y no baja de
+ * su ancho mínimo intrínseco. Un nombre de agencia largo («Turismo
+ * Internacional Patagonia Austral Sociedad Anónima») desbordaba la página
+ * entera en un teléfono, con la ficha de `agencias/[id]` como caso real.
+ *
+ * `break-words` en la descripción, y no solo `min-w-0` en el contenedor: un
+ * email o una URL no tiene espacios donde cortar, así que sin esto la palabra
+ * entera («reservas@turismointernacionalpatagoniaaustral.com.ar») seguía
+ * empujando el ancho más allá de la pantalla aunque el título de al lado ya
+ * hubiera arreglado el suyo — es el mismo bug, una capa más adentro.
+ */
 export function Encabezado({ titulo, descripcion, icono, acciones }: EncabezadoProps) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-stone-200 pb-4">
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         {icono && (
           <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-lago-50 text-lago-700 ring-1 ring-lago-100">
             <Icono nombre={icono} tam={20} />
           </span>
         )}
-        <div>
+        <div className="min-w-0">
           <h1 className="font-display text-2xl leading-tight font-semibold tracking-tight text-stone-900">
             {titulo}
           </h1>
-          {descripcion && <p className="mt-0.5 text-sm text-stone-500">{descripcion}</p>}
+          {descripcion && (
+            <p className="mt-0.5 text-sm break-words text-stone-500">{descripcion}</p>
+          )}
         </div>
       </div>
       {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
@@ -303,19 +319,45 @@ export function EstadoUnidad({
  * `overscroll-x-contain` está por un motivo concreto. Un contenedor con scroll
  * propio **atrapa la rueda del mouse**: al llegar a su borde horizontal, el
  * navegador seguía aplicando el gesto al contenedor en vez de devolvérselo a la
- * página, así que bajar la pantalla con el cursor sobre una tabla ancha —el
- * tarifario de Configuración es la peor— se trababa. `contain` corta esa
- * propagación hacia adentro y deja que el scroll vertical siga siendo de la
- * página.
+ * página, así que bajar la pantalla con el cursor sobre una tabla ancha se
+ * trababa (el tarifario de Configuración era el caso que lo mostró, antes de
+ * que la Fase 25 lo rehiciera en tarjetas y dejara de ser una tabla ancha).
+ * `contain` corta esa propagación hacia adentro y deja que el scroll vertical
+ * siga siendo de la página.
  */
-export function Tabla({ children, resumen }: { children: ReactNode; resumen: string }) {
+export function Tabla({
+  children,
+  resumen,
+  indicarScrollHorizontal,
+}: {
+  children: ReactNode
+  resumen: string
+  /**
+   * Muestra «Deslizá la tabla hacia el costado para ver el resto» arriba,
+   * visible hasta el breakpoint `xl`. Opt-in y no por omisión: la mayoría de
+   * las tablas del panel —tarifario e informes incluidos, verificado a
+   * 1024 px y 640 px tras la Fase 25— entran enteras en pantalla, y el aviso
+   * ahí sería ruido, no ayuda. Usarlo en la que de verdad corte columnas
+   * (la grilla de ocupación necesitó este mismo aviso, pero tiene su propio
+   * envoltorio de scroll con `contain-paint` y no pasa por este componente,
+   * así que ahí se repitió el texto a mano).
+   */
+  indicarScrollHorizontal?: boolean
+}) {
   return (
-    <div className="overflow-x-auto overscroll-x-contain">
-      <table className="min-w-full text-sm">
-        <caption className="sr-only">{resumen}</caption>
-        {children}
-      </table>
-    </div>
+    <>
+      {indicarScrollHorizontal && (
+        <p className="mb-2 px-1 text-xs text-stone-500 xl:hidden">
+          Deslizá la tabla hacia el costado para ver el resto de las columnas.
+        </p>
+      )}
+      <div className="overflow-x-auto overscroll-x-contain">
+        <table className="min-w-full text-sm">
+          <caption className="sr-only">{resumen}</caption>
+          {children}
+        </table>
+      </div>
+    </>
   )
 }
 
@@ -494,9 +536,20 @@ export function BotonExportar({ href, titulo = 'Exportar CSV' }: { href: string;
 
 /* ----------------------------------------------------------- formulario -- */
 
-/** Clases de un campo de formulario. Una sola definición para todo el panel. */
+/**
+ * Clases de un campo de formulario. Una sola definición para todo el panel.
+ *
+ * `min-w-0` es necesario además de `w-full`: en un `<select>`, `min-width:
+ * auto` no es «el ancho del contenedor», es el ancho de su opción MÁS ANCHA
+ * (a diferencia de un `<input>`, donde `w-full` ya alcanza). Un select de
+ * proveedor dentro de una fila angosta de tabla, con «Turismo Internacional
+ * Patagonia Austral Sociedad Anónima» como una de sus opciones, escapaba del
+ * contenedor con scroll de la tabla e inflaba el ancho de toda la página en
+ * el teléfono — no se veía en el viewport, pero `<html>` medía más ancho que
+ * `<body>` y la página entera scrolleaba de lado.
+ */
 export const CAMPO =
-  'w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-800 outline-none transition placeholder:text-stone-500 focus:border-lago-600 disabled:bg-stone-100'
+  'w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-800 outline-none transition placeholder:text-stone-500 focus:border-lago-600 disabled:bg-stone-100'
 
 /**
  * Campo con etiqueta **visible** y ayuda opcional.

@@ -19,7 +19,18 @@ import {
 } from '@/lib/domain/divisas'
 import { registrarMovimiento, regenerarEnlacePortal, revocarEnlacePortal } from '../actions'
 import { type CondicionIva } from '@/lib/domain/facturacion'
-import { Encabezado, Mensaje, Pagina, botonClases } from '../../_components/ui'
+import {
+  Encabezado,
+  EstadoVacio,
+  FILA,
+  Mensaje,
+  Pagina,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+} from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
 import { BotonEnvio } from '../../_components/boton-envio'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
@@ -286,54 +297,50 @@ export default async function AgenciaDetallePage({
         </div>
       </section>
 
-      <h2 className="mt-6 mb-2 text-sm font-medium text-stone-700">Movimientos</h2>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="px-4 py-2.5">Fecha</th>
-              <th className="px-4 py-2.5">Concepto</th>
-              <th className="px-4 py-2.5 text-right">Cargo</th>
-              <th className="px-4 py-2.5 text-right">Pago</th>
-            </tr>
-          </thead>
-          <tbody>
-            {movs.length === 0 && (
+      <Tarjeta titulo="Movimientos" className="mt-6 overflow-hidden">
+        {movs.length === 0 ? (
+          <EstadoVacio titulo="Sin movimientos" icono="agencias" />
+        ) : (
+          <Tabla resumen="Movimientos de la cuenta corriente, con cargos y pagos">
+            <thead>
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-stone-600">
-                  Sin movimientos.
-                </td>
+                <th className={TH}>Fecha</th>
+                <th className={TH}>Concepto</th>
+                <th className={`${TH} text-right`}>Cargo</th>
+                <th className={`${TH} text-right`}>Pago</th>
               </tr>
-            )}
-            {movs.map((m) => (
-              <tr key={m.id} className="border-b border-stone-100 last:border-0">
-                <td className="px-4 py-2 text-stone-500">{m.fecha}</td>
-                <td className="px-4 py-2 text-stone-700">
-                  {m.concepto || ETIQUETAS_MOVIMIENTO[m.tipo]}
-                  {m.reserva && <span className="ml-2 text-xs text-stone-600">{m.reserva.codigo}</span>}
-                  {/*
-                    Lo que decía el comprobante, cuando no fue en dólares. Las dos
-                    columnas de la derecha están en USD porque el saldo vive ahí;
-                    sin esta línea, quien concilia contra el papel no encuentra el
-                    número que está buscando.
-                  */}
-                  {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
-                    <span className="block text-xs text-stone-500">
-                      {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right text-stone-800">
-                  {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
-                </td>
-                <td className="px-4 py-2 text-right text-emerald-700">
-                  {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {movs.map((m) => (
+                <tr key={m.id} className={FILA}>
+                  <td className={`${TD} text-stone-500`}>{m.fecha}</td>
+                  <td className={`${TD} text-stone-700`}>
+                    {m.concepto || ETIQUETAS_MOVIMIENTO[m.tipo]}
+                    {m.reserva && <span className="ml-2 text-xs text-stone-600">{m.reserva.codigo}</span>}
+                    {/*
+                      Lo que decía el comprobante, cuando no fue en dólares. Las dos
+                      columnas de la derecha están en USD porque el saldo vive ahí;
+                      sin esta línea, quien concilia contra el papel no encuentra el
+                      número que está buscando.
+                    */}
+                    {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
+                      <span className="block text-xs text-stone-500">
+                        {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${TD} tabular text-right text-stone-800`}>
+                    {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
+                  </td>
+                  <td className={`${TD} tabular text-right text-emerald-700`}>
+                    {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        )}
+      </Tarjeta>
     </Pagina>
   )
 }

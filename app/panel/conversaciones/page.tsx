@@ -16,6 +16,7 @@ import {
 import { Chat, type MensajeVista } from './chat'
 import { marcarConsultaRespondida } from './actions'
 import { fechaHoraHotel } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
 
 /** Cuántos mensajes se cargan del historial al abrir un canal. */
 const HISTORIAL = 50
@@ -54,10 +55,11 @@ export default async function ConversacionesPage({
   const supabase = await crearClienteServidor()
 
   // RLS ya filtra los canales por rol: lo que vuelve es lo que puede ver.
-  const { data: canalesData } = await supabase
+  const { data: canalesData, error: eCanales } = await supabase
     .from('canales')
     .select('id, clave, nombre, descripcion')
     .order('creado_en')
+  registrarFalla(eCanales, 'conversaciones:canales')
   const canales = (canalesData ?? []) as Canal[]
 
   const verConsultas = sp.vista === 'consultas'
@@ -66,26 +68,32 @@ export default async function ConversacionesPage({
   // Las consultas del bot las atiende quien tiene contacto con el huésped.
   const puedeVerConsultas = puedeAcceder(sesion.rol, 'reservas')
 
-  const [{ data: mensajesData }, { data: perfilesData }, { data: consultasData }] =
-    await Promise.all([
-      canalActivo
-        ? supabase
-            .from('mensajes')
-            .select('id, cuerpo, autor_id, creado_en')
-            .eq('canal_id', canalActivo.id)
-            .order('creado_en', { ascending: false })
-            .limit(HISTORIAL)
-        : Promise.resolve({ data: [] }),
-      supabase.from('perfiles').select('id, nombre'),
-      puedeVerConsultas
-        ? supabase
-            .from('consultas_bot')
-            .select('id, pregunta, contacto, respondida, creado_en')
-            .order('respondida')
-            .order('creado_en', { ascending: false })
-            .limit(50)
-        : Promise.resolve({ data: [] }),
-    ])
+  const [
+    { data: mensajesData, error: eMensajes },
+    { data: perfilesData, error: ePerfiles },
+    { data: consultasData, error: eConsultas },
+  ] = await Promise.all([
+    canalActivo
+      ? supabase
+          .from('mensajes')
+          .select('id, cuerpo, autor_id, creado_en')
+          .eq('canal_id', canalActivo.id)
+          .order('creado_en', { ascending: false })
+          .limit(HISTORIAL)
+      : Promise.resolve({ data: [], error: null }),
+    supabase.from('perfiles').select('id, nombre'),
+    puedeVerConsultas
+      ? supabase
+          .from('consultas_bot')
+          .select('id, pregunta, contacto, respondida, creado_en')
+          .order('respondida')
+          .order('creado_en', { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  registrarFalla(eMensajes, 'conversaciones:mensajes')
+  registrarFalla(ePerfiles, 'conversaciones:perfiles')
+  registrarFalla(eConsultas, 'conversaciones:consultas_bot')
 
   // Se piden del más nuevo al más viejo (para quedarse con los últimos) y se
   // invierten para mostrarlos en orden de conversación.

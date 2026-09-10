@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { ESTADOS_RESERVA, ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { traerReservas } from '../datos'
@@ -25,6 +26,13 @@ export default async function InformeEstadosPage() {
 
   return (
     <Pagina>
+      <Link
+        href="/panel/reportes"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a reportes
+      </Link>
+
       <Encabezado
         titulo="Reservas por estado"
         descripcion={`Distribución histórica de las ${total.toLocaleString('es-AR')} reservas cargadas.`}

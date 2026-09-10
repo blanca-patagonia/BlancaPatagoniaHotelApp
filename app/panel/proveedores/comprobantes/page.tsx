@@ -341,7 +341,7 @@ export default async function ComprobantesPage({
                         >
                           <input type="hidden" name="comprobante_id" value={c.id} />
                           <label className="flex flex-col gap-1 text-xs">
-                            <span className="sr-only">Proveedor al que se imputa</span>
+                            <span className="text-stone-500">Proveedor</span>
                             <select
                               name="proveedor_id"
                               defaultValue={c.proveedor?.id ?? ''}
@@ -357,7 +357,7 @@ export default async function ComprobantesPage({
                           </label>
                           {!esNotaDeCredito(c.tipo_codigo) && (
                             <label className="flex flex-col gap-1 text-xs">
-                              <span className="sr-only">Vencimiento</span>
+                              <span className="text-stone-500">Vencimiento</span>
                               <input
                                 name="vencimiento"
                                 type="date"

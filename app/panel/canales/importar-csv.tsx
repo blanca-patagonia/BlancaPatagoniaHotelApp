@@ -85,22 +85,22 @@ export function ImportarCsv() {
       )}
 
       {estado.rechazadas && estado.rechazadas.length > 0 && (
-        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm ring-1 ring-red-200">
-          <p className="font-semibold text-red-900">
+        <Mensaje tono="error">
+          <span className="block font-semibold">
             Filas que no se pudieron leer ({estado.rechazadas.length}):
-          </p>
-          <ul className="mt-2 space-y-1 text-red-800">
+          </span>
+          <ul className="mt-2 space-y-1">
             {estado.rechazadas.map((r) => (
               <li key={r.fila}>
                 <span className="font-medium">Fila {r.fila}:</span> {r.motivos.join(' ')}
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-red-700">
+          <span className="mt-2 block text-xs opacity-90">
             El número de fila es el que se ve al abrir el archivo en Excel. El resto de las
             reservas sí se importó.
-          </p>
-        </div>
+          </span>
+        </Mensaje>
       )}
 
       <button

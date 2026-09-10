@@ -1,22 +1,23 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
+import { disponibilidadPorTipo, unidadesDisponibles } from '@/lib/availability/disponibilidad'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { hoyISO, sumarDias, diasEntre } from '@/lib/fechas'
-import { FormularioReserva, type OpcionTipo, type OpcionAgencia } from './formulario'
+import { parsearBusquedaFechas } from '@/lib/domain/reservas'
+import { FormularioReserva, type OpcionTipo, type OpcionAgencia, type OpcionUnidad } from './formulario'
 import {
   CAMPO,
   Campo,
   Encabezado,
   EstadoVacio,
+  Mensaje,
   Pagina,
   Tarjeta,
   botonClases,
 } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
-
-const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
+import { registrarFalla } from '@/lib/acciones'
 
 export default async function NuevaReservaPage({
   searchParams,
@@ -26,25 +27,37 @@ export default async function NuevaReservaPage({
   await requerirAcceso('reservas')
   const sp = await searchParams
 
-  const checkIn = RE_FECHA.test(sp.check_in ?? '') ? sp.check_in! : ''
-  const checkOut = RE_FECHA.test(sp.check_out ?? '') ? sp.check_out! : ''
+  const { checkIn, checkOut, buscado, invalida: fechasInvalidas } = parsearBusquedaFechas(
+    sp.check_in,
+    sp.check_out,
+  )
   const huespedes = Math.max(1, Number(sp.huespedes ?? 1) || 1)
-  const buscado = Boolean(checkIn && checkOut && checkOut > checkIn)
   const noches = buscado ? diasEntre(checkIn, checkOut) : 0
 
   // Agencias activas con convenio: si la reserva entra por una, de ella salen
   // la tarifa neta y la letra del comprobante al facturar.
   const supabase = await crearClienteServidor()
-  const { data: agenciasData } = await supabase
+  const { data: agenciasData, error: eAgencias } = await supabase
     .from('agencias')
     .select('id, nombre, descuento_pct')
     .eq('activo', true)
     .order('nombre')
+  // Bajo impacto: si falla, el alta sigue andando sin el combo de agencias. Se
+  // loguea para no perder la causa, sin banner que distraiga de la búsqueda.
+  registrarFalla(eAgencias, 'reservas:nueva_agencias')
   const agencias = (agenciasData ?? []) as OpcionAgencia[]
 
   let opciones: OpcionTipo[] = []
+  // Unidad puntual por tipo (patrón QloApps: elegir tipo Y habitación en el
+  // mismo alta). Se arma acá y no en el cliente porque `unidades_disponibles`
+  // ya trae el estado de housekeeping, dato que recepción necesita para no
+  // ofrecer una unidad sucia a alguien que va a entrar ahora.
+  let unidadesPorTipo: Record<string, OpcionUnidad[]> = {}
   if (buscado) {
-    const tipos = await disponibilidadPorTipo(checkIn, checkOut)
+    const [tipos, libres] = await Promise.all([
+      disponibilidadPorTipo(checkIn, checkOut),
+      unidadesDisponibles(checkIn, checkOut),
+    ])
     const disponibles = tipos.filter((t) => t.disponibles > 0 && t.capacidad_max >= huespedes)
     opciones = await Promise.all(
       disponibles.map(async (t) => {
@@ -66,6 +79,13 @@ export default async function NuevaReservaPage({
       }),
     )
     opciones.sort((a, b) => a.total - b.total)
+
+    unidadesPorTipo = {}
+    for (const u of libres) {
+      const lista = unidadesPorTipo[u.tipo_unidad_id] ?? []
+      lista.push({ id: u.id, nombre: u.nombre, estado: u.estado })
+      unidadesPorTipo[u.tipo_unidad_id] = lista
+    }
   }
 
   return (
@@ -79,7 +99,7 @@ export default async function NuevaReservaPage({
 
       <Encabezado
         titulo="Nueva reserva"
-        descripcion="Primero buscá qué hay libre; después elegís la unidad y cargás al huésped."
+        descripcion="Primero buscá qué hay libre; después elegís la unidad y cargás al huésped. Para una reserva de mostrador alcanza con el apellido: el resto ya viene con los valores más comunes y se puede ajustar después desde la ficha."
         icono="reservas"
       />
 
@@ -122,6 +142,14 @@ export default async function NuevaReservaPage({
         </form>
       </Tarjeta>
 
+      {fechasInvalidas && (
+        <div className="mt-4">
+          <Mensaje tono="error">
+            El check-out tiene que ser posterior al check-in. Revisá las fechas y volvé a buscar.
+          </Mensaje>
+        </div>
+      )}
+
       {buscado && (
         <div className="mt-4">
           {opciones.length === 0 ? (
@@ -141,6 +169,7 @@ export default async function NuevaReservaPage({
             <FormularioReserva
               agencias={agencias}
               opciones={opciones}
+              unidadesPorTipo={unidadesPorTipo}
               checkIn={checkIn}
               checkOut={checkOut}
               huespedes={huespedes}

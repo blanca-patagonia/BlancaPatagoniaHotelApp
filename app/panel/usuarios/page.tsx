@@ -176,19 +176,27 @@ export default async function UsuariosPage({
                     <td className={TD}>
                       <form action={cambiarRolUsuario} className="flex items-center gap-2">
                         <input type="hidden" name="user_id" value={p.id} />
-                        <select
-                          name="rol"
-                          defaultValue={p.rol}
-                          disabled={esYo}
-                          aria-label={`Rol de ${p.nombre}`}
-                          className="rounded-md border border-stone-300 px-2 py-1 text-xs focus:border-lago-500 focus:outline-none disabled:bg-stone-100"
-                        >
-                          {ROLES.map((r) => (
-                            <option key={r} value={r}>
-                              {ETIQUETAS_ROL[r]}
-                            </option>
-                          ))}
-                        </select>
+                        {/*
+                          `<label>` visible y no `aria-label` a secas (Fase 15):
+                          por tabulación, sin haber leído antes la fila con el
+                          nombre, un lector de pantalla solo decía "combobox".
+                        */}
+                        <label className="flex items-center gap-1 text-xs text-stone-500">
+                          <span>Rol</span>
+                          <select
+                            name="rol"
+                            defaultValue={p.rol}
+                            disabled={esYo}
+                            aria-label={`Rol de ${p.nombre}`}
+                            className="rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-800 focus:border-lago-500 focus:outline-none disabled:bg-stone-100"
+                          >
+                            {ROLES.map((r) => (
+                              <option key={r} value={r}>
+                                {ETIQUETAS_ROL[r]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                         {!esYo && (
                           <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
                             Guardar

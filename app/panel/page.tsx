@@ -4,10 +4,11 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ESTADOS_ACTIVOS, ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
-import { hoyISO, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
+import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { areasDe, estaOculta, type Area } from '@/lib/domain/permisos'
+import { registrarFalla } from '@/lib/acciones'
 import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
 import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
@@ -17,6 +18,7 @@ import {
   EstadoVacio,
   Etiqueta,
   Kpi,
+  Mensaje,
   Tarjeta,
   botonClases,
   Pagina,
@@ -79,16 +81,19 @@ export default async function DashboardPage() {
   const sesion = await requerirAcceso('dashboard')
   const supabase = await crearClienteServidor()
   const hoy = hoyISO()
+  const mañana = sumarDias(hoy, 1)
 
   const [
-    { data: unidades },
-    { data: estadias },
-    { count: reservasActivas },
-    { count: mantPendiente },
-    { count: objetosGuardados },
-    { count: conflictosCanal },
-    { data: stockBajo },
-    { data: comprobantes },
+    { data: unidades, error: eUnidades },
+    { data: estadias, error: eEstadias },
+    { count: reservasActivas, error: eActivas },
+    { count: reservasNuevasHoy, error: eNuevasHoy },
+    { count: canceladasHoy, error: eCanceladasHoy },
+    { count: mantPendiente, error: eMant },
+    { count: objetosGuardados, error: eObjetos },
+    { count: conflictosCanal, error: eConflictos },
+    { data: stockBajo, error: eStock },
+    { data: comprobantes, error: eComprobantes },
   ] = await Promise.all([
     supabase.from('unidades').select('estado').eq('activo', true),
     supabase
@@ -98,6 +103,20 @@ export default async function DashboardPage() {
       )
       .in('estado', [...ESTADOS_ACTIVOS]),
     supabase.from('reservas').select('*', { count: 'exact', head: true }).in('estado', [...ESTADOS_ACTIVOS]),
+    // Altas del día: por cuándo se CARGÓ la reserva, no por cuándo empieza la
+    // estadía (eso ya lo cuentan «Llegadas hoy»).
+    supabase
+      .from('reservas')
+      .select('*', { count: 'exact', head: true })
+      .gte('creada_en', hoy)
+      .lt('creada_en', mañana),
+    // `cancelada_en` (migración 0090): sin esa fecha, «canceladas hoy» y
+    // «canceladas el mes pasado» eran indistinguibles.
+    supabase
+      .from('reservas')
+      .select('*', { count: 'exact', head: true })
+      .gte('cancelada_en', hoy)
+      .lt('cancelada_en', mañana),
     supabase
       .from('ordenes_mantenimiento')
       .select('*', { count: 'exact', head: true })
@@ -112,7 +131,7 @@ export default async function DashboardPage() {
     // Si el módulo está apagado (`AREAS_OCULTAS`), nadie va a ver este número y la
     // consulta sería un viaje a la base de más en la pantalla que más se abre.
     estaOculta('objetos_perdidos')
-      ? Promise.resolve({ count: 0 })
+      ? Promise.resolve({ count: 0, error: null })
       : supabase
           .from('objetos_perdidos')
           .select('*', { count: 'exact', head: true })
@@ -124,6 +143,32 @@ export default async function DashboardPage() {
       .eq('tipo', 'cargo')
       .in('estado', ['pendiente', 'vencido']),
   ])
+
+  /*
+   * Ninguna de las 10 lecturas de arriba revisaba su `error`: si una fallaba,
+   * `data`/`count` llegaban en `null`, el `?? 0`/`?? []` de más abajo lo
+   * convertía en «no hay nada», y la pantalla lo mostraba idéntico a que
+   * estuviera todo en cero. El caso más caro era el conflicto de canal
+   * (`conflictosCanal`): con la lectura fallada, la alerta de posible
+   * overbooking —la más cara que le puede pasar al hotel— desaparecía sin
+   * dejar rastro. Se loguean todas (accesorio: no corta el render, degrada) y
+   * la de canal se trata aparte más abajo porque «no se pudo verificar» no es
+   * lo mismo que «no hay ninguno».
+   */
+  registrarFalla(eUnidades, 'dashboard:unidades')
+  registrarFalla(eEstadias, 'dashboard:estadias')
+  registrarFalla(eActivas, 'dashboard:reservas_activas')
+  registrarFalla(eNuevasHoy, 'dashboard:reservas_nuevas_hoy')
+  registrarFalla(eCanceladasHoy, 'dashboard:canceladas_hoy')
+  registrarFalla(eMant, 'dashboard:mantenimiento_pendiente')
+  registrarFalla(eObjetos, 'dashboard:objetos_guardados')
+  registrarFalla(eConflictos, 'dashboard:conflictos_canal')
+  registrarFalla(eStock, 'dashboard:stock_bajo')
+  registrarFalla(eComprobantes, 'dashboard:comprobantes_proveedor')
+
+  /** `null` cuando la lectura fallida no puede distinguirse de «no hay ninguno». */
+  const kpi = (valor: number | null, huboError: unknown): string =>
+    huboError ? '—' : String(valor ?? 0)
 
   const totalUnidades = unidades?.length ?? 0
   const porEstado = new Map<EstadoHousekeeping, number>()
@@ -227,7 +272,14 @@ export default async function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {(eUnidades || eEstadias) && (
+        <Mensaje tono="error">
+          No se pudo leer el estado de las unidades ni la ocupación en este momento. Los números de
+          abajo pueden estar incompletos — actualizá la página, y si sigue así avisá al administrador.
+        </Mensaje>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <Kpi
           titulo="Ocupación hoy"
           valor={`${ocupacionPct}%`}
@@ -251,20 +303,50 @@ export default async function DashboardPage() {
         />
         <Kpi
           titulo="Reservas activas"
-          valor={String(reservasActivas ?? 0)}
+          valor={kpi(reservasActivas, eActivas)}
           detalle="en curso"
           icono="reservas"
           href={puede('reservas') ? '/panel/reservas' : undefined}
         />
+        <Kpi
+          titulo="Nuevas hoy"
+          valor={kpi(reservasNuevasHoy, eNuevasHoy)}
+          detalle="reservas cargadas hoy"
+          icono="reservas"
+          tono="exito"
+          href={puede('reservas') ? '/panel/reservas' : undefined}
+        />
+        <Kpi
+          titulo="Canceladas hoy"
+          valor={kpi(canceladasHoy, eCanceladasHoy)}
+          detalle="bajas de hoy"
+          icono="reservas"
+          tono={(canceladasHoy ?? 0) > 0 ? 'alerta' : undefined}
+          href={puede('reservas') ? '/panel/reservas' : undefined}
+        />
       </div>
 
-      {/* Alertas: solo aparecen cuando hay algo que atender. */}
+      {/*
+        Alertas: aparecen cuando hay algo que atender, O cuando una lectura
+        falló y no se puede saber si hay algo que atender. Sin `eConflictos`
+        acá, el aviso de «no se pudo verificar overbooking» de más abajo
+        nunca llegaba a renderizarse: este `if` de afuera lo tapaba primero.
+      */}
       {((mantPendiente ?? 0) > 0 ||
         (objetosGuardados ?? 0) > 0 ||
         faltantes.length > 0 ||
         vencenPronto > 0 ||
-        yaVencidos > 0) && (
+        yaVencidos > 0 ||
+        eConflictos ||
+        eStock ||
+        eComprobantes) && (
         <div className="mt-4 flex flex-wrap gap-2">
+          {(eStock || eComprobantes) && puede('proveedores') && (
+            <span className="inline-flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 ring-1 ring-stone-200">
+              <Icono nombre="alerta" tam={16} />
+              No se pudo revisar el stock ni los vencimientos de proveedores en este momento
+            </span>
+          )}
           {(vencenPronto > 0 || yaVencidos > 0) && puede('proveedores') && (
             <Link
               href="/panel/proveedores"
@@ -289,8 +371,22 @@ export default async function DashboardPage() {
             El posible overbooking va en el hub y no solo en la pantalla de canales
             porque es lo más caro que le puede pasar al hotel y hay que verlo sin ir a
             buscarlo. En tono de peligro, no del gris de los demás avisos.
+
+            Si la lectura falló, NO se trata como «cero conflictos»: eso sería
+            justo el fallo silencioso más caro posible acá. Se avisa que no se
+            pudo verificar, en el mismo tono de peligro, en vez de ocultar la
+            alerta como si no hubiera nada que mirar.
           */}
-          {(conflictosCanal ?? 0) > 0 && puede('canales') && (
+          {eConflictos && puede('canales') && (
+            <Link
+              href="/panel/canales"
+              className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-800 ring-1 ring-red-200 transition hover:bg-red-100"
+            >
+              <Icono nombre="alerta" tam={16} />
+              No se pudo verificar si hay conflictos de canal — revisá Canales a mano
+            </Link>
+          )}
+          {!eConflictos && (conflictosCanal ?? 0) > 0 && puede('canales') && (
             <Link
               href="/panel/canales"
               className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-800 ring-1 ring-red-200 transition hover:bg-red-100"

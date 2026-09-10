@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { crearReservaAction, type EstadoNuevaReserva } from '../actions'
 import {
@@ -11,15 +11,60 @@ import {
   PLANES,
   SEGMENTOS,
 } from '@/lib/domain/reservas'
+import { ETIQUETAS_ESTADO_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
+import { claveBorradorReserva } from '@/lib/domain/borrador-reserva'
 import {
   CAMPO,
   Campo,
+  Etiqueta,
   Mensaje,
   PieDeFormulario,
   Tarjeta,
   botonClases,
 } from '../../_components/ui'
 import { formatearUSD } from '@/lib/domain/moneda'
+
+/**
+ * Borrador del alta (auditoría de calidad 2026-09-09).
+ *
+ * `sessionStorage`, no `localStorage`: en una recepción con la computadora
+ * compartida entre turnos, el nombre de un huésped a medio cargar no debería
+ * sobrevivir a que alguien cierre la pestaña. Envuelto en `try/catch` porque
+ * Safari en navegación privada puede negar el acceso — si falla, el
+ * formulario sigue andando, solo que sin recordar nada (degradación
+ * aceptable: hoy ya se pierde SIEMPRE).
+ */
+function leerBorrador(clave: string): Record<string, string> | null {
+  try {
+    const crudo = sessionStorage.getItem(clave)
+    return crudo ? (JSON.parse(crudo) as Record<string, string>) : null
+  } catch {
+    return null
+  }
+}
+
+function guardarBorrador(clave: string, datos: Record<string, string>): void {
+  try {
+    sessionStorage.setItem(clave, JSON.stringify(datos))
+  } catch {
+    // Sin espacio o sin acceso: no hay nada mejor que hacer acá.
+  }
+}
+
+function borrarBorrador(clave: string): void {
+  try {
+    sessionStorage.removeItem(clave)
+  } catch {
+    // Nada que limpiar si nunca se pudo escribir.
+  }
+}
+
+/**
+ * Ni el navegador cambia de servidor a cliente más de una vez, así que la
+ * suscripción no tiene a qué escuchar: solo hace falta la transición inicial
+ * (mismo patrón que `pwa.tsx`, `SIN_CAMBIOS`).
+ */
+const SIN_CAMBIOS = () => () => {}
 
 export interface OpcionAgencia {
   id: string
@@ -38,10 +83,18 @@ export interface OpcionTipo {
   faltanTarifas: boolean
 }
 
+/** Unidad física puntual libre, para elegir además del tipo (patrón QloApps). */
+export interface OpcionUnidad {
+  id: string
+  nombre: string
+  estado: EstadoHousekeeping
+}
+
 const ESTADO_INICIAL: EstadoNuevaReserva = {}
 
 export function FormularioReserva({
   opciones,
+  unidadesPorTipo,
   agencias,
   checkIn,
   checkOut,
@@ -49,6 +102,7 @@ export function FormularioReserva({
   noches,
 }: {
   opciones: OpcionTipo[]
+  unidadesPorTipo: Record<string, OpcionUnidad[]>
   agencias: OpcionAgencia[]
   checkIn: string
   checkOut: string
@@ -57,18 +111,109 @@ export function FormularioReserva({
 }) {
   const [estado, accion, pendiente] = useActionState(crearReservaAction, ESTADO_INICIAL)
 
-  // Los valores vuelven desde la acción para reponerlos si hubo error: un
-  // formulario que se vacía obliga a recargar todo por corregir un campo.
-  const v = estado.valores ?? {}
+  const clave = claveBorradorReserva(checkIn, checkOut, huespedes)
+  const [borrador, setBorrador] = useState<Record<string, string> | null>(null)
+  // Fuerza el remontaje de los campos no controlados cuando llega un borrador
+  // después del primer render: `defaultValue` solo se aplica al montar, así
+  // que cambiarlo sin remontar no mueve nada en el DOM.
+  const [version, setVersion] = useState(0)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  // Los valores vuelven desde la acción del servidor si hubo un error de
+  // validación (prioridad: son los que el huésped acaba de intentar mandar);
+  // si no, un borrador guardado en este mismo navegador para esta misma
+  // búsqueda; si no hay ninguno, vacío.
+  const v = estado.valores ?? borrador ?? {}
 
   const cotizables = opciones.filter((o) => !o.faltanTarifas)
   const primeraCotizable = cotizables[0]?.tipoUnidadId
 
+  // Qué tipo está elegido ahora mismo, para mostrar debajo sus unidades
+  // puntuales. Sin esto habría que repetir el picker de unidad una vez por
+  // tipo, visible todo junto — más ruido que ayuda con seis tipos en pantalla.
+  const [tipoElegido, setTipoElegidoState] = useState(v.tipo_unidad_id || primeraCotizable || '')
+  const [unidadElegida, setUnidadElegida] = useState('')
+  const unidadesDelTipo = unidadesPorTipo[tipoElegido] ?? []
+
+  /*
+    `typeof window !== 'undefined'` es VERDADERO desde el primer render del
+    cliente —incluso el de hidratación—, así que ajustar estado con esa
+    condición pinta el borrador ANTES de que React termine de comparar contra
+    el HTML del servidor: "Hydration failed because the server rendered HTML
+    didn't match the client" (se reprodujo en el navegador armando este
+    mismo caso). `useSyncExternalStore` sí distingue las dos pasadas: en la
+    de hidratación fuerza `getServerSnapshot` (acá `false`) aunque ya haya
+    `window`, y solo DESPUÉS de que la hidratación cierra pasa a `true` en un
+    render aparte, normal, donde ajustar estado ya no choca con nada (mismo
+    motivo por el que `pwa.tsx` usa este hook y no `typeof window`).
+  */
+  const clienteListo = useSyncExternalStore(SIN_CAMBIOS, () => true, () => false)
+
+  // Ajuste de estado durante el render (react.dev/learn/you-might-not-need-an-effect
+  // → "adjusting state when a value changes"), no en un `useEffect`: un efecto
+  // que llama `setState` en su cuerpo pinta una vez vacío y recién después
+  // pinta con el borrador, el rebote que corta `react-hooks/set-state-in-effect`.
+  const [borradorLeido, setBorradorLeido] = useState(false)
+  if (clienteListo && !borradorLeido && !estado.valores) {
+    setBorradorLeido(true)
+    const guardado = leerBorrador(clave)
+    if (guardado) {
+      setBorrador(guardado)
+      setVersion((n) => n + 1)
+      if (guardado.tipo_unidad_id) setTipoElegidoState(guardado.tipo_unidad_id)
+      if (guardado.unidad_id) setUnidadElegida(guardado.unidad_id)
+    }
+  }
+
+  function descartarBorrador() {
+    borrarBorrador(clave)
+    setBorrador(null)
+    setTipoElegidoState(primeraCotizable || '')
+    setUnidadElegida('')
+    setVersion((n) => n + 1)
+  }
+
+  /** Guarda cada cambio: es lo que sobrevive a un `?check_in=` distinto o a "atrás". */
+  function alCambiar() {
+    if (!formRef.current) return
+    const datos = Object.fromEntries(
+      Array.from(new FormData(formRef.current).entries()).map(([k, val]) => [k, String(val)]),
+    )
+    guardarBorrador(clave, datos)
+  }
+
+  // Cambiar de tipo invalida cualquier unidad puntual ya elegida: una unidad de
+  // la Cabaña Doble no existe como opción bajo Suite Triple.
+  function setTipoElegido(id: string) {
+    setTipoElegidoState(id)
+    setUnidadElegida('')
+    alCambiar()
+  }
+
   return (
-    <form action={accion} className="flex flex-col gap-4">
+    <form
+      key={version}
+      ref={formRef}
+      action={accion}
+      onChange={alCambiar}
+      className="flex flex-col gap-4"
+    >
       <input type="hidden" name="check_in" value={checkIn} />
       <input type="hidden" name="check_out" value={checkOut} />
       <input type="hidden" name="huespedes" value={huespedes} />
+
+      {borrador && (
+        <Mensaje tono="ok">
+          Recuperamos lo que tenías cargado para esta búsqueda.{' '}
+          <button
+            type="button"
+            onClick={descartarBorrador}
+            className="font-medium underline underline-offset-2"
+          >
+            Descartar y empezar de cero
+          </button>
+        </Mensaje>
+      )}
 
       {/* Si ninguna unidad tiene precio, se avisa ACÁ y no al confirmar: el
           problema es del tarifario, no de lo que cargue quien reserva. */}
@@ -106,7 +251,8 @@ export function FormularioReserva({
                   type="radio"
                   name="tipo_unidad_id"
                   value={o.tipoUnidadId}
-                  defaultChecked={o.tipoUnidadId === primeraCotizable}
+                  checked={tipoElegido === o.tipoUnidadId}
+                  onChange={() => setTipoElegido(o.tipoUnidadId)}
                   // Sin tarifa no se puede cotizar: se bloquea acá en lugar de
                   // dejar elegir y fallar recién al confirmar.
                   disabled={sinPrecio}
@@ -136,9 +282,66 @@ export function FormularioReserva({
             )
           })}
         </div>
+
+        {/* Unidad puntual, opcional: sin elegir ninguna, `crear_reserva` toma la
+            primera libre del tipo (comportamiento histórico). Recepción la
+            necesita cuando el huésped pidió "la de siempre" o hay que evitar
+            una que está sucia justo antes de que entre alguien ahora mismo. */}
+        {unidadesDelTipo.length > 0 && (
+          <div className="border-t border-stone-100 p-5 pt-4">
+            <p className="mb-2 text-sm font-medium text-stone-700">¿Cuál en particular?</p>
+            <div className="flex flex-wrap gap-2">
+              <label
+                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                  !unidadElegida
+                    ? 'border-lago-600 bg-lago-50 text-lago-900'
+                    : 'border-stone-200 text-stone-600 hover:border-lago-400'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="unidad_id"
+                  value=""
+                  checked={!unidadElegida}
+                  onChange={() => setUnidadElegida('')}
+                  className="size-4 accent-lago-600"
+                />
+                Cualquiera disponible
+              </label>
+              {unidadesDelTipo.map((u) => (
+                <label
+                  key={u.id}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                    unidadElegida === u.id
+                      ? 'border-lago-600 bg-lago-50 text-lago-900'
+                      : 'border-stone-200 text-stone-600 hover:border-lago-400'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="unidad_id"
+                    value={u.id}
+                    checked={unidadElegida === u.id}
+                    onChange={() => setUnidadElegida(u.id)}
+                    className="size-4 accent-lago-600"
+                  />
+                  {u.nombre}
+                  {u.estado !== 'limpia' && (
+                    <Etiqueta tono={u.estado === 'sucia' ? 'alerta' : 'lago'}>
+                      {ETIQUETAS_ESTADO_HK[u.estado]}
+                    </Etiqueta>
+                  )}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </Tarjeta>
 
-      <Tarjeta titulo="3 · ¿A nombre de quién?">
+      <Tarjeta
+        titulo="3 · ¿A nombre de quién?"
+        descripcion="Solo el apellido es obligatorio."
+      >
         <div className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
           <Campo etiqueta="Apellido" requerido>
             <input name="apellido" required defaultValue={v.apellido ?? ''} className={CAMPO} />
@@ -323,6 +526,25 @@ export function FormularioReserva({
             />
           </Campo>
         </div>
+      </Tarjeta>
+
+      {/* Check-in inmediato: para el walk-in que llega y se aloja en el momento,
+          en vez de dejarlo `confirmada` y pedirle a recepción un segundo paso
+          en la ficha para pasarlo a `in_house` (patrón QloApps
+          `AdminHotelRoomsBookingController`, que deja marcar "In Progress" al
+          confirmar la reserva). */}
+      <Tarjeta>
+        <label className="flex items-center gap-2 p-5 text-sm text-stone-700">
+          <input
+            type="checkbox"
+            name="checkin_inmediato"
+            value="1"
+            defaultChecked={v.checkin_inmediato === '1'}
+            className="size-4 accent-lago-600"
+          />
+          <span className="font-medium">Marcar check-in ahora</span>
+          <span className="text-stone-500">(el huésped ya está en el mostrador)</span>
+        </label>
       </Tarjeta>
 
       {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
