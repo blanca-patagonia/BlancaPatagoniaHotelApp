@@ -4,7 +4,11 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirAcceso, requerirRol } from '@/lib/auth/session'
-import { periodicidadValida, primeraEjecucionSugerida } from '@/lib/domain/preventivo'
+import {
+  periodicidadValida,
+  primeraEjecucionSugerida,
+  proximaEjecucion,
+} from '@/lib/domain/preventivo'
 import { hoyISO } from '@/lib/fechas'
 import { cortarSiFalla } from '@/lib/acciones'
 import { avisarIncidenteMantenimiento } from '@/lib/notificaciones/eventos'
@@ -105,6 +109,57 @@ export async function crearPlanPreventivo(formData: FormData): Promise<void> {
 
   revalidatePath('/panel/mantenimiento')
   redirect('/panel/mantenimiento?ok=plan')
+}
+
+/**
+ * Da de baja un plan preventivo (baja lógica: `activo = false`).
+ *
+ * No se borra la fila: es el mismo criterio que ya usa el resto del sistema
+ * para lo que tiene historial (huéspedes, agencias…), y acá además evita que
+ * una orden ya generada por este plan se quede apuntando a nada.
+ */
+export async function eliminarPlanPreventivo(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('id') ?? '')
+  if (id) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase
+      .from('planes_mantenimiento')
+      .update({ activo: false })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/mantenimiento', 'plan_eliminar')
+  }
+
+  revalidatePath('/panel/mantenimiento')
+  redirect('/panel/mantenimiento?ok=plan_eliminado')
+}
+
+/**
+ * Registra que la tarea se hizo hoy, fuera del ciclo automático, y calcula
+ * la próxima ejecución a partir de HOY (no de la fecha vencida).
+ *
+ * Sin esto, la única forma de que un plan avance era esperar a que quedara
+ * vencido y generar la orden — no hay manera de anotar «esto ya se hizo» si
+ * se resolvió por afuera del sistema (una visita del técnico sin pasar por
+ * la orden).
+ */
+export async function marcarPlanHecho(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('id') ?? '')
+  const cadaMeses = Number(formData.get('cada_meses'))
+  if (id && periodicidadValida(cadaMeses)) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase
+      .from('planes_mantenimiento')
+      .update({ proxima_ejecucion: proximaEjecucion(hoyISO(), cadaMeses) })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/mantenimiento', 'plan_marcar_hecho')
+  }
+
+  revalidatePath('/panel/mantenimiento')
+  redirect('/panel/mantenimiento?ok=plan_hecho')
 }
 
 /**

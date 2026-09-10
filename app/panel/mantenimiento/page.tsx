@@ -35,7 +35,13 @@ import {
   diasParaProxima,
 } from '@/lib/domain/preventivo'
 import { Mensaje } from '../_components/ui'
-import { cambiarEstadoOrden, crearPlanPreventivo, generarPreventivo } from './actions'
+import {
+  cambiarEstadoOrden,
+  crearPlanPreventivo,
+  eliminarPlanPreventivo,
+  generarPreventivo,
+  marcarPlanHecho,
+} from './actions'
 
 interface PlanPreventivo {
   id: string
@@ -97,6 +103,8 @@ interface Orden {
 const MENSAJES_ERROR: Record<string, string> = {
   plan: 'Revisá el título y la periodicidad del plan.',
   plan_guardar: 'No se pudo guardar el plan. No quedó cargado.',
+  plan_eliminar: 'No se pudo eliminar el plan. Sigue activo.',
+  plan_marcar_hecho: 'No se pudo registrar la tarea como hecha. La próxima fecha no cambió.',
   estado_orden: 'No se pudo cambiar el estado de la orden. Quedó como estaba.',
 }
 
@@ -278,6 +286,10 @@ export default async function MantenimientoPage({
         </Mensaje>
       )}
       {sp.ok === 'plan' && <Mensaje tono="ok">Plan preventivo creado.</Mensaje>}
+      {sp.ok === 'plan_eliminado' && <Mensaje tono="ok">Plan eliminado.</Mensaje>}
+      {sp.ok === 'plan_hecho' && (
+        <Mensaje tono="ok">Registrado: la próxima ejecución se recalculó desde hoy.</Mensaje>
+      )}
       {sp.error && (
         <Mensaje tono="error">
           {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
@@ -331,6 +343,24 @@ export default async function MantenimientoPage({
                   ) : (
                     <Etiqueta tono="neutro">En {dias} días</Etiqueta>
                   )}
+                  <form action={marcarPlanHecho}>
+                    <input type="hidden" name="id" value={p.id} />
+                    <input type="hidden" name="cada_meses" value={p.cada_meses} />
+                    <BotonEnvio variante="fantasma" extra="px-3 py-1.5 text-xs" cargando="Marcando…">
+                      Marcar hecha
+                    </BotonEnvio>
+                  </form>
+                  <form action={eliminarPlanPreventivo}>
+                    <input type="hidden" name="id" value={p.id} />
+                    <BotonEnvio
+                      confirmar={`¿Eliminar el plan «${p.titulo}»? Deja de generar órdenes.`}
+                      variante="fantasma"
+                      extra="px-3 py-1.5 text-xs text-red-700"
+                      cargando="Eliminando…"
+                    >
+                      Eliminar
+                    </BotonEnvio>
+                  </form>
                 </li>
               )
             })}
