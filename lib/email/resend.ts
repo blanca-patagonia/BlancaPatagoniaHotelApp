@@ -78,6 +78,10 @@ export class ProveedorResend implements EmailProvider {
           to: [m.para],
           subject: m.asunto,
           text: m.cuerpo,
+          // Resend acepta las dos partes en la misma llamada: el cliente de
+          // correo elige cuál mostrar. Sin `html`, algunos clientes muestran
+          // el texto plano sin ningún salto de línea propio.
+          ...(m.cuerpoHtml ? { html: m.cuerpoHtml } : {}),
         }),
         signal: corte,
       })
