@@ -9,6 +9,9 @@ import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { areasDe, estaOculta, type Area } from '@/lib/domain/permisos'
 import { registrarFalla } from '@/lib/acciones'
+import { ESTADOS_FACTURABLES } from '@/lib/domain/facturacion'
+import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
+import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
 import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
@@ -77,6 +80,125 @@ function FilaMovimiento({ e }: { e: EstadiaDia }) {
   )
 }
 
+type ClienteServidor = Awaited<ReturnType<typeof crearClienteServidor>>
+
+/** Cuántos días hacia atrás se mira para «consumos sin facturar». */
+const VENTANA_CONSUMOS_SIN_FACTURAR_DIAS = 60
+
+/**
+ * Reservas en estados facturables (`ESTADOS_FACTURABLES`) con consumos
+ * cargados que todavía no tienen factura — la cuenta que se puede olvidar
+ * porque el huésped «ya se fue» (`motivoNoCargable`, ADR/P3: la cuenta se
+ * cierra con la FACTURA, no con el check-out — no existe `consumos.factura_id`,
+ * «facturada» es «existe una fila en `facturas` con este `reserva_id`», igual
+ * que ya lo resuelve `agregarConsumo` en `app/panel/reservas/actions.ts`).
+ *
+ * Acotado a los últimos `VENTANA_CONSUMOS_SIN_FACTURAR_DIAS` por el check-out:
+ * `checkout` es un estado terminal que no se vuelve a tocar, así que sin esta
+ * ventana la consulta sumaría TODAS las reservas facturables de la historia
+ * del hotel y con los años pasaría las 1000 filas que PostgREST corta en
+ * silencio (`max_rows`). Una cuenta sin facturar hace más de dos meses ya no
+ * es «atender hoy»: es otro problema, de auditoría.
+ */
+async function contarConsumosSinFacturar(
+  supabase: ClienteServidor,
+  hoy: string,
+): Promise<{ cantidad: number; error: { message: string } | null }> {
+  const desde = sumarDias(hoy, -VENTANA_CONSUMOS_SIN_FACTURAR_DIAS)
+
+  // Paso 1: reservas facturables cuyo check-out cayó en la ventana. `!inner`
+  // es obligatorio para que el filtro por `check_out` recorte la fila madre —
+  // con un embed normal PostgREST devuelve TODAS las reservas con el array
+  // vacío, y el filtro no filtra nada, en silencio (trampa documentada en
+  // AGENTS.md).
+  const { data: candidatas, error: eCandidatas } = await supabase
+    .from('reservas')
+    .select('id, estadias!inner(check_out)')
+    .in('estado', ESTADOS_FACTURABLES)
+    .gte('estadias.check_out', desde)
+  if (eCandidatas) return { cantidad: 0, error: eCandidatas }
+  const ids = (candidatas ?? []).map((r) => r.id as string)
+  if (ids.length === 0) return { cantidad: 0, error: null }
+
+  // Paso 2: de esas, cuáles ya tienen factura.
+  const { data: facturadas, error: eFacturadas } = await supabase
+    .from('facturas')
+    .select('reserva_id')
+    .in('reserva_id', ids)
+  if (eFacturadas) return { cantidad: 0, error: eFacturadas }
+  const idsFacturados = new Set((facturadas ?? []).map((f) => f.reserva_id as string))
+  const sinFacturar = ids.filter((id) => !idsFacturados.has(id))
+  if (sinFacturar.length === 0) return { cantidad: 0, error: null }
+
+  // Paso 3: de las que no tienen factura, cuáles tienen algún consumo cargado
+  // — sin este paso se contaría también el alojamiento solo, que no es
+  // «consumos sin facturar».
+  const { data: conConsumo, error: eConsumo } = await supabase
+    .from('consumos')
+    .select('reserva_id')
+    .in('reserva_id', sinFacturar)
+  if (eConsumo) return { cantidad: 0, error: eConsumo }
+  const cantidad = new Set((conConsumo ?? []).map((c) => c.reserva_id as string)).size
+  return { cantidad, error: null }
+}
+
+/**
+ * Reservas confirmadas o alojadas con saldo pendiente de cobro, calculado con
+ * la misma cuenta consolidada (alojamiento + consumos) y el mismo
+ * `resumenPagos` que usa `lib/notificaciones/cobros.ts` — no una segunda
+ * noción de «pendiente» que con el tiempo diverja de la real (es la misma
+ * situación que ya pasó con `saldarSiCorresponde`, documentada en ese archivo).
+ *
+ * Sólo cuenta las que YA deberían haber sido cobradas: una `confirmada` para
+ * dentro de un mes, con la seña pagada y el resto pendiente, es el curso
+ * normal de una reserva — contarla acá inundaría «Requiere atención» con
+ * prácticamente toda reserva confirmada a futuro. Lo que sí pide atención es
+ * el check-in ya pasado sin saldar (`confirmada` que debería haberse alojado)
+ * o el check-out ya pasado sin saldar (`in_house` sin registrar la salida).
+ */
+async function contarSaldosPendientes(
+  supabase: ClienteServidor,
+  hoy: string,
+): Promise<{ cantidad: number; error: { message: string } | null }> {
+  const { data, error } = await supabase
+    .from('reservas')
+    .select(
+      'estado, total, pagos(tipo, monto, estado), consumos(cantidad, precio_unitario), estadias(check_in, check_out)',
+    )
+    .in('estado', ['confirmada', 'in_house'])
+  if (error) return { cantidad: 0, error }
+
+  const filas = (data ?? []) as unknown as {
+    estado: string
+    total: number | string
+    pagos: Pago[]
+    consumos: { cantidad: number; precio_unitario: number | string }[]
+    estadias: { check_in: string; check_out: string }[]
+  }[]
+
+  let cantidad = 0
+  for (const r of filas) {
+    const cuenta = cuentaConsolidada(
+      Number(r.total),
+      r.consumos.map(
+        (c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }) as Consumo,
+      ),
+    )
+    const resumen = resumenPagos(
+      cuenta.total,
+      r.pagos.map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado })),
+    )
+    if (resumen.saldo <= 0) continue
+
+    // «Debería haberse cobrado» según el estado: el check-in ya pasado para
+    // una `confirmada`, el check-out ya pasado para una `in_house`.
+    const fechas =
+      r.estado === 'in_house' ? r.estadias.map((e) => e.check_out) : r.estadias.map((e) => e.check_in)
+    if (fechas.some((f) => f <= hoy)) cantidad++
+  }
+  return { cantidad, error: null }
+}
+
 export default async function DashboardPage() {
   const sesion = await requerirAcceso('dashboard')
   const supabase = await crearClienteServidor()
@@ -95,6 +217,8 @@ export default async function DashboardPage() {
     { data: stockBajo, error: eStock },
     { data: comprobantes, error: eComprobantes },
     { count: avisosFijados, error: eAvisos },
+    { cantidad: consumosSinFacturar, error: eConsumosSinFacturar },
+    { cantidad: saldosPendientes, error: eSaldosPendientes },
   ] = await Promise.all([
     supabase.from('unidades').select('estado').eq('activo', true),
     supabase
@@ -147,10 +271,12 @@ export default async function DashboardPage() {
     // como «esto hay que verlo», a diferencia del resto del tablón que se lee
     // por orden cronológico.
     supabase.from('avisos').select('*', { count: 'exact', head: true }).eq('fijado', true),
+    contarConsumosSinFacturar(supabase, hoy),
+    contarSaldosPendientes(supabase, hoy),
   ])
 
   /*
-   * Ninguna de las 10 lecturas de arriba revisaba su `error`: si una fallaba,
+   * Ninguna de las 12 lecturas de arriba revisaba su `error`: si una fallaba,
    * `data`/`count` llegaban en `null`, el `?? 0`/`?? []` de más abajo lo
    * convertía en «no hay nada», y la pantalla lo mostraba idéntico a que
    * estuviera todo en cero. El caso más caro era el conflicto de canal
@@ -171,6 +297,8 @@ export default async function DashboardPage() {
   registrarFalla(eStock, 'dashboard:stock_bajo')
   registrarFalla(eComprobantes, 'dashboard:comprobantes_proveedor')
   registrarFalla(eAvisos, 'dashboard:avisos_fijados')
+  registrarFalla(eConsumosSinFacturar, 'dashboard:consumos_sin_facturar')
+  registrarFalla(eSaldosPendientes, 'dashboard:saldos_pendientes')
 
   /** `null` cuando la lectura fallida no puede distinguirse de «no hay ninguno». */
   const kpi = (valor: number | null, huboError: unknown): string =>
@@ -232,6 +360,26 @@ export default async function DashboardPage() {
       icono: 'proveedores' as NombreIcono,
       cantidad: vencenPronto,
       texto: 'por vencer esta semana',
+    },
+    {
+      area: 'reservas' as Area,
+      href: '/panel/reservas',
+      icono: 'divisas' as NombreIcono,
+      cantidad: saldosPendientes,
+      texto:
+        saldosPendientes === 1
+          ? 'reserva con saldo pendiente de cobro'
+          : 'reservas con saldo pendiente de cobro',
+    },
+    {
+      area: 'reservas' as Area,
+      href: '/panel/reservas',
+      icono: 'reservas' as NombreIcono,
+      cantidad: consumosSinFacturar,
+      texto:
+        consumosSinFacturar === 1
+          ? 'cuenta con consumos sin facturar'
+          : 'cuentas con consumos sin facturar',
     },
     {
       area: 'mantenimiento' as Area,

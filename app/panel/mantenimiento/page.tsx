@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { hoyISO, diasEntre, formatoFechaCorta } from '@/lib/fechas'
 import {
   construirQuery,
@@ -163,12 +164,12 @@ export default async function MantenimientoPage({
     fila: es correcto a cualquier volumen y además más barato.
   */
   const [
-    { data: ordenesData, count: enFiltro },
-    { data: unidadesData },
-    { count: pendientesCount },
-    { count: enProcesoCount },
-    { count: urgentesCount },
-    { data: planesData },
+    { data: ordenesData, count: enFiltro, error: eOrdenes },
+    { data: unidadesData, error: eUnidades },
+    { count: pendientesCount, error: ePendientes },
+    { count: enProcesoCount, error: eEnProceso },
+    { count: urgentesCount, error: eUrgentes },
+    { data: planesData, error: ePlanes },
   ] = await Promise.all([
     consulta.range(desde, hasta),
     supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
@@ -191,6 +192,18 @@ export default async function MantenimientoPage({
       .eq('activo', true)
       .order('proxima_ejecucion'),
   ])
+  registrarFalla(eOrdenes, 'mantenimiento:ordenes')
+  registrarFalla(eUnidades, 'mantenimiento:unidades')
+  registrarFalla(ePendientes, 'mantenimiento:kpi_pendientes')
+  registrarFalla(eEnProceso, 'mantenimiento:kpi_en_proceso')
+  registrarFalla(eUrgentes, 'mantenimiento:kpi_urgentes')
+  registrarFalla(ePlanes, 'mantenimiento:planes_preventivos')
+
+  // Con seis lecturas en paralelo, cualquiera puede fallar sola: sin este aviso,
+  // «0 urgentes» y «no se pudo leer» se ven exactamente igual.
+  const huboErrorDeLectura = Boolean(
+    eOrdenes || eUnidades || ePendientes || eEnProceso || eUrgentes || ePlanes,
+  )
 
   const ordenes = (ordenesData ?? []) as unknown as Orden[]
   const totalFiltrado = enFiltro ?? 0
@@ -223,6 +236,13 @@ export default async function MantenimientoPage({
           </>
         }
       />
+
+      {huboErrorDeLectura && (
+        <Mensaje tono="error">
+          No se pudieron leer algunos datos de esta pantalla. Los KPI y el listado pueden estar
+          incompletos.
+        </Mensaje>
+      )}
 
       {/* Tres KPIs en 375px daban columnas de ~110px: el número quedaba
           partido. Se apilan de a uno y recién en `sm` van los tres. */}
@@ -443,7 +463,12 @@ export default async function MantenimientoPage({
                   {ETIQUETA_PRIORIDAD[o.prioridad]}
                 </Etiqueta>
                 <div className="min-w-40 flex-1">
-                  <p className="font-medium text-stone-800">{o.titulo}</p>
+                  <Link
+                    href={`/panel/mantenimiento/${o.id}`}
+                    className="font-medium text-stone-800 hover:text-lago-700 hover:underline"
+                  >
+                    {o.titulo}
+                  </Link>
                   <p className="text-xs text-stone-600">
                     {o.unidad?.nombre ?? 'General'}
                     {o.descripcion ? ` · ${o.descripcion}` : ''}

@@ -7,6 +7,7 @@ import {
   contieneDia,
   nochesEnVentana,
   inicioFinDeMes,
+  inicioFinDeSemana,
   hoyISO,
   formatoFecha,
   fechaHotel,
@@ -198,5 +199,26 @@ describe('utilidades de fecha', () => {
   it('calcula inicio y fin (exclusivo) de un mes, incluido diciembre', () => {
     expect(inicioFinDeMes('2025-11')).toEqual({ inicio: '2025-11-01', fin: '2025-12-01' })
     expect(inicioFinDeMes('2025-12')).toEqual({ inicio: '2025-12-01', fin: '2026-01-01' })
+  })
+})
+
+describe('semana (lunes a domingo)', () => {
+  it('un martes resuelve al lunes de esa semana', () => {
+    // 2026-09-15 es martes.
+    expect(inicioFinDeSemana('2026-09-15')).toEqual({ inicio: '2026-09-14', fin: '2026-09-21' })
+  })
+
+  it('el propio lunes resuelve a sí mismo', () => {
+    expect(inicioFinDeSemana('2026-09-14')).toEqual({ inicio: '2026-09-14', fin: '2026-09-21' })
+  })
+
+  it('un domingo resuelve al lunes anterior, no al siguiente', () => {
+    // 2026-09-20 es domingo, último día de la semana que empezó el 14.
+    expect(inicioFinDeSemana('2026-09-20')).toEqual({ inicio: '2026-09-14', fin: '2026-09-21' })
+  })
+
+  it('cruza el cambio de mes', () => {
+    // 2026-09-30 es miércoles; esa semana termina el 2026-10-05.
+    expect(inicioFinDeSemana('2026-09-30')).toEqual({ inicio: '2026-09-28', fin: '2026-10-05' })
   })
 })

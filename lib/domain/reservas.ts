@@ -140,15 +140,15 @@ export function caminoDeEstados(
  * Plan de comidas incluido en la tarifa.
  *
  * Es lo que WinPAX llamaba indistintamente «plan» y «pensión»: son el mismo dato.
- * El valor por omisión es `desayuno` porque es lo que incluye el Tarifario del
- * hotel; poner `solo_alojamiento` por defecto haría que toda reserva nueva
- * prometiera menos de lo que el hotel da.
+ * El desayuno está SIEMPRE incluido en la tarifa del hotel (decisión del dueño,
+ * 2026-09-14): no existe `solo_alojamiento`. El valor por omisión es `desayuno`
+ * porque es el plan base del Tarifario; `media_pension` y `pension_completa` lo
+ * incluyen y suman comidas adicionales.
  */
-export const PLANES = ['solo_alojamiento', 'desayuno', 'media_pension', 'pension_completa'] as const
+export const PLANES = ['desayuno', 'media_pension', 'pension_completa'] as const
 export type Plan = (typeof PLANES)[number]
 
 export const ETIQUETAS_PLAN: Record<Plan, string> = {
-  solo_alojamiento: 'Solo alojamiento',
   desayuno: 'Habitación y desayuno',
   media_pension: 'Media pensión',
   pension_completa: 'Pensión completa',

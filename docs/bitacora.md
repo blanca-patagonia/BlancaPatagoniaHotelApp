@@ -5971,3 +5971,340 @@ fechas.
 sin autenticar, uno crítico. Se subió a 16.3.4 y el árbol quedó en cero
 vulnerabilidades. No es una dependencia nueva; la alternativa era desplegar con un
 RCE conocido.
+
+## 2026-09-14 — Lista de mejoras del dueño: trece pedidos, diez módulos
+
+**Origen:** el dueño del hotel pasó una lista corrida de mejoras chicas
+("requiere atención con consumos y pagos", "avisos por WhatsApp", "precio en
+la grilla", "agencia en el canal", "desayuno siempre incluido", "inicio de
+temporada en el tarifario", "color al 60 % de ocupación", "foto en
+mantenimiento y en housekeeping", "agencia sube el comprobante un mes antes
+del check-in", "proveedores con foto y WhatsApp", "ocupación semanal en
+reportes", "posnet Payway / MercadoPago / Santander y gráficos de
+facturación") y pidió hacerlas todas, resolviendo el resto de detalles sobre
+la marcha. Se relevó primero el estado real de cada módulo (seis excursiones
+de lectura en paralelo) antes de tocar código, y varias piezas se repartieron
+a agentes en paralelo sobre archivos sin superposición, coordinando a mano la
+numeración de migraciones para que no chocaran entre sí.
+
+### Storage: primer uso en todo el proyecto (ADR 0037)
+
+Cuatro pedidos —foto en mantenimiento, foto y comentario en housekeeping,
+documentación de proveedores, comprobante de agencia— necesitaban lo mismo:
+adjuntar un archivo a una fila existente. El ADR 0013 había dejado esto como
+trabajo futuro con una recomendación concreta (bucket privado, acceso siempre
+por URL firmada); se construyó una sola vez, en `lib/storage/index.ts`, con
+un bucket único `adjuntos-operativos` (migración 0099) **sin ninguna política
+RLS de Storage a propósito**: sin policy, Postgres deniega todo a
+`anon`/`authenticated`, y la única puerta es `service_role` desde el
+servidor, después de que la Server Action que llama ya pasó por
+`requerirAcceso`. Es la misma garantía que ya usa `crearClienteAdmin()` en el
+resto del sistema, en vez de abrir una segunda capa de permisos que
+mantener sincronizada con `lib/domain/permisos.ts`. Dos componentes
+compartidos (`SubirFoto`, `FotoAdjunta`) evitan reinventar la subida cuatro
+veces.
+
+Sobre eso se construyeron: detalle de una orden de mantenimiento
+(`/panel/mantenimiento/[id]`, migración 0100 — no existía pantalla de
+detalle, solo listado); registro de limpieza con comentario y foto
+(`housekeeping_registros`, migración 0101, con su propia política RLS
+acotada a admin/gerencia/housekeeping); documentación del proveedor más el
+teléfono/WhatsApp movido al alta (migración 0102); y el comprobante de pago
+de agencia (migración 0103), que fue el más delicado de los cuatro.
+
+### El pago de agencia, un mes antes del check-in
+
+El dueño lo explicó así: «la agencia tiene que abonar con un mes de
+anticipación a la fecha de check-in». El vencimiento **no se guarda**, se
+deriva de `estadias.check_in − 30 días` (`lib/domain/cuentas.ts`,
+`vencimientoPagoAgencia`/`pagoAgenciaVencido`, con test dedicado) — guardarlo
+lo desincronizaría apenas alguien reprograme la reserva. Se agregó la
+primera Server Action de escritura del portal público de agencias
+(`app/portal/[token]/actions.ts`), que hasta ahora era 100 % lectura, con
+límite de tasa propio (`comprobante_agencia`, 10/hora). ⚠️ **Decisión
+conservadora que queda anotada para el dueño:** un comprobante subido desde
+el portal, sin sesión de staff, es una AFIRMACIÓN, no una verificación — la
+acción nunca inventa ni confirma un importe. Si hay un pago sin comprobante
+para esa reserva, le adjunta el archivo; si no hay ninguno, crea uno con
+`monto: 0` (no mueve el saldo) para que el staff lo revise y cargue el
+importe real, igual que ya hace la conciliación bancaria (ADR 0030). Si el
+hotel prefiere otro flujo, es una decisión de negocio a validar antes de
+usarlo en producción.
+
+### Payway como tercera pasarela (ADR 0038)
+
+El pedido de integración real (no un simulador más) chocó con que Payway
+—a diferencia de Mercado Pago y Stripe— no tiene checkout alojado: resuelve
+el pago en dos llamadas que hace el propio integrador, tokenizar desde el
+navegador con la llave pública y ejecutar desde el servidor con la llave
+privada, de forma **síncrona** (sin webhook real de la pasarela). Se
+construyó un checkout propio (`/pago-payway/[reservaId]`, con el script
+`decidir.js` client-side) y, para no abrir un segundo camino de escritura de
+`pagos`, el resultado síncrono se re-empaqueta como el mismo evento interno
+firmado que ya usa `ProveedorSimulado` y se postea contra
+`/api/webhooks/pagos/payway` — el pipeline que decide si la reserva queda
+saldada sigue siendo uno solo. ⚠️ **Escrito contra la documentación pública
+de los SDKs de Payway, no contra una cuenta de sandbox** (mismo régimen con
+el que se sumaron Mercado Pago y Stripe): el nombre del header de
+autenticación y la URL base de producción están documentados en el código
+con la fuente exacta y conviene confirmarlos con Soporte Payway antes de
+activar `PAGO_PROVIDER=payway` en producción.
+
+Sobre "Santander": no existe como pasarela de cobro para comercios en
+Argentina — lo que ya existe con ese nombre es la conciliación bancaria por
+archivo (ADR 0030), que no cambió. Se dejó explícito en el ADR 0038 para que
+no se intente inventar una integración que el banco no ofrece.
+
+### El resto, más chico
+
+- **Ocupación:** la celda de la grilla muestra ahora precio total y por
+  noche (derivado de `reservas.total / noches`, nunca una columna nueva) vía
+  `title`/`sr-only` para no romper el `truncate` en una celda de 40 px.
+  `tonoOcupacion()` suma un cuarto tramo `'medio'` (60–84 %) en `calafate`,
+  dejando `lenga` (85 %+) y rojo (100 %) como estaban.
+- **Canales / Tarifario:** el listado de canales muestra la agencia de la
+  reserva vinculada; el tarifario muestra el rango de cada temporada (con
+  `textoRango()`, fin excluido) — la premisa de que `temporadas` tenía
+  columnas `desde`/`hasta` era incorrecta, las fechas viven en
+  `temporada_rangos`.
+- **Desayuno siempre incluido:** se sacó `solo_alojamiento` de `PLANES`
+  (`lib/domain/reservas.ts`) y del check de `reservas.plan` (migración 0098,
+  con backfill de las filas existentes a `desayuno` antes de endurecer el
+  constraint).
+- **Dashboard:** "Requiere atención" suma consumos sin facturar (estadías ya
+  en `pagada`/`in_house`/`checkout` sin fila en `facturas`, acotado a 60 días
+  por `checkout` para no pasar el límite de 1000 filas de PostgREST) y
+  saldos pendientes ya vencidos (reserva confirmada con el check-in pasado, o
+  in-house con el check-out pasado, todavía sin saldar).
+- **Reportes:** `metricasDeMes` se generalizó a `metricasDePeriodo` (ventana
+  `[inicio, fin)` cualquiera) sin cambiar su firma pública, y
+  `reportes/ocupacion` suma una vista semanal (lunes a domingo, identificada
+  por el ISO de su lunes) al lado de la mensual, con el mismo cálculo por
+  debajo.
+- **Facturación y medios de cobro:** informe nuevo
+  (`/panel/reportes/facturacion`) con dos gráficos de barras CSS —sin sumar
+  ninguna librería, seguí el patrón que ya usa `reportes/ocupacion`—:
+  evolución de lo facturado y desglose de lo cobrado por medio de pago
+  (incluye Payway).
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (todas las rutas nuevas aparecen en el
+manifiesto: `/pago-payway/[reservaId]`, `/panel/reportes/facturacion`,
+`/panel/mantenimiento/[id]`, `/panel/housekeeping/mi-trabajo/[unidadId]`).
+**1981 tests en verde, 16 en rojo, 261 salteados.** Los 16 en rojo son
+previos a esta sesión y no la tocan (confirmado por dos agentes distintos
+con `git stash`/`git stash pop`): la base local tenía un desvío de esquema
+—la migración 0087 figuraba aplicada pero le faltaba crear
+`canal_restricciones`, y a `notificaciones` le falta `proveedor_id`— que un
+`npx supabase db reset` completo resuelve. Ese comando está bloqueado por el
+hook `bloquear-destructivos.mjs` para cualquier ejecución automática (borra
+los usuarios de auth); queda pendiente que alguien lo corra a mano seguido
+de `npm run seed:usuarios`.
+
+## 2026-09-14 (segunda mitad) — Auto-auditoría de la sesión, y cómo conectar cada pasarela
+
+Con la lista de trece pedidos ya cerrada, se hicieron dos cosas más: una
+ronda de auditoría sobre el propio trabajo recién hecho (y sobre módulos que
+no se habían tocado) para encontrar lo que se pudo pasar por alto, y una
+investigación de qué trámite hace falta para contratar de verdad Santander,
+Mercado Pago y Payway — pedido explícito, para dejarlo listo cuando el hotel
+decida conectarlas.
+
+### Lo que encontró la auditoría (tres pasadas en paralelo) y se corrigió
+
+**Sobre las pantallas nuevas de esta sesión:** faltaban dos `loading.tsx`
+(`reportes/facturacion`, `housekeeping/mi-trabajo/[unidadId]`) rompiendo el
+patrón del resto del panel; el botón "Pagar" de Payway y dos botones "Subir
+foto" no tenían `sm:w-auto`; y —el hallazgo más serio— el formulario de
+Payway llamaba al SDK de tokenización sin `try/catch`: si esas llamadas
+tiran una excepción síncrona (posible, dado que el SDK no está probado
+contra una cuenta real), el botón quedaba trabado en "Procesando…" para
+siempre, sin mensaje y sin forma de reintentar salvo recargar. Se agregó el
+`try/catch` y `autoComplete` a los campos de tarjeta. También se detectó que
+`app/portal/[token]/actions.ts` (subida de comprobante de agencia) descartaba
+`{ error }` en tres lecturas; una de ellas —el pago pendiente sin
+comprobante— tenía además una consecuencia real: si esa lectura fallaba, el
+código no lo notaba y creaba un `pago` en CERO nuevo en vez de completar el
+que ya existía, duplicando filas. Se corrigió cortando con
+`?error=comprobante_guardar` cuando la lectura falla.
+
+**Sobre commits recientes no cubiertos por la auditoría del 09-09:** el
+patrón de `{ data } ?? []` sin revisar `{ error }` había reaparecido en
+`app/panel/notificaciones/page.tsx` (el registro de envíos) y en
+`app/panel/config/page.tsx` (el índice de configuración, reescrito en el
+rediseño), y seguía sin corregirse en `app/panel/mantenimiento/page.tsx`
+(seis lecturas). Se corrigieron las tres, cada una con `registrarFalla` +
+`Mensaje` visible cuando el dato es crítico. De paso se encontró que
+`traerRentabilidadCanal` (`app/panel/reportes/datos.ts`) descartaba
+`{ error }` **en el origen** —no en la pantalla, en la función que trae los
+datos—, así que se le cambió la firma para devolver `{ filas, error }` (su
+único caller, `reportes/canales`, se actualizó) y se sumó el mismo chequeo a
+`reportes/ocupacion` y `reportes/categorias`, que tenían el mismo hueco.
+
+**Sobre módulos no tocados en la sesión (punto de venta, conciliación,
+huéspedes, contratos):** un importe real mostrado al mostrador en
+`app/panel/punto-venta/actions.ts` (`cerrarComanda`) usaba `toLocaleString`
+en vez de `formatearUSD` —deuda ya documentada, pero un importe de venta
+real igual—; el botón "Cerrar comanda" (el formulario más táctil del
+sistema, se usa en tablet/mostrador) no tenía `w-full sm:w-auto`; y la tabla
+de gastos operativos no plegaba la columna "Categoría" en móvil. Las tres se
+corrigieron. Quedó sin tocar, por ser puramente cosmético y de bajo riesgo
+(confirmado que no es un agujero de seguridad): `punto-venta/actions.ts`
+sigue usando el patrón viejo `obtenerSesion()` + `puedeAcceder()` en vez de
+`requerirAcceso()` en dos acciones.
+
+**Lo que sigue pendiente y no se tocó, por ser una inversión de
+infraestructura y no un arreglo puntual:** cero tests de componente (Vitest
+sigue en `environment: 'node'`, sin React Testing Library) y Lighthouse/
+Profiler sin correrse de forma sistemática — los dos ya estaban señalados en
+`CLAUDE.md` como oportunidades para cuando el hotel las priorice.
+
+### Cómo conectar Santander, Mercado Pago y Payway (investigado, no implementado)
+
+Documentado en `docs/despliegue.md` §1.6, con el trámite exacto de cada uno.
+Tres cosas que vale la pena tener presentes:
+
+1. **Hay TRES pares de credenciales de Mercado Pago, no uno** — cobro
+   (`MERCADOPAGO_ACCESS_TOKEN`/`WEBHOOK_SECRET`), conexión OAuth del panel
+   (`MERCADOPAGO_APP_ID`/`APP_SECRET`, ADR 0036) y ninguna reemplaza a la
+   otra: la conexión OAuth hoy solo guarda el estado, `lib/payments/` sigue
+   leyendo el primer par directo de las variables de entorno.
+2. **Payway es un trámite telefónico** (`4378-4440`) antes que un formulario
+   web: hay que pedir la cuenta, después activar «venta online» como
+   establecimiento aparte, y recién después escribir a
+   `soporte@payway.com.ar` por las claves del portal de desarrolladores —
+   ahí mismo conviene preguntar lo que el código dejó sin confirmar (nombre
+   del header de autenticación, URL base de producción correcta).
+3. **Santander no es una pasarela**: sigue siendo la conciliación bancaria
+   por archivo (ADR 0030) que ya existía, porque el banco no tiene banca
+   abierta. Si alguna vez el hotel quiere un posnet físico del banco, la
+   marca es **Getnet by Santander** (`comercios@getnet.com.ar`) — es una
+   integración nueva, no escrita, y no es lo mismo que Payway aunque las dos
+   sean adquirentes locales.
+
+También quedó documentado, y es una decisión del hotel más que un trámite
+técnico: **Stripe no admite cuentas registradas en Argentina** — el camino
+que existe es una entidad legal en otro país (EE.UU. u otro), no cargar una
+variable de entorno.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0. **1981 tests en verde, 16 en rojo** (los
+mismos 16 previos por el desvío de esquema, sin cambios), 261 salteados.
+
+## 2026-09-14 (tercera mitad) — Lista de compras de cocina, y estética de Avisos enviados
+
+**Estética.** Pedido puntual sobre `/panel/notificaciones`: la tarjeta "¿Los
+avisos salen de verdad?" se veía como un log técnico —seis filas de texto
+corrido con el nombre de la variable de entorno en monoespaciado pelado—.
+Se le sumó una insignia "N de 6 listas" en el encabezado para lectura rápida,
+cada requisito pasó a ser una fila con fondo propio (las que faltan se
+destacan sobre las que ya están listas, en vez de verse todas iguales), el
+nombre de la variable pasó a una etiqueta tipo chip en vez de texto suelto, y
+el aviso de "los correos no salen" sumó un borde de color a la izquierda.
+Verificado en el navegador contra la base local.
+
+**Lista de compras de cocina** (`/panel/servicio/lista-compras`, migración
+0105, nuevo enlace desde "Servicio de cocina"). El pedido: una hoja tipo
+planilla con casillero de comprado, para ir anotando con el tiempo qué
+comprarle al supermercado para el restaurante, con precio estimado, e
+imprimirla.
+
+- Tabla nueva y chica a propósito, no reutiliza `productos_servicios` (eso es
+  el catálogo de venta al huésped) ni `movimientos_proveedor` (eso es gasto ya
+  facturado): acá son cosas que **todavía no se compraron**, con un precio
+  que es una estimación en pesos para presupuestar, no un importe fiscal.
+- RLS con los mismos tres roles que ya ven el área `servicio`
+  (admin/gerencia/recepcion — housekeeping no entra).
+- "Una fila, un guardado" (mismo criterio que el tarifario de la Fase 25):
+  cantidad, precio y nota de cada ítem están siempre editables, sin modo de
+  edición aparte. Tildar "comprado" es la acción que más se usa, así que
+  tiene su propio botón que guarda solo eso.
+- Se imprime con casilleros en blanco para lo que el sistema todavía no tiene
+  tildado —para marcarlo a mano en el súper— y ya tildado lo que se cargó
+  como comprado antes de imprimir, con el total pendiente al pie.
+- Sumado el capítulo de Ayuda del área `servicio`, que no existía (hueco
+  previo a esta sesión, no introducido acá).
+- Pedido aparte del usuario, ya cubierto por piezas existentes: "ícono de
+  carga cuando demora" es el `Girador` que `BotonEnvio` ya muestra solo con
+  usarlo (spinner + `aria-busy`), y "loading.tsx" propio para el primer
+  ingreso a la pantalla. Para los errores se usó el `Mensaje` que ya usa el
+  resto del panel (banner con `role="alert"`, visible arriba de la acción)
+  en vez de introducir un sistema de popups nuevo y distinto al de las otras
+  ~100 pantallas del panel — si se prefiere un popup/toast de verdad, es una
+  decisión de diseño para todo el sistema, no solo para este módulo.
+- Verificado de punta a punta en el navegador contra la base local: alta,
+  tildar/destildar (con el KPI de estimado pendiente/comprado moviéndose en
+  vivo), edición de cantidad/precio/nota.
+- Sumada a `tests/rls-por-rol.test.ts` (matriz + siembra), siguiendo el
+  mismo patrón que `housekeeping_registros`. ⚠️ **No se pudo correr ese test
+  contra una base limpia**: el desvío de esquema preexistente
+  (`canal_restricciones` faltante) corta la siembra antes de llegar a esta
+  tabla. Typecheck y lint sí están verdes sobre el archivo.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0. **1986 tests en verde** (+5 de
+`tests/lista-compras.test.ts`), **16 en rojo** (los mismos de siempre, por el
+desvío de esquema que sigue pendiente de un `db reset` a mano), 261
+salteados.
+
+## 2026-09-14 (cuarta mitad) — Eliminar producto en Inventario
+
+Pedido puntual: el inventario (`/panel/config/inventario`) solo tenía
+Activar/Desactivar, no Eliminar. `eliminarProducto` (`app/panel/config/actions.ts`)
+hace un `delete` de verdad, y es seguro sin necesitar ninguna comprobación
+propia: `consumos.producto_id` tiene `on delete restrict` desde la migración
+0010, así que si el producto ya se vendió alguna vez, Postgres rechaza el
+borrado solo, antes de tocar nada. Ese rechazo (código `23503`) se traduce a
+un mensaje que manda a "Desactivar" en vez del genérico de escritura
+fallida —confirmado el código exacto pegándole directo a PostgREST con
+`curl`, no solo leyendo la migración—. Botón nuevo en `FilaProducto`
+(variante `peligro`, con confirmación: "no se puede deshacer").
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0. Probado contra la base local por fuera del
+navegador (para no disparar el diálogo nativo de confirmación del botón):
+un producto sin consumos se borra sin problema; uno con un consumo cargado
+lo rechaza con `23503`, tal como lo lee `eliminarProducto`. Datos de prueba
+limpiados después.
+
+## 2026-09-14 (quinta mitad) — Ocultar Contratos y Respaldos, y subir el tarifario por porcentaje
+
+**Ocultar Contratos y Respaldos.** Pedido del dueño: sacarlos de la vista
+por ahora. Ya existía el mecanismo exacto para esto —`AREAS_OCULTAS` en
+`lib/domain/permisos.ts`, usado para auditoría/conversaciones/objetos
+perdidos—, así que fue agregar los dos nombres a esa lista: apaga el menú,
+el hub de inicio, el capítulo de Ayuda y el `requerirAcceso` de cada
+pantalla y Server Action del módulo, sin tocar código, sin borrar nada
+(la tabla `auditoria` sigue registrando operaciones sensibles igual, que es
+a propósito). Dos tests quedaron desactualizados porque afirmaban lo
+contrario —que admin/gerencia SÍ entraban a contratos/respaldos— y se
+corrigieron: uno pasó a probar `PERMISOS` directo (a quién quedaría
+asignado si se reactiva) en vez de `puedeAcceder` (que ahora da `false`
+para todos, correctamente).
+
+**Tarifario por porcentaje** (`/panel/config/tarifario`, nuevo panel arriba
+de la tabla, admin/gerencia). Pedido explícito: "así se hace en los
+hoteles" — un ajuste de temporada no se carga tarifa por tarifa, se aplica
+un porcentaje parejo a todo (o a una sola temporada) de una vez.
+`aplicarPorcentajeTarifario` sube o baja precio neto Y rack **juntos**, con
+el mismo factor: como la relación entre los dos (neto de agencia ≤ rack de
+mostrador) ya valía antes, multiplicar los dos por el mismo número positivo
+no puede invertirla — no hace falta una validación aparte para eso. Sí se
+valida que ningún precio resultante quede negativo, calculando y
+verificando TODOS los precios nuevos antes de escribir el primero. Misma
+limitación de atomicidad que ya tiene `actualizarTarifasDeFila` en el mismo
+archivo (sin función SQL transaccional, documentada ahí).
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · **1986 tests en verde, 16 en rojo** (los
+de siempre). Confirmado en el navegador que Contratos y Respaldos
+desaparecieron del menú y que entrar por URL redirige al panel. El cálculo
+del porcentaje se probó pegándole directo a PostgREST con `curl` sobre una
+tarifa real (270 → 297 con +10%, matemática exacta) y se revirtió al valor
+original — no se probó el botón desde el navegador para no disparar su
+diálogo nativo de confirmación.

@@ -79,6 +79,94 @@ export async function actualizarTarifasDeFila(
   return { ok: 'Tarifas guardadas.' }
 }
 
+export interface EstadoPorcentajeTarifario {
+  error?: string
+  ok?: string
+}
+
+/**
+ * Sube o baja TODAS las tarifas cargadas (o las de una sola temporada) un
+ * mismo porcentaje, de una vez.
+ *
+ * Es como se ajusta el tarifario en un hotel real, según lo que pidió el
+ * dueño: al cambio de temporada no se entra tarifa por tarifa, se aplica un
+ * porcentaje parejo y después se corrige a mano lo puntual. El mismo
+ * porcentaje sube (o baja) el precio neto Y el rack juntos, así la relación
+ * entre los dos —el neto de agencia nunca puede superar al rack de
+ * mostrador— se mantiene sola: multiplicar dos números por el mismo factor
+ * positivo no puede invertir el orden que ya tenían.
+ *
+ * Se calculan y validan TODOS los precios nuevos antes de escribir el
+ * primero: si el porcentaje dejara algún precio negativo, no se guarda nada.
+ * Una vez que empieza a escribir seguimos con la misma limitación que
+ * `actualizarTarifasDeFila` de este mismo archivo: no hay función SQL
+ * transaccional, así que si falla a mitad de camino, las tarifas anteriores
+ * en el lote ya quedaron con el precio nuevo.
+ */
+export async function aplicarPorcentajeTarifario(
+  _prev: EstadoPorcentajeTarifario,
+  formData: FormData,
+): Promise<EstadoPorcentajeTarifario> {
+  await requerirAcceso('config')
+
+  const pct = Number(formData.get('porcentaje'))
+  if (!Number.isFinite(pct) || pct === 0) return { error: 'Ingresá un porcentaje distinto de cero.' }
+  if (pct < -90 || pct > 500) {
+    return { error: 'Ese porcentaje parece un error de tipeo (tiene que estar entre -90 y 500). Revisalo.' }
+  }
+
+  const temporadaFiltro = String(formData.get('temporada') ?? '') // '' = todas
+
+  const supabase = await crearClienteServidor()
+  const { data, error: eLectura } = await supabase
+    .from('tarifas')
+    .select('id, precio_neto, precio_rack, temporada:temporadas(codigo)')
+
+  if (eLectura) return { error: 'No se pudo leer el tarifario. Probá de nuevo.' }
+
+  interface FilaTarifa {
+    id: string
+    precio_neto: number | string
+    precio_rack: number | string
+    temporada: { codigo: string } | null
+  }
+  const todas = (data ?? []) as unknown as FilaTarifa[]
+  const alcanzadas = temporadaFiltro
+    ? todas.filter((t) => t.temporada?.codigo === temporadaFiltro)
+    : todas
+
+  if (alcanzadas.length === 0) return { error: 'No hay tarifas cargadas para ese filtro.' }
+
+  const factor = 1 + pct / 100
+  const cambios = alcanzadas.map((t) => ({
+    id: t.id,
+    neto: Math.round(Number(t.precio_neto) * factor * 100) / 100,
+    rack: Math.round(Number(t.precio_rack) * factor * 100) / 100,
+  }))
+
+  if (cambios.some((c) => c.neto < 0 || c.rack < 0)) {
+    return { error: 'Ese porcentaje dejaría algún precio negativo. No se guardó nada.' }
+  }
+
+  for (const c of cambios) {
+    const { error } = await supabase
+      .from('tarifas')
+      .update({ precio_neto: c.neto, precio_rack: c.rack })
+      .eq('id', c.id)
+    if (error) {
+      return {
+        error: `Se aplicó parte del cambio y falló el resto (${error.message}). Revisá el tarifario antes de repetir.`,
+      }
+    }
+  }
+
+  updateTag(ETIQUETA_CATALOGO)
+  revalidatePath('/panel/config/tarifario')
+
+  const signo = pct > 0 ? '+' : ''
+  return { ok: `Se aplicó ${signo}${pct}% a ${cambios.length} tarifa(s).` }
+}
+
 /** Repone stock de un producto (suma unidades). Solo admin/gerencia. */
 export async function reponerStock(formData: FormData): Promise<void> {
   await requerirAcceso('config')
@@ -212,6 +300,34 @@ export async function alternarProducto(formData: FormData): Promise<void> {
   }
   revalidatePath('/panel/config/inventario')
   redirect('/panel/config/inventario')
+}
+
+/**
+ * Borra un producto o servicio del catálogo, de verdad.
+ *
+ * Es seguro por diseño de la base, no por una comprobación de acá:
+ * `consumos.producto_id` tiene `on delete restrict` (migración 0010), así que
+ * si alguna vez se vendió, Postgres rechaza el borrado antes de tocar nada —
+ * el consumo ya cargado no puede quedar apuntando a un producto que no
+ * existe. Ese rechazo (código `23503`) no es un fallo real: es la base
+ * protegiendo el historial, y se traduce a un mensaje que manda a
+ * "Desactivar" en vez del genérico de escritura fallida.
+ */
+export async function eliminarProducto(formData: FormData): Promise<void> {
+  await requerirAcceso('config')
+
+  const id = String(formData.get('producto_id') ?? '')
+  if (id) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase.from('productos_servicios').delete().eq('id', id)
+    cortarSiFalla(
+      error,
+      '/panel/config/inventario',
+      error?.code === '23503' ? 'producto_con_historial' : 'producto_eliminar',
+    )
+  }
+  revalidatePath('/panel/config/inventario')
+  redirect('/panel/config/inventario?ok=producto_eliminado')
 }
 
 /**

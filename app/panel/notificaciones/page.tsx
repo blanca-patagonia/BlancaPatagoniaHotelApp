@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda } from '@/lib/listados'
 import { fechaHoraHotel, hoyISO } from '@/lib/fechas'
 import { PLANTILLAS } from '@/lib/domain/plantillas'
@@ -141,7 +142,8 @@ export default async function NotificacionesPage({
   */
   if (termino) consulta = consulta.ilike('destinatario', `%${termino}%`)
 
-  const { data, count } = await consulta.range(desde, hasta)
+  const { data, count, error: eListado } = await consulta.range(desde, hasta)
+  registrarFalla(eListado, 'notificaciones:listado')
   const filas = (data ?? []) as Fila[]
   const total = count ?? 0
 
@@ -153,7 +155,10 @@ export default async function NotificacionesPage({
     siguiente y el contador daría cero (ver `lib/fechas.ts`).
   */
   const desdeHoy = `${hoyISO()}T00:00:00-03:00`
-  const [{ count: deHoy }, { count: fallidas }] = await Promise.all([
+  const [
+    { count: deHoy, error: eDeHoy },
+    { count: fallidas, error: eFallidas },
+  ] = await Promise.all([
     supabase
       .from('notificaciones')
       .select('id', { count: 'exact', head: true })
@@ -163,6 +168,12 @@ export default async function NotificacionesPage({
       .select('id', { count: 'exact', head: true })
       .eq('estado', 'fallida'),
   ])
+  registrarFalla(eDeHoy, 'notificaciones:kpi_de_hoy')
+  registrarFalla(eFallidas, 'notificaciones:kpi_fallidas')
+
+  // Sin esto, un fallo de lectura se ve idéntico a «cero avisos fallidos» — el
+  // caso exacto que el registro de envíos existe para detectar.
+  const huboErrorDeLectura = Boolean(eListado || eDeHoy || eFallidas)
 
   const filtros = { estado, q: sp.q }
 
@@ -201,17 +212,26 @@ export default async function NotificacionesPage({
           className="mb-4"
           titulo="¿Los avisos salen de verdad?"
           descripcion="Todo el camino funciona sin configurar nada: la bandeja anota y marca «enviada» igual. Esto dice si además sale."
+          acciones={
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                diagnostico.puedeMandarCorreo
+                  ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+                  : 'bg-lenga-50 text-lenga-800 ring-lenga-200'
+              }`}
+            >
+              {diagnostico.requisitos.filter((r) => r.listo).length} de {diagnostico.requisitos.length} listas
+            </span>
+          }
         >
           {!diagnostico.puedeMandarCorreo && (
-            <div className="mb-4 flex items-start gap-3 rounded-xl bg-lenga-50 px-4 py-3 ring-1 ring-lenga-200">
+            <div className="mb-5 flex items-start gap-3 rounded-xl border-l-4 border-lenga-500 bg-lenga-50 px-4 py-3.5 ring-1 ring-lenga-200">
               <span className="mt-0.5 shrink-0 text-lenga-700">
                 <Icono nombre="alerta" tam={18} />
               </span>
-              <div className="text-sm text-lenga-900">
-                <p className="font-semibold">
-                  Hoy los correos NO salen del sistema.
-                </p>
-                <p className="mt-1 text-stone-700">
+              <div className="text-sm">
+                <p className="font-semibold text-lenga-900">Hoy los correos NO salen del sistema.</p>
+                <p className="mt-1 leading-relaxed text-stone-700">
                   El proveedor configurado es «{diagnostico.email.proveedor}», que escribe el
                   correo en el registro del servidor y no lo manda. Los avisos igual se van a
                   marcar como enviados en la lista de abajo: es el motivo por el que esta tarjeta
@@ -221,9 +241,14 @@ export default async function NotificacionesPage({
             </div>
           )}
 
-          <ul className="mb-4 space-y-2">
+          <ul className="mb-5 flex flex-col gap-2">
             {diagnostico.requisitos.map((r) => (
-              <li key={r.clave} className="flex items-start gap-2.5 text-sm">
+              <li
+                key={r.clave}
+                className={`flex items-start gap-3 rounded-xl px-3.5 py-3 ring-1 ${
+                  r.listo ? 'bg-stone-50 ring-stone-200' : 'bg-white ring-lenga-200'
+                }`}
+              >
                 <span
                   className={`mt-0.5 shrink-0 ${r.listo ? 'text-emerald-600' : 'text-lenga-700'}`}
                   aria-hidden
@@ -234,20 +259,22 @@ export default async function NotificacionesPage({
                   {/* El estado también en palabras: el color solo no alcanza para
                       quien no lo distingue, y es la misma regla que sigue el resto
                       del panel con los estados de reserva. */}
-                  <span className="font-medium text-stone-800">
+                  <span className={`font-medium ${r.listo ? 'text-stone-600' : 'text-stone-900'}`}>
                     {r.listo ? 'Listo' : 'Falta'} · {r.que}
+                  </span>{' '}
+                  <span className="inline-block rounded bg-stone-100 px-1.5 py-0.5 align-middle font-mono text-[11px] font-medium text-stone-600 ring-1 ring-stone-200">
+                    {r.clave}
                   </span>
-                  <span className="ml-1 font-mono text-xs text-stone-500">{r.clave}</span>
                   {!r.listo && (
-                    <span className="mt-0.5 block text-xs text-stone-600">{r.siFalta}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-stone-600">{r.siFalta}</span>
                   )}
                 </span>
               </li>
             ))}
           </ul>
 
-          <p className="mb-4 text-sm text-stone-600">
-            <strong>WhatsApp:</strong>{' '}
+          <p className="mb-5 rounded-xl bg-stone-50 px-3.5 py-3 text-sm text-stone-600 ring-1 ring-stone-200">
+            <strong className="text-stone-800">WhatsApp:</strong>{' '}
             {diagnostico.whatsapp.activo
               ? `activo con «${diagnostico.whatsapp.proveedor}». Las confirmaciones y los recordatorios de llegada salen por ahí cuando el huésped tiene teléfono cargado.`
               : 'no está configurado, así que todo sale por correo. No es una falla: es el respaldo, y funciona.'}
@@ -255,6 +282,15 @@ export default async function NotificacionesPage({
 
           <PruebaDeCorreo sugerido={sesion.email ?? ''} />
         </Tarjeta>
+      )}
+
+      {huboErrorDeLectura && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            No se pudieron leer algunos datos de esta pantalla. Los números de abajo pueden estar
+            incompletos — no significa que no haya avisos fallidos.
+          </Mensaje>
+        </div>
       )}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">

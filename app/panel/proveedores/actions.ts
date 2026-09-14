@@ -8,6 +8,7 @@ import { movimientoEnMoneda } from '@/lib/domain/cuentas'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
+import { subirAdjunto } from '@/lib/storage'
 
 export interface EstadoProveedor {
   error?: string
@@ -29,12 +30,19 @@ export async function crearProveedor(
   const rubro = String(formData.get('rubro') ?? '').trim()
   const cuit = String(formData.get('cuit') ?? '').trim()
   const email = String(formData.get('email') ?? '').trim()
+  const telefono = String(formData.get('telefono') ?? '').trim()
   if (!nombre) return { error: 'Ingresá el nombre.' }
 
   const supabase = await crearClienteServidor()
   const { data, error } = await supabase
     .from('proveedores')
-    .insert({ nombre, rubro: rubro || null, cuit: cuit || null, email: email || null })
+    .insert({
+      nombre,
+      rubro: rubro || null,
+      cuit: cuit || null,
+      email: email || null,
+      telefono: telefono || null,
+    })
     .select('id')
     .single()
   if (error) return { error: `No se pudo crear: ${error.message}` }
@@ -164,4 +172,54 @@ export async function alternarActivoProveedor(formData: FormData): Promise<void>
   }
   revalidatePath('/panel/proveedores')
   redirect(`/panel/proveedores/${id}`)
+}
+
+/**
+ * Adjunta una foto/documento nuevo a un proveedor (ADR 0037).
+ *
+ * Sube el archivo a `proveedores/<proveedor_id>` con `subirAdjunto` y agrega
+ * la RUTA devuelta al arreglo `fotos` — nunca se guarda una URL ni el archivo
+ * en la base, sólo el nombre dentro del bucket privado. Es documentación del
+ * proveedor (habilitación, seguro, lo que corresponda), no las facturas
+ * escaneadas por QR de `/panel/proveedores/comprobantes`.
+ *
+ * Se lee el arreglo actual y se reescribe con la ruta nueva en vez de un
+ * `array_append` en la base: el volumen es una foto por vez, cargada por una
+ * sola persona, así que la ventana de carrera es despreciable frente a la
+ * simplicidad de no sumar una función SQL sólo para esto (mismo patrón que
+ * `agregarFotoOrden` en mantenimiento).
+ */
+export async function agregarFotoProveedor(formData: FormData): Promise<void> {
+  await exigirGestion()
+
+  const proveedorId = String(formData.get('proveedor_id') ?? '')
+  const archivo = formData.get('foto')
+  if (!proveedorId || !(archivo instanceof File) || archivo.size === 0) {
+    redirect(`/panel/proveedores/${proveedorId}?error=foto_falta`)
+  }
+
+  const subida = await subirAdjunto(`proveedores/${proveedorId}`, archivo)
+  if ('error' in subida) {
+    redirect(`/panel/proveedores/${proveedorId}?error=foto_subida`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { data: actual, error: errorLectura } = await supabase
+    .from('proveedores')
+    .select('fotos')
+    .eq('id', proveedorId)
+    .single()
+  if (errorLectura) {
+    cortarSiFalla(errorLectura, `/panel/proveedores/${proveedorId}`, 'foto_leer')
+  }
+
+  const fotos = [...(((actual as { fotos: string[] } | null)?.fotos) ?? []), subida.ruta]
+  const { error } = await supabase
+    .from('proveedores')
+    .update({ fotos })
+    .eq('id', proveedorId)
+  cortarSiFalla(error, `/panel/proveedores/${proveedorId}`, 'foto_guardar')
+
+  revalidatePath(`/panel/proveedores/${proveedorId}`)
+  redirect(`/panel/proveedores/${proveedorId}?ok=foto`)
 }

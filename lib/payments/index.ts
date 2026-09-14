@@ -29,11 +29,13 @@ import {
 import { ProveedorSimulado, NOMBRE_SIMULADO } from './simulado'
 import { ProveedorMercadoPago } from './mercadopago'
 import { ProveedorStripe } from './stripe'
+import { ProveedorPayway } from './payway'
 import type { PaymentProvider } from './tipos'
 
 export * from './tipos'
 export { NOMBRE_SIMULADO } from './simulado'
 export { esMonedaDeCobro } from './simulado'
+export { ejecutarPagoPayway } from './payway'
 
 /**
  * Todas las implementaciones que existen, por nombre.
@@ -45,6 +47,7 @@ const PROVEEDORES: Record<string, PaymentProvider> = {
   [NOMBRE_SIMULADO]: new ProveedorSimulado(),
   mercadopago: new ProveedorMercadoPago(),
   stripe: new ProveedorStripe(),
+  payway: new ProveedorPayway(),
 }
 
 /**
@@ -111,6 +114,7 @@ export function nombreClave(p: PaymentProvider): string {
 const CREDENCIALES_POR_PASARELA: Record<string, readonly string[]> = {
   mercadopago: ['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_WEBHOOK_SECRET'],
   stripe: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+  payway: ['PAYWAY_PUBLIC_KEY', 'PAYWAY_PRIVATE_KEY', 'PAYWAY_INTERNAL_SECRET'],
 }
 
 /**

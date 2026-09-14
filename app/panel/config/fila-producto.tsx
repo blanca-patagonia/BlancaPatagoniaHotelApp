@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react'
 import { llevaStock, stockBajo } from '@/lib/domain/inventario'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
 import { importe } from '@/lib/domain/moneda'
-import { editarProducto, reponerStock, alternarProducto, type EstadoProducto } from './actions'
+import { editarProducto, reponerStock, alternarProducto, eliminarProducto, type EstadoProducto } from './actions'
 import { BotonEnvio } from '../_components/boton-envio'
 import { CAMPO, Campo, Etiqueta, FILA, TD, botonClases } from '../_components/ui'
 
@@ -159,14 +159,30 @@ export function FilaProducto({
                 </button>
               </form>
             )}
-            {/* Se desactiva en lugar de borrar: los consumos ya cargados
-                siguen apuntando al producto. */}
+            {/* Desactivar conserva el historial: los consumos ya cargados
+                siguen apuntando al producto. Es lo que conviene si alguna
+                vez se vendió. */}
             <form action={alternarProducto}>
               <input type="hidden" name="producto_id" value={p.id} />
               <input type="hidden" name="activo" value={String(p.activo)} />
               <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
                 {p.activo ? 'Desactivar' : 'Activar'}
               </button>
+            </form>
+            {/* Eliminar de verdad. Si el producto ya se vendió alguna vez, la
+                base lo rechaza sola (ver el comentario de `eliminarProducto`
+                en actions.ts) y el mensaje manda a "Desactivar" en su lugar. */}
+            <form action={eliminarProducto}>
+              <input type="hidden" name="producto_id" value={p.id} />
+              <BotonEnvio
+                variante="peligro"
+                cargando="…"
+                extra="px-2 py-1 text-xs"
+                confirmar={`¿Eliminar «${p.nombre}» del catálogo? No se puede deshacer.`}
+                aria-label={`Eliminar ${p.nombre}`}
+              >
+                Eliminar
+              </BotonEnvio>
             </form>
           </div>
         </td>

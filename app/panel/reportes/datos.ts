@@ -146,6 +146,39 @@ export async function traerFacturas(): Promise<ResultadoCompleto<{ total: number
   )
 }
 
+/** Comprobantes emitidos, con fecha — para el informe de facturación por mes. */
+export async function traerFacturasConFecha(): Promise<
+  ResultadoCompleto<{ total: number; emitida_en: string }>
+> {
+  const supabase = await crearClienteServidor()
+  return traerTodo<{ total: number; emitida_en: string }>((d, h) =>
+    supabase.from('facturas').select('total, emitida_en').order('id').range(d, h),
+  )
+}
+
+/**
+ * Pagos aprobados con medio y fecha — para el desglose por medio de cobro del
+ * informe de facturación. Separado de `traerPagos` (que solo trae `tipo` y
+ * `monto` para el índice de reportes) para no cambiarle la forma a una
+ * consulta que ya usa otra pantalla.
+ *
+ * ⚠️ `pagos.monto` está SIEMPRE en USD (ADR 0027): el desglose por medio no
+ * mezcla monedas aunque el cobro real haya sido en pesos.
+ */
+export async function traerPagosConMedio(): Promise<
+  ResultadoCompleto<{ medio: string; monto: number; creado_en: string }>
+> {
+  const supabase = await crearClienteServidor()
+  return traerTodo<{ medio: string; monto: number; creado_en: string }>((d, h) =>
+    supabase
+      .from('pagos')
+      .select('medio, monto, creado_en')
+      .eq('estado', 'aprobado')
+      .order('id')
+      .range(d, h),
+  )
+}
+
 /** Encuestas de satisfacción, respondidas y sin responder. */
 export async function traerEncuestas(): Promise<
   ResultadoCompleto<{ puntaje: number | null; respondida_en: string | null }>
@@ -178,14 +211,16 @@ export interface FilaResumenCanal {
  * está en aquella consulta. La vista imputa por fecha de **salida**, que es
  * cuando se consume la estadía y el criterio con el que el canal factura.
  */
-export async function traerRentabilidadCanal(mes: string): Promise<FilaResumenCanal[]> {
+export async function traerRentabilidadCanal(
+  mes: string,
+): Promise<{ filas: FilaResumenCanal[]; error: string | null }> {
   const supabase = await crearClienteServidor()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('resumen_canal_mes')
     .select(
       'canal, reservas_totales, reservas_vendidas, bruto, noches, comision_informada, sin_comision_informada',
     )
     .eq('mes', `${mes}-01`)
 
-  return (data ?? []) as unknown as FilaResumenCanal[]
+  return { filas: (data ?? []) as unknown as FilaResumenCanal[], error: error?.message ?? null }
 }

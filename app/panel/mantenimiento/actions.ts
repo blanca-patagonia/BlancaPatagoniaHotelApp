@@ -12,6 +12,7 @@ import {
 import { hoyISO } from '@/lib/fechas'
 import { cortarSiFalla } from '@/lib/acciones'
 import { avisarIncidenteMantenimiento } from '@/lib/notificaciones/eventos'
+import { subirAdjunto } from '@/lib/storage'
 
 export interface EstadoOrden {
   error?: string
@@ -177,4 +178,52 @@ export async function generarPreventivo(): Promise<void> {
 
   revalidatePath('/panel/mantenimiento')
   redirect(`/panel/mantenimiento?generadas=${data ?? 0}`)
+}
+
+/**
+ * Adjunta una foto nueva a una orden de mantenimiento (ADR 0037).
+ *
+ * Sube el archivo a `mantenimiento/<orden_id>` con `subirAdjunto` y agrega la
+ * RUTA devuelta al arreglo `fotos` de la orden — nunca se guarda una URL ni el
+ * archivo en la base, sólo el nombre dentro del bucket privado.
+ *
+ * Se lee el arreglo actual y se reescribe con la ruta nueva en vez de un
+ * `array_append` en la base: el volumen es una foto por vez, cargada por una
+ * sola persona parada frente a la orden, así que la ventana de carrera es
+ * despreciable frente a la simplicidad de no sumar una función SQL sólo para
+ * esto.
+ */
+export async function agregarFotoOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
+
+  const ordenId = String(formData.get('orden_id') ?? '')
+  const archivo = formData.get('foto')
+  if (!ordenId || !(archivo instanceof File) || archivo.size === 0) {
+    redirect(`/panel/mantenimiento/${ordenId}?error=foto_falta`)
+  }
+
+  const subida = await subirAdjunto(`mantenimiento/${ordenId}`, archivo)
+  if ('error' in subida) {
+    redirect(`/panel/mantenimiento/${ordenId}?error=foto_subida`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { data: actual, error: errorLectura } = await supabase
+    .from('ordenes_mantenimiento')
+    .select('fotos')
+    .eq('id', ordenId)
+    .single()
+  if (errorLectura) {
+    cortarSiFalla(errorLectura, `/panel/mantenimiento/${ordenId}`, 'foto_leer')
+  }
+
+  const fotos = [...(((actual as { fotos: string[] } | null)?.fotos) ?? []), subida.ruta]
+  const { error } = await supabase
+    .from('ordenes_mantenimiento')
+    .update({ fotos })
+    .eq('id', ordenId)
+  cortarSiFalla(error, `/panel/mantenimiento/${ordenId}`, 'foto_guardar')
+
+  revalidatePath(`/panel/mantenimiento/${ordenId}`)
+  redirect(`/panel/mantenimiento/${ordenId}?ok=foto`)
 }

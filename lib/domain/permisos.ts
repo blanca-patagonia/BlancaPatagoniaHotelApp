@@ -146,7 +146,15 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
  * pierde justamente el valor que tiene —estar ahí cuando hay que revisar algo que
  * pasó antes—, y volver a encenderlo no recupera lo que no se guardó.
  */
-export const AREAS_OCULTAS: readonly Area[] = ['auditoria', 'conversaciones', 'objetos_perdidos']
+export const AREAS_OCULTAS: readonly Area[] = [
+  'auditoria',
+  'conversaciones',
+  'objetos_perdidos',
+  // Pedido del dueño del hotel (2026-09-14): ocultar por ahora, sin borrar
+  // nada (ver el porqué de este mecanismo arriba).
+  'contratos',
+  'respaldos',
+]
 
 export function estaOculta(area: Area): boolean {
   return AREAS_OCULTAS.includes(area)

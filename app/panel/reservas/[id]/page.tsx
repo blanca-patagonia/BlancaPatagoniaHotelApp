@@ -24,6 +24,7 @@ import {
 } from '@/lib/domain/ocupantes'
 import { cargoDeCancelacion } from '@/lib/reservas/cancelacion'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
+import { pagoAgenciaVencido, vencimientoPagoAgencia } from '@/lib/domain/cuentas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
 import {
   cambiarEstadoReserva,
@@ -450,6 +451,35 @@ export default async function DetalleReservaPage({
   // cobró: es el mismo riesgo que la alerta de overbooking del dashboard.
   const fallaPagos = Boolean(ePagos)
 
+  /*
+    Pago vencido de la agencia (pedido del dueño del hotel, 2026-09): abona un
+    mes antes del check-in. Sólo aplica a una reserva DE agencia y sólo
+    mientras siga vigente —una cancelada no genera reclamo—, así que la
+    consulta extra se hace nada más que para esa minoría de fichas.
+  */
+  let avisoPagoAgenciaVencido: { vencimiento: string; totalPagado: number } | null = null
+  if (reserva.agencia_id && periodo && reserva.estado !== 'cancelada') {
+    const { data: movsAgenciaData, error: eMovsAgencia } = await supabase
+      .from('movimientos_cuenta')
+      .select('tipo, monto')
+      .eq('reserva_id', id)
+    if (eMovsAgencia) registrarFalla(eMovsAgencia, 'reservas:pago_agencia')
+    const totalPagadoAgencia = (movsAgenciaData ?? [])
+      .filter((m) => m.tipo === 'pago')
+      .reduce((acc, m) => acc + Number(m.monto), 0)
+    if (
+      pagoAgenciaVencido(
+        { checkIn: periodo.desde, totalReserva: Number(reserva.total), totalPagado: totalPagadoAgencia },
+        hoyISO(),
+      )
+    ) {
+      avisoPagoAgenciaVencido = {
+        vencimiento: vencimientoPagoAgencia(periodo.desde),
+        totalPagado: totalPagadoAgencia,
+      }
+    }
+  }
+
   // Estado de cobro consolidado (alojamiento + consumos) y links de pago vivos.
   // Es la misma lectura que usa el portal público, para que el huésped y
   // recepción no vean saldos distintos.
@@ -534,6 +564,16 @@ export default async function DetalleReservaPage({
         <Mensaje tono="error">
           No se pudieron leer los pagos de esta reserva — el saldo que se ve abajo puede no ser el
           real. Revisá directamente en Pagos antes de dar algo por cobrado.
+        </Mensaje>
+      )}
+
+      {avisoPagoAgenciaVencido && (
+        <Mensaje tono="error">
+          El pago de la agencia está vencido: tenía que estar cubierto el{' '}
+          {formatoFechaCorta(avisoPagoAgenciaVencido.vencimiento)} (un mes antes del check-in) y
+          lleva pagado {formatearUSD(avisoPagoAgenciaVencido.totalPagado)} de{' '}
+          {formatearUSD(Number(reserva.total))}. Reclamale a la agencia o evaluá liberar la
+          unidad.
         </Mensaje>
       )}
 

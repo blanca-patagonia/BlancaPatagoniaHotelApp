@@ -6,7 +6,7 @@
  * descuentan de lo pagado.
  */
 
-export const MEDIOS_PAGO = ['efectivo', 'transferencia', 'tarjeta', 'mercadopago', 'stripe'] as const
+export const MEDIOS_PAGO = ['efectivo', 'transferencia', 'tarjeta', 'mercadopago', 'stripe', 'payway'] as const
 export type MedioPago = (typeof MEDIOS_PAGO)[number]
 
 export const TIPOS_PAGO = ['senia', 'saldo', 'reembolso'] as const
@@ -21,6 +21,7 @@ export const ETIQUETAS_MEDIO: Record<MedioPago, string> = {
   tarjeta: 'Tarjeta',
   mercadopago: 'MercadoPago',
   stripe: 'Stripe',
+  payway: 'Payway',
 }
 
 export const ETIQUETAS_TIPO_PAGO: Record<TipoPago, string> = {

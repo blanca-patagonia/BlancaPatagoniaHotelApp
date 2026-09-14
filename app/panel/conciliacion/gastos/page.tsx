@@ -15,6 +15,7 @@ import {
   BotonExportar,
   Buscador,
   Chip,
+  COL_SECUNDARIA,
   Encabezado,
   EstadoVacio,
   FILA,
@@ -179,7 +180,7 @@ export default async function GastosPage({
               <thead>
                 <tr>
                   <th className={TH}>Fecha</th>
-                  <th className={TH}>Categoría</th>
+                  <th className={`${TH} ${COL_SECUNDARIA}`}>Categoría</th>
                   <th className={TH}>Descripción</th>
                   <th className={TH}>Monto</th>
                   <th className={TH}></th>
@@ -191,8 +192,15 @@ export default async function GastosPage({
                     <td className={`${TD} tabular whitespace-nowrap text-stone-500`}>
                       {formatoFecha(g.fecha)}
                     </td>
-                    <td className={`${TD} text-stone-700`}>{ETIQUETAS_CATEGORIA_GASTO[g.categoria]}</td>
-                    <td className={`${TD} text-stone-700`}>{g.descripcion}</td>
+                    <td className={`${TD} ${COL_SECUNDARIA} text-stone-700`}>
+                      {ETIQUETAS_CATEGORIA_GASTO[g.categoria]}
+                    </td>
+                    <td className={`${TD} text-stone-700`}>
+                      {g.descripcion}
+                      <span className="block text-xs text-stone-500 sm:hidden">
+                        {ETIQUETAS_CATEGORIA_GASTO[g.categoria]}
+                      </span>
+                    </td>
                     <td className={`${TD} tabular font-medium text-stone-900`}>
                       {formatearUSD(Number(g.monto))}
                     </td>

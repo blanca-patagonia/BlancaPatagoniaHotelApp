@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
+import { registrarErrorSync } from '@/lib/registro'
 import { mesActual } from '@/lib/fechas'
 import { etiquetaMes } from '@/lib/domain/metricas'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
@@ -50,6 +51,9 @@ export default async function InformeCategoriasPage({
     traerEstadiasPorTipo(),
     traerTiposConInventario(),
   ])
+  if (estadias.error) {
+    registrarErrorSync('reportes_categorias_lectura', { fuente: 'estadias', motivo: estadias.error })
+  }
 
   const filas = ventaPorTipo(estadias.filas, tipos.filas, mes)
   const totales = totalesDeVenta(filas)

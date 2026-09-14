@@ -145,21 +145,27 @@ export function resumenPorDia(
 /**
  * Tono de la celda de ocupación del resumen.
  *
- * Tres tramos, no un degradado: el número exacto ya está escrito al lado, así que
- * el color sólo tiene que responder «¿hay que preocuparse?». Los cortes son de
- * negocio, no estéticos:
+ * Cuatro tramos, no un degradado: el número exacto ya está escrito al lado, así
+ * que el color sólo tiene que responder «¿hay que preocuparse?». Los cortes son
+ * de negocio, no estéticos:
  *
  * · **100 %** — completo. No queda nada para vender y hay que mirar la lista de
  *   espera antes de prometer una habitación por teléfono.
  * · **≥ 85 %** — casi completo. Es el umbral en que conviene dejar de dar
  *   descuentos y revisar el overbooking permitido.
- * · **resto** — hay lugar.
+ * · **≥ 60 %** — media ocupación. No es una alerta —no hay que dejar de vender
+ *   ni de dar descuentos— pero conviene tenerlo a la vista. Por eso va en
+ *   `lago`/`calafate` (los azules de marca) y no en `lenga`, que ya significa
+ *   «pendiente/aviso» en el tramo de arriba, ni en rojo o verde, reservados por
+ *   Tailwind para error/éxito (ver ADR 0026 y el comentario de `globals.css`).
+ * · **resto** — hay lugar de sobra.
  */
-export type TonoOcupacion = 'completo' | 'alto' | 'normal'
+export type TonoOcupacion = 'completo' | 'alto' | 'medio' | 'normal'
 
 export function tonoOcupacion(pct: number): TonoOcupacion {
   if (pct >= 100) return 'completo'
   if (pct >= 85) return 'alto'
+  if (pct >= 60) return 'medio'
   return 'normal'
 }
 

@@ -27,7 +27,9 @@ import {
   contieneDia,
   rangoISO,
   formatoFechaCorta,
+  diasEntre,
 } from '@/lib/fechas'
+import { formatearUSD, porNoche } from '@/lib/domain/moneda'
 import { construirQuery } from '@/lib/listados'
 import { registrarFalla } from '@/lib/acciones'
 import { MENSAJES_RECHAZO_ARRASTRE } from '@/lib/domain/arrastre-grilla'
@@ -75,6 +77,8 @@ interface EstadiaRow {
   reserva: {
     id: string
     codigo: string
+    /** Total de la reserva completa; con las noches del período se saca el precio por noche. */
+    total: number | null
     huesped: { apellido: string; nombre: string } | null
   } | null
 }
@@ -182,7 +186,7 @@ export default async function OcupacionPage({
     supabase
       .from('estadias')
       .select(
-        'unidad_id, periodo, estado, huespedes, reserva:reservas(id, codigo, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre))',
+        'unidad_id, periodo, estado, huespedes, reserva:reservas(id, codigo, total, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre))',
       )
       .in('estado', [...ESTADOS_ACTIVOS])
       .overlaps('periodo', rangoISO(desde, hasta)),
@@ -722,7 +726,22 @@ export default async function OcupacionPage({
 
                       const apellido = e.reserva?.huesped?.apellido ?? ''
                       const nombreEstado = ETIQUETAS_ESTADO_RESERVA[e.estado]
-                      const etiqueta = `${e.reserva?.codigo ?? ''} · ${apellido} · ${nombreEstado}`
+
+                      // Precio de la estadía: noches del PERÍODO (no de la
+                      // ventana visible) por el total de la reserva. Sin
+                      // noches o sin total no se divide ni se muestra nada —
+                      // dividir por cero daría Infinity, y un total en null
+                      // (reserva sin cotizar) no es un precio de USD 0.
+                      const periodoEstadia = rangoDeEstadia.get(e)
+                      const noches = periodoEstadia
+                        ? diasEntre(periodoEstadia.desde, periodoEstadia.hasta)
+                        : 0
+                      const total = e.reserva?.total ?? null
+                      const detallePrecio =
+                        total != null && noches > 0
+                          ? ` · ${formatearUSD(total)} total (${formatearUSD(porNoche(total, noches))}/noche)`
+                          : ''
+                      const etiqueta = `${e.reserva?.codigo ?? ''} · ${apellido} · ${nombreEstado}${detallePrecio}`
 
                       // El estado se comunica con LETRA + color, nunca sólo con
                       // color: cuatro bloques de colores distintos son cuatro
@@ -730,7 +749,11 @@ export default async function OcupacionPage({
                       // color era lo único que separaba «está paga» de «puede
                       // caerse». La celda mide ~40 px, así que no entra texto:
                       // entra una letra, y el nombre completo va en el title y
-                      // en el texto para lector de pantalla.
+                      // en el texto para lector de pantalla. El precio sigue la
+                      // misma regla: no entra como texto visible sin romper el
+                      // `truncate` del apellido, así que va en el `title` del
+                      // `<td>` (tooltip nativo) y en el texto para lector de
+                      // pantalla, nunca solo en el color ni escondido del todo.
                       const bloque = (
                         <div
                           className={`flex items-center gap-0.5 rounded px-1 py-1 text-[10px] leading-tight ${
@@ -744,7 +767,7 @@ export default async function OcupacionPage({
                             {apellido || e.reserva?.codigo?.slice(-4) || ''}
                           </span>
                           <span className="sr-only">
-                            {`${u.nombre}, ${formatoFechaCorta(dia)}: ${nombreEstado}${apellido ? `, ${apellido}` : ''}`}
+                            {`${u.nombre}, ${formatoFechaCorta(dia)}: ${nombreEstado}${apellido ? `, ${apellido}` : ''}${detallePrecio}`}
                           </span>
                         </div>
                       )
@@ -815,9 +838,11 @@ export default async function OcupacionPage({
                             ? 'bg-red-100 font-semibold text-red-900'
                             : tono === 'alto'
                               ? 'bg-lenga-100 font-medium text-lenga-900'
-                              : r.dia === hoy
-                                ? 'bg-lago-50 text-stone-700'
-                                : 'text-stone-600'
+                              : tono === 'medio'
+                                ? 'bg-calafate-100 text-calafate-900'
+                                : r.dia === hoy
+                                  ? 'bg-lago-50 text-stone-700'
+                                  : 'text-stone-600'
                         }`}
                       >
                         {/* El valor exacto está escrito: el color sólo responde
@@ -862,6 +887,10 @@ export default async function OcupacionPage({
             {ETIQUETAS_ESTADO_RESERVA[e]}
           </span>
         ))}
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block size-4 rounded bg-calafate-100 ring-1 ring-calafate-200" aria-hidden />
+          60 % o más
+        </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-4 rounded bg-lenga-100 ring-1 ring-lenga-200" aria-hidden />
           85 % o más

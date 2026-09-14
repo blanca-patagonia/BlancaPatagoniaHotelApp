@@ -109,6 +109,14 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // ── Unidades y mantenimiento ──
   ordenes_mantenimiento: { todos: 'si' },
   objetos_perdidos: { todos: 'si' },
+  // Migración 0101: mismo criterio que las políticas que hoy tienen el área
+  // `housekeeping` en `lib/domain/permisos.ts` — admin, gerencia y
+  // housekeeping. Recepción NO la tiene.
+  housekeeping_registros: { admin: 'si', gerencia: 'si', housekeeping: 'si', recepcion: 'no' },
+  // Migración 0105: mismos tres roles que hoy tienen el área `servicio` en
+  // `lib/domain/permisos.ts` — admin, gerencia y recepcion. Housekeeping NO
+  // entra a `servicio`, así que tampoco a la lista de compras.
+  lista_compras_cocina: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
 
   // ── Encuestas y comercial ──
   encuestas_satisfaccion: { todos: 'si' },
@@ -609,6 +617,50 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       if (error) throw new Error(`No se pudo sembrar gastos_operativos: ${error.message}`)
 
       sembradas.push({ tabla: 'gastos_operativos', columna: 'id', valor: data.id })
+    }
+
+    /*
+      ── housekeeping_registros (migración 0101) ───────────────────────────────
+
+      Nace vacía —se carga desde la pantalla de detalle de una unidad, que nadie
+      visitó todavía en un entorno de test— así que sin sembrar, el caso negativo
+      de `recepcion` pasaría por tabla vacía en vez de por la política.
+    */
+    if ((await contar('housekeeping_registros')) === 0) {
+      const { data: unidad, error: eUnidad } = await admin
+        .from('unidades')
+        .select('id')
+        .limit(1)
+        .maybeSingle<{ id: string }>()
+      if (eUnidad) throw new Error(`No se pudo leer una unidad para sembrar housekeeping_registros: ${eUnidad.message}`)
+      if (!unidad) throw new Error('No hay ninguna unidad para sembrar housekeeping_registros')
+
+      const { data, error } = await admin
+        .from('housekeeping_registros')
+        .insert({ unidad_id: unidad.id, comentario: `fila de prueba de la matriz RLS ${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar housekeeping_registros: ${error.message}`)
+
+      sembradas.push({ tabla: 'housekeeping_registros', columna: 'id', valor: data.id })
+    }
+
+    /*
+      ── lista_compras_cocina (migración 0105) ─────────────────────────────────
+
+      Nace vacía —se carga desde la pantalla de la lista, que nadie visitó
+      todavía en un entorno de test— así que sin sembrar, el caso negativo de
+      `housekeeping` pasaría por tabla vacía en vez de por la política.
+    */
+    if ((await contar('lista_compras_cocina')) === 0) {
+      const { data, error } = await admin
+        .from('lista_compras_cocina')
+        .insert({ nombre: `fila de prueba de la matriz RLS ${sufijo}` })
+        .select('id')
+        .single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar lista_compras_cocina: ${error.message}`)
+
+      sembradas.push({ tabla: 'lista_compras_cocina', columna: 'id', valor: data.id })
     }
 
     /*

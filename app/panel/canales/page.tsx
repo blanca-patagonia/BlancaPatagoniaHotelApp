@@ -224,7 +224,7 @@ interface EntranteRow {
   divergencia: string
   divergencia_desde: string | null
   reserva_id: string | null
-  reserva: { codigo: string } | null
+  reserva: { codigo: string; agencia: { nombre: string } | null } | null
 }
 
 interface SincroRow {
@@ -321,7 +321,7 @@ export default async function CanalesPage({
   let consultaEntrantes = supabase
     .from('canal_reservas')
     .select(
-      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, divergencia, divergencia_desde, reserva_id, reserva:reservas(codigo)',
+      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, divergencia, divergencia_desde, reserva_id, reserva:reservas(codigo, agencia:agencias(nombre))',
     )
     .order('check_in', { ascending: true })
     .limit(200)
@@ -1064,6 +1064,11 @@ export default async function CanalesPage({
                               >
                                 {e.reserva.codigo}
                               </Link>
+                            )}
+                            {e.reserva?.agencia?.nombre && (
+                              <span className="mt-1 inline-block">
+                                <Etiqueta tono="neutro">{e.reserva.agencia.nombre}</Etiqueta>
+                              </span>
                             )}
                             {e.motivo && (
                               <span className="mt-1 block max-w-xs text-xs text-stone-600">

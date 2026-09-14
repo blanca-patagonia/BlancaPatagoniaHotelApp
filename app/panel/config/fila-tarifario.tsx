@@ -43,12 +43,15 @@ export function FilaTarifario({
   categoria,
   cap,
   precios,
+  fechas,
 }: {
   nombre: string
   categoria: CategoriaUnidad
   cap: number
   /** Solo las temporadas que este tipo tiene cargadas. */
   precios: Partial<Record<Temporada, PrecioTemporada>>
+  /** Rango de fechas de cada temporada (código -> texto ya formateado), común a todos los tipos. */
+  fechas?: Partial<Record<string, string>>
 }) {
   const [editando, setEditando] = useState(false)
   const [estado, accion, pendiente] = useActionState(actualizarTarifasDeFila, ESTADO_INICIAL)
@@ -90,7 +93,9 @@ export function FilaTarifario({
                 )
               }
               return (
-                <div key={t} className="flex items-end gap-2 rounded-lg bg-stone-50 p-2">
+                <div key={t} className="flex flex-col gap-1 rounded-lg bg-stone-50 p-2">
+                  {fechas?.[t] && <span className="text-xs text-stone-400">{fechas[t]}</span>}
+                  <div className="flex items-end gap-2">
                   <input type="hidden" name={`tarifa_id_${t}`} value={p.id} />
                   <label className="flex flex-col gap-1 text-xs">
                     <span className="text-stone-500">Temporada {ETIQUETAS_TEMP[t].toLowerCase()} · Neto</span>
@@ -114,6 +119,7 @@ export function FilaTarifario({
                       className="tabular w-20 rounded-md border border-stone-300 px-2 py-1.5 text-right text-sm focus:border-lago-500 focus:outline-none"
                     />
                   </label>
+                  </div>
                 </div>
               )
             })}
@@ -144,6 +150,7 @@ export function FilaTarifario({
                   className="rounded-lg bg-stone-50 px-3 py-2 ring-1 ring-stone-200"
                 >
                   <p className="text-xs font-medium text-stone-500">Temporada {ETIQUETAS_TEMP[t].toLowerCase()}</p>
+                  {fechas?.[t] && <p className="text-xs text-stone-400">{fechas[t]}</p>}
                   {p ? (
                     <p className="tabular text-sm text-stone-800">
                       <span className="font-semibold text-stone-900">{formatearUSD(p.rack)}</span>

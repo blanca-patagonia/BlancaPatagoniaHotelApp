@@ -191,3 +191,23 @@ export function inicioFinDeMes(mes: string): { inicio: string; fin: string } {
 export function mesActual(): string {
   return hoyISO().slice(0, 7)
 }
+
+/**
+ * Lunes y (exclusivo) lunes siguiente de la semana que contiene `fechaISO`.
+ *
+ * Una semana se identifica por el ISO del lunes que le corresponde, así no
+ * hace falta resolver numeración de semana ISO (que tiene casos borde en el
+ * cambio de año): dado cualquier día de la semana, incluido el propio lunes,
+ * se llega al mismo `inicio`.
+ */
+export function inicioFinDeSemana(fechaISO: string): { inicio: string; fin: string } {
+  const diaSemana = new Date(fechaISO + 'T00:00:00Z').getUTCDay() // 0 = domingo … 6 = sábado
+  const offsetALunes = diaSemana === 0 ? 6 : diaSemana - 1
+  const inicio = sumarDias(fechaISO, -offsetALunes)
+  return { inicio, fin: sumarDias(inicio, 7) }
+}
+
+/** Lunes de la semana actual, en formato `YYYY-MM-DD`. */
+export function semanaActual(): string {
+  return inicioFinDeSemana(hoyISO()).inicio
+}

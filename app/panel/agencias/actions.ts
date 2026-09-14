@@ -9,6 +9,7 @@ import { TIPOS_CUENTA, movimientoEnMoneda } from '@/lib/domain/cuentas'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
+import { subirAdjunto } from '@/lib/storage'
 
 export interface EstadoAgencia {
   error?: string
@@ -86,6 +87,21 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
   // tipo de cambio que nadie puede justificar después.
   if (!mov) redirect(`/panel/agencias/${agenciaId}?error=sin_cotizacion`)
 
+  /*
+    Comprobante opcional (ADR 0037, migración 0103).
+
+    Se sube ANTES de insertar el movimiento, y si falla se corta acá: es
+    preferible que el usuario reintente a que el movimiento quede registrado
+    sin el archivo que la pantalla le dijo que estaba adjuntando.
+  */
+  let comprobanteRuta: string | null = null
+  const archivo = formData.get('comprobante')
+  if (archivo instanceof File && archivo.size > 0) {
+    const subido = await subirAdjunto(`agencias/${agenciaId}`, archivo)
+    if ('error' in subido) redirect(`/panel/agencias/${agenciaId}?error=comprobante`)
+    comprobanteRuta = subido.ruta
+  }
+
   const supabase = await crearClienteServidor()
   // Un movimiento de cuenta corriente que no se registra y no avisa descuadra el
   // saldo de la agencia sin que nadie lo note.
@@ -97,6 +113,7 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
     monto_origen: mov.montoOrigen,
     cotizacion: mov.cotizacion,
     concepto,
+    comprobante_ruta: comprobanteRuta,
   })
   cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'movimiento')
   redirect(`/panel/agencias/${agenciaId}`)

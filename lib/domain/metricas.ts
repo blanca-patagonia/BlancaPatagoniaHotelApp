@@ -11,7 +11,14 @@
  * · RevPAR (Revenue per Available Room)  = ingreso de alojamiento / noches disponibles
  */
 
-import { inicioFinDeMes, diasEntre, nochesEnVentana, parsearPeriodo } from '@/lib/fechas'
+import {
+  inicioFinDeMes,
+  inicioFinDeSemana,
+  sumarDias,
+  diasEntre,
+  nochesEnVentana,
+  parsearPeriodo,
+} from '@/lib/fechas'
 
 /** Lo mínimo que se necesita de una estadía para calcular las métricas. */
 export interface EstadiaMetrica {
@@ -19,18 +26,25 @@ export interface EstadiaMetrica {
   precio_noche: number | string | null
 }
 
-export interface MetricasMes {
-  /** Mes en formato `YYYY-MM`. */
-  mes: string
-  /** Noches efectivamente ocupadas dentro del mes. */
+export interface MetricasPeriodo {
+  /** Primer día de la ventana, inclusive. */
+  inicio: string
+  /** Último día de la ventana, EXCLUSIVE (mismo criterio `[inicio, fin)` que el resto del sistema). */
+  fin: string
+  /** Noches efectivamente ocupadas dentro de la ventana. */
   nochesVendidas: number
-  /** Noches que el hotel podía vender (unidades × días del mes). */
+  /** Noches que el hotel podía vender (unidades × días de la ventana). */
   nochesDisponibles: number
-  /** Ingreso de alojamiento imputado al mes. */
+  /** Ingreso de alojamiento imputado a la ventana. */
   ingreso: number
   ocupacionPct: number
   adr: number
   revpar: number
+}
+
+export interface MetricasMes extends MetricasPeriodo {
+  /** Mes en formato `YYYY-MM`. */
+  mes: string
 }
 
 /**
@@ -51,17 +65,19 @@ export function ultimosMeses(mes: string, cantidad: number): string[] {
 }
 
 /**
- * Calcula las métricas de un mes.
+ * Calcula las métricas de una ventana `[inicio, fin)` cualquiera — un mes, una
+ * semana, cualquier rango. Es el cálculo real; `metricasDeMes` es el caso
+ * particular «la ventana es un mes calendario».
  *
- * Las estadías se prorratean: una reserva a caballo entre dos meses aporta a
- * cada uno solo las noches que le corresponden.
+ * Las estadías se prorratean: una reserva a caballo del borde de la ventana
+ * aporta solo las noches que le corresponden.
  */
-export function metricasDeMes(
+export function metricasDePeriodo(
   estadias: readonly EstadiaMetrica[],
-  mes: string,
+  ventana: { inicio: string; fin: string },
   cantidadUnidades: number,
-): MetricasMes {
-  const { inicio, fin } = inicioFinDeMes(mes)
+): MetricasPeriodo {
+  const { inicio, fin } = ventana
   const nochesDisponibles = cantidadUnidades * diasEntre(inicio, fin)
 
   let nochesVendidas = 0
@@ -74,7 +90,8 @@ export function metricasDeMes(
   }
 
   return {
-    mes,
+    inicio,
+    fin,
     nochesVendidas,
     nochesDisponibles,
     ingreso,
@@ -82,6 +99,15 @@ export function metricasDeMes(
     adr: nochesVendidas ? Math.round(ingreso / nochesVendidas) : 0,
     revpar: nochesDisponibles ? Math.round(ingreso / nochesDisponibles) : 0,
   }
+}
+
+/** Calcula las métricas de un mes calendario `YYYY-MM`. */
+export function metricasDeMes(
+  estadias: readonly EstadiaMetrica[],
+  mes: string,
+  cantidadUnidades: number,
+): MetricasMes {
+  return { mes, ...metricasDePeriodo(estadias, inicioFinDeMes(mes), cantidadUnidades) }
 }
 
 /**
@@ -100,4 +126,42 @@ export function etiquetaMes(mes: string): string {
   const [anio, m] = mes.split('-')
   const nombres = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
   return `${nombres[Number(m) - 1]} ${anio.slice(2)}`
+}
+
+/* ─────────────────────────────────────────────── vista semanal (Fase de pedidos 2026-09-14) ── */
+
+/**
+ * Desplaza una semana en `delta` semanas. Una semana se identifica por el ISO
+ * del lunes correspondiente (ver `inicioFinDeSemana` en `lib/fechas.ts`), así
+ * que desplazarla es sumar `delta * 7` días — sin casos borde de año como
+ * tendría la numeración de semana ISO.
+ */
+export function semanaRelativa(semana: string, delta: number): string {
+  return sumarDias(semana, delta * 7)
+}
+
+/** Las últimas `cantidad` semanas terminando en `semana` (de la más vieja a la más nueva). */
+export function ultimasSemanas(semana: string, cantidad: number): string[] {
+  const semanas: string[] = []
+  for (let i = cantidad - 1; i >= 0; i--) semanas.push(semanaRelativa(semana, -i))
+  return semanas
+}
+
+/** Calcula las métricas de la semana (lunes a domingo) que empieza en `semana`. */
+export function metricasDeSemana(
+  estadias: readonly EstadiaMetrica[],
+  semana: string,
+  cantidadUnidades: number,
+): MetricasPeriodo & { semana: string } {
+  return { semana, ...metricasDePeriodo(estadias, inicioFinDeSemana(semana), cantidadUnidades) }
+}
+
+/** Rango corto para los ejes del gráfico semanal (ej: `8-14 sep`). */
+export function etiquetaSemana(semana: string): string {
+  const nombres = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  const domingo = sumarDias(semana, 6)
+  const [, mIni, dIni] = semana.split('-').map(Number)
+  const [, mFin, dFin] = domingo.split('-').map(Number)
+  if (mIni === mFin) return `${dIni}-${dFin} ${nombres[mFin - 1]}`
+  return `${dIni} ${nombres[mIni - 1]} - ${dFin} ${nombres[mFin - 1]}`
 }
