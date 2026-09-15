@@ -40,6 +40,7 @@ export type NombreIcono =
   | 'divisas'
   | 'canales'
   | 'conciliacion'
+  | 'ia'
 
 /** Trazos de cada icono (todo dentro de un viewBox 0 0 24 24). */
 const TRAZOS: Record<NombreIcono, string[]> = {
@@ -118,6 +119,12 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     'M13 5l3.5 3.5L13 12',
     'M20.5 15.5h-13',
     'M11 12l-3.5 3.5L11 19',
+  ],
+  // Dos destellos, el clásico glifo de «asistente / generado con IA»: uno
+  // grande y uno chico, cada uno una cometa de cuatro puntas.
+  ia: [
+    'M11.5 3c.7 3.6 2.4 5.4 6 6.1-3.6.7-5.3 2.5-6 6.1-.7-3.6-2.4-5.4-6-6.1 3.6-.7 5.3-2.5 6-6.1z',
+    'M18 14.5c.3 1.5 1 2.2 2.5 2.5-1.5.3-2.2 1-2.5 2.5-.3-1.5-1-2.2-2.5-2.5 1.5-.3 2.2-1 2.5-2.5z',
   ],
   divisas: [
     'M2.5 7.5h13v7h-13z',

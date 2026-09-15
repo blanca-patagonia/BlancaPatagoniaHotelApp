@@ -266,12 +266,12 @@ export function GrillaPos({
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           {lineas.length > 0 && (
             <button
               type="button"
               onClick={() => setCantidades({})}
-              className={botonClases('fantasma')}
+              className={botonClases('fantasma', 'w-full sm:w-auto')}
             >
               Vaciar
             </button>
@@ -279,7 +279,7 @@ export function GrillaPos({
           <button
             type="submit"
             disabled={pendiente || lineas.length === 0}
-            className={botonClases('primario', 'disabled:cursor-not-allowed')}
+            className={botonClases('primario', 'w-full disabled:cursor-not-allowed sm:w-auto')}
           >
             {pendiente ? 'Cargando…' : 'Cerrar comanda'}
           </button>

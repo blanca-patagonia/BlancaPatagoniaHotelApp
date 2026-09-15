@@ -115,9 +115,11 @@ describe('requerirAcceso · la puerta de la que dependen las 51 Server Actions',
     expect(await destinoDe(() => requerirAcceso('proveedores'))).toBe('/panel')
   })
 
-  it('admin entra a todo', async () => {
+  it('admin entra a todo lo que no esté apagado', async () => {
+    // `respaldos` salió de esta lista: está en `AREAS_OCULTAS` (pedido del
+    // hotel, 2026-09-14), así que ni admin entra — lo cubre el test de abajo.
     comoRol('admin')
-    for (const area of ['reservas', 'proveedores', 'config', 'usuarios', 'respaldos'] as const) {
+    for (const area of ['reservas', 'proveedores', 'config', 'usuarios'] as const) {
       expect(await destinoDe(() => requerirAcceso(area)), `admin no entró a ${area}`).toBeNull()
     }
   })

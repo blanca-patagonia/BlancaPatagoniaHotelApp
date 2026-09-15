@@ -16,7 +16,7 @@
  * en una y falta en la otra.
  */
 
-export type IdInforme = 'ocupacion' | 'categorias' | 'canales' | 'satisfaccion' | 'estados'
+export type IdInforme = 'ocupacion' | 'categorias' | 'canales' | 'satisfaccion' | 'estados' | 'facturacion'
 
 export interface Informe {
   id: IdInforme
@@ -70,6 +70,13 @@ export const INFORMES: readonly Informe[] = [
     pregunta: '¿Cuántas reservas se nos caen?',
     porMes: false,
   },
+  {
+    id: 'facturacion',
+    titulo: 'Facturación y medios de cobro',
+    descripcion: 'Total facturado por mes y de qué manera pagó cada huésped (efectivo, tarjeta, pasarela).',
+    pregunta: '¿Cuánto facturamos y con qué cobramos?',
+    porMes: true,
+  },
 ]
 
 /** La ruta de un informe, con el mes cuando corresponde. */
@@ -94,4 +101,19 @@ const RE_MES = /^\d{4}-\d{2}$/
  */
 export function mesValido(crudo: string | undefined, porDefecto: string): string {
   return RE_MES.test(crudo ?? '') ? (crudo as string) : porDefecto
+}
+
+import { inicioFinDeSemana } from '@/lib/fechas'
+
+const RE_FECHA_SEMANA = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Valida la semana que llega por la URL y la normaliza al lunes que le
+ * corresponde (una semana se identifica por el ISO de su lunes, ver
+ * `inicioFinDeSemana` en `lib/fechas.ts`) — así una fecha cualquiera dentro
+ * de la semana en la URL sigue resolviendo a la misma ventana.
+ */
+export function semanaValida(crudo: string | undefined, porDefecto: string): string {
+  if (!crudo || !RE_FECHA_SEMANA.test(crudo)) return porDefecto
+  return inicioFinDeSemana(crudo).inicio
 }

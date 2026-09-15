@@ -22,6 +22,7 @@ import {
   CLAVE_ANCHO,
   PASO_TECLADO,
 } from '@/lib/domain/lateral'
+import { alternarGrupo, estaPlegado, leerPlegadosGuardado, CLAVE_PLEGADO } from '@/lib/domain/nav-plegado'
 import type { Rol } from '@/lib/domain/roles'
 import { Icono, Logotipo, type NombreIcono } from './iconos'
 
@@ -53,6 +54,7 @@ const ICONO_AREA: Record<Area, NombreIcono> = {
   errores: 'alerta',
   notificaciones: 'sobre',
   reportes: 'reportes',
+  ia: 'ia',
   config: 'config',
   usuarios: 'usuarios',
   respaldos: 'descargar',
@@ -81,6 +83,11 @@ function estaActivo(pathname: string, area: Area, href: string): boolean {
  */
 function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alNavegar?: () => void }) {
   const grupos = agruparAreas(areasDe(rol))
+  const plegados = useSyncExternalStore(
+    suscribirPlegado,
+    leerPlegado,
+    () => SIN_PLEGADOS, // En el servidor no hay preferencia guardada que leer: todo abierto.
+  )
 
   return (
     /* `barra-discreta` (globals.css): la barra del sistema es gris y ancha, y
@@ -93,18 +100,33 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
     >
       {grupos.map((grupo, i) => {
         const idTitulo = `nav-grupo-${i}`
+        // El grupo que contiene la página activa nunca se muestra plegado: sin
+        // esto, alguien podría plegar «Comercial» y quedarse navegando dentro
+        // de un grupo del que no ve ni el propio encabezado.
+        const contieneActivo = grupo.areas.some((area) => estaActivo(pathname, area, NAV[area].href))
+        const plegado = grupo.titulo !== null && estaPlegado(plegados, grupo.titulo) && !contieneActivo
         return (
           <div key={grupo.titulo ?? 'sin-titulo'}>
             {grupo.titulo && (
-              <p
+              <button
+                type="button"
                 id={idTitulo}
-                className="px-3 pb-1.5 text-[11px] font-semibold tracking-[0.12em] text-lago-200/70 uppercase"
+                onClick={() => alternarPlegado(grupo.titulo as string)}
+                aria-expanded={!plegado}
+                className="flex w-full items-center justify-between gap-2 rounded-lg px-3 pb-1.5 text-[11px] font-semibold tracking-[0.12em] text-lago-200/70 uppercase transition hover:text-lago-100"
               >
                 {grupo.titulo}
-              </p>
+                <span
+                  aria-hidden="true"
+                  className={`text-[9px] transition-transform ${plegado ? '-rotate-90' : ''}`}
+                >
+                  ▾
+                </span>
+              </button>
             )}
-            <ul className="flex flex-col gap-0.5" aria-labelledby={grupo.titulo ? idTitulo : undefined}>
-              {grupo.areas.map((area) => {
+            {!plegado && (
+              <ul className="flex flex-col gap-0.5" aria-labelledby={grupo.titulo ? idTitulo : undefined}>
+                {grupo.areas.map((area) => {
                 const { href, icono } = NAV[area]
                 const activo = estaActivo(pathname, area, href)
                 return (
@@ -139,7 +161,8 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
                   </li>
                 )
               })}
-            </ul>
+              </ul>
+            )}
           </div>
         )
       })}
@@ -317,6 +340,41 @@ function guardarAncho(ancho: number): void {
     // La preferencia no sobrevive a la recarga, pero el arrastre funciona.
   }
   oyentesAncho.forEach((avisar) => avisar())
+}
+
+/* ── Grupos plegados, con el mismo patrón que el ancho ────────────────────── */
+
+let plegadosEnMemoria: string[] | null = null
+const oyentesPlegado = new Set<() => void>()
+
+function suscribirPlegado(alCambiar: () => void): () => void {
+  oyentesPlegado.add(alCambiar)
+  return () => {
+    oyentesPlegado.delete(alCambiar)
+  }
+}
+
+function leerPlegado(): string[] {
+  if (plegadosEnMemoria !== null) return plegadosEnMemoria
+  try {
+    plegadosEnMemoria = leerPlegadosGuardado(localStorage.getItem(CLAVE_PLEGADO))
+  } catch {
+    plegadosEnMemoria = []
+  }
+  return plegadosEnMemoria
+}
+
+const SIN_PLEGADOS: string[] = []
+
+function alternarPlegado(titulo: string): void {
+  const siguiente = alternarGrupo(leerPlegado(), titulo)
+  plegadosEnMemoria = siguiente
+  try {
+    localStorage.setItem(CLAVE_PLEGADO, JSON.stringify(siguiente))
+  } catch {
+    // La preferencia no sobrevive a la recarga, pero plegar/desplegar funciona.
+  }
+  oyentesPlegado.forEach((avisar) => avisar())
 }
 
 interface Props {

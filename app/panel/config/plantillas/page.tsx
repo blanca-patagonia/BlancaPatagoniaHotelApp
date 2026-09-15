@@ -31,6 +31,7 @@ const MUESTRA = {
 
 const MENSAJES_ERROR: Record<string, string> = {
   plantilla: 'Esa plantilla no existe.',
+  plantilla_restaurar: 'No se pudo restaurar el texto original. Probá de nuevo.',
 }
 
 export default async function PlantillasPage({

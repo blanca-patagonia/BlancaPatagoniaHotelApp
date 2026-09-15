@@ -3,10 +3,19 @@
 -- Datos reales del Anexo A (Tarifario Temporada 2025 / 2026, IVA discriminado).
 -- Se ejecuta con `supabase db reset`.
 --
--- NOTA: el inventario físico de `unidades` es representativo (cantidades a
--- confirmar con el hotel). Las tarifas y temporadas SÍ son las oficiales.
--- Para cabañas el tarifario solo publica tarifa neta (agencia); se replica en
--- rack hasta confirmar el precio de mostrador.
+-- El inventario físico de `unidades` es el real (migración 0106, hoja de
+-- recepción del hotel): Agassiz/Mayo/Frías + Planta Alta/Planta Baja de la
+-- hostería, y las cabañas Bolados/Onelli/Spegazzini/Upsala/Moreno. Los nombres
+-- y códigos de `tipos_unidad` de acá tienen que coincidir exactamente con los
+-- que esa migración deja (la renombra si ya existían, o los usa directo si
+-- todavía no — ver el comentario de esa migración para el porqué de las dos
+-- rutas). Upsala y Moreno **no** están en el insert de tipos de abajo: la
+-- migración 0106 ya los crea, sin tarifa, y volver a insertarlos acá
+-- chocaría contra el `unique` de `codigo`.
+--
+-- Las tarifas y temporadas SÍ son las oficiales. Para cabañas el tarifario
+-- solo publica tarifa neta (agencia); se replica en rack hasta confirmar el
+-- precio de mostrador.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── Temporadas y sus rangos de fecha ──────────────────────────────────────────
@@ -57,17 +66,19 @@ from (values
 join temporadas tp on tp.codigo = r.temp_codigo;
 
 -- ── Tipos de unidad ───────────────────────────────────────────────────────────
+-- ⚠️ Upsala y Moreno NO van acá: los crea la migración 0106 (sin tarifa).
+-- ⚠️ No hay cabaña de 5 ni de 7 personas: la migración 0107 borró esos dos
+-- tipos (tenían tarifa real pero ninguna cabaña de la hoja de recepción
+-- tiene esa capacidad — lo confirmó el dueño del hotel).
 insert into tipos_unidad (codigo, nombre, categoria, capacidad_max, descripcion, amenities) values
   ('HOST-SINGLE',  'Single',                        'hosteria', 1, 'Habitación single con vista al Lago Argentino.',            '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
-  ('HOST-DBL-STD', 'Doble Standard',                'hosteria', 2, 'Habitación doble standard con vista al lago.',              '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
-  ('HOST-DBL-SUP', 'Doble Superior',                'hosteria', 2, 'Habitación doble superior con vista al lago.',              '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
+  ('HOST-STD',     'Standard',                      'hosteria', 2, 'Habitación doble standard con vista al lago.',              '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
+  ('HOST-SUP',     'Superior',                      'hosteria', 2, 'Habitación doble superior con vista al lago.',              '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
   ('HOST-TRIPLE',  'Triple',                        'hosteria', 3, 'Habitación triple con vista al lago.',                      '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
-  ('HOST-SUITE',   'Suite Principal',               'hosteria', 2, 'Suite principal con vista panorámica e hidromasaje.',       '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
-  ('CAB-1D-3P',    'Cabaña 1 dormitorio (3 pers.)', 'cabana',   3, 'Cabaña de 1 dormitorio, hasta 3 personas.',                 '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]'),
-  ('CAB-2D-4P',    'Cabaña 2 dormitorios (4 pers.)','cabana',   4, 'Cabaña de 2 dormitorios, hasta 4 personas.',                '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]'),
-  ('CAB-2D-5P',    'Cabaña 2 dormitorios (5 pers.)','cabana',   5, 'Cabaña de 2 dormitorios, hasta 5 personas.',                '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]'),
-  ('CAB-3D-6P',    'Cabaña 3 dormitorios (6 pers.)','cabana',   6, 'Cabaña de 3 dormitorios, hasta 6 personas.',                '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]'),
-  ('CAB-3D-7P',    'Cabaña 3 dormitorios (7 pers.)','cabana',   7, 'Cabaña de 3 dormitorios, hasta 7 personas.',                '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]');
+  ('HOST-SUITE',   'Suite',                         'hosteria', 2, 'Suite con vista panorámica e hidromasaje.',                 '["Vista al Lago Argentino","Hidromasaje","Desayuno buffet","WiFi"]'),
+  ('CAB-ONELLI',      'Onelli',      'cabana', 3, 'Cabaña Onelli, hasta 3 personas.',      '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]'),
+  ('CAB-SPEGAZZINI',  'Spegazzini',  'cabana', 4, 'Cabaña Spegazzini, hasta 4 personas.',  '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]'),
+  ('CAB-BOLADOS',  'Bolados',       'cabana', 6, 'Cabaña Bolados, hasta 6 personas.',       '["Hogar a parrilla","Cocina equipada","Desayuno buffet","WiFi"]');
 
 -- ── Tarifas (Anexo A). Neto = agencia, Rack = mostrador. Montos SIN IVA. ───────
 insert into tarifas (tipo_unidad_id, temporada_id, precio_neto, precio_rack)
@@ -75,41 +86,57 @@ select tu.id, tp.id, v.neto, v.rack
 from (values
   -- Hostería Boutique
   ('HOST-SINGLE',  'baja',   85, 120), ('HOST-SINGLE',  'media', 110, 143), ('HOST-SINGLE',  'alta', 155, 177),
-  ('HOST-DBL-STD', 'baja',   85, 120), ('HOST-DBL-STD', 'media', 110, 143), ('HOST-DBL-STD', 'alta', 155, 177),
-  ('HOST-DBL-SUP', 'baja',  100, 139), ('HOST-DBL-SUP', 'media', 130, 165), ('HOST-DBL-SUP', 'alta', 170, 195),
+  ('HOST-STD',     'baja',   85, 120), ('HOST-STD',     'media', 110, 143), ('HOST-STD',     'alta', 155, 177),
+  ('HOST-SUP',     'baja',  100, 139), ('HOST-SUP',     'media', 130, 165), ('HOST-SUP',     'alta', 170, 195),
   ('HOST-TRIPLE',  'baja',  120, 160), ('HOST-TRIPLE',  'media', 145, 180), ('HOST-TRIPLE',  'alta', 190, 215),
   ('HOST-SUITE',   'baja',  140, 190), ('HOST-SUITE',   'media', 180, 190), ('HOST-SUITE',   'alta', 220, 225),
   -- Cabañas (rack replicado de neto hasta confirmar mostrador)
-  ('CAB-1D-3P',    'baja',  130, 130), ('CAB-1D-3P',    'media', 155, 155), ('CAB-1D-3P',    'alta', 200, 200),
-  ('CAB-2D-4P',    'baja',  180, 180), ('CAB-2D-4P',    'media', 210, 210), ('CAB-2D-4P',    'alta', 240, 240),
-  ('CAB-2D-5P',    'baja',  210, 210), ('CAB-2D-5P',    'media', 235, 235), ('CAB-2D-5P',    'alta', 280, 280),
-  ('CAB-3D-6P',    'baja',  240, 240), ('CAB-3D-6P',    'media', 265, 265), ('CAB-3D-6P',    'alta', 310, 310),
-  ('CAB-3D-7P',    'baja',  270, 270), ('CAB-3D-7P',    'media', 300, 300), ('CAB-3D-7P',    'alta', 340, 340)
+  ('CAB-ONELLI',      'baja',  130, 130), ('CAB-ONELLI',      'media', 155, 155), ('CAB-ONELLI',      'alta', 200, 200),
+  ('CAB-SPEGAZZINI',  'baja',  180, 180), ('CAB-SPEGAZZINI',  'media', 210, 210), ('CAB-SPEGAZZINI',  'alta', 240, 240),
+  ('CAB-BOLADOS',  'baja',  240, 240), ('CAB-BOLADOS',  'media', 265, 265), ('CAB-BOLADOS',  'alta', 310, 310)
 ) as v(tipo_codigo, temp_codigo, neto, rack)
 join tipos_unidad tu on tu.codigo = v.tipo_codigo
 join temporadas   tp on tp.codigo = v.temp_codigo;
 
--- ── Unidades físicas (inventario representativo, a confirmar) ──────────────────
-insert into unidades (tipo_unidad_id, nombre)
-select tu.id, v.nombre
+-- ── Unidades físicas (inventario real, hoja de recepción — ver migración 0106) ──
+-- Upsala y Moreno ya están cargadas por la migración 0106 (sus `unidades`
+-- se insertan ahí junto con sus `tipos_unidad`, porque no dependen de nada
+-- de este archivo). El resto se carga acá porque sí depende de los
+-- `tipos_unidad` que este archivo acaba de insertar arriba.
+insert into unidades (tipo_unidad_id, nombre, bloque, piso, orden)
+select tu.id, v.nombre, v.bloque, v.piso, v.orden
 from (values
-  ('HOST-SINGLE',  'Hostería 101'),
-  ('HOST-SINGLE',  'Hostería 102'),
-  ('HOST-DBL-STD', 'Hostería 201'),
-  ('HOST-DBL-STD', 'Hostería 202'),
-  ('HOST-DBL-STD', 'Hostería 203'),
-  ('HOST-DBL-SUP', 'Hostería 301'),
-  ('HOST-DBL-SUP', 'Hostería 302'),
-  ('HOST-TRIPLE',  'Hostería 401'),
-  ('HOST-TRIPLE',  'Hostería 402'),
-  ('HOST-SUITE',   'Suite Principal'),
-  ('CAB-1D-3P',    'Cabaña Lenga'),
-  ('CAB-2D-4P',    'Cabaña Ñire'),
-  ('CAB-2D-5P',    'Cabaña Calafate'),
-  ('CAB-3D-6P',    'Cabaña Notro'),
-  ('CAB-3D-7P',    'Cabaña Coihue')
-) as v(tipo_codigo, nombre)
-join tipos_unidad tu on tu.codigo = v.tipo_codigo;
+  -- Sueltas.
+  ('HOST-STD',    'Agassiz', 'Hostería', '', 0),
+  ('HOST-TRIPLE', 'Mayo',    'Hostería', '', 0),
+  ('HOST-SUITE',  'Frías',   'Hostería', '', 0),
+  -- Planta Alta.
+  ('HOST-SUP',    'Gorra Blanca', 'Hostería', 'PA', 1),
+  ('HOST-SUP',    'Murallón',     'Hostería', 'PA', 2),
+  ('HOST-SUP',    'Heim',         'Hostería', 'PA', 3),
+  ('HOST-STD',    'Ameghino',     'Hostería', 'PA', 4),
+  ('HOST-STD',    'Caglio',       'Hostería', 'PA', 5),
+  ('HOST-SUITE',  'Torre',        'Hostería', 'PA', 6),
+  -- Planta Baja.
+  ('HOST-TRIPLE', 'Peineta',  'Hostería', 'PB', 1),
+  ('HOST-STD',    'Cono',     'Hostería', 'PB', 2),
+  ('HOST-SUP',    'Viedma',   'Hostería', 'PB', 3),
+  ('HOST-STD',    'Marconi',  'Hostería', 'PB', 4),
+  ('HOST-STD',    'Bertachi', 'Hostería', 'PB', 5),
+  ('HOST-STD',    'Nunatak',  'Hostería', 'PB', 6),
+  -- Cabañas.
+  ('CAB-BOLADOS', 'Bolados 1', 'Cabañas', '', 1), ('CAB-BOLADOS', 'Bolados 2', 'Cabañas', '', 2),
+  ('CAB-BOLADOS', 'Bolados 3', 'Cabañas', '', 3), ('CAB-BOLADOS', 'Bolados 4', 'Cabañas', '', 4),
+  ('CAB-BOLADOS', 'Bolados 5', 'Cabañas', '', 5), ('CAB-BOLADOS', 'Bolados 6', 'Cabañas', '', 6),
+  ('CAB-BOLADOS', 'Bolados 7', 'Cabañas', '', 7),
+  ('CAB-ONELLI',  'Onelli 1',  'Cabañas', '', 1), ('CAB-ONELLI',  'Onelli 2',  'Cabañas', '', 2),
+  ('CAB-ONELLI',  'Onelli 3',  'Cabañas', '', 3), ('CAB-ONELLI',  'Onelli 4',  'Cabañas', '', 4),
+  ('CAB-SPEGAZZINI', 'Spegazzini 1', 'Cabañas', '', 1), ('CAB-SPEGAZZINI', 'Spegazzini 2', 'Cabañas', '', 2),
+  ('CAB-SPEGAZZINI', 'Spegazzini 3', 'Cabañas', '', 3), ('CAB-SPEGAZZINI', 'Spegazzini 4', 'Cabañas', '', 4),
+  ('CAB-SPEGAZZINI', 'Spegazzini 5', 'Cabañas', '', 5)
+) as v(tipo_codigo, nombre, bloque, piso, orden)
+join tipos_unidad tu on tu.codigo = v.tipo_codigo
+where not exists (select 1 from unidades u where u.nombre = v.nombre);
 
 -- ── Política de cancelación (Tarifario) ───────────────────────────────────────
 -- > 14 días: sin cargo · 14–7 días: primera noche · < 7 días: 100% · no-show: 100%.

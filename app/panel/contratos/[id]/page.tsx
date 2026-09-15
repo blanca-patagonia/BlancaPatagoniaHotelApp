@@ -28,7 +28,7 @@ import {
   type Tono,
 } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
-import { cambiarEstadoContrato, enviarAFirmar, verificarIntegridad } from '../actions'
+import { cambiarEstadoContrato, editarContrato, enviarAFirmar, verificarIntegridad } from '../actions'
 
 const TONO_CONTRATO: Record<EstadoContrato, Tono> = {
   borrador: 'neutro',
@@ -43,12 +43,18 @@ const MENSAJES_ERROR: Record<string, string> = {
   transicion: 'Esa transición de estado no es válida.',
   envio: 'No se pudo generar la invitación a firmar.',
   sin_firma: 'Todavía no hay una firma registrada para verificar.',
+  titulo: 'El título no puede quedar vacío.',
+  contenido: 'El texto del contrato no puede quedar vacío.',
+  vigencia: 'La vigencia no puede terminar antes de empezar.',
+  no_editable: 'Este contrato ya no es un borrador: no se puede editar.',
+  editar: 'No se pudieron guardar los cambios. Quedó como estaba.',
 }
 
 const MENSAJES_OK: Record<string, string> = {
   enviado: 'Contrato enviado. Copiá el enlace de firma y hacéselo llegar a la contraparte.',
   integro: 'Verificación correcta: el texto coincide exactamente con lo que se firmó.',
   alterado: '⚠️ El texto actual NO coincide con el que se firmó. El documento fue modificado.',
+  editado: 'Cambios guardados.',
 }
 
 interface Contrato {
@@ -288,10 +294,61 @@ export default async function DetalleContratoPage({
         </Tarjeta>
       )}
 
-      {/* Texto del contrato */}
-      <Tarjeta titulo="Texto del contrato" className="mt-4">
-        <p className="p-5 text-sm whitespace-pre-line text-stone-700">{contrato.contenido}</p>
-      </Tarjeta>
+      {/* Texto del contrato — editable mientras sigue en borrador; enviarlo a
+          firmar congela el texto y calcula su hash (ADR 0010). */}
+      {contrato.estado === 'borrador' ? (
+        <Tarjeta
+          titulo="Texto del contrato"
+          descripcion="Borrador: se puede seguir editando hasta enviarlo a firmar."
+          className="mt-4"
+        >
+          <form action={editarContrato} className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
+            <input type="hidden" name="contrato_id" value={contrato.id} />
+
+            <div className="sm:col-span-2">
+              <Campo etiqueta="Título del contrato" requerido>
+                <input name="titulo" required defaultValue={contrato.titulo} className={CAMPO} />
+              </Campo>
+            </div>
+            <Campo etiqueta="Vigencia desde">
+              <input
+                name="vigencia_desde"
+                type="date"
+                defaultValue={contrato.vigencia_desde ?? ''}
+                className={CAMPO}
+              />
+            </Campo>
+            <Campo etiqueta="Vigencia hasta" ayuda="Dejalo vacío si no tiene fecha de fin.">
+              <input
+                name="vigencia_hasta"
+                type="date"
+                defaultValue={contrato.vigencia_hasta ?? ''}
+                className={CAMPO}
+              />
+            </Campo>
+            <div className="sm:col-span-2">
+              <Campo etiqueta="Texto del contrato" requerido>
+                <textarea
+                  name="contenido"
+                  rows={10}
+                  required
+                  defaultValue={contrato.contenido ?? ''}
+                  className={CAMPO}
+                />
+              </Campo>
+            </div>
+            <div className="sm:col-span-2">
+              <BotonEnvio cargando="Guardando…" extra="w-full sm:w-auto">
+                Guardar cambios
+              </BotonEnvio>
+            </div>
+          </form>
+        </Tarjeta>
+      ) : (
+        <Tarjeta titulo="Texto del contrato" className="mt-4">
+          <p className="p-5 text-sm whitespace-pre-line text-stone-700">{contrato.contenido}</p>
+        </Tarjeta>
+      )}
 
       {/* Transiciones manuales */}
       {transicionesPosibles(contrato.estado).length > 0 && (

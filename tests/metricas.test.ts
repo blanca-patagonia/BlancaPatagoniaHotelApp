@@ -3,6 +3,10 @@ import {
   mesRelativo,
   ultimosMeses,
   metricasDeMes,
+  metricasDeSemana,
+  semanaRelativa,
+  ultimasSemanas,
+  etiquetaSemana,
   variacionPct,
   etiquetaMes,
   type EstadiaMetrica,
@@ -92,5 +96,34 @@ describe('etiqueta de mes', () => {
   it('abrevia mes y año', () => {
     expect(etiquetaMes('2026-01')).toBe('ene 26')
     expect(etiquetaMes('2025-12')).toBe('dic 25')
+  })
+})
+
+describe('métricas hoteleras de la semana', () => {
+  it('cuenta solo las noches de la semana pedida, lunes a domingo', () => {
+    // Semana del 2026-09-14 (lunes) al 2026-09-21 (exclusivo).
+    const estadias: EstadiaMetrica[] = [
+      { periodo: '[2026-09-13,2026-09-16)', precio_noche: 100 }, // entra domingo, se van 2 noches de esta semana
+      { periodo: '[2026-09-20,2026-09-23)', precio_noche: 50 }, // solo el domingo cuenta
+    ]
+    const m = metricasDeSemana(estadias, '2026-09-14', 1)
+    expect(m.semana).toBe('2026-09-14')
+    expect(m.nochesDisponibles).toBe(7)
+    expect(m.nochesVendidas).toBe(3) // 2 + 1
+    expect(m.ingreso).toBe(250) // 2*100 + 1*50
+  })
+
+  it('semanaRelativa avanza de a 7 días, cruzando mes', () => {
+    expect(semanaRelativa('2026-09-28', 1)).toBe('2026-10-05')
+    expect(semanaRelativa('2026-09-28', -1)).toBe('2026-09-21')
+  })
+
+  it('ultimasSemanas lista en orden cronológico', () => {
+    expect(ultimasSemanas('2026-09-14', 3)).toEqual(['2026-08-31', '2026-09-07', '2026-09-14'])
+  })
+
+  it('etiquetaSemana muestra el rango corto, dentro y a través de un mes', () => {
+    expect(etiquetaSemana('2026-09-14')).toBe('14-20 sep')
+    expect(etiquetaSemana('2026-09-28')).toBe('28 sep - 4 oct')
   })
 })

@@ -35,6 +35,9 @@ const MENSAJES_ERROR: Record<string, string> = {
   producto: 'Revisá el nombre y el precio del producto.',
   producto_estado: 'No se pudo activar ni desactivar el producto. Quedó como estaba.',
   stock: 'No se pudo registrar la reposición. El stock quedó con el valor anterior.',
+  producto_con_historial:
+    'No se puede eliminar: ya tiene consumos vendidos cargados. Desactivalo en vez de eliminarlo, así no se pierde ese historial.',
+  producto_eliminar: 'No se pudo eliminar el producto. Probá de nuevo.',
 }
 
 export default async function InventarioPage({
@@ -77,6 +80,7 @@ export default async function InventarioPage({
 
       {sp.error && <Mensaje tono="error">{MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}</Mensaje>}
       {sp.ok === 'producto' && <Mensaje tono="ok">Producto agregado al catálogo.</Mensaje>}
+      {sp.ok === 'producto_eliminado' && <Mensaje tono="ok">Producto eliminado del catálogo.</Mensaje>}
       {eProductos && (
         <Mensaje tono="error">
           No se pudo leer el inventario completo — puede haber artículos con stock bajo que no se

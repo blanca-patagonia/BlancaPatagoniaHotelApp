@@ -63,7 +63,7 @@ emite un CAE inventado sobre una factura real.
 | `FACTURACION_PROVIDER` | — | `simulado` | **CAE inventado**, no es ARCA |
 | `COTIZACION_PROVIDER` | `dolarapi` / `argentinadatos` | `manual` | Usa la cotización que cargó un admin (no inventa) |
 | `CANAL_PROVIDER` | `booking-ical` | `simulado` | No habla con ninguna OTA |
-| `PAGO_PROVIDER` | `mercadopago,stripe` | `simulado` | No cobra nada |
+| `PAGO_PROVIDER` | `mercadopago,stripe,payway` | `simulado` | No cobra nada |
 
 > `PAGO_PROVIDER` es el **único plural**: admite varios separados por coma,
 > porque el hotel ofrece varios medios a la vez.
@@ -72,8 +72,10 @@ emite un CAE inventado sobre una factura real.
 
 | Integración | Variables | Notas |
 |---|---|---|
-| **MercadoPago** | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | El token es también el que usa la conciliación de liquidaciones |
-| **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | ⚠️ Stripe cuenta en **centavos** |
+| **MercadoPago (cobro)** | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | El token es también el que usa la conciliación de liquidaciones. Cómo conseguirlas: §1.6 |
+| **MercadoPago (conexión OAuth)** | `MERCADOPAGO_APP_ID`, `MERCADOPAGO_APP_SECRET` | Para el botón «Conectar Mercado Pago» de `/panel/config/conexiones` (ADR 0036) — **no** reemplaza al par de arriba, ver §1.6 |
+| **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | ⚠️ Stripe cuenta en **centavos**. ⚠️ No admite cuentas de Argentina directas, ver §1.6 |
+| **Payway** (ADR 0038) | `PAYWAY_PUBLIC_KEY`, `PAYWAY_PRIVATE_KEY`, `PAYWAY_INTERNAL_SECRET` | ⚠️ Payway también cuenta en **centavos**. `PAYWAY_INTERNAL_SECRET` no es de Payway: firma el evento que el propio servidor se manda a sí mismo tras una respuesta síncrona (ver `lib/payments/payway.ts`). Cómo conseguirlas: §1.6 |
 | **Pago simulado** | `PAGO_WEBHOOK_SECRET` | Sólo con `PAGO_PROVIDER=simulado` |
 | **Resend (envío)** | `RESEND_API_KEY`, `EMAIL_FROM` | ⚠️ `EMAIL_FROM` debe ser de un dominio **verificado** o la API responde 403 |
 | **Resend (entrega)** | `RESEND_WEBHOOK_SECRET` | Sin esto **no se detectan los rebotes**: el aviso queda «enviada» para siempre |
@@ -120,6 +122,114 @@ y son trámites del hotel:
 >
 > ⚠️ `es_AR` y `es` son plantillas **distintas** para Meta. Pedir una que no
 > existe devuelve el error 132001 y el mensaje no sale.
+
+### 1.6 Pasarelas de pago: qué trámite hace falta para cada una
+
+El código de las cuatro está escrito (`lib/payments/`); lo que falta en los
+cuatro casos es el trámite comercial, no programar. Investigado el
+2026-09-14 para tenerlo a mano cuando el hotel decida contratar. Nada de esto
+se probó contra una cuenta real todavía (ver ADR 0027 y ADR 0038): antes de
+activar cualquiera en producción, conviene un pago de prueba chico primero.
+
+#### Mercado Pago — tres pares de credenciales, no uno
+
+Hay TRES variables de Mercado Pago en este proyecto, y se confunden fácil
+porque las tres se llaman parecido pero son trámites distintos:
+
+| Variable | Para qué | De dónde sale |
+|---|---|---|
+| `MERCADOPAGO_ACCESS_TOKEN` + `MERCADOPAGO_WEBHOOK_SECRET` | Cobrar de verdad (Checkout Pro, `lib/payments/mercadopago.ts`) | Credenciales de **producción** de la cuenta de cobro del hotel, en `mercadopago.com.ar/developers/panel/app` → la aplicación → «Credenciales de producción». El webhook secret se genera al configurar la URL de notificaciones dentro de esa misma aplicación (menú Webhooks → Configurar notificaciones → pestaña «Modo productivo», poner `https://<dominio>/api/webhooks/pagos/mercadopago`) |
+| `MERCADOPAGO_APP_ID` + `MERCADOPAGO_APP_SECRET` | El botón «Conectar Mercado Pago» de `/panel/config/conexiones` (OAuth2, ADR 0036) — para que el staff conecte la cuenta sin pegar un token a mano | Se registra **una sola aplicación** de Mercado Pago para Blanca Patagonia (no una por hotel, acá hay uno solo) en el mismo panel de developers, sección «Tus integraciones» → «Crear aplicación». Ahí salen el `Client ID` (= `APP_ID`) y el `Client Secret` (= `APP_SECRET`) |
+
+⚠️ **Requisito previo, para cualquiera de los dos pares:** una cuenta de
+Mercado Pago dada de alta como **vendedor**, lo que pide CUIT/CUIL y
+Monotributo o el régimen fiscal que corresponda al hotel — es un trámite del
+hotel, no de quien programa. Y para que Mercado Pago habilite las
+credenciales de **producción** (no solo las de prueba) pide un sitio HTTPS
+real: no se puede activar contra `localhost`.
+
+⚠️ **La conexión OAuth (segundo par) hoy es solo de estado** — Fase 1 de 4
+del ADR 0036, según la bitácora del 2026-09-09: guarda el token conectado en
+`conexiones_proveedores` (cifrado) y lo muestra en la pantalla, pero
+`lib/payments/mercadopago.ts` y la conciliación (ADR 0030) siguen leyendo el
+primer par (`MERCADOPAGO_ACCESS_TOKEN`) directo de las variables de entorno,
+no de la conexión guardada. Conectar por OAuth hoy no reemplaza cargar el
+`ACCESS_TOKEN` a mano.
+
+#### Payway (Prisma) — es un trámite telefónico, no un formulario web
+
+1. **Abrir cuenta Payway**, si el hotel no tiene una: por teléfono,
+   `4378-4440` (CABA/GBA) o `0810-222-4440` (interior), de lunes a viernes de
+   10 a 18h. Hace falta estar inscripto como empresa (hay una modalidad
+   aparte para monotributista/persona física, «cuenta persona física»).
+2. **Pedir la activación de «venta online»** sobre esa cuenta — no viene
+   activada por default, es un establecimiento aparte («Mis
+   establecimientos» → «Agregar nuevo establecimiento» → «Online» o «Link de
+   pago», una vez que ya se tiene el panel Mi Payway).
+3. **Pedir acceso al portal de desarrolladores** (`developers.payway.com.ar`)
+   y las claves —pública y privada— escribiendo a
+   **soporte@payway.com.ar**. Ahí es donde conviene preguntar explícitamente
+   por las dos cosas que el código dejó sin confirmar (ver el docblock de
+   `lib/payments/payway.ts` y el ADR 0038):
+   - el nombre exacto del header de autenticación de la API REST (el código
+     usa `apikey`, que es lo que documentan los SDKs públicos, pero no se
+     verificó contra una respuesta real),
+   - la URL base de producción correcta para la cuenta contratada
+     (`ventasonline.payway.com.ar/api/v2` según el SDK de JavaScript,
+     `live.decidir.com` según el SDK de PHP — son la marca vieja y la nueva
+     del mismo gateway, y probablemente una sola resuelva para la cuenta
+     real).
+4. **Pedir un usuario de sandbox** para probar antes de salir a producción —
+   existe («Developer Sandbox», con credenciales de prueba propias) y también
+   se gestiona con Soporte.
+5. Soporte técnico de terminales (si el hotel usa un posnet físico Payway
+   además del cobro online): `0800-333-1258`, todos los días de 8 a 21h.
+
+#### Stripe — ⚠️ no tiene alta directa para una empresa argentina
+
+Esto cambia si conviene activarlo o no, y es una decisión del hotel, no un
+trámite técnico: **Stripe no admite cuentas registradas en Argentina** (no
+está en su lista de países soportados). El camino que existe hoy para una
+empresa argentina es indirecto:
+
+- Constituir una entidad en un país donde Stripe sí opera (EE.UU. es lo más
+  común — una LLC con su EIN, Reino Unido, etc.) y abrir la cuenta de Stripe
+  con esa entidad, no con el CUIT del hotel; o
+- Usar un intermediario/plataforma que ya tenga cuenta Stripe habilitada y
+  liquide al hotel por otro medio.
+
+Ninguna de las dos es «cargar una variable de entorno». Antes de invertir
+tiempo en conseguir `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` de verdad,
+vale la pena que el hotel confirme si quiere ir por ese camino — el huésped
+que paga con Stripe hoy en el sistema es el que paga desde el exterior, y
+Mercado Pago con tarjeta internacional cubre buena parte del mismo caso sin
+ese trámite.
+
+#### Santander — no es una pasarela, es la fuente de conciliación (ADR 0030)
+
+No hace falta ninguna credencial nueva de API: Santander Argentina **no
+tiene banca abierta** para descargar movimientos por API, así que
+`lib/conciliacion/extracto-csv.ts` está armado para importación manual de
+archivo, no para conectarse solo. Lo único que hace falta operativamente:
+
+1. Bajar el extracto desde **Online Banking Santander**
+   (`onlinebanking.santander.com.ar`) — sale en **PDF**, no en CSV/Excel
+   directo. Para convertirlo antes de subirlo al sistema hace falta un
+   conversor (hay servicios como ExtractPro pensados justo para bancos
+   argentinos) o pasarlo a mano.
+2. Nada de esto pide una variable de entorno ni un desarrollo nuevo: es un
+   procedimiento mensual/semanal de quien concilia, no una integración.
+
+**Si en algún momento el hotel quisiera un posnet físico de Santander** (no
+es lo mismo que conciliar el banco), la marca es **Getnet by Santander**
+(`getnet.net/ar` o `docs.globalgetnet.com` para su API). Contacto comercial:
+`comercios@getnet.com.ar` / `+54 11 6074-7001`. Esto sería una **quinta
+pasarela nueva** (ni Payway ni Getnet son lo mismo, aunque las dos sean
+adquirentes locales) — no hay código escrito para Getnet todavía, y no se
+escribió en esta pasada porque el pedido original mencionaba «Santander»
+esperando que fuera la conciliación, no un posnet nuevo. Si el hotel
+confirma que quiere Getnet como medio de cobro además de Payway, es un
+adapter nuevo con el mismo patrón que `lib/payments/payway.ts`.
 
 ---
 

@@ -11,6 +11,8 @@ import {
   formatoFechaCorta,
   horaHotel,
   hoyISO,
+  inicioFinDeMes,
+  mesActual,
   parsearPeriodo,
   sumarDias,
 } from '@/lib/fechas'
@@ -224,7 +226,7 @@ interface EntranteRow {
   divergencia: string
   divergencia_desde: string | null
   reserva_id: string | null
-  reserva: { codigo: string } | null
+  reserva: { codigo: string; agencia: { nombre: string } | null } | null
 }
 
 interface SincroRow {
@@ -291,10 +293,16 @@ export default async function CanalesPage({
     nuevas?: string
     actualizadas?: string
     rechazadas?: string
+    mes?: string
   }>
 }) {
   const sesion = await requerirAcceso('canales')
   const sp = await searchParams
+  // Mes de la conciliación de comisión (Devengado / Facturado / Diferencia).
+  // Antes se sumaba TODO `canal_cargos` sin acotar por fecha, mezclando meses
+  // distintos como si fueran comparables — y encima truncado a 200 filas.
+  const mesConciliacion = /^\d{4}-\d{2}$/.test(sp.mes ?? '') ? sp.mes! : mesActual()
+  const { inicio: mesDesde, fin: mesHasta } = inicioFinDeMes(mesConciliacion)
 
   /*
     Cerrar la conciliación es de gerencia (P1-4).
@@ -318,11 +326,27 @@ export default async function CanalesPage({
 
   const supabase = await crearClienteServidor()
 
+  /*
+    `canal_reservas` no se purga: acumula todo lo sincronizado desde siempre.
+    Con orden ascendente por `check_in` y un `limit(200)`, sin ningún piso de
+    fecha, esa combinación traía las 200 filas MÁS VIEJAS de toda la historia
+    en cuanto el hotel superaba las 200 sincronizaciones — las entrantes
+    NUEVAS, que son las que hay que revisar, quedaban tapadas por historial ya
+    resuelto. Y de ahí salían el KPI de "posible overbooking" y la lista de
+    cobros, así que el problema no era solo visual.
+
+    El piso de 14 días hacia atrás (no `hoyISO()` a secas) es porque una
+    entrante de conciliación puede seguir necesitando revisión unos días
+    después del check-in. El conteo de la barra de filtros (`conteo`, más
+    abajo) es una consulta aparte SIN este piso ni el límite: sigue contando
+    la historia completa.
+  */
   let consultaEntrantes = supabase
     .from('canal_reservas')
     .select(
-      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, divergencia, divergencia_desde, reserva_id, reserva:reservas(codigo)',
+      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, divergencia, divergencia_desde, reserva_id, reserva:reservas(codigo, agencia:agencias(nombre))',
     )
+    .gte('check_in', sumarDias(hoyISO(), -14))
     .order('check_in', { ascending: true })
     .limit(200)
   if (estado) consultaEntrantes = consultaEntrantes.eq('estado', estado)
@@ -360,13 +384,19 @@ export default async function CanalesPage({
         .limit(100),
       // Los cargos del canal (migración 0049). El embed trae el apellido para poder
       // decir a qué venta pertenece cada costo, que es todo el punto de la tabla.
+      // Acotado al mes de conciliación elegido (`mesConciliacion`): sin este
+      // filtro se sumaban cargos de meses distintos como si fueran comparables,
+      // y encima se truncaba a 200 filas sin avisar — ver el comentario de más
+      // abajo, junto a `devengado`/`facturado`.
       supabase
         .from('canal_cargos')
         .select(
           'id, concepto, origen, monto, moneda, monto_usd, imputado_el, estado_conciliacion, nota_conciliacion, detalle, entrante:canal_reservas(huesped_apellido, external_id), reserva:reservas(codigo)',
         )
+        .gte('imputado_el', mesDesde)
+        .lt('imputado_el', mesHasta)
         .order('imputado_el', { ascending: false, nullsFirst: false })
-        .limit(200),
+        .limit(500),
       /*
         El inventario, para armar las URLs del feed iCal de salida.
 
@@ -1065,6 +1095,11 @@ export default async function CanalesPage({
                                 {e.reserva.codigo}
                               </Link>
                             )}
+                            {e.reserva?.agencia?.nombre && (
+                              <span className="mt-1 inline-block">
+                                <Etiqueta tono="neutro">{e.reserva.agencia.nombre}</Etiqueta>
+                              </span>
+                            )}
                             {e.motivo && (
                               <span className="mt-1 block max-w-xs text-xs text-stone-600">
                                 {e.motivo}
@@ -1375,8 +1410,27 @@ export default async function CanalesPage({
         <div className="grid gap-4">
           <Tarjeta
             titulo="Conciliación de la comisión"
-            descripcion="Lo que el canal informó por reserva, contra lo que después facturó."
+            descripcion="Lo que el canal informó por reserva, contra lo que después facturó, mes a mes."
           >
+            <form
+              method="get"
+              action="/panel/canales"
+              className="mb-4 flex flex-wrap items-end gap-2"
+            >
+              <input type="hidden" name="vista" value="costos" />
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Mes a conciliar</span>
+                <input
+                  type="month"
+                  name="mes"
+                  defaultValue={mesConciliacion}
+                  aria-label="Mes a conciliar"
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
+                />
+              </label>
+              <button className={botonClases('secundario', 'px-3 py-1.5 text-sm')}>Ver</button>
+            </form>
+
             {/*
               La advertencia que evita el error más caro de esta pantalla. `tarifa_tipo
               = 'neto'` es un TIPO DE TARIFA (la de agencia, contra la rack de

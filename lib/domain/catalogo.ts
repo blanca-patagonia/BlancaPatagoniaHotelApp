@@ -171,16 +171,24 @@ export function textoRango(desde: string, hasta: string): string {
  *
  * Recomendado para las reales: JPG de ~1400 px de ancho, por debajo de 300 kB.
  */
+/*
+ * ⚠️ Las claves siguen el `codigo` de `tipos_unidad`. La migración 0106
+ * renombró cinco (inventario físico real): `HOST-DBL-STD`→`HOST-STD`,
+ * `HOST-DBL-SUP`→`HOST-SUP`, `CAB-1D-3P`→`CAB-ONELLI`, `CAB-2D-4P`→
+ * `CAB-SPEGAZZINI`, `CAB-3D-6P`→`CAB-BOLADOS`. Se mueve la clave, no el
+ * archivo: son fotos de stock por categoría, no de la unidad puntual, así
+ * que la misma imagen sigue sirviendo.
+ */
 export const FOTOS: Readonly<Partial<Record<string, string>>> = {
   'HOST-SINGLE': '/alojamientos/single.jpg',
-  'HOST-DBL-STD': '/alojamientos/doble-standard.jpg',
-  'HOST-DBL-SUP': '/alojamientos/doble-superior.jpg',
+  'HOST-STD': '/alojamientos/doble-standard.jpg',
+  'HOST-SUP': '/alojamientos/doble-superior.jpg',
   'HOST-TRIPLE': '/alojamientos/triple.jpg',
   'HOST-SUITE': '/alojamientos/suite-principal.jpg',
-  'CAB-1D-3P': '/alojamientos/cabana-1-dormitorio.jpg',
-  'CAB-2D-4P': '/alojamientos/cabana-2-dormitorios-4.jpg',
+  'CAB-ONELLI': '/alojamientos/cabana-1-dormitorio.jpg',
+  'CAB-SPEGAZZINI': '/alojamientos/cabana-2-dormitorios-4.jpg',
   'CAB-2D-5P': '/alojamientos/cabana-2-dormitorios-5.jpg',
-  'CAB-3D-6P': '/alojamientos/cabana-3-dormitorios-6.jpg',
+  'CAB-BOLADOS': '/alojamientos/cabana-3-dormitorios-6.jpg',
   'CAB-3D-7P': '/alojamientos/cabana-3-dormitorios-7.jpg',
 }
 

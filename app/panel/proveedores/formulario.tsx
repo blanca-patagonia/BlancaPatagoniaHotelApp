@@ -36,6 +36,13 @@ export function FormularioProveedor() {
         <input name="email" type="email" className={CAMPO} />
       </Campo>
 
+      <Campo
+        etiqueta="Teléfono / WhatsApp"
+        ayuda="Número por el que se lo contacta."
+      >
+        <input name="telefono" type="tel" className={CAMPO} />
+      </Campo>
+
       {estado.error && (
         <div className="sm:col-span-2">
           <Mensaje tono="error">{estado.error}</Mensaje>

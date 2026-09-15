@@ -27,6 +27,7 @@ export const AREAS = [
   'errores',
   'notificaciones',
   'reportes',
+  'ia',
   'config',
   'usuarios',
   'respaldos',
@@ -56,6 +57,7 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   errores: 'Errores del sistema',
   notificaciones: 'Avisos enviados',
   reportes: 'Reportes',
+  ia: 'Asistente IA',
   config: 'Configuración',
   usuarios: 'Usuarios',
   respaldos: 'Respaldos',
@@ -99,6 +101,11 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
     // restringe la propia pantalla y el endpoint, porque el archivo concentra los
     // datos personales de todos los huéspedes del hotel.
     'respaldos',
+    // El asistente contesta con datos de plata y de ocupación (los mismos
+    // números que reportes) y puede quedar prendido contra un proveedor de
+    // pago: se lo da a los mismos dos roles que ya ven `reportes` y
+    // `conciliacion`, no a recepción ni a housekeeping.
+    'ia',
     'ayuda',
   ],
   // Recepción entra a `canales`: las reservas de Booking las importa y las
@@ -146,7 +153,20 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
  * pierde justamente el valor que tiene —estar ahí cuando hay que revisar algo que
  * pasó antes—, y volver a encenderlo no recupera lo que no se guardó.
  */
-export const AREAS_OCULTAS: readonly Area[] = ['auditoria', 'conversaciones', 'objetos_perdidos']
+export const AREAS_OCULTAS: readonly Area[] = [
+  'auditoria',
+  'objetos_perdidos',
+  // Pedido del dueño del hotel (2026-09-14): ocultar por ahora, sin borrar
+  // nada (ver el porqué de este mecanismo arriba).
+  'contratos',
+  'respaldos',
+  // `conversaciones` se reactivó el 2026-09-15 y se volvió a ocultar el mismo
+  // día, a pedido del hotel: la pantalla se va a rediseñar como bandeja única
+  // por conversación (estilo Chatwoot) cuando lleguen WhatsApp e Instagram, y
+  // hasta entonces prefiere no mostrar el chat interno por área (ADR 0011)
+  // que va a dejar de ser la versión final. El código sigue entero.
+  'conversaciones',
+]
 
 export function estaOculta(area: Area): boolean {
   return AREAS_OCULTAS.includes(area)

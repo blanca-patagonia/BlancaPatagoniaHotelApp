@@ -5,10 +5,11 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirRol } from '@/lib/auth/session'
 import { puedeAvanzar, type EtapaComercial } from '@/lib/domain/comercial'
-import { TIPOS_CUENTA, movimientoEnMoneda } from '@/lib/domain/cuentas'
+import { TIPOS_CUENTA, movimientoEnMoneda, type TipoCuenta } from '@/lib/domain/cuentas'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
+import { subirAdjunto } from '@/lib/storage'
 
 export interface EstadoAgencia {
   error?: string
@@ -86,6 +87,21 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
   // tipo de cambio que nadie puede justificar después.
   if (!mov) redirect(`/panel/agencias/${agenciaId}?error=sin_cotizacion`)
 
+  /*
+    Comprobante opcional (ADR 0037, migración 0103).
+
+    Se sube ANTES de insertar el movimiento, y si falla se corta acá: es
+    preferible que el usuario reintente a que el movimiento quede registrado
+    sin el archivo que la pantalla le dijo que estaba adjuntando.
+  */
+  let comprobanteRuta: string | null = null
+  const archivo = formData.get('comprobante')
+  if (archivo instanceof File && archivo.size > 0) {
+    const subido = await subirAdjunto(`agencias/${agenciaId}`, archivo)
+    if ('error' in subido) redirect(`/panel/agencias/${agenciaId}?error=comprobante`)
+    comprobanteRuta = subido.ruta
+  }
+
   const supabase = await crearClienteServidor()
   // Un movimiento de cuenta corriente que no se registra y no avisa descuadra el
   // saldo de la agencia sin que nadie lo note.
@@ -97,6 +113,7 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
     monto_origen: mov.montoOrigen,
     cotizacion: mov.cotizacion,
     concepto,
+    comprobante_ruta: comprobanteRuta,
   })
   cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'movimiento')
   redirect(`/panel/agencias/${agenciaId}`)
@@ -141,11 +158,16 @@ export async function actualizarAgencia(formData: FormData): Promise<void> {
   const descuento = Number(formData.get('descuento_pct'))
   if (!id) redirect('/panel/agencias')
 
+  const tipo = String(formData.get('tipo') ?? '')
+
   const supabase = await crearClienteServidor()
   const { error } = await supabase
     .from('agencias')
     .update({
       nombre: String(formData.get('nombre') ?? '').trim(),
+      // Se valida contra el catálogo del dominio: un valor inesperado en el
+      // formulario no debe poder escribir cualquier texto en esta columna.
+      ...(TIPOS_CUENTA.includes(tipo as TipoCuenta) ? { tipo } : {}),
       cuit: String(formData.get('cuit') ?? '').trim() || null,
       email: String(formData.get('email') ?? '').trim() || null,
       telefono: String(formData.get('telefono') ?? '').trim() || null,

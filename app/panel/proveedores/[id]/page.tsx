@@ -5,7 +5,9 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { saldoCuenta, type TipoMovimiento, type Movimiento } from '@/lib/domain/cuentas'
-import { registrarMovimientoProveedor, marcarComprobantePagado } from '../actions'
+import { registrarMovimientoProveedor, marcarComprobantePagado, agregarFotoProveedor } from '../actions'
+import { SubirFoto } from '../../_components/subir-foto'
+import { FotoAdjunta } from '../../_components/foto-adjunta'
 import {
   ETIQUETAS_ESTADO_COMPROBANTE,
   clasificarTramo,
@@ -43,6 +45,7 @@ interface Proveedor {
   email: string | null
   telefono: string | null
   activo: boolean
+  fotos: string[]
 }
 interface MovRow {
   id: string
@@ -74,10 +77,15 @@ const MENSAJES_ERROR: Record<string, string> = {
   pagado: 'No se pudo marcar el comprobante como pagado. Sigue figurando como pendiente.',
   datos: 'No se pudieron guardar los datos del proveedor.',
   activo: 'No se pudo cambiar el estado del proveedor.',
+  foto_falta: 'Elegí un archivo antes de subir.',
+  foto_subida: 'No se pudo subir el archivo. Probá de nuevo.',
+  foto_leer: 'No se pudo leer el proveedor para adjuntar la foto. No se guardó nada.',
+  foto_guardar: 'La foto se subió pero no se pudo asociar al proveedor. Probá de nuevo.',
 }
 
 const MENSAJES_OK: Record<string, string> = {
   datos: 'Datos actualizados.',
+  foto: 'Foto agregada.',
 }
 
 export default async function ProveedorDetallePage({
@@ -99,7 +107,11 @@ export default async function ProveedorDetallePage({
     del socio y permite firmar contratos en su nombre.
   */
   const [{ data: provData }, { data: movsData }, { data: tokenData }] = await Promise.all([
-    supabase.from('proveedores').select('id, nombre, rubro, cuit, email, telefono, activo').eq('id', id).single(),
+    supabase
+      .from('proveedores')
+      .select('id, nombre, rubro, cuit, email, telefono, activo, fotos')
+      .eq('id', id)
+      .single(),
     supabase
       .from('movimientos_proveedor')
       .select(
@@ -333,6 +345,33 @@ export default async function ProveedorDetallePage({
             </tbody>
           </Tabla>
         )}
+      </Tarjeta>
+
+      <Tarjeta
+        titulo="Documentación"
+        descripcion="Habilitación, seguro o cualquier otro documento del proveedor, guardado como foto o PDF."
+        className="mt-6"
+      >
+        {proveedor.fotos.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-stone-500">Todavía no hay documentos adjuntos.</p>
+        ) : (
+          <div className="flex flex-wrap gap-3 p-5">
+            {proveedor.fotos.map((ruta) => (
+              <FotoAdjunta key={ruta} ruta={ruta} alt={`Documento de ${proveedor.nombre}`} />
+            ))}
+          </div>
+        )}
+
+        <form
+          action={agregarFotoProveedor}
+          className="flex flex-col gap-3 border-t border-stone-100 p-5 sm:flex-row sm:items-end"
+        >
+          <input type="hidden" name="proveedor_id" value={proveedor.id} />
+          <div className="flex-1">
+            <SubirFoto nombre="foto" etiqueta="Agregar un documento" requerido />
+          </div>
+          <BotonEnvio cargando="Subiendo…" extra="w-full sm:w-auto">Subir</BotonEnvio>
+        </form>
       </Tarjeta>
     </Pagina>
   )

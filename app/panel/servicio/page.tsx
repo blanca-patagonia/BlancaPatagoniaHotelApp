@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { traerTodo } from '@/lib/paginado'
@@ -219,7 +220,14 @@ export default async function ServicioPage({
           titulo="Servicio de cocina"
           descripcion="Lista de desayuno del día y resumen de lo vendido."
           icono="reportes"
-          acciones={<BotonImprimir />}
+          acciones={
+            <>
+              <Link href="/panel/servicio/lista-compras" className={botonClases('secundario')}>
+                Lista de compras
+              </Link>
+              <BotonImprimir />
+            </>
+          }
         />
       </div>
 

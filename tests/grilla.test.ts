@@ -158,7 +158,12 @@ describe('tonoOcupacion', () => {
 
   it('marca alto a partir del 85 %, que es el umbral de dejar de dar descuentos', () => {
     expect(tonoOcupacion(85)).toBe('alto')
-    expect(tonoOcupacion(84)).toBe('normal')
+    expect(tonoOcupacion(84)).toBe('medio')
+  })
+
+  it('marca medio a partir del 60 %', () => {
+    expect(tonoOcupacion(60)).toBe('medio')
+    expect(tonoOcupacion(59)).toBe('normal')
   })
 
   it('el resto es normal', () => {

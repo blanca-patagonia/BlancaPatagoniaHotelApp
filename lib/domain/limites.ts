@@ -19,6 +19,8 @@ export type AccionLimitada =
   | 'webhook_pago'
   | 'webhook_email'
   | 'webhook_canal_externo'
+  | 'comprobante_agencia'
+  | 'payway_ejecutar_pago'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -156,6 +158,43 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 40,
     minutos: 60,
     motivo: 'Martilleo del webhook de correo por parte de quien no tiene el secreto.',
+  },
+
+  /*
+    Subida de comprobante de pago desde el portal del socio, sin sesión de
+    staff: el token de la URL es la única credencial. Sin techo, quien lo tenga
+    podría llenar el bucket privado de archivos (cada uno pesa hasta 8 MB) y
+    ensuciar la cuenta corriente con filas de «pago pendiente» sin comprobante
+    real detrás.
+
+    Diez por hora deja margen de sobra para el caso legítimo más intenso: una
+    agencia que liquida el mes y sube el comprobante de varias reservas
+    seguidas. Un script que quisiera llenar el bucket necesitaría cientos.
+  */
+  comprobante_agencia: {
+    maximo: 10,
+    minutos: 60,
+    motivo: 'El bucket privado y la cuenta corriente, desde un enlace sin sesión de staff.',
+  },
+
+  /*
+    Ejecutar un pago con Payway (`/pago-payway/[reservaId]`), sin sesión de
+    staff: la única credencial es haber tokenizado una tarjeta. A diferencia
+    de `webhook_pago` —que se cuenta después de rechazar la firma porque la
+    pasarela real nunca pasa por ahí sin el secreto—, acá el que llega es
+    SIEMPRE el propio huésped desde el navegador, así que el límite protege
+    otra cosa: que un script no martille la API real de Payway (cada intento
+    cuesta una llamada de verdad, y varios intentos con tarjetas al azar son
+    la forma más barata de probar números robados).
+
+    Diez por hora tolera al huésped que se equivoca de tarjeta un par de veces
+    y a la familia que paga varias reservas seguidas; un script necesitaría
+    cientos para tener alguna chance contra una sola tarjeta.
+  */
+  payway_ejecutar_pago: {
+    maximo: 10,
+    minutos: 60,
+    motivo: 'Prueba de tarjetas contra la API real de Payway desde un checkout sin sesión.',
   },
 }
 

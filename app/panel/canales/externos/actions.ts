@@ -24,9 +24,13 @@ export async function crearCanalExterno(formData: FormData): Promise<void> {
 
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('canales_externos').insert({ codigo, nombre })
+  // Antes esto solo decidía el redirect y nunca quedaba logueado: cualquier
+  // fallo real (no solo el choque de UNIQUE que el mensaje de la pantalla
+  // asume) se perdía sin rastro en `/panel/errores`.
+  cortarSiFalla(error, '/panel/canales/externos', 'canal')
 
   revalidatePath('/panel/canales/externos')
-  redirect(error ? '/panel/canales/externos?error=canal' : '/panel/canales/externos?ok=canal')
+  redirect('/panel/canales/externos?ok=canal')
 }
 
 /** Activa o desactiva un canal sin borrarlo (conserva el mapeo y el historial de reservas). */

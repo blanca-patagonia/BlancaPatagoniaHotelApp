@@ -1,6 +1,11 @@
 import { notFound } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { saldoCuenta, type Movimiento } from '@/lib/domain/cuentas'
+import {
+  saldoCuenta,
+  pagoAgenciaVencido,
+  vencimientoPagoAgencia,
+  type Movimiento,
+} from '@/lib/domain/cuentas'
 import {
   contratosDeEntidad,
   ETIQUETAS_ESTADO_CONTRATO,
@@ -15,7 +20,11 @@ import {
 } from '@/lib/domain/antiguedad'
 import { esMonedaExtranjera, formatearLocal } from '@/lib/domain/divisas'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
-import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import { hoyISO, formatoFechaCorta, parsearPeriodo } from '@/lib/fechas'
+import { subirComprobantePagoAgencia } from './actions'
+import { SubirFoto } from '@/app/panel/_components/subir-foto'
+import { FotoAdjunta } from '@/app/panel/_components/foto-adjunta'
+import { BotonEnvio } from '@/app/panel/_components/boton-envio'
 
 /**
  * Portal del socio: agencias y proveedores.
@@ -59,6 +68,19 @@ interface MovRow {
   fecha: string
   estado?: EstadoComprobante
   vencimiento?: string | null
+  /** Solo en `movimientos_cuenta` (agencias): a qué reserva pertenece, si a alguna. */
+  reserva_id?: string | null
+  /** Ruta en el bucket privado `adjuntos-operativos` (migración 0103). */
+  comprobante_ruta?: string | null
+}
+
+/** Reserva de la agencia, lo mínimo para el aviso de pago vencido y el selector de subida. */
+interface ReservaRow {
+  id: string
+  codigo: string
+  estado: string
+  total: number | string
+  estadias: { periodo: string }[] | null
 }
 
 const TONO_ESTADO: Record<EstadoContrato, string> = {
@@ -69,12 +91,25 @@ const TONO_ESTADO: Record<EstadoContrato, string> = {
   vencido: 'bg-lenga-50 text-lenga-800 ring-1 ring-lenga-200',
 }
 
+const MENSAJES_ERROR: Record<string, string> = {
+  limite: 'Recibimos varios envíos desde tu conexión. Probá de nuevo en un rato.',
+  comprobante_datos: 'Elegí la reserva y el archivo antes de enviar.',
+  token: 'Este enlace ya no está activo.',
+  reserva: 'No encontramos esa reserva entre las tuyas.',
+  reserva_cancelada: 'Esa reserva está cancelada: no hace falta comprobante.',
+  subida: 'No se pudo subir el archivo. Probá de nuevo.',
+  comprobante_guardar: 'El archivo se subió, pero no se pudo registrar. Escribinos y lo resolvemos.',
+}
+
 export default async function PortalSocioPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ ok?: string; error?: string }>
 }) {
   const { token } = await params
+  const { ok: okParam, error: errorParam } = await searchParams
   const admin = crearClienteAdmin()
 
   /*
@@ -116,7 +151,7 @@ export default async function PortalSocioPage({
   const tipo: TipoContrato = agencia ? 'agencia' : 'proveedor'
   const esAgencia = tipo === 'agencia'
 
-  const [{ data: contratosData }, { data: movsData }] = await Promise.all([
+  const [{ data: contratosData }, { data: movsData }, { data: reservasData }] = await Promise.all([
     admin
       .from('contratos')
       .select('id, tipo, entidad_id, titulo, estado, vigencia_desde, vigencia_hasta')
@@ -126,7 +161,7 @@ export default async function PortalSocioPage({
     esAgencia
       ? admin
           .from('movimientos_cuenta')
-          .select('tipo, monto, moneda, monto_origen, concepto, fecha')
+          .select('tipo, monto, moneda, monto_origen, concepto, fecha, reserva_id, comprobante_ruta')
           .eq('agencia_id', socio.id)
           .order('fecha', { ascending: false })
       : admin
@@ -134,6 +169,17 @@ export default async function PortalSocioPage({
           .select('tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento')
           .eq('proveedor_id', socio.id)
           .order('fecha', { ascending: false }),
+    // Solo para agencias: reservas vigentes, para el aviso de pago vencido y
+    // el selector del formulario de subida. `esAgencia` decide con `? :`, no
+    // con un `if` aparte, para poder pedirla en el mismo `Promise.all`.
+    esAgencia
+      ? admin
+          .from('reservas')
+          .select('id, codigo, estado, total, estadias(periodo)')
+          .eq('agencia_id', socio.id)
+          .neq('estado', 'cancelada')
+          .order('creada_en', { ascending: false })
+      : Promise.resolve({ data: null }),
   ])
 
   // El filtro por entidad ya lo hace la consulta; se vuelve a aplicar la regla
@@ -148,6 +194,33 @@ export default async function PortalSocioPage({
   const movs = (movsData ?? []) as MovRow[]
   const saldo = saldoCuenta(
     movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento),
+  )
+
+  /*
+    Pagos vencidos (pedido del dueño del hotel, 2026-09): la agencia tiene que
+    abonar cada reserva un mes antes del check-in. Se calcula igual que en la
+    ficha de la agencia del panel (`lib/domain/cuentas.ts`): lo pagado es la
+    suma de los pagos vinculados a ESA reserva puntual, no el saldo general —
+    una agencia puede estar al día con una reserva y atrasada con otra.
+  */
+  const pagadoPorReserva = new Map<string, number>()
+  for (const m of movs) {
+    if (m.tipo !== 'pago' || !m.reserva_id) continue
+    pagadoPorReserva.set(m.reserva_id, (pagadoPorReserva.get(m.reserva_id) ?? 0) + Number(m.monto))
+  }
+  const hoy = hoyISO()
+  const reservas = esAgencia ? ((reservasData ?? []) as ReservaRow[]) : []
+  const reservasConCheckIn = reservas
+    .map((r) => {
+      const checkIns = (r.estadias ?? []).map((e) => parsearPeriodo(e.periodo).desde)
+      return { ...r, checkIn: checkIns.length ? checkIns.sort()[0] : null }
+    })
+    .filter((r): r is typeof r & { checkIn: string } => r.checkIn !== null)
+  const reservasVencidas = reservasConCheckIn.filter((r) =>
+    pagoAgenciaVencido(
+      { checkIn: r.checkIn, totalReserva: Number(r.total), totalPagado: pagadoPorReserva.get(r.id) ?? 0 },
+      hoy,
+    ),
   )
 
   /*
@@ -188,8 +261,6 @@ export default async function PortalSocioPage({
     firmas.filter((f) => !f.fecha_firma).map((f) => [f.contrato_id, f.token]),
   )
 
-  const hoy = hoyISO()
-
   return (
     <main className="flex flex-1 justify-center bg-gradient-to-b from-lago-50 to-stone-100 px-4 py-10">
       <div className="w-full max-w-3xl">
@@ -205,6 +276,40 @@ export default async function PortalSocioPage({
             {socio.cuit && ` · CUIT ${socio.cuit}`}
           </p>
         </header>
+
+        {errorParam && (
+          <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800 ring-1 ring-red-200">
+            {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </p>
+        )}
+        {okParam === 'comprobante' && (
+          <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
+            Comprobante recibido. El hotel lo va a revisar y confirmar.
+          </p>
+        )}
+
+        {/* Pagos vencidos: la política del hotel es cobrar un mes antes del check-in. */}
+        {esAgencia && reservasVencidas.length > 0 && (
+          <div className="mb-4 rounded-2xl bg-red-50 px-5 py-4 text-sm text-red-800 ring-1 ring-red-200">
+            <p className="font-semibold">
+              {reservasVencidas.length === 1
+                ? 'Hay una reserva con el pago vencido.'
+                : `Hay ${reservasVencidas.length} reservas con el pago vencido.`}
+            </p>
+            <p className="mt-1">
+              El hotel pide el pago un mes antes del check-in. Si ya lo hiciste, subí el
+              comprobante más abajo.
+            </p>
+            <ul className="mt-2 space-y-1">
+              {reservasVencidas.map((r) => (
+                <li key={r.id}>
+                  {r.codigo} · check-in {formatoFechaCorta(r.checkIn)} · vencía el{' '}
+                  {formatoFechaCorta(vencimientoPagoAgencia(r.checkIn))}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Cuenta corriente */}
         <section className="mb-4 rounded-2xl border border-stone-200 bg-white shadow-sm">
@@ -267,6 +372,11 @@ export default async function PortalSocioPage({
                             {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
                           </span>
                         )}
+                        {m.comprobante_ruta && (
+                          <span className="mt-1 block">
+                            <FotoAdjunta ruta={m.comprobante_ruta} alt={`Comprobante de ${m.concepto || 'pago'}`} />
+                          </span>
+                        )}
                       </td>
                       {/* Por `importe()` y no por `toLocaleString`: éste usa entre 0
                           y 3 decimales, así que la misma columna publicaba «726»,
@@ -284,6 +394,59 @@ export default async function PortalSocioPage({
             </div>
           )}
         </section>
+
+        {/*
+          Subir comprobante de pago (migración 0103). El hotel NO da el pago por
+          confirmado con solo subirlo: queda adjunto a un movimiento `pago` para
+          que el mostrador lo revise y cargue el importe real — igual que la
+          conciliación bancaria (ADR 0030). Necesita al menos una reserva con
+          fecha de check-in para elegir en el selector.
+        */}
+        {esAgencia && reservasConCheckIn.length > 0 && (
+          <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+            <h2 className="font-display text-base font-semibold text-stone-900">
+              Subir comprobante de pago
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              El hotel lo revisa y lo confirma. Subirlo no da el pago por acreditado todavía.
+            </p>
+            <form action={subirComprobantePagoAgencia} className="mt-4 flex flex-col gap-4">
+              <input type="hidden" name="token" value={token} />
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-stone-700">Reserva</span>
+                <select
+                  name="reserva_id"
+                  required
+                  className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none focus:border-lago-600"
+                >
+                  {reservasConCheckIn.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.codigo} · check-in {formatoFechaCorta(r.checkIn)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <SubirFoto
+                nombre="comprobante"
+                etiqueta="Comprobante"
+                ayuda="JPG, PNG, WEBP o PDF. Hasta 8 MB."
+                requerido
+              />
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-stone-700">Nota (opcional)</span>
+                <input
+                  name="nota"
+                  maxLength={500}
+                  placeholder="Por ejemplo: importe y fecha del pago"
+                  className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 outline-none focus:border-lago-600"
+                />
+              </label>
+              <div>
+                <BotonEnvio cargando="Enviando…">Enviar comprobante</BotonEnvio>
+              </div>
+            </form>
+          </section>
+        )}
 
         {/* Contratos */}
         <section className="rounded-2xl border border-stone-200 bg-white shadow-sm">

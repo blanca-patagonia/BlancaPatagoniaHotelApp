@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { MONEDAS_EXTRANJERAS } from '@/lib/domain/divisas'
 import { datosFiscales } from '@/lib/facturacion/emisor'
-import { Encabezado, Etiqueta, Pagina, Tarjeta, botonClases } from '../_components/ui'
+import { Encabezado, Etiqueta, Mensaje, Pagina, Tarjeta, botonClases } from '../_components/ui'
 import { type NombreIcono } from '../_components/iconos'
 
 interface Seccion {
@@ -79,12 +80,24 @@ export default async function ConfigPage() {
   await requerirAcceso('config')
   const supabase = await crearClienteServidor()
 
-  const [{ count: tarifasCount }, { data: productosData }, vigentes, datosF] = await Promise.all([
+  const [
+    { count: tarifasCount, error: eTarifas },
+    { data: productosData, error: eProductos },
+    vigentes,
+    datosF,
+  ] = await Promise.all([
     supabase.from('tarifas').select('id', { count: 'exact', head: true }),
     supabase.from('productos_servicios').select('id, stock, stock_minimo, activo').eq('activo', true),
     Promise.all(MONEDAS_EXTRANJERAS.map((m) => cotizacionVigente(m))),
     datosFiscales(supabase),
   ])
+  registrarFalla(eTarifas, 'config:tarifas_count')
+  registrarFalla(eProductos, 'config:productos_servicios')
+
+  // Sin esto, «sin tarifas cargadas» y «con stock bajo» se leen igual cuando
+  // en realidad no se pudo leer nada — el aviso desaparece justo cuando más
+  // haría falta mostrarlo.
+  const huboErrorDeLectura = Boolean(eTarifas || eProductos)
 
   const bajos = articulosFaltantes(productosData ?? [])
   const divisaConAdvertencia = vigentes.some((v) => v?.requiereAdvertencia)
@@ -108,6 +121,13 @@ export default async function ConfigPage() {
         descripcion="Tarifas, temporadas, inventario, plantillas, divisas y datos del hotel."
         icono="config"
       />
+
+      {huboErrorDeLectura && (
+        <Mensaje tono="error">
+          No se pudieron leer algunos datos de esta pantalla. Los avisos de «sin tarifas» o «stock
+          bajo» pueden estar incompletos.
+        </Mensaje>
+      )}
 
       <div className="gap-4 sm:columns-2 xl:columns-3">
         {SECCIONES.map((s) => {

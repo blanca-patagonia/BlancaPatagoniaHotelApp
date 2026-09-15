@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { hoyISO, diasEntre, formatoFechaCorta } from '@/lib/fechas'
 import {
   construirQuery,
@@ -38,6 +39,7 @@ import { Mensaje } from '../_components/ui'
 import {
   cambiarEstadoOrden,
   crearPlanPreventivo,
+  editarPlanPreventivo,
   eliminarPlanPreventivo,
   generarPreventivo,
   marcarPlanHecho,
@@ -47,8 +49,10 @@ interface PlanPreventivo {
   id: string
   titulo: string
   cada_meses: number
+  prioridad: Prioridad
   proxima_ejecucion: string
   activo: boolean
+  unidad_id: string | null
   unidad: { nombre: string } | null
 }
 
@@ -103,6 +107,7 @@ interface Orden {
 const MENSAJES_ERROR: Record<string, string> = {
   plan: 'Revisá el título y la periodicidad del plan.',
   plan_guardar: 'No se pudo guardar el plan. No quedó cargado.',
+  plan_editar: 'No se pudieron guardar los cambios del plan. Quedó como estaba.',
   plan_eliminar: 'No se pudo eliminar el plan. Sigue activo.',
   plan_marcar_hecho: 'No se pudo registrar la tarea como hecha. La próxima fecha no cambió.',
   estado_orden: 'No se pudo cambiar el estado de la orden. Quedó como estaba.',
@@ -163,12 +168,12 @@ export default async function MantenimientoPage({
     fila: es correcto a cualquier volumen y además más barato.
   */
   const [
-    { data: ordenesData, count: enFiltro },
-    { data: unidadesData },
-    { count: pendientesCount },
-    { count: enProcesoCount },
-    { count: urgentesCount },
-    { data: planesData },
+    { data: ordenesData, count: enFiltro, error: eOrdenes },
+    { data: unidadesData, error: eUnidades },
+    { count: pendientesCount, error: ePendientes },
+    { count: enProcesoCount, error: eEnProceso },
+    { count: urgentesCount, error: eUrgentes },
+    { data: planesData, error: ePlanes },
   ] = await Promise.all([
     consulta.range(desde, hasta),
     supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
@@ -187,10 +192,24 @@ export default async function MantenimientoPage({
       .neq('estado', 'resuelta'),
     supabase
       .from('planes_mantenimiento')
-      .select('id, titulo, cada_meses, proxima_ejecucion, activo, unidad:unidades(nombre)')
+      .select(
+        'id, titulo, cada_meses, prioridad, proxima_ejecucion, activo, unidad_id, unidad:unidades(nombre)',
+      )
       .eq('activo', true)
       .order('proxima_ejecucion'),
   ])
+  registrarFalla(eOrdenes, 'mantenimiento:ordenes')
+  registrarFalla(eUnidades, 'mantenimiento:unidades')
+  registrarFalla(ePendientes, 'mantenimiento:kpi_pendientes')
+  registrarFalla(eEnProceso, 'mantenimiento:kpi_en_proceso')
+  registrarFalla(eUrgentes, 'mantenimiento:kpi_urgentes')
+  registrarFalla(ePlanes, 'mantenimiento:planes_preventivos')
+
+  // Con seis lecturas en paralelo, cualquiera puede fallar sola: sin este aviso,
+  // «0 urgentes» y «no se pudo leer» se ven exactamente igual.
+  const huboErrorDeLectura = Boolean(
+    eOrdenes || eUnidades || ePendientes || eEnProceso || eUrgentes || ePlanes,
+  )
 
   const ordenes = (ordenesData ?? []) as unknown as Orden[]
   const totalFiltrado = enFiltro ?? 0
@@ -223,6 +242,13 @@ export default async function MantenimientoPage({
           </>
         }
       />
+
+      {huboErrorDeLectura && (
+        <Mensaje tono="error">
+          No se pudieron leer algunos datos de esta pantalla. Los KPI y el listado pueden estar
+          incompletos.
+        </Mensaje>
+      )}
 
       {/* Tres KPIs en 375px daban columnas de ~110px: el número quedaba
           partido. Se apilan de a uno y recién en `sm` van los tres. */}
@@ -286,6 +312,7 @@ export default async function MantenimientoPage({
         </Mensaje>
       )}
       {sp.ok === 'plan' && <Mensaje tono="ok">Plan preventivo creado.</Mensaje>}
+      {sp.ok === 'plan_editado' && <Mensaje tono="ok">Plan actualizado.</Mensaje>}
       {sp.ok === 'plan_eliminado' && <Mensaje tono="ok">Plan eliminado.</Mensaje>}
       {sp.ok === 'plan_hecho' && (
         <Mensaje tono="ok">Registrado: la próxima ejecución se recalculó desde hoy.</Mensaje>
@@ -322,43 +349,81 @@ export default async function MantenimientoPage({
               const pronto = esInminente(p.proxima_ejecucion, hoy)
               const dias = diasParaProxima(p.proxima_ejecucion, hoy)
               return (
-                <li
-                  key={p.id}
-                  className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-5 py-2.5 first:border-0"
-                >
-                  <div className="min-w-40 flex-1">
-                    <p className="font-medium text-stone-800">{p.titulo}</p>
-                    <p className="text-xs text-stone-600">
-                      {p.unidad?.nombre ?? 'General'} · cada {p.cada_meses}{' '}
-                      {p.cada_meses === 1 ? 'mes' : 'meses'}
-                    </p>
+                <li key={p.id} className="border-t border-stone-100 px-5 py-3 first:border-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-3">
+                    <span className="tabular text-xs text-stone-500">
+                      Próxima: {formatoFechaCorta(p.proxima_ejecucion)}
+                    </span>
+                    {vencido ? (
+                      <Etiqueta tono="peligro">Vencido</Etiqueta>
+                    ) : pronto ? (
+                      <Etiqueta tono="alerta">En {dias} días</Etiqueta>
+                    ) : (
+                      <Etiqueta tono="exito">Al día · en {dias} días</Etiqueta>
+                    )}
+                    <form action={marcarPlanHecho}>
+                      <input type="hidden" name="id" value={p.id} />
+                      <input type="hidden" name="cada_meses" value={p.cada_meses} />
+                      <BotonEnvio variante="fantasma" extra="px-3 py-1.5 text-xs" cargando="Marcando…">
+                        Marcar hecha
+                      </BotonEnvio>
+                    </form>
+                    <form action={eliminarPlanPreventivo}>
+                      <input type="hidden" name="id" value={p.id} />
+                      <BotonEnvio
+                        confirmar={`¿Eliminar el plan «${p.titulo}»? Deja de generar órdenes.`}
+                        variante="fantasma"
+                        extra="px-3 py-1.5 text-xs text-red-700"
+                        cargando="Eliminando…"
+                      >
+                        Eliminar
+                      </BotonEnvio>
+                    </form>
                   </div>
-                  <span className="tabular text-xs text-stone-500">
-                    {formatoFechaCorta(p.proxima_ejecucion)}
-                  </span>
-                  {vencido ? (
-                    <Etiqueta tono="peligro">Vencido</Etiqueta>
-                  ) : pronto ? (
-                    <Etiqueta tono="alerta">En {dias} días</Etiqueta>
-                  ) : (
-                    <Etiqueta tono="exito">Al día · en {dias} días</Etiqueta>
-                  )}
-                  <form action={marcarPlanHecho}>
+
+                  <form
+                    action={editarPlanPreventivo}
+                    className="flex flex-wrap items-end gap-2"
+                  >
                     <input type="hidden" name="id" value={p.id} />
-                    <input type="hidden" name="cada_meses" value={p.cada_meses} />
-                    <BotonEnvio variante="fantasma" extra="px-3 py-1.5 text-xs" cargando="Marcando…">
-                      Marcar hecha
-                    </BotonEnvio>
-                  </form>
-                  <form action={eliminarPlanPreventivo}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <BotonEnvio
-                      confirmar={`¿Eliminar el plan «${p.titulo}»? Deja de generar órdenes.`}
-                      variante="fantasma"
-                      extra="px-3 py-1.5 text-xs text-red-700"
-                      cargando="Eliminando…"
-                    >
-                      Eliminar
+                    <Campo etiqueta="Tarea">
+                      <input
+                        name="titulo"
+                        required
+                        defaultValue={p.titulo}
+                        className={`${CAMPO} w-52`}
+                      />
+                    </Campo>
+                    <Campo etiqueta="Unidad">
+                      <select name="unidad_id" defaultValue={p.unidad_id ?? ''} className={`${CAMPO} w-40`}>
+                        <option value="">Todas / general</option>
+                        {unidades.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                    <Campo etiqueta="Cada cuánto">
+                      <select name="cada_meses" defaultValue={p.cada_meses} className={`${CAMPO} w-36`}>
+                        {PERIODICIDADES.map((per) => (
+                          <option key={per.meses} value={per.meses}>
+                            {per.etiqueta}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                    <Campo etiqueta="Prioridad de la orden">
+                      <select name="prioridad" defaultValue={p.prioridad} className={`${CAMPO} w-28`}>
+                        {PRIORIDADES.map((pr) => (
+                          <option key={pr} value={pr}>
+                            {ETIQUETA_PRIORIDAD[pr]}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                    <BotonEnvio variante="secundario" extra="px-3 py-1.5 text-xs" cargando="Guardando…">
+                      Guardar
                     </BotonEnvio>
                   </form>
                 </li>
@@ -369,7 +434,7 @@ export default async function MantenimientoPage({
 
         <form
           action={crearPlanPreventivo}
-          className="grid gap-x-4 gap-y-4 border-t border-stone-100 p-5 sm:grid-cols-4"
+          className="grid gap-x-4 gap-y-4 border-t border-stone-100 p-5 sm:grid-cols-5"
         >
           <div className="sm:col-span-2">
             <Campo
@@ -404,7 +469,16 @@ export default async function MantenimientoPage({
               ))}
             </select>
           </Campo>
-          <div className="sm:col-span-4">
+          <Campo etiqueta="Prioridad de la orden">
+            <select name="prioridad" defaultValue="media" className={CAMPO}>
+              {PRIORIDADES.map((p) => (
+                <option key={p} value={p}>
+                  {ETIQUETA_PRIORIDAD[p]}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <div className="sm:col-span-5">
             <BotonEnvio variante="secundario" cargando="Agregando…">
               <Icono nombre="mas" tam={16} />
               Agregar plan
@@ -443,7 +517,12 @@ export default async function MantenimientoPage({
                   {ETIQUETA_PRIORIDAD[o.prioridad]}
                 </Etiqueta>
                 <div className="min-w-40 flex-1">
-                  <p className="font-medium text-stone-800">{o.titulo}</p>
+                  <Link
+                    href={`/panel/mantenimiento/${o.id}`}
+                    className="font-medium text-stone-800 hover:text-lago-700 hover:underline"
+                  >
+                    {o.titulo}
+                  </Link>
                   <p className="text-xs text-stone-600">
                     {o.unidad?.nombre ?? 'General'}
                     {o.descripcion ? ` · ${o.descripcion}` : ''}

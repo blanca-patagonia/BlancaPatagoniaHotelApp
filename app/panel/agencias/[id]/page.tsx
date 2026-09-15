@@ -6,6 +6,8 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import {
   saldoCuenta,
+  pagoAgenciaVencido,
+  vencimientoPagoAgencia,
   ETIQUETAS_TIPO_CUENTA,
   ETIQUETAS_MOVIMIENTO,
   type TipoCuenta,
@@ -33,7 +35,11 @@ import {
 } from '../../_components/ui'
 import { Icono } from '../../_components/iconos'
 import { BotonEnvio } from '../../_components/boton-envio'
+import { SubirFoto } from '../../_components/subir-foto'
+import { FotoAdjunta } from '../../_components/foto-adjunta'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
+import { registrarFalla } from '@/lib/acciones'
+import { parsearPeriodo, hoyISO, formatoFechaCorta } from '@/lib/fechas'
 
 interface Agencia {
   id: string
@@ -56,7 +62,19 @@ interface MovRow {
   monto_origen: number | string | null
   concepto: string
   fecha: string
+  reserva_id: string | null
+  /** Ruta en el bucket privado `adjuntos-operativos` (migración 0103). Nulo si no tiene adjunto. */
+  comprobante_ruta: string | null
   reserva: { codigo: string } | null
+}
+
+/** Lo mínimo para juzgar si el pago de una reserva de agencia está vencido (ver `lib/domain/cuentas.ts`). */
+interface ReservaAgenciaRow {
+  id: string
+  codigo: string
+  estado: string
+  total: number | string
+  estadias: { periodo: string }[] | null
 }
 
 /**
@@ -75,6 +93,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   datos: 'No se pudieron guardar los datos de la agencia.',
   activo: 'No se pudo cambiar el estado de la cuenta.',
   enlace: 'No se pudo actualizar el enlace del portal. El anterior sigue vigente.',
+  comprobante: 'No se pudo subir el comprobante. Probá de nuevo o registrá el movimiento sin adjunto.',
 }
 
 const MENSAJES_OK: Record<string, string> = {
@@ -107,11 +126,18 @@ export default async function AgenciaDetallePage({
     El resto de la fila sigue pasando por RLS, que es lo que corresponde: la
     política de lectura ya limita quién ve la ficha.
   */
-  const [{ data: agenciaData }, { data: movsData }, { data: tokenData }] = await Promise.all([
+  const [
+    { data: agenciaData },
+    { data: movsData, error: eMovs },
+    { data: tokenData },
+    { data: reservasData, error: eReservas },
+  ] = await Promise.all([
     supabase.from('agencias').select('id, nombre, tipo, cuit, email, telefono, descuento_pct, activo, condicion_iva').eq('id', id).single(),
     supabase
       .from('movimientos_cuenta')
-      .select('id, tipo, monto, moneda, monto_origen, concepto, fecha, reserva:reservas(codigo)')
+      .select(
+        'id, tipo, monto, moneda, monto_origen, concepto, fecha, reserva_id, comprobante_ruta, reserva:reservas(codigo)',
+      )
       .eq('agencia_id', id)
       .order('fecha', { ascending: false })
       .order('creado_en', { ascending: false }),
@@ -120,8 +146,18 @@ export default async function AgenciaDetallePage({
       .select('token, token_revocado_en')
       .eq('id', id)
       .maybeSingle(),
+    // Reservas de esta agencia, para el aviso de pago vencido (regla del
+    // dueño del hotel: se paga con un mes de anticipación al check-in). Las
+    // canceladas quedan afuera: una reserva cancelada no genera reclamo.
+    supabase
+      .from('reservas')
+      .select('id, codigo, estado, total, estadias(periodo)')
+      .eq('agencia_id', id)
+      .neq('estado', 'cancelada'),
   ])
   if (!agenciaData) notFound()
+  if (eMovs) registrarFalla(eMovs, 'agencias:movimientos')
+  if (eReservas) registrarFalla(eReservas, 'agencias:reservas_vencimiento')
   const agencia = agenciaData as Agencia
   // Puede ser null si la lectura privilegiada falla: la pantalla lo contempla
   // en vez de romperse, porque el enlace del portal es accesorio a la ficha.
@@ -132,6 +168,32 @@ export default async function AgenciaDetallePage({
   const origen = `${cabeceras.get('x-forwarded-proto') ?? 'http'}://${cabeceras.get('host') ?? 'localhost:3000'}`
   const movs = (movsData ?? []) as unknown as MovRow[]
   const saldo = saldoCuenta(movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento))
+
+  /*
+    Pagos vencidos (pedido del dueño del hotel, 2026-09): una agencia tiene que
+    abonar la reserva con un mes de anticipación al check-in. El vencimiento se
+    deriva del check-in de la estadía —nunca se guarda (migración 0103)— y lo
+    pagado es la suma de los pagos de ESTA reserva puntual, no el saldo general
+    de la cuenta: una agencia puede estar al día con una reserva y atrasada con
+    otra.
+  */
+  const pagadoPorReserva = new Map<string, number>()
+  for (const m of movs) {
+    if (m.tipo !== 'pago' || !m.reserva_id) continue
+    pagadoPorReserva.set(m.reserva_id, (pagadoPorReserva.get(m.reserva_id) ?? 0) + Number(m.monto))
+  }
+  const hoy = hoyISO()
+  const reservasVencidas = ((reservasData ?? []) as ReservaAgenciaRow[])
+    .map((r) => {
+      const checkIns = (r.estadias ?? []).map((e) => parsearPeriodo(e.periodo).desde)
+      const checkIn = checkIns.length ? checkIns.sort()[0] : null
+      return { ...r, checkIn, totalPagado: pagadoPorReserva.get(r.id) ?? 0 }
+    })
+    .filter(
+      (r): r is typeof r & { checkIn: string } =>
+        r.checkIn !== null &&
+        pagoAgenciaVencido({ checkIn: r.checkIn, totalReserva: Number(r.total), totalPagado: r.totalPagado }, hoy),
+    )
 
   return (
     <Pagina>
@@ -230,11 +292,54 @@ export default async function AgenciaDetallePage({
             <span className="text-stone-500">Concepto</span>
             <input name="concepto" className="w-40 rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
           </label>
+          {/*
+            Comprobante opcional (ADR 0037, migración 0103). Sirve sobre todo
+            para un `pago`: es la constancia que la agencia mandó por correo o
+            trajo impresa. Se sube junto con el movimiento — no hay forma de
+            adjuntarlo después a uno ya cargado.
+          */}
+          <div className="w-40">
+            <SubirFoto nombre="comprobante" etiqueta="Comprobante" ayuda="Opcional. JPG, PNG, WEBP o PDF." />
+          </div>
           {/* Mueve dinero: el botón se bloquea mientras viaja al servidor para
               que un segundo clic no duplique el movimiento. */}
           <BotonEnvio cargando="Registrando…">Registrar</BotonEnvio>
         </form>
       </div>
+
+      {/*
+        Pagos vencidos (pedido del dueño del hotel, 2026-09): la agencia tiene
+        que abonar la reserva con un mes de anticipación al check-in. Es el
+        aviso que necesita el mostrador para reclamar o, en el peor caso,
+        decidir liberar la unidad — no una cifra escondida en un reporte.
+      */}
+      {reservasVencidas.length > 0 && (
+        <div className="mt-5">
+          <Mensaje tono="error">
+            <span className="block font-semibold">
+              {reservasVencidas.length === 1
+                ? 'Hay una reserva con el pago vencido.'
+                : `Hay ${reservasVencidas.length} reservas con el pago vencido.`}
+            </span>
+            <span className="mt-1 block">
+              La política del hotel es cobrarle a la agencia un mes antes del check-in. Estas ya
+              pasaron esa fecha sin cubrir el total:
+            </span>
+            <ul className="mt-2 space-y-1">
+              {reservasVencidas.map((r) => (
+                <li key={r.id}>
+                  <Link href={`/panel/reservas/${r.id}`} className="font-medium underline">
+                    {r.codigo}
+                  </Link>{' '}
+                  · check-in {formatoFechaCorta(r.checkIn)} · vencía el{' '}
+                  {formatoFechaCorta(vencimientoPagoAgencia(r.checkIn))} · pagado{' '}
+                  {formatearUSD(r.totalPagado)} de {formatearUSD(Number(r.total))}
+                </li>
+              ))}
+            </ul>
+          </Mensaje>
+        </div>
+      )}
 
 
       {/* Enlace del portal: el socio ve sus contratos y su cuenta sin cuenta de usuario. */}
@@ -327,6 +432,14 @@ export default async function AgenciaDetallePage({
                       <span className="block text-xs text-stone-500">
                         {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
                       </span>
+                    )}
+                    {/* Archivo adjunto (ADR 0037, migración 0103): subido desde el
+                        mostrador al registrar el movimiento, o por la agencia desde
+                        su portal. */}
+                    {m.comprobante_ruta && (
+                      <div className="mt-2">
+                        <FotoAdjunta ruta={m.comprobante_ruta} alt={`Comprobante de ${m.concepto || ETIQUETAS_MOVIMIENTO[m.tipo]}`} />
+                      </div>
                     )}
                   </td>
                   <td className={`${TD} tabular text-right text-stone-800`}>

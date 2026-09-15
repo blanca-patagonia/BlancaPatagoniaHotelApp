@@ -180,7 +180,7 @@ describe('fotos', () => {
     // Eso fijaba una situación transitoria, no el contrato: lo que la función
     // promete es resolver el código al archivo de su portada.
     expect(fotoDe('HOST-SUITE')).toBe('/alojamientos/suite-principal.jpg')
-    expect(fotoDe('CAB-1D-3P')).toBe('/alojamientos/cabana-1-dormitorio.jpg')
+    expect(fotoDe('CAB-ONELLI')).toBe('/alojamientos/cabana-1-dormitorio.jpg')
   })
 
   it('devuelve null ante un código sin portada', () => {

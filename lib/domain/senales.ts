@@ -26,10 +26,11 @@
 
   La primera versión de este módulo avisaba con 3 o menos unidades libres:
   «Quedan 2 habitaciones», «Queda 1 cabaña». Al verlo renderizado contra el
-  inventario real apareció el problema: **la señal salía en las nueve opciones,
-  siempre**. El inventario del hotel es de 15 unidades repartidas en 10 tipos, y
-  seis de esos tipos —las cinco cabañas y la Suite Principal— tienen **una sola
-  unidad**. El máximo es 3.
+  inventario **de entonces** (representativo, antes de la migración 0106)
+  apareció el problema: **la señal salía en las nueve opciones, siempre**. Ese
+  catálogo tenía 15 unidades repartidas en 10 tipos, y seis de esos tipos
+  —las cinco cabañas y la Suite Principal— tenían **una sola unidad**. El
+  máximo era 3.
 
   Así que «Queda 1 cabaña» no informaba de escasez: informaba del inventario, y
   lo iba a mostrar todos los días del año aunque no hubiera ni una reserva. Cada

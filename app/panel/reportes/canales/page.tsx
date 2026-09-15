@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
+import { registrarErrorSync } from '@/lib/registro'
 import { mesActual } from '@/lib/fechas'
 import { etiquetaMes } from '@/lib/domain/metricas'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
@@ -44,6 +45,9 @@ export default async function InformeCanalesPage({
     traerRentabilidadCanal(mes),
     traerReservas(),
   ])
+  if (rentabilidad.error) {
+    registrarErrorSync('reportes_canales_lectura', { fuente: 'resumen_canal_mes', motivo: rentabilidad.error })
+  }
 
   /*
     La vista ya viene agregada por canal, así que NO se pasa por
@@ -51,7 +55,7 @@ export default async function InformeCanalesPage({
     cual cualquier correspondencia por índice quedaría cruzada—. Se arma la
     métrica de cada canal con los mismos ayudantes puros del dominio.
   */
-  const metricasCanal = rentabilidad
+  const metricasCanal = rentabilidad.filas
     .map((f) => {
       const bruto = Number(f.bruto)
       const comision = Number(f.comision_informada)
@@ -100,7 +104,7 @@ export default async function InformeCanalesPage({
         icono="canales"
       />
 
-      <AvisoIncompleto incompleto={reservasRes.truncado} />
+      <AvisoIncompleto incompleto={reservasRes.truncado || Boolean(rentabilidad.error)} />
 
       <SelectorDeMes base="/panel/reportes/canales" mes={mes} />
 

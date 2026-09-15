@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { hoyISO, sumarDias, formatoFechaCorta } from '@/lib/fechas'
 import {
   parsearRango,
@@ -83,10 +84,17 @@ export default async function TemporadasPage({
   const puedeEditar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
   const supabase = await crearClienteServidor()
 
-  const [{ data: temporadasData }, { data: rangosData }] = await Promise.all([
-    supabase.from('temporadas').select('id, codigo, nombre, orden').order('orden'),
-    supabase.from('temporada_rangos').select('id, rango, temporada_id'),
-  ])
+  const [{ data: temporadasData, error: eTemporadas }, { data: rangosData, error: eRangos }] =
+    await Promise.all([
+      supabase.from('temporadas').select('id, codigo, nombre, orden').order('orden'),
+      supabase.from('temporada_rangos').select('id, rango, temporada_id'),
+    ])
+  registrarFalla(eTemporadas, 'config:temporadas')
+  registrarFalla(eRangos, 'config:temporada_rangos')
+  // Si la lectura falla, `periodos` queda vacío y dispara el mismo aviso que
+  // «hoy no tiene temporada cargada» — hay que poder distinguirlos: uno se
+  // arregla cargando un período, el otro reintentando la lectura.
+  const huboErrorDeLectura = Boolean(eTemporadas || eRangos)
 
   const temporadas = (temporadasData ?? []) as Temporada[]
   const filas = (rangosData ?? []) as RangoFila[]
@@ -126,6 +134,13 @@ export default async function TemporadasPage({
       {sp.ok === 'quitado' && (
         <Mensaje tono="ok">
           Período quitado. Esas fechas quedaron sin temporada: no se van a poder cotizar.
+        </Mensaje>
+      )}
+
+      {huboErrorDeLectura && (
+        <Mensaje tono="error">
+          No se pudo leer el calendario de temporadas. Si «hoy no se puede cotizar» aparece abajo,
+          puede ser por esto y no porque falte cargar un período — recargá antes de asumir nada.
         </Mensaje>
       )}
 
@@ -215,7 +230,7 @@ export default async function TemporadasPage({
                 <input type="date" name="hasta" required className={CAMPO} />
               </Campo>
               <div className="flex items-end">
-                <BotonEnvio extra="w-full" cargando="Agregando…">
+                <BotonEnvio extra="w-full sm:w-auto" cargando="Agregando…">
                   Agregar
                 </BotonEnvio>
               </div>

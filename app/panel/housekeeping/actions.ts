@@ -9,6 +9,7 @@ import { cortarSiFalla } from '@/lib/acciones'
 import { siguienteEstadoMucama } from '@/lib/domain/housekeeping'
 import { avisarHabitacionLista } from '@/lib/notificaciones/eventos'
 import { hoyISO } from '@/lib/fechas'
+import { subirAdjunto } from '@/lib/storage'
 
 /** Vuelta de la vista movil: quien la usa esta en el pasillo con el telefono. */
 const DESTINO_MOVIL = '/panel/housekeeping/mi-trabajo'
@@ -161,4 +162,59 @@ export async function marcarLimpiaDesdeMovil(formData: FormData): Promise<void> 
   revalidatePath(DESTINO_MOVIL)
   revalidatePath('/panel/housekeeping')
   redirect(`${DESTINO_MOVIL}?ok=limpia`)
+}
+
+/**
+ * Agrega un registro al historial de limpieza de una unidad: comentario y/o
+ * foto de un pase puntual (`housekeeping_registros`, migración 0101).
+ *
+ * ── Por qué es una pantalla aparte, y no un campo más en la tarjeta ─────────
+ *
+ * La tarjeta de «Mi trabajo» tiene un solo botón a propósito (ver el
+ * encabezado de `mi-trabajo/page.tsx`): la mucama no elige entre estados,
+ * marca hecho. Esta acción NO toca `unidades.estado` — es un log aparte,
+ * opcional, para dejar un detalle puntual («falta un toallón», «se rompió la
+ * persiana») que el botón único no puede expresar. Vive en
+ * `/panel/housekeeping/mi-trabajo/[unidadId]`, una pantalla de detalle que se
+ * visita por elección, no un paso obligatorio del flujo de limpieza.
+ *
+ * El comentario y la foto son los dos opcionales: un registro vacío no tiene
+ * sentido, pero cuál de los dos falta no importa — a veces alcanza con la
+ * foto, a veces alcanza con la palabra.
+ */
+export async function agregarRegistroLimpieza(formData: FormData): Promise<void> {
+  const sesion = await requerirAcceso('housekeeping')
+
+  const unidadId = String(formData.get('unidad_id') ?? '')
+  const destino = `/panel/housekeeping/mi-trabajo/${unidadId}`
+  if (!unidadId) redirect(DESTINO_MOVIL)
+
+  const comentario = String(formData.get('comentario') ?? '').trim()
+  const archivo = formData.get('foto')
+  const hayFoto = archivo instanceof File && archivo.size > 0
+
+  if (!comentario && !hayFoto) {
+    redirect(`${destino}?error=registro_vacio`)
+  }
+
+  const fotos: string[] = []
+  if (hayFoto) {
+    const subida = await subirAdjunto(`housekeeping/${unidadId}`, archivo as File)
+    if ('error' in subida) {
+      redirect(`${destino}?error=foto_subida`)
+    }
+    fotos.push(subida.ruta)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('housekeeping_registros').insert({
+    unidad_id: unidadId,
+    mucama_id: sesion.userId,
+    comentario,
+    fotos,
+  })
+  cortarSiFalla(error, destino, 'registro_guardar')
+
+  revalidatePath(destino)
+  redirect(`${destino}?ok=registro`)
 }

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { guardarUbicacionUnidad } from '../actions'
+import { crearUnidad, guardarUbicacionUnidad } from '../actions'
 import { registrarFalla } from '@/lib/acciones'
 import { CAMPO, Campo, Encabezado, FILA, Mensaje, TD, TH, Tabla, Tarjeta, Pagina } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
@@ -9,6 +9,10 @@ import { BotonEnvio } from '../../_components/boton-envio'
 const MENSAJES_ERROR: Record<string, string> = {
   unidad: 'Faltó indicar la unidad.',
   ubicacion: 'No se pudo guardar la ubicación. Quedó como estaba.',
+  unidad_nombre: 'Ingresá un nombre para la unidad.',
+  unidad_tipo: 'Elegí un tipo de alojamiento válido.',
+  unidad_tipo_verificar: 'No se pudo verificar el tipo. No se creó nada.',
+  unidad_guardar: 'No se pudo crear la unidad. Probá de nuevo.',
 }
 
 /**
@@ -28,14 +32,18 @@ export default async function UbicacionesPage({
   const puedeEditar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
   const supabase = await crearClienteServidor()
 
-  const { data, error } = await supabase
-    .from('unidades')
-    .select('id, nombre, piso, bloque, orden, tipo:tipos_unidad(nombre)')
-    .eq('activo', true)
-    .order('bloque')
-    .order('piso')
-    .order('orden')
+  const [{ data, error }, { data: tiposData, error: errorTipos }] = await Promise.all([
+    supabase
+      .from('unidades')
+      .select('id, nombre, piso, bloque, orden, tipo:tipos_unidad(nombre)')
+      .eq('activo', true)
+      .order('bloque')
+      .order('piso')
+      .order('orden'),
+    supabase.from('tipos_unidad').select('id, nombre').eq('activo', true).order('nombre'),
+  ])
   if (error) registrarFalla(error, 'config:ubicaciones')
+  if (errorTipos) registrarFalla(errorTipos, 'config:ubicaciones_tipos')
 
   const unidades = (data ?? []) as unknown as {
     id: string
@@ -45,6 +53,7 @@ export default async function UbicacionesPage({
     orden: number
     tipo: { nombre: string } | null
   }[]
+  const tipos = (tiposData ?? []) as { id: string; nombre: string }[]
 
   const sinUbicar = unidades.filter((u) => !u.piso).length
 
@@ -67,11 +76,49 @@ export default async function UbicacionesPage({
       {sp.ok === 'ubicacion' && (
         <Mensaje tono="ok">Ubicación guardada. La grilla ya la usa para filtrar y ordenar.</Mensaje>
       )}
+      {sp.ok === 'unidad' && <Mensaje tono="ok">Unidad creada. Ya aparece en la grilla de ocupación.</Mensaje>}
       {error && (
         <Mensaje tono="error">
           No se pudo leer el listado de unidades. Los filtros de la grilla de ocupación pueden
           quedar incompletos.
         </Mensaje>
+      )}
+
+      {puedeEditar && (
+        <Tarjeta
+          titulo="Nueva unidad"
+          descripcion="Da de alta una habitación o cabaña física. Después se le puede asignar bloque, piso y orden acá abajo."
+          className="mb-4"
+        >
+          {errorTipos || tipos.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-stone-500">
+              {errorTipos
+                ? 'No se pudo leer el catálogo de tipos de alojamiento. No se puede crear una unidad hasta que se pueda leer.'
+                : 'Todavía no hay tipos de alojamiento activos. Cargá uno en el tarifario antes de crear una unidad.'}
+            </p>
+          ) : (
+            <form action={crearUnidad} className="flex flex-wrap items-end gap-3 p-5">
+              <Campo etiqueta="Nombre" requerido>
+                <input name="nombre" required placeholder="Cabaña 7" className={`${CAMPO} w-48`} />
+              </Campo>
+              <Campo etiqueta="Tipo de alojamiento" requerido>
+                <select name="tipo_unidad_id" required defaultValue="" className={`${CAMPO} w-56`}>
+                  <option value="" disabled>
+                    Elegir…
+                  </option>
+                  {tipos.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <BotonEnvio cargando="Creando…" extra="w-full sm:w-auto">
+                Crear unidad
+              </BotonEnvio>
+            </form>
+          )}
+        </Tarjeta>
       )}
 
       <Tarjeta>

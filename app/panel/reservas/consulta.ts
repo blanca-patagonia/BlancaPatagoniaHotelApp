@@ -2,6 +2,7 @@ import 'server-only'
 import type { crearClienteServidor } from '@/lib/supabase/server'
 import { terminoBusqueda, patronOr } from '@/lib/listados'
 import { definicionDe, type VistaReservas } from '@/lib/domain/vistas-reservas'
+import { registrarFalla } from '@/lib/acciones'
 
 /**
  * Consulta compartida del listado de reservas.
@@ -103,7 +104,11 @@ export async function filtroTermino(supabase: Cliente, q: string | undefined): P
   // explica el comentario de arriba, y la primera versión de esto la incumplía: el
   // filtro no devolvía nada y no daba error, que es exactamente el modo de falla
   // silencioso de este stack.
-  const [{ data: huespedes }, { data: porNombre }, { data: tipos }] = await Promise.all([
+  const [
+    { data: huespedes, error: eHuespedes },
+    { data: porNombre, error: ePorNombre },
+    { data: tipos, error: eTipos },
+  ] = await Promise.all([
     supabase
       .from('huespedes')
       .select('id')
@@ -118,6 +123,13 @@ export async function filtroTermino(supabase: Cliente, q: string | undefined): P
 
     supabase.from('tipos_unidad').select('id').ilike('nombre', `%${termino}%`),
   ])
+  // Estas cinco lecturas no tienen dónde mostrar un `<Mensaje>` (esta función
+  // solo arma un filtro), así que quedan solo logueadas: sin esto, un fallo
+  // se ve igual que «no coincide nada», que es el mismo modo de falla
+  // silencioso que el comentario de arriba dice haber combatido para el `or`.
+  registrarFalla(eHuespedes, 'reservas:buscar_huespedes')
+  registrarFalla(ePorNombre, 'reservas:buscar_unidad_por_nombre')
+  registrarFalla(eTipos, 'reservas:buscar_tipo_por_nombre')
 
   const idsHuesped = (huespedes ?? []).map((h) => h.id as string)
   const idsUnidad = new Set((porNombre ?? []).map((u) => u.id as string))
@@ -125,21 +137,23 @@ export async function filtroTermino(supabase: Cliente, q: string | undefined): P
   // Las unidades de los tipos que coincidieron por nombre («Cabaña», «Doble»).
   const idsTipo = (tipos ?? []).map((t) => t.id as string)
   if (idsTipo.length > 0) {
-    const { data: delTipo } = await supabase
+    const { data: delTipo, error: eDelTipo } = await supabase
       .from('unidades')
       .select('id')
       .in('tipo_unidad_id', idsTipo)
+    registrarFalla(eDelTipo, 'reservas:buscar_unidades_del_tipo')
     for (const u of delTipo ?? []) idsUnidad.add(u.id as string)
   }
 
   // De las unidades a las reservas que las ocupan.
   let idsReserva: string[] = []
   if (idsUnidad.size > 0) {
-    const { data: estadias } = await supabase
+    const { data: estadias, error: eEstadias } = await supabase
       .from('estadias')
       .select('reserva_id')
       .in('unidad_id', [...idsUnidad])
       .limit(MAX_RESERVAS_POR_UNIDAD)
+    registrarFalla(eEstadias, 'reservas:buscar_estadias_de_unidad')
 
     idsReserva = [...new Set((estadias ?? []).map((e) => e.reserva_id as string))]
   }

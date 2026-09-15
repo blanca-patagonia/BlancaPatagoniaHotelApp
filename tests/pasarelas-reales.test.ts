@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ProveedorMercadoPago } from '@/lib/payments/mercadopago'
 import { ProveedorStripe, aUnidadMinima, desdeUnidadMinima } from '@/lib/payments/stripe'
-import { hmacHex } from '@/lib/integraciones/firma-webhook'
+import { ProveedorPayway, aCentavos } from '@/lib/payments/payway'
+import { hmacHex, firmar } from '@/lib/integraciones/firma-webhook'
 import { proveedoresHabilitados, nombreClave, estaHabilitado } from '@/lib/payments'
 import type { ResultadoWebhook } from '@/lib/payments'
 
@@ -29,6 +30,9 @@ beforeEach(() => {
   process.env.MERCADOPAGO_WEBHOOK_SECRET = SECRETO
   process.env.STRIPE_SECRET_KEY = 'sk_test_x'
   process.env.STRIPE_WEBHOOK_SECRET = SECRETO
+  process.env.PAYWAY_PUBLIC_KEY = 'public-key-payway'
+  process.env.PAYWAY_PRIVATE_KEY = 'private-key-payway'
+  process.env.PAYWAY_INTERNAL_SECRET = SECRETO
 })
 
 afterEach(() => {
@@ -458,6 +462,84 @@ describe('MercadoPago · webhook', () => {
   })
 })
 
+/* ─────────────────────────────────────────────────────── Payway ────────── */
+
+describe('Payway · centavos', () => {
+  it('convierte a centavos', () => {
+    expect(aCentavos(150.5)).toBe(15050)
+    expect(aCentavos(100)).toBe(10000)
+  })
+})
+
+describe('Payway · checkout', () => {
+  it('no llama a la red: devuelve la URL del checkout propio', async () => {
+    const llamadas = fetchFalso({})
+    const r = await new ProveedorPayway().crearCheckout({ ...PARAMS, monto: 15000, moneda: 'ARS' })
+
+    expect(llamadas).toHaveLength(0)
+    expect(r).toMatchObject({ url: expect.stringContaining(`/pago-payway/${PARAMS.reservaId}`) })
+    if ('url' in r) {
+      expect(r.url).toContain('external_id=bp_abc123')
+      expect(r.url).toContain('moneda=ARS')
+    }
+  })
+
+  it('rechaza cualquier moneda que no sea ARS', async () => {
+    const r = await new ProveedorPayway().crearCheckout({ ...PARAMS, monto: 100, moneda: 'USD' })
+    expect(r).toMatchObject({ error: expect.stringContaining('ARS') })
+  })
+})
+
+describe('Payway · webhook interno', () => {
+  /** El evento interno que arma `ejecutarPagoPayway`, firmado igual que `ProveedorSimulado`. */
+  async function pedidoInterno(cuerpo: Record<string, unknown>) {
+    const texto = JSON.stringify(cuerpo)
+    const ts = String(Math.floor(Date.now() / 1000))
+    return new Request('https://h.local/api/webhooks/pagos/payway', {
+      method: 'POST',
+      headers: {
+        'x-webhook-timestamp': ts,
+        'x-webhook-signature': await firmar(SECRETO, ts, texto),
+      },
+      body: texto,
+    })
+  }
+
+  const EVENTO_OK = {
+    external_id: 'bp_abc123',
+    reserva_id: PARAMS.reservaId,
+    monto: 15000,
+    moneda: 'ARS',
+    tipo: 'saldo',
+    estado: 'aprobado',
+  }
+
+  it('acepta un evento propio bien firmado', async () => {
+    const req = await pedidoInterno(EVENTO_OK)
+    expect(await new ProveedorPayway().verificarFirma(req.clone())).toBe(true)
+    const r = evento(await new ProveedorPayway().parsearWebhook(req))
+    expect(r.monto).toBe(15000)
+    expect(r.medio).toBe('payway')
+    expect(r.estado).toBe('aprobado')
+  })
+
+  it('rechaza un evento sin la firma correcta', async () => {
+    const texto = JSON.stringify(EVENTO_OK)
+    const req = new Request('https://h.local/api/webhooks/pagos/payway', {
+      method: 'POST',
+      headers: { 'x-webhook-signature': 'firma-inventada', 'x-webhook-timestamp': '123' },
+      body: texto,
+    })
+    expect(await new ProveedorPayway().verificarFirma(req)).toBe(false)
+  })
+
+  it('rechaza un estado que no existe en el dominio, en vez de adivinarlo', async () => {
+    const req = await pedidoInterno({ ...EVENTO_OK, estado: 'lo-que-sea' })
+    const r = await new ProveedorPayway().parsearWebhook(req)
+    expect(r.tipo).toBe('invalido')
+  })
+})
+
 /* ──────────────────────────────────────── selección de proveedor ───────── */
 
 describe('PAGO_PROVIDER · el régimen del ADR 0018', () => {
@@ -495,7 +577,7 @@ describe('PAGO_PROVIDER · el régimen del ADR 0018', () => {
   it('ninguna pasarela promete verificar tarjetas de garantía', () => {
     // Cobrar y preautorizar son cosas distintas; declararlo evita que la
     // pantalla ofrezca una certeza que nadie comprobó (ADR 0025).
-    for (const nombre of ['mercadopago', 'stripe', 'simulado']) {
+    for (const nombre of ['mercadopago', 'stripe', 'payway', 'simulado']) {
       expect(proveedoresHabilitados(nombre)[0].capacidades().verificaTarjeta).toBe(false)
     }
   })

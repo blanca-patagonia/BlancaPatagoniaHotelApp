@@ -15,6 +15,7 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CondicionIva } from '@/lib/domain/facturacion'
+import { registrarErrorSync } from '@/lib/registro'
 
 export interface DatosFiscales {
   razonSocial: string
@@ -45,10 +46,17 @@ type Cliente = SupabaseClient<any, any, any>
  * avisaría nunca.
  */
 export async function datosFiscales(cliente: Cliente): Promise<DatosFiscales | null> {
-  const { data } = await cliente
+  const { data, error } = await cliente
     .from('datos_fiscales')
     .select('razon_social, cuit, condicion_iva, domicilio, inicio_actividades, ingresos_brutos')
     .maybeSingle()
+
+  // El `null` de más abajo es ambiguo por diseño (ver el docblock), pero eso no
+  // significa que un fallo de lectura pueda quedar sin rastro: sin esto, «no se
+  // pudo leer» y «nunca se cargó» se ven exactamente igual en los dos lugares
+  // que llaman a esta función (el aviso al escanear un comprobante, y la
+  // pantalla de datos fiscales).
+  if (error) registrarErrorSync('datos_fiscales_lectura', { detalle: error.message })
 
   const fila = data as {
     razon_social: string

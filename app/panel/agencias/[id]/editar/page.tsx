@@ -82,6 +82,16 @@ export default async function EditarAgenciaPage({
             <input name="nombre" required defaultValue={agencia.nombre} className={CAMPO} />
           </Campo>
 
+          <Campo etiqueta="Tipo de cuenta">
+            <select name="tipo" defaultValue={agencia.tipo} className={CAMPO}>
+              {Object.entries(ETIQUETAS_TIPO_CUENTA).map(([valor, etiqueta]) => (
+                <option key={valor} value={valor}>
+                  {etiqueta}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
           <Campo
             etiqueta="Descuento sobre la tarifa"
             ayuda="Las reservas de esta cuenta se cotizan con tarifa neta usando este porcentaje."

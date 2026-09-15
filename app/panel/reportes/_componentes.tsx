@@ -1,4 +1,4 @@
-import { mesRelativo } from '@/lib/domain/metricas'
+import { mesRelativo, semanaRelativa, etiquetaSemana } from '@/lib/domain/metricas'
 import { Icono } from '../_components/iconos'
 import { BarraHerramientas, Mensaje, botonClases } from '../_components/ui'
 
@@ -10,14 +10,20 @@ import { BarraHerramientas, Mensaje, botonClases } from '../_components/ui'
  * mes, avisar si los datos vinieron incompletos y ofrecer abrirse aparte.
  */
 
-/** Flecha de variación contra el mes anterior. */
-export function Variacion({ valor }: { valor: number | null }) {
+/** Flecha de variación contra el período anterior (mes o semana, según el informe). */
+export function Variacion({
+  valor,
+  etiquetaBase = 'mes anterior',
+}: {
+  valor: number | null
+  etiquetaBase?: string
+}) {
   if (valor === null) return <span className="text-xs text-stone-600">sin base previa</span>
-  if (valor === 0) return <span className="text-xs text-stone-600">igual que el mes anterior</span>
+  if (valor === 0) return <span className="text-xs text-stone-600">igual que {etiquetaBase}</span>
   const sube = valor > 0
   return (
     <span className={`text-xs font-medium ${sube ? 'text-emerald-600' : 'text-red-600'}`}>
-      {sube ? '▲' : '▼'} {Math.abs(valor)}% vs. mes anterior
+      {sube ? '▲' : '▼'} {Math.abs(valor)}% vs. {etiquetaBase}
     </span>
   )
 }
@@ -55,6 +61,70 @@ export function SelectorDeMes({ base, mes }: { base: string; mes: string }) {
         Mes siguiente ›
       </a>
     </BarraHerramientas>
+  )
+}
+
+/**
+ * Selector de semana, análogo a `SelectorDeMes`. La semana se elige con un
+ * día cualquiera dentro de ella (el navegador ya sabe pedir una fecha con
+ * `type="date"`, no hay un `<input>` nativo de "semana" confiable entre
+ * navegadores) y se normaliza al lunes en el servidor (`semanaValida`).
+ */
+export function SelectorDeSemana({ base, semana }: { base: string; semana: string }) {
+  return (
+    <BarraHerramientas>
+      <form method="get" action={base} className="flex items-end gap-2">
+        <input type="hidden" name="vista" value="semanal" />
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-stone-500">Semana analizada</span>
+          <input
+            type="date"
+            name="semana"
+            defaultValue={semana}
+            aria-label="Un día dentro de la semana a analizar"
+            className="rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-lago-500 focus:outline-none"
+          />
+        </label>
+        <button className={botonClases('primario')}>Ver</button>
+      </form>
+      <a href={`${base}?vista=semanal&semana=${semanaRelativa(semana, -1)}`} className={botonClases('secundario')}>
+        ‹ Semana anterior
+      </a>
+      <a href={`${base}?vista=semanal&semana=${semanaRelativa(semana, 1)}`} className={botonClases('secundario')}>
+        Semana siguiente ›
+      </a>
+      <span className="text-xs text-stone-500">{etiquetaSemana(semana)}</span>
+    </BarraHerramientas>
+  )
+}
+
+/** Alterna entre la vista mensual y la semanal de un mismo informe. */
+export function SelectorDeVista({
+  base,
+  vista,
+}: {
+  base: string
+  vista: 'mensual' | 'semanal'
+}) {
+  return (
+    <div className="mb-3 inline-flex rounded-lg border border-stone-300 bg-white p-0.5 text-sm">
+      <a
+        href={`${base}?vista=mensual`}
+        className={`rounded-md px-3 py-1.5 font-medium transition ${
+          vista === 'mensual' ? 'bg-lago-600 text-white' : 'text-stone-600 hover:bg-stone-50'
+        }`}
+      >
+        Mensual
+      </a>
+      <a
+        href={`${base}?vista=semanal`}
+        className={`rounded-md px-3 py-1.5 font-medium transition ${
+          vista === 'semanal' ? 'bg-lago-600 text-white' : 'text-stone-600 hover:bg-stone-50'
+        }`}
+      >
+        Semanal
+      </a>
+    </div>
   )
 }
 

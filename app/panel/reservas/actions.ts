@@ -779,10 +779,19 @@ export async function agregarConsumo(formData: FormData): Promise<void> {
     Lo que sí corta es el comprobante emitido: un cargo posterior no entraría en
     él, y `facturas` es inmutable (migración 0034).
   */
-  const [{ data: reservaEstado }, { data: facturaExistente }] = await Promise.all([
+  const [
+    { data: reservaEstado, error: eEstado },
+    { data: facturaExistente, error: eFactura },
+  ] = await Promise.all([
     supabase.from('reservas').select('estado').eq('id', reservaId).maybeSingle(),
     supabase.from('facturas').select('id').eq('reserva_id', reservaId).maybeSingle(),
   ])
+  // Fail-closed: si no se pudo leer el estado o si ya tiene factura, NO
+  // corresponde asumir "no tiene factura todavía" y dejar pasar el cargo — un
+  // consumo posterior a la factura emitida (inmutable) se pierde para siempre.
+  if (eEstado || eFactura) {
+    cortarSiFalla(eEstado ?? eFactura, `/panel/reservas/${reservaId}`, 'consumo_verificar')
+  }
 
   const motivo = motivoNoCargable(
     String(reservaEstado?.estado ?? ''),
@@ -790,11 +799,12 @@ export async function agregarConsumo(formData: FormData): Promise<void> {
   )
   if (motivo) redirect(`/panel/reservas/${reservaId}?error=${motivo}`)
 
-  const { data: producto } = await supabase
+  const { data: producto, error: eProducto } = await supabase
     .from('productos_servicios')
     .select('precio')
     .eq('id', productoId)
     .single()
+  cortarSiFalla(eProducto, `/panel/reservas/${reservaId}`, 'consumo_verificar')
   if (producto) {
     const { error } = await supabase.from('consumos').insert({
       reserva_id: reservaId,
@@ -1710,11 +1720,18 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
   // precio se corrige a mano. Al revés (revertir la mudanza por un problema de
   // tarifa) sería peor.
   if (debeRecotizar(politica, Boolean(resultado.cambio_de_tipo)) && resultado.tipo_destino) {
-    const { data: reserva } = await supabase
+    const { data: reserva, error: eReserva } = await supabase
       .from('reservas')
       .select('tarifa_tipo')
       .eq('id', id)
       .single()
+
+    // Fail-closed, no fail-`rack`: si no se pudo leer `tarifa_tipo`, NO hay que
+    // asumir "rack" — una reserva de agencia (`tarifa_tipo: 'neto'`, ADR 0004)
+    // se recotizaría a precio de mostrador en vez de precio de agencia, sin que
+    // nadie se entere. El huésped ya está mudado (lo urgente); la recotización
+    // se corrige a mano, igual que cuando falta la tarifa del tipo destino.
+    if (eReserva) redirect(volverA({ error: 'tarifa_tipo_verificar' }))
 
     const { desde, hasta } = parsearPeriodo(estadia.periodo as string)
     const cot = await cotizarEstadia({

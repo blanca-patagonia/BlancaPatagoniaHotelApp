@@ -13,6 +13,8 @@
  * `cotizacion`, y la migración 0078 tiene los `check` que lo obligan.
  */
 
+import { sumarDias } from '@/lib/fechas'
+
 export const TIPOS_CUENTA = ['agencia', 'empresa'] as const
 export type TipoCuenta = (typeof TIPOS_CUENTA)[number]
 
@@ -98,4 +100,45 @@ export function movimientoEnMoneda(
   if (!(enUSD > 0)) return null
 
   return { monto: enUSD, moneda, montoOrigen: redondear(montoIngresado), cotizacion }
+}
+
+/* ───────────────────────────── pago vencido de una reserva de agencia ──── */
+
+/**
+ * Vencimiento del pago de una reserva de agencia (pedido del dueño del hotel,
+ * 2026-09): un mes antes del check-in del huésped.
+ *
+ * ⚠️ No se guarda en ninguna columna, a propósito (migración 0103): se deriva
+ * de `estadias.check_in` cada vez que hace falta. Guardarlo lo desincroniza en
+ * cuanto la reserva se reprograma —el vencimiento quedaría apuntando a una
+ * fecha que ya no es la de esa estadía—, el mismo motivo por el que
+ * `estadias.check_in` es una columna GENERADA y no una que se escribe a mano
+ * (migración 0037).
+ */
+export function vencimientoPagoAgencia(checkIn: string): string {
+  return sumarDias(checkIn, -30)
+}
+
+/** Lo mínimo que hace falta saber de una reserva de agencia para juzgar si el pago está vencido. */
+export interface PagoAgenciaReserva {
+  /** Check-in de la estadía (la más próxima, si la reserva tuvo una mudanza). */
+  checkIn: string
+  /** Total de la reserva, en USD. */
+  totalReserva: number
+  /** Suma de los pagos de la agencia vinculados a esta reserva, en USD. */
+  totalPagado: number
+}
+
+/**
+ * ¿La agencia debería haber pagado esta reserva y, a la fecha de hoy, no lo
+ * hizo?
+ *
+ * Antes del vencimiento (`checkIn` − 30 días) no hay nada que reclamar: la
+ * agencia todavía tiene margen para pagar. Una reserva sin total (todavía sin
+ * cotizar) nunca puede estar vencida: no hay contra qué comparar lo pagado, y
+ * afirmarlo sería un falso positivo.
+ */
+export function pagoAgenciaVencido(r: PagoAgenciaReserva, hoy: string): boolean {
+  if (!(r.totalReserva > 0)) return false
+  return hoy >= vencimientoPagoAgencia(r.checkIn) && redondear(r.totalPagado) < redondear(r.totalReserva)
 }

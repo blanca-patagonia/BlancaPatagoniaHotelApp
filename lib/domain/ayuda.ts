@@ -228,6 +228,37 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
+    area: 'servicio',
+    resumen: 'La lista de desayuno del día, lo vendido y la lista de compras de cocina.',
+    pasos: [
+      {
+        titulo: 'Lista de desayuno',
+        detalle:
+          'Quién desayuna hoy y cuántos cubiertos preparar, por habitación. Se arma sola con quién durmió anoche: el que llega hoy no entra, el que se va hoy sí. Se imprime con el botón de arriba.',
+      },
+      {
+        titulo: 'Desayuno extra vendido',
+        detalle:
+          'Si alguien pagó un desayuno suelto para hoy —llegó a la mañana antes del check-in, por ejemplo— aparece marcado como "extra" en la misma lista, para que la cocina no prepare un cubierto de menos.',
+      },
+      {
+        titulo: 'Consumos vendidos',
+        detalle:
+          'Lo que salió del frigobar y de la cocina en el rango de fechas elegido, total y por categoría. Sirve para reponer stock y para el arqueo.',
+      },
+      {
+        titulo: 'Lista de compras',
+        detalle:
+          'El botón "Lista de compras" abre una hoja aparte para ir anotando, con el tiempo, qué hay que comprarle al supermercado para el restaurante: artículo, cantidad, precio estimado y una nota. Se tilda "comprado" con el casillero, sin tener que tocar el resto de la fila.',
+      },
+      {
+        titulo: 'Imprimir la lista de compras',
+        detalle:
+          'El papel muestra casilleros en blanco para lo que todavía no está tildado en el sistema —para marcarlos a mano en el súper— y ya tildado lo que se cargó como comprado antes de imprimir, con el total estimado de lo que falta al final.',
+      },
+    ],
+  },
+  {
     area: 'agencias',
     resumen: 'Agencias y empresas con convenio, y lo que nos deben.',
     pasos: [
@@ -647,6 +678,27 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Elegir el rol',
         detalle:
           'Recepción no ve facturación ni proveedores; housekeeping ve solo su trabajo. Dar de más es el error más caro de deshacer.',
+      },
+    ],
+  },
+  {
+    area: 'ia',
+    resumen: 'Preguntale por la ocupación, el ADR, la facturación del mes y demás números del hotel.',
+    pasos: [
+      {
+        titulo: 'Qué puede responder',
+        detalle:
+          'Ocupación, ADR y RevPAR de un mes, venta por categoría, lo facturado y cobrado, y el estado de las reservas. Cuando hace falta un dato, lo va a buscar al sistema en el momento: no inventa números.',
+      },
+      {
+        titulo: 'Qué NO hace',
+        detalle:
+          'No carga ni modifica nada. Es de solo lectura: para cambiar una tarifa o cargar una reserva hay que ir al módulo correspondiente.',
+      },
+      {
+        titulo: 'Si dice que no está configurado',
+        detalle:
+          'El asistente necesita un proveedor de IA enchufado por variable de entorno. Sin eso, la pantalla lo dice claramente en vez de simular una respuesta.',
       },
     ],
   },

@@ -265,6 +265,15 @@ export default async function MiTrabajoPage({
                   <span>· Estado: {ETIQUETAS_ESTADO_HK[u.estado]}</span>
                 </div>
 
+                {/* Link chico, aparte del botón principal: abre el detalle con el
+                    historial y el formulario opcional de comentario y foto. */}
+                <Link
+                  href={`/panel/housekeeping/mi-trabajo/${u.id}`}
+                  className="mt-2 inline-block text-xs font-medium text-lago-700 underline underline-offset-2"
+                >
+                  Ver detalle y agregar comentario o foto
+                </Link>
+
                 {accion ? (
                   <form action={marcarLimpiaDesdeMovil} className="mt-3">
                     <input type="hidden" name="unidad_id" value={u.id} />

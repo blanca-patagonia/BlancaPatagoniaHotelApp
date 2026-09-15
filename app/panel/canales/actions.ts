@@ -156,7 +156,7 @@ export async function importarCsvCanal(
   const primeraPasada = interpretarCsvBooking(texto)
   const firma = firmaEncabezados(primeraPasada.encabezados, normalizarEncabezado)
 
-  const { data: mapeo } = await supabaseLectura
+  const { data: mapeo, error: eMapeo } = await supabaseLectura
     .from('canal_mapeos_columnas')
     .select('asignaciones')
     .eq('canal', 'booking')
@@ -164,6 +164,10 @@ export async function importarCsvCanal(
     .eq('firma_encabezados', firma)
     .eq('activo', true)
     .maybeSingle<{ asignaciones: Record<string, string> }>()
+  // Si falla, se sigue con `primeraPasada` (mismo comportamiento que "no hay
+  // mapeo guardado"): el peor caso es pedirle de nuevo el mapeo a alguien que
+  // ya lo había configurado, no perder el informe. Pero que quede logueado.
+  registrarFalla(eMapeo, 'canales:mapeo_columnas')
 
   const resultado = mapeo
     ? interpretarCsvBooking(texto, 'booking', mapeo.asignaciones)

@@ -13,6 +13,7 @@ import {
   type LineaComanda,
 } from '@/lib/domain/punto-venta'
 import { esFolio } from '@/lib/domain/folios'
+import { formatearUSD } from '@/lib/domain/moneda'
 
 /**
  * Cierre de una comanda del punto de venta.
@@ -183,8 +184,8 @@ export async function cerrarComanda(
 
   return {
     ok:
-      `Comanda ${comanda} cargada al folio ${folioCrudo}: ${aCargar.length} línea(s) por USD ` +
-      `${totalComanda(aCargar).toLocaleString('es-AR')}.`,
+      `Comanda ${comanda} cargada al folio ${folioCrudo}: ${aCargar.length} línea(s) por ` +
+      `${formatearUSD(totalComanda(aCargar))}.`,
     comanda,
   }
 }
