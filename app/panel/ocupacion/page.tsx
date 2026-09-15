@@ -98,8 +98,10 @@ const COLOR_ESTADIA: Record<string, string> = {
  * celda con distinto número, y así agregar una fila —pax de menores, por
  * ejemplo— es sumar una entrada acá.
  *
- * El orden no es casual: arriba lo que se vende (ocupadas / libres), en el medio
- * el movimiento del día (llegadas / salidas) y abajo los dos totales de contexto.
+ * El orden sigue el de la planilla que ya usaba recepción en WinPAX (Ocupadas /
+ * Libres / Pax / Llegadas / Salidas): arriba lo que se vende, después quién está
+ * alojado, y al final el movimiento del día. El % de ocupación se agrega al pie
+ * —esa planilla no lo tenía— porque es el dato que resume los otros cinco.
  */
 const FILAS_RESUMEN: readonly {
   clave: string
@@ -108,9 +110,9 @@ const FILAS_RESUMEN: readonly {
 }[] = [
   { clave: 'ocupadas', titulo: 'Ocupadas', valor: (r) => r.ocupadas },
   { clave: 'libres', titulo: 'Libres', valor: (r) => r.libres },
+  { clave: 'pax', titulo: 'Pax', valor: (r) => r.pax },
   { clave: 'llegadas', titulo: 'Llegadas', valor: (r) => r.llegadas },
   { clave: 'salidas', titulo: 'Salidas', valor: (r) => r.salidas },
-  { clave: 'pax', titulo: 'Pax', valor: (r) => r.pax },
   { clave: 'ocupacion', titulo: '% ocupación', valor: (r) => r.ocupacionPct },
 ]
 
@@ -133,6 +135,8 @@ const MENSAJES_ERROR: Record<string, string> = {
   mudanza: 'No se pudo cambiar la habitación. Probá de nuevo.',
   tarifa_destino:
     'La habitación cambió, pero no hay tarifa cargada para el tipo nuevo: revisá el total en la ficha.',
+  tarifa_tipo_verificar:
+    'La habitación cambió, pero no se pudo verificar si la reserva es neta o rack: revisá el total en la ficha antes de facturar.',
   total:
     'La habitación cambió, pero no se pudo actualizar el total. Revisalo en la ficha de la reserva.',
 }
@@ -506,6 +510,93 @@ export default async function OcupacionPage({
         )}
       </BarraHerramientas>
 
+      {/*
+        Calendario resumen, arriba de la grilla y no sólo al pie: es la misma
+        cuenta que ya traía `resumenPorDia` (Fase 22, WinPAX) pero puesta como
+        vista propia, para verla de entrada sin tener que llegar al final de
+        la tabla de unidades. No es sticky —no hace falta: es chica y no
+        compite por espacio con nada mientras se la lee—.
+      */}
+      {unidades.length > 0 && (
+        <Tarjeta titulo="Calendario del período" className="mb-4 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <caption className="sr-only">
+                Ocupadas, libres, pax, llegadas y salidas por día del período elegido.
+              </caption>
+              <thead>
+                <tr className="border-b border-stone-200">
+                  <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left text-xs font-medium text-stone-500">
+                    &nbsp;
+                  </th>
+                  {dias.map((dia) => {
+                    const esHoy = dia === hoy
+                    return (
+                      <th
+                        key={dia}
+                        aria-current={esHoy ? 'date' : undefined}
+                        className={`min-w-10 px-1 py-2 text-center text-xs font-medium ${
+                          esHoy
+                            ? 'bg-lago-100 text-lago-900'
+                            : esFinDeSemana(dia)
+                              ? 'bg-stone-100 text-stone-500'
+                              : 'text-stone-500'
+                        }`}
+                      >
+                        <div>{LETRA_DIA[new Date(dia + 'T00:00:00Z').getUTCDay()]}</div>
+                        <div className={esHoy ? 'font-semibold' : 'text-stone-600'}>
+                          {formatoFechaCorta(dia)}
+                        </div>
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {FILAS_RESUMEN.map((fila) => (
+                  <tr key={fila.clave} className="border-t border-stone-100">
+                    <th
+                      scope="row"
+                      className="sticky left-0 z-10 bg-white px-3 py-1 text-left font-medium whitespace-nowrap text-stone-600"
+                    >
+                      {fila.titulo}
+                    </th>
+                    {resumen.map((r) => {
+                      const valor = fila.valor(r)
+                      const tono = fila.clave === 'ocupacion' ? tonoOcupacion(r.ocupacionPct) : null
+                      return (
+                        <td
+                          key={r.dia}
+                          className={`px-1 py-1 text-center tabular ${
+                            tono === 'completo'
+                              ? 'bg-red-100 font-semibold text-red-900'
+                              : tono === 'alto'
+                                ? 'bg-lenga-100 font-medium text-lenga-900'
+                                : tono === 'medio'
+                                  ? 'bg-calafate-100 text-calafate-900'
+                                  : r.dia === hoy
+                                    ? 'bg-lago-50 text-stone-700'
+                                    : 'text-stone-600'
+                          }`}
+                        >
+                          {valor === 0 && fila.clave !== 'ocupacion' ? (
+                            <span className="text-stone-300">·</span>
+                          ) : fila.clave === 'ocupacion' ? (
+                            `${valor}%`
+                          ) : (
+                            valor
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Tarjeta>
+      )}
+
       <Tarjeta className="overflow-hidden">
         {/*
           Sin unidades a la vista, la grilla quedaba con el encabezado de días, un
@@ -538,7 +629,7 @@ export default async function OcupacionPage({
               descripcion="La grilla se arma con las habitaciones y cabañas activas."
               icono="ocupacion"
               accion={
-                <Link href="/panel/unidades" className={botonClases('primario')}>
+                <Link href="/panel/config/ubicaciones" className={botonClases('primario')}>
                   Cargar unidades
                 </Link>
               }

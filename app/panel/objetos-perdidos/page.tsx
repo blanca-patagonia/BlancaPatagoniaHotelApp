@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { formatoFechaCorta } from '@/lib/fechas'
 import {
   construirQuery,
@@ -30,6 +31,7 @@ import {
   Mensaje,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
 import { marcarDevuelto } from './actions'
 
 interface Objeto {
@@ -84,8 +86,12 @@ export default async function ObjetosPerdidosPage({
     supabase/config.toml:10). Comprobado con 1100 filas sembradas: llegaban 1000 y
     el KPI decía 1000. Un número equivocado que no falla es peor que un error.
   */
-  const [{ data, count: enFiltro }, { count: guardadosCount }, { count: devueltosCount }, { count: totalCount }] =
-    await Promise.all([
+  const [
+    { data, count: enFiltro, error: eListado },
+    { count: guardadosCount, error: eGuardados },
+    { count: devueltosCount, error: eDevueltos },
+    { count: totalCount, error: eTotal },
+  ] = await Promise.all([
     consulta.range(desde, hasta),
     supabase
       .from('objetos_perdidos')
@@ -97,6 +103,11 @@ export default async function ObjetosPerdidosPage({
       .eq('estado', 'devuelto'),
     supabase.from('objetos_perdidos').select('*', { count: 'exact', head: true }),
   ])
+  registrarFalla(eListado, 'objetos_perdidos:listado')
+  registrarFalla(eGuardados, 'objetos_perdidos:kpi_guardados')
+  registrarFalla(eDevueltos, 'objetos_perdidos:kpi_devueltos')
+  registrarFalla(eTotal, 'objetos_perdidos:kpi_total')
+  const huboErrorDeLectura = Boolean(eListado || eGuardados || eDevueltos || eTotal)
 
   const objetos = (data ?? []) as Objeto[]
   const guardados = guardadosCount ?? 0
@@ -129,6 +140,15 @@ export default async function ObjetosPerdidosPage({
         <div className="mb-4">
           <Mensaje tono="error">
             {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
+
+      {huboErrorDeLectura && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            No se pudieron leer algunos datos de esta pantalla. El listado y los KPI pueden estar
+            incompletos.
           </Mensaje>
         </div>
       )}
@@ -240,9 +260,9 @@ export default async function ObjetosPerdidosPage({
                       <form action={marcarDevuelto} className="flex items-center gap-2">
                         <input type="hidden" name="id" value={o.id} />
                         <Etiqueta tono="alerta">En depósito</Etiqueta>
-                        <button className={botonClases('secundario', 'px-2.5 py-1 text-xs')}>
+                        <BotonEnvio variante="secundario" cargando="…" extra="px-2.5 py-1 text-xs">
                           Marcar devuelto
-                        </button>
+                        </BotonEnvio>
                       </form>
                     )}
                   </td>

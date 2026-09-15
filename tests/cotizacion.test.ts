@@ -7,7 +7,7 @@ import { hayDB, hayAnon, clienteDePrueba, clienteAnonimo } from './db'
  * corresponde a su temporada (incluso cuando la estadía cruza de una a otra) y que
  * distingue tarifa neta (agencia) de rack (mostrador). Requiere DB local.
  *
- * Doble Standard (seed): Alta neto/rack 155/177 · Media 110/143.
+ * Standard (seed): Alta neto/rack 155/177 · Media 110/143.
  * Temporadas: Alta = 1–30 nov 2025 · Media = 1–19 dic 2025.
  */
 
@@ -18,7 +18,7 @@ describe.skipIf(!hayDB)('cotizar_estadia (precio por temporada)', () => {
 
   beforeAll(async () => {
     db = clienteDePrueba()
-    const { data } = await db.from('tipos_unidad').select('id').eq('codigo', 'HOST-DBL-STD').single()
+    const { data } = await db.from('tipos_unidad').select('id').eq('codigo', 'HOST-STD').single()
     tipoId = data!.id as string
   })
 
@@ -64,7 +64,7 @@ describe.skipIf(!hayAnon)('cotizar_estadia desde el borde público', () => {
   beforeAll(async () => {
     db = clienteDePrueba()
     publico = clienteAnonimo()
-    const { data } = await db.from('tipos_unidad').select('id').eq('codigo', 'HOST-DBL-STD').single()
+    const { data } = await db.from('tipos_unidad').select('id').eq('codigo', 'HOST-STD').single()
     tipoId = data!.id as string
   })
 

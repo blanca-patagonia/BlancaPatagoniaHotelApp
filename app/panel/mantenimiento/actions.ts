@@ -66,18 +66,63 @@ export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promis
   return { ok: 'Orden creada.' }
 }
 
+/**
+ * Cambia el estado de una orden. Vuelve al listado o al detalle según de
+ * dónde se haya llamado.
+ *
+ * `origen` es una lista blanca de dos valores literales, no una URL de
+ * vuelta que venga del formulario: un campo "volvé acá" sería un redirect
+ * abierto (mismo criterio que `retornoDeMudanza` en `lib/reservas/`). El
+ * destino real —con el id de la orden interpolado— lo arma el servidor.
+ */
 export async function cambiarEstadoOrden(formData: FormData): Promise<void> {
   await requerirAcceso('mantenimiento')
   const id = String(formData.get('id') ?? '')
   const estado = String(formData.get('estado') ?? '')
+  const origen = formData.get('origen') === 'detalle' ? 'detalle' : 'listado'
+  const destino = origen === 'detalle' ? `/panel/mantenimiento/${id}` : '/panel/mantenimiento'
+
   if (id && ESTADOS.includes(estado)) {
     const supabase = await crearClienteServidor()
     const upd: { estado: string; resuelta_en?: string | null } = { estado }
     upd.resuelta_en = estado === 'resuelta' ? new Date().toISOString() : null
     const { error } = await supabase.from('ordenes_mantenimiento').update(upd).eq('id', id)
-    cortarSiFalla(error, '/panel/mantenimiento', 'estado_orden')
+    cortarSiFalla(error, destino, 'estado_orden')
   }
-  redirect('/panel/mantenimiento')
+  revalidatePath('/panel/mantenimiento')
+  redirect(destino)
+}
+
+/**
+ * Edita título, descripción, prioridad y unidad de una orden ya cargada.
+ *
+ * Antes de esto, la única forma de corregir un título mal tipeado o una
+ * unidad equivocada era borrar la orden y cargarla de nuevo — perdiendo las
+ * fotos y el historial de cambio de estado.
+ */
+export async function editarOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
+  const id = String(formData.get('id') ?? '')
+  if (!id) redirect('/panel/mantenimiento')
+  const destino = `/panel/mantenimiento/${id}`
+
+  const titulo = String(formData.get('titulo') ?? '').trim()
+  const descripcion = String(formData.get('descripcion') ?? '').trim()
+  const prioridad = String(formData.get('prioridad') ?? 'media')
+  const unidadId = String(formData.get('unidad_id') ?? '')
+
+  if (!titulo) redirect(`${destino}?error=orden_titulo`)
+  if (!PRIORIDADES.includes(prioridad)) redirect(`${destino}?error=orden_prioridad`)
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('ordenes_mantenimiento')
+    .update({ titulo, descripcion, prioridad, unidad_id: unidadId || null })
+    .eq('id', id)
+  cortarSiFalla(error, destino, 'orden_editar')
+
+  revalidatePath('/panel/mantenimiento')
+  redirect(`${destino}?ok=orden`)
 }
 
 /**
@@ -92,7 +137,8 @@ export async function crearPlanPreventivo(formData: FormData): Promise<void> {
   const titulo = String(formData.get('titulo') ?? '').trim()
   const unidadId = String(formData.get('unidad_id') ?? '')
   const cadaMeses = Number(formData.get('cada_meses'))
-  const prioridad = String(formData.get('prioridad') ?? 'media')
+  const prioridadCruda = String(formData.get('prioridad') ?? 'media')
+  const prioridad = PRIORIDADES.includes(prioridadCruda) ? prioridadCruda : 'media'
 
   if (!titulo || !periodicidadValida(cadaMeses)) {
     redirect('/panel/mantenimiento?error=plan')
@@ -110,6 +156,41 @@ export async function crearPlanPreventivo(formData: FormData): Promise<void> {
 
   revalidatePath('/panel/mantenimiento')
   redirect('/panel/mantenimiento?ok=plan')
+}
+
+/**
+ * Edita título, unidad, periodicidad y prioridad de un plan preventivo ya
+ * cargado, en un solo guardado por fila (mismo patrón que el tarifario).
+ *
+ * No toca `proxima_ejecucion`: cambiar la periodicidad de un plan no debe
+ * mover la fecha ya calculada, o un plan «cada 6 meses» pasado a «cada 3»
+ * podría atrasar la próxima tarea en vez de adelantarla.
+ */
+export async function editarPlanPreventivo(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) redirect('/panel/mantenimiento?error=plan')
+
+  const titulo = String(formData.get('titulo') ?? '').trim()
+  const unidadId = String(formData.get('unidad_id') ?? '')
+  const cadaMeses = Number(formData.get('cada_meses'))
+  const prioridadCruda = String(formData.get('prioridad') ?? 'media')
+  const prioridad = PRIORIDADES.includes(prioridadCruda) ? prioridadCruda : 'media'
+
+  if (!titulo || !periodicidadValida(cadaMeses)) {
+    redirect('/panel/mantenimiento?error=plan')
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('planes_mantenimiento')
+    .update({ titulo, unidad_id: unidadId || null, cada_meses: cadaMeses, prioridad })
+    .eq('id', id)
+  cortarSiFalla(error, '/panel/mantenimiento', 'plan_editar')
+
+  revalidatePath('/panel/mantenimiento')
+  redirect('/panel/mantenimiento?ok=plan_editado')
 }
 
 /**

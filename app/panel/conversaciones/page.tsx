@@ -132,6 +132,23 @@ export default async function ConversacionesPage({
         </div>
       )}
 
+      {/*
+        WhatsApp e Instagram todavía no están conectados acá. El pedido del
+        hotel (2026-09-15) es que esta pantalla termine pareciéndose a
+        Chatwoot: una bandeja única por CONVERSACIÓN (no por canal), con el
+        historial completo del contacto sin importar por dónde escribió.
+        Es un rediseño de esta pantalla, nativo del panel — no se integra la
+        aplicación Chatwoot en sí (es un sistema aparte, Rails + Postgres +
+        Redis, que habría que hostear). Queda para cuando lleguen el código
+        y las credenciales de WhatsApp/Instagram, como una pasada de diseño
+        propia — no se improvisa acá arriba del chat por canal actual.
+      */}
+      <div className="mb-4 rounded-lg bg-lenga-50 px-4 py-2 text-sm text-lenga-900 ring-1 ring-lenga-200">
+        Por ahora esto es el chat interno del equipo, organizado por canal. Cuando se sumen
+        WhatsApp e Instagram, esta pantalla se va a rediseñar como una bandeja única por
+        conversación (estilo Chatwoot).
+      </div>
+
       {verConsultas && puedeVerConsultas ? (
         <>
           <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">

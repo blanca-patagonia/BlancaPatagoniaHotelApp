@@ -40,15 +40,18 @@ export async function agregarItemCompra(formData: FormData): Promise<void> {
 }
 
 /**
- * Edita cantidad, precio y nota de un ítem existente, en un solo guardado por
- * fila (mismo patrón que el tarifario: siempre editable, sin modo de edición
- * aparte).
+ * Edita nombre, cantidad, precio y nota de un ítem existente, en un solo
+ * guardado por fila (mismo patrón que el tarifario: siempre editable, sin
+ * modo de edición aparte).
  */
 export async function editarItemCompra(formData: FormData): Promise<void> {
   await requerirAcceso('servicio')
 
   const id = String(formData.get('id') ?? '')
   if (!id) cortarSiFalla({ message: 'sin id' }, DESTINO, 'lista_compras_guardar')
+
+  const nombre = String(formData.get('nombre') ?? '').trim()
+  if (!nombre) cortarSiFalla({ message: 'nombre vacío' }, DESTINO, 'lista_compras_nombre')
 
   const cantidad = String(formData.get('cantidad') ?? '').trim()
   const nota = String(formData.get('nota') ?? '').trim()
@@ -58,6 +61,7 @@ export async function editarItemCompra(formData: FormData): Promise<void> {
   const { error } = await supabase
     .from('lista_compras_cocina')
     .update({
+      nombre,
       cantidad,
       nota,
       precio_estimado: precioEstimado,

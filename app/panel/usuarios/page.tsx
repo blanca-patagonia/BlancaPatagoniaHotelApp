@@ -20,8 +20,10 @@ import {
   Mensaje,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
 import { cambiarRolUsuario, alternarActivoUsuario } from './actions'
 import { fechaHotel } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
 
 interface Perfil {
   id: string
@@ -59,13 +61,21 @@ export default async function UsuariosPage({
   const { q, error: errorParam } = await searchParams
   const admin = crearClienteAdmin()
 
-  const [{ data: perfilesData }, { data: authData }] = await Promise.all([
-    admin.from('perfiles').select('id, nombre, rol, activo').order('creado_en'),
-    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-  ])
+  const [{ data: perfilesData, error: ePerfiles }, { data: authData, error: eAuth }] =
+    await Promise.all([
+      admin.from('perfiles').select('id, nombre, rol, activo').order('creado_en'),
+      admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    ])
+  registrarFalla(ePerfiles, 'usuarios:perfiles')
+  registrarFalla(eAuth, 'usuarios:auth_listUsers')
+  // Es el módulo más sensible del sistema (alta/baja/rol de staff): sin esto,
+  // una lectura fallida se ve exactamente igual que "0 usuarios cargados".
+  const huboErrorDeLectura = Boolean(ePerfiles || eAuth)
+
   const perfiles = (perfilesData ?? []) as Perfil[]
-  const emailPorId = new Map(authData.users.map((u) => [u.id, u.email ?? '']))
-  const accesoPorId = new Map(authData.users.map((u) => [u.id, u.last_sign_in_at ?? undefined]))
+  const usuariosAuth = authData?.users ?? []
+  const emailPorId = new Map(usuariosAuth.map((u) => [u.id, u.email ?? '']))
+  const accesoPorId = new Map(usuariosAuth.map((u) => [u.id, u.last_sign_in_at ?? undefined]))
 
   // El listado es chico (staff del hotel): se filtra en memoria sin ir a la base.
   const termino = (q ?? '').trim().toLowerCase()
@@ -98,6 +108,15 @@ export default async function UsuariosPage({
         <div className="mb-4">
           <Mensaje tono="error">
             {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          </Mensaje>
+        </div>
+      )}
+
+      {huboErrorDeLectura && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            No se pudieron leer todos los datos de usuarios. La lista de abajo puede estar
+            incompleta — no significa que no haya más staff cargado.
           </Mensaje>
         </div>
       )}
@@ -198,9 +217,9 @@ export default async function UsuariosPage({
                           </select>
                         </label>
                         {!esYo && (
-                          <button className={botonClases('secundario', 'px-2 py-1 text-xs')}>
+                          <BotonEnvio variante="secundario" cargando="…" extra="px-2 py-1 text-xs">
                             Guardar
-                          </button>
+                          </BotonEnvio>
                         )}
                       </form>
                     </td>

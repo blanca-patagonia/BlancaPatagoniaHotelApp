@@ -6308,3 +6308,360 @@ del porcentaje se probó pegándole directo a PostgREST con `curl` sobre una
 tarifa real (270 → 297 con +10%, matemática exacta) y se revirtió al valor
 original — no se probó el botón desde el navegador para no disparar su
 diálogo nativo de confirmación.
+
+## 2026-09-15 — Cuarta ronda de auditoría (reservas, huéspedes, canales, usuarios, config restante) y dos bugs de plata reales
+
+Tres auditorías en paralelo sobre los módulos que quedaban sin revisar esta
+sesión. A diferencia de las rondas anteriores (sobre todo estética/convención),
+esta encontró **dos bugs de plata concretos**, no solo el patrón de
+`{ error }` descartado:
+
+**1. `agregarConsumo` podía cargar un consumo a una reserva YA FACTURADA.**
+Las dos lecturas que deciden si corresponde el cargo (estado de la reserva,
+si ya tiene factura) descartaban su error; si cualquiera fallaba, el cargo
+se dejaba pasar. Como `facturas` es inmutable (migración 0034), ese consumo
+quedaba fuera del comprobante para siempre — el mismo riesgo que el propio
+`emitirFactura` ya documentaba como "el caro", pero abierto del otro lado.
+Se corrigió a fail-closed: si no se puede verificar, no se carga nada.
+
+**2. Una mudanza de unidad podía recotizar una reserva de agencia a tarifa
+rack.** `cambiarUnidadReserva` leía `reservas.tarifa_tipo` para decidir si
+recotizar en neto o rack, y con `reserva?.tarifa_tipo === 'neto' ? 'neto' :
+'rack'`, una lectura fallida caía en "rack" — precio de mostrador en vez de
+precio de agencia (ADR 0004), sin que nadie se enterara. Mismo fix:
+fail-closed, no fail-"rack".
+
+**3. `canal_reservas` mostraba las 200 reservas MÁS VIEJAS, no las nuevas.**
+La tabla no se purga nunca; con orden ascendente por `check_in` y
+`limit(200)` sin ningún piso de fecha, en cuanto el hotel superó las 200
+sincronizaciones históricas, las entrantes NUEVAS —las que hay que
+revisar— quedaron tapadas por historial ya resuelto. De ahí salía además el
+KPI de "posible overbooking", que el propio código llama "lo más caro que
+le puede pasar al hotel". Se le puso un piso de 14 días hacia atrás.
+
+**4. La conciliación de comisión de canal ("Devengado/Facturado/Diferencia")
+sumaba TODOS los cargos históricos sin acotar por mes**, mezclando períodos
+distintos como si fueran comparables, y truncados a 200 filas. Se agregó un
+selector de mes (`mes`, con `inicioFinDeMes`) y se filtra `canal_cargos`
+por ese rango — un mes de cargos entra holgado en el límite nuevo (500).
+
+**El resto**, todo el patrón ya conocido de `{ error }` descartado sin
+`registrarFalla` (y en dos casos, sin siquiera `cortarSiFalla` en una
+escritura): `reservas/page.tsx` (el listado principal — 709 líneas, había
+quedado afuera de la auditoría QA/UX del 09-09), `reservas/consulta.ts`
+(`filtroTermino`, 5 lecturas), `reservas/[id]/page.tsx` (consumos, catálogo
+de productos, y si ya tiene factura — este último también se corrigió para
+no ofrecer "Emitir factura" cuando no se pudo verificar), `huespedes/page.tsx`
+y `huespedes/[id]/page.tsx` (esta última, además, empezó a distinguir "no
+existe" de "falló la lectura" como ya hacía su propia pantalla de editar),
+`usuarios/page.tsx` (el módulo más sensible: alta/baja/rol de staff),
+`config/temporadas/page.tsx`, `objetos-perdidos/page.tsx`,
+`lib/facturacion/emisor.ts`, `canales/externos/actions.ts` y
+`canales/actions.ts`. De paso, dos `requerirRol('admin','gerencia')`
+redundantes en `plantillas-actions.ts` pasaron a `requerirAcceso('config')`
+(el área ya es esos dos roles) y un `delete` sin verificar en
+`restaurarPlantillaOriginal` pasó a usar `cortarSiFalla`.
+
+⚠️ **Deuda que quedó anotada y no se tocó, por volumen:** ~30 lugares con
+`requerirRol('admin','gerencia')` o `sesion.rol === 'admin' || sesion.rol
+=== 'gerencia'` hardcodeado en vez de `puedeAcceder(rol, área)` — la misma
+deuda de `AGENTS.md` ("21 lugares"), ahora con un conteo más preciso. No es
+un agujero de seguridad (la mayoría son booleanos de UI, la seguridad real
+la da `requerirAcceso` + RLS), así que se deja para ir migrando al tocar
+cada archivo, como ya pide `AGENTS.md`.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · **1986 tests en verde, 16 en rojo** (los
+mismos de siempre, desvío de esquema preexistente). No se pudo probar el
+cambio de `canal_reservas`/`canal_cargos` de punta a punta en el navegador
+por falta de datos históricos de canal en la base local (todo lo sembrado
+es reciente, así que el bug del `limit(200)` no se manifiesta ahí) — la
+corrección se verificó por lectura de código y por la lógica de la consulta,
+no por reproducción.
+
+## 2026-09-15 — Auditoría de editabilidad: cuatro huecos reales cerrados
+
+A pedido explícito («audita todos los módulos y verificá que la información
+sea editable y que cada cosa funcione»), dos agentes en paralelo recorrieron
+el panel buscando datos que se muestran pero no se pueden corregir, y
+botones o links que prometen una acción que en realidad no existe. Se
+encontraron y cerraron cuatro casos reales:
+
+**1. El botón «Cargar unidades» del estado vacío de la grilla de ocupación
+apuntaba a `/panel/unidades`, una ruta que no existe** — y de fondo no
+había NINGÚN camino en todo el panel para dar de alta una unidad física
+nueva (habitación o cabaña): sólo existía `config/ubicaciones`, que asigna
+piso/bloque/orden a unidades **ya existentes**. Se agregó `crearUnidad`
+(`app/panel/config/actions.ts`), que valida `tipo_unidad_id` contra los
+tipos activos reales antes de insertar (no confía en lo que mande el
+formulario), y un formulario «Nueva unidad» arriba del listado de
+`config/ubicaciones` — el módulo que ya gestiona `unidades`, así que no
+hizo falta un área nueva ni tocar los cinco lugares de `AGENTS.md`. El
+link roto ahora apunta ahí. La política RLS `"unidades: admin/gerencia
+gestionan"` (migración 0002) ya cubre el `insert`: sólo faltaba la
+pantalla.
+
+**2. El plan de mantenimiento preventivo no se podía editar.** Sólo había
+alta y baja; corregir un título mal tipeado, la unidad, la periodicidad o
+la prioridad significaba borrar el plan y perder su historial. Se agregó
+`editarPlanPreventivo` (`app/panel/mantenimiento/actions.ts`) y cada fila
+de la lista pasó del mismo patrón «texto estático + dos botones» a un
+formulario siempre editable (mismo criterio que el tarifario). ⚠️ La
+edición **no toca `proxima_ejecucion`**: cambiar la periodicidad de un plan
+no debe mover la fecha ya calculada. De paso, el alta ganó el selector de
+«Prioridad de la orden» que faltaba — sin él, todo plan nuevo quedaba en
+`media` sin que el formulario lo dijera.
+
+**3. Un comprobante de proveedor mal cargado no se podía ni editar ni
+borrar**, pese a que la política RLS de `comprobantes_recibidos`
+(migración 0080) ya le da `for all` —incluido `delete`— a admin/gerencia:
+faltaba la acción y el botón. Se agregó `eliminarComprobante`
+(`app/panel/proveedores/comprobantes/actions.ts`), **bloqueado si el
+comprobante ya está imputado** (`movimiento_id` no nulo): borrarlo ahí
+dejaría una deuda real en la cuenta corriente del proveedor sin ningún
+documento de origen. Sólo se puede eliminar un comprobante sin imputar.
+
+**4. El formulario de alta de un contrato promete «se guarda como
+borrador: podés seguir editándolo hasta enviarlo a firmar», y esa edición
+no existía** — ni la acción ni la pantalla. Se agregó `editarContrato`
+(`app/panel/contratos/actions.ts`) y la Tarjeta «Texto del contrato» del
+detalle pasó a ser un formulario editable (título, vigencia, contenido)
+**sólo mientras `estado === 'borrador'`**: enviarlo a firmar congela el
+texto y calcula su hash (ADR 0010), así que editarlo después invalidaría
+la firma sin que nada lo detectara. Contratos sigue oculto del menú
+(`AREAS_OCULTAS`) a pedido del cliente, así que este arreglo no cambia
+nada visible hasta que se reactive el módulo.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · misma suite que la ronda anterior: **1986
+tests en verde, 16 en rojo** (los mismos de siempre — desvío de esquema
+local preexistente en `canal_restricciones` y `notificaciones.proveedor_id`,
+ninguno de los 16 toca los archivos de esta ronda). No se agregó test nuevo
+para estos cuatro cambios — son Server Actions que siguen el patrón ya
+cubierto por `tests/acciones/` en otros módulos; queda pendiente sumarles
+cobertura si se retoma esta área.
+
+## 2026-09-15 — Menú plegable por grupo, asistente de IA y reactivación de Conversaciones
+
+Tres pedidos del mismo mensaje: que los grupos del menú lateral se puedan
+plegar y desplegar, un apartado «IA» con un chat que responda con datos
+reales del hotel, y un apartado «Conversaciones» —ya existía, oculto— para
+más adelante sumarle WhatsApp e Instagram.
+
+**1. Menú plegable por grupo.** `lib/domain/nav-plegado.ts` (lógica pura:
+qué títulos están plegados, guardado como lista de strings) +
+`app/panel/_components/shell.tsx`, mismo patrón que ya usa el ancho
+ajustable del menú (`lateral.ts`): estado en memoria + `localStorage`
+(`bp:nav-plegado`) leído con `useSyncExternalStore`. Cada encabezado de
+grupo es ahora un botón con `aria-expanded` y una flechita que rota. ⚠️ El
+grupo que contiene la página activa **nunca se muestra plegado**, aunque la
+preferencia guardada diga que sí: sin esto, alguien podía plegar
+«Comercial» y quedarse navegando adentro de un grupo sin encabezado
+visible. Test: `tests/nav-plegado.test.ts`.
+
+**2. Asistente de IA (`/panel/ia`, admin y gerencia).** Chat que contesta
+preguntas sobre ocupación, ADR, RevPAR, venta por categoría, facturación,
+reservas y satisfacción — con los números reales del sistema, nunca
+inventados. Arquitectura completa en **ADR 0039**. En resumen:
+- **Adapter genérico compatible con OpenAI** (`lib/ia/proveedor.ts`, HTTP
+  directo, sin SDK): funciona con cualquier proveedor que hable ese
+  formato — el hotel todavía no decidió cuál, se habló de un nivel gratuito
+  de NVIDIA o de OpenRouter, así que atarlo a una marca habría sido
+  prematuro. Se activa con `IA_PROVIDER=openai_compatible` + `IA_BASE_URL`
+  + `IA_API_KEY` + `IA_MODELO`; ninguna es obligatoria para que el sistema
+  arranque (no entran a la lista del ADR 0018).
+- **Sin proveedor configurado, no hay simulador.** A diferencia de los
+  otros nueve adapters del proyecto, acá un simulador tendría que
+  *inventar* una respuesta sobre datos del hotel — exactamente lo que el
+  resto del sistema evita en cada rincón. `/panel/ia` lo dice en la propia
+  pantalla en vez de fingir.
+- **El modelo nunca contesta un número de memoria**: el system prompt lo
+  obliga a llamar a una herramienta, y la ejecución real
+  (`app/panel/ia/herramientas.ts`) reusa las **mismas lecturas que ya usan
+  los informes gerenciales** (`app/panel/reportes/datos.ts` +
+  `lib/domain/metricas*.ts`) — un mismo número en el asistente y en
+  Reportes. Las cinco herramientas son de solo lectura y corren con RLS del
+  usuario, nunca `service_role`.
+- **Tope de 4 vueltas de herramienta por consulta**, para que un modelo que
+  insiste en pedir lo mismo no agote un cupo gratis con una sola pregunta.
+- Tests: `tests/ia-herramientas.test.ts` (catálogo y system prompt),
+  `tests/ia-proveedor.test.ts` (activación por variables + el
+  request/response HTTP con `fetch` mockeado, incluida la ida y vuelta de
+  `tool_calls`). La ejecución real de las herramientas
+  (`app/panel/ia/herramientas.ts`) no tiene test propio: depende de
+  `crearClienteServidor()`, que necesita `cookies()` de una petición real —
+  mismo motivo por el que otras rutas de este tipo tampoco lo tienen— pero
+  reusa funciones que sí están probadas (`metricasDeMes`, `ventaPorTipo`,
+  `facturadoEnPeriodo`).
+
+**3. Conversaciones, reactivada.** Salió de `AREAS_OCULTAS`: vuelve a verse
+el chat interno del equipo por canal (ADR 0011) que ya existía y funcionaba.
+La pantalla suma un aviso: por ahora es sólo el chat interno, y cuando se
+sumen WhatsApp e Instagram esta pantalla se va a **rediseñar como una
+bandeja única por conversación, con el estilo de Chatwoot** — no se integra
+la aplicación Chatwoot en sí (es un sistema aparte que habría que hostear),
+es un rediseño nativo del panel a encarar cuando lleguen esos dos canales.
+Se actualizaron los tests que fijaban el menú de housekeeping con
+`conversaciones` afuera (`tests/permisos.test.ts`).
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 (incluidas `/panel/ia` y `/panel/ia/consulta`
+como rutas nuevas) · **2007 tests en verde, 16 en rojo** (los mismos 16 de
+siempre, sin relación con esta ronda — 21 tests nuevos: 7 de plegado + 5 del
+catálogo de herramientas + 9 del adapter de IA). No se pudo probar el chat
+contra un proveedor real: el hotel todavía no cargó ninguna credencial, así
+que sólo se verificó que la pantalla ofrece el aviso de «no configurado» en
+ese estado (comportamiento esperado sin las cuatro variables).
+
+## 2026-09-15 (más tarde) — Conversaciones, vuelta a ocultar
+
+El mismo día que se reactivó, el hotel pidió ocultarla de nuevo: `conversaciones`
+vuelve a `AREAS_OCULTAS` en `lib/domain/permisos.ts`. El motivo que quedó
+escrito en el comentario es el mismo que ya explica el rediseño pendiente —
+la pantalla actual (chat interno por canal, ADR 0011) no es la versión que
+va a quedar una vez que se rediseñe como bandeja única estilo Chatwoot con
+WhatsApp e Instagram, así que mientras tanto el hotel prefiere no mostrarla.
+Nada de código se tocó más allá del apagado: la pantalla, las acciones y las
+migraciones siguen enteras. Se revirtió el ajuste de `tests/permisos.test.ts`
+que había sacado `conversaciones` de la lista esperada para housekeeping.
+Typecheck 0 · lint 0 · build 0 · los mismos 44 tests de permisos/navegación
+en verde.
+
+## 2026-09-15 (más tarde aún) — Inventario físico real y franja resumen de Ocupación
+
+Dos fotos del dueño del hotel: la planilla de recepción con el nombre real
+de cada habitación y cabaña, y una franja de calendario (WinPAX) con
+Ocupadas/Libres/Pax/Llegadas/Salidas por día que pidió agregar a Ocupación.
+
+**La franja de Ocupación YA EXISTÍA**, casi idéntica: `lib/domain/grilla.ts`
+(`resumenPorDia`, de la modernización WinPAX) calcula exactamente esas
+cinco cuentas por día, y se muestra como `<tfoot>` pegado abajo de la grilla
+con el día de la semana y la fecha en el encabezado, fin de semana resaltado.
+Lo único que se tocó fue el **orden de las filas** en
+`app/panel/ocupacion/page.tsx` (`FILAS_RESUMEN`) para que calzara con la
+hoja: Ocupadas, Libres, Pax, Llegadas, Salidas — antes tenía Pax al final.
+El % de ocupación se dejó al pie, aunque la hoja no lo tenga: es el número
+que resume a los otros cinco.
+
+**Inventario real (migración 0106, `docs/decisiones/0040-…`).** `CLAUDE.md`
+tenía anotado desde el relevamiento: *"inventario físico real de unidades…
+pendiente de confirmar con el hotel"*. La hoja de recepción lo confirma: 37
+unidades físicas con nombre propio —Agassiz, Mayo, Frías + las 6+6 de Planta
+Alta/Planta Baja de la hostería (Gorra Blanca, Murallón, Heim, Ameghino,
+Caglio, Torre / Peineta, Cono, Viedma, Marconi, Bertachi, Nunatak) + 22
+cabañas en 5 tipos (Bolados ×7, Onelli ×4, Spegazzini ×5, Upsala ×3, Moreno
+×3)— reemplazando el catálogo representativo de 15 unidades genéricas que
+`seed.sql` traía desde el principio y que decía de sí mismo "a confirmar".
+
+Seis `tipos_unidad` con tarifa real del Anexo A **se renombraron en vez de
+recrearse** (`HOST-DBL-STD`→Standard, `HOST-DBL-SUP`→Superior, `CAB-3D-6P`→
+Bolados, `CAB-1D-3P`→Onelli, `CAB-2D-4P`→Spegazzini, más `Suite`/`Triple` que
+sólo cambiaron de nombre) para no perder esas tarifas —cuelgan del `id`, no
+del `codigo`—. Dos cabañas nuevas de 2 personas (Upsala, Moreno) **no tienen
+tarifa**: el Anexo A no publica ninguna categoría de 2 personas y el sistema
+no inventa un precio, así que esas 6 unidades existen pero no se pueden
+reservar todavía. Tres tipos con tarifa real pero sin ninguna unidad física
+en la hoja (`HOST-SINGLE`, cabañas de 5 y 7 personas) se dejaron
+"huérfanos", sin borrar, por si el hotel confirma que corresponden a algo.
+
+⚠️ **Lo que quedó fuera, a propósito:** la configuración de cama (Twin /
+Matrimonial / Solo Twin / Solo Matrimonial) que trae la hoja no se cargó —no
+existe ningún campo para eso, y agregarlo es una decisión de diseño aparte—
+y la categoría de las habitaciones sin ninguna etiqueta en la hoja (Ameghino,
+Caglio, Cono, Nunatak, Marconi, Bertachi, Agassiz) se infirió como Standard
+por descarte. El detalle completo de cada inferencia está en el ADR.
+
+`lib/domain/catalogo.ts` (mapa de fotos del catálogo público por `codigo`)
+se actualizó con las claves nuevas de los cinco tipos renombrados — la foto
+de stock sigue siendo la misma, sólo cambió a qué código apunta. Se
+corrigieron dos tests que consultaban el código viejo contra la base
+(`tests/cotizacion.test.ts`, `tests/catalogo.test.ts`); los demás archivos
+que mencionan los códigos viejos (`tests/asistente.test.ts`,
+`tests/ical-saliente.test.ts`) los usan como texto de ejemplo suelto, no
+como una consulta real, así que no hacía falta tocarlos.
+
+### Cómo se verificó
+
+`db reset` está bloqueado por el hook de seguridad del repo, así que la
+migración se probó aplicándola con `psql` directo contra el Postgres local:
+primero dentro de una transacción con `rollback` (para confirmar que corre
+sin errores sin tocar nada), después aplicada de verdad para poder correr la
+suite completa contra el resultado real. Los `update` de renombre y los dos
+`insert` de tipos nuevos salieron 1 fila cada uno; el `insert` de unidades,
+37. Typecheck 0 · lint 0 · build 0 · **2012 tests en verde**. De paso,
+aplicar migraciones pendientes para poder probar esto (0086, que ya estaba
+al día localmente) dejó **5 tests menos en rojo** de los 16 de siempre —
+`notificaciones-bandeja.test.ts` pasó a estar en verde, porque esa migración
+agregaba justo la columna que le faltaba al esquema local (el desvío
+preexistente que ya venía documentado en sesiones anteriores). Quedan 11 en
+rojo, todos del mismo desvío de esquema preexistente sobre `canal_*` y
+`ari_*`, sin relación con esta ronda.
+
+### Lo que sigue pendiente
+
+Aplicar la migración 0106 al proyecto hosted (queda para cuando el hotel
+esté listo), confirmar la tarifa de Upsala/Moreno y el destino de los tres
+tipos huérfanos, y decidir si vale la pena modelar la configuración de cama.
+
+## 2026-09-15 (aún más tarde) — Baja de cabañas ficticias y calendario arriba de la grilla
+
+Dos pedidos de seguimiento sobre lo de recién.
+
+**1. «Los nombres que no son los que te pasé, eliminalos de las cabañas.»**
+Dos migraciones, 0107 y 0108 (la 0108 completa lo que la 0107 —ya aplicada,
+no se puede reescribir— dejaba a medias; el porqué está en el ADR 0040,
+sección "Corrección"). Se dieron de baja las cinco `unidades` ficticias que
+la 0106 nunca había tocado (Cabaña Lenga, Ñire, Calafate, Notro, Coihue) y
+los dos `tipos_unidad` sin ninguna cabaña real (`CAB-2D-5P`, `CAB-3D-7P`).
+Cada unidad se intenta **borrar**, y sólo si la base la rechaza por tener
+una estadía real cargada se la **da de baja** (`activo = false`) en vez de
+perder el historial — pasó de verdad con «Cabaña Coihue» en la base local,
+que confirmó que hacía falta la baja lógica y no era una precaución de más.
+Resultado: 4 unidades borradas, 1 dada de baja, `CAB-2D-5P` borrado,
+`CAB-3D-7P` se queda (todavía lo referencia la unidad de baja).
+
+**2. «Agregá el calendario en Ocupación por arriba de lo que tenemos
+hecho.»** La franja resumen (Ocupadas/Libres/Pax/Llegadas/Salidas/%) vivía
+sólo como pie pegajoso de la grilla de habitaciones, así que había que
+llegar al final de una tabla de 37 filas para verla. Ahora hay una segunda
+vista, una `Tarjeta` propia arriba de la grilla con el mismo cálculo
+(`resumenPorDia`, sin volver a leer nada de la base) y el mismo encabezado
+de fecha + día de semana. No es sticky —no compite por espacio con nada
+mientras se la mira— y se oculta si el filtro no deja ninguna unidad, mismo
+criterio que ya tenía la grilla. El pie de la grilla se dejó como estaba:
+sirve para quien está scrolleando la lista de habitaciones y no quiere
+perder de vista el resumen del día.
+
+### Verificación
+
+Typecheck 0 · lint 0 · build 0 · **2012 tests en verde, 11 en rojo** (los
+mismos de siempre — desvío de esquema preexistente en `canal_*`/`ari_*`,
+sin relación con esta ronda). Las dos migraciones se probaron con `psql`
+directo contra el Postgres local (mismo motivo que la 0106: `db reset` está
+bloqueado por el hook de seguridad del repo).
+
+## 2026-09-15 (última de la vuelta) — Dólar blue en la pantalla de configuración
+
+Pedido: mostrar el dólar blue y el oficial del Banco Nación, en tiempo real,
+en «el panel de dólar» (`/panel/config/divisas`).
+
+**El oficial ya estaba** — es la fila `ARS` de la tabla de vigentes, que ya
+sale en vivo de DolarAPI (la fuente que replica el Banco Nación, según la
+propia explicación de esa pantalla) salvo que alguien haya cargado un valor
+manual. Se le agregó la aclaración «· dólar oficial» al lado del nombre de
+la moneda para que quede explícito de un vistazo, sin cambiar de dónde sale
+el número.
+
+**El blue faltaba en esta pantalla en particular** — `obtenerDolarBlueInformativo()`
+ya existía y ya se usaba en el widget del dashboard (`app/panel/_components/cotizacion.tsx`),
+deliberadamente por fuera de la cadena de respaldo que decide con qué se
+cobra (el Tarifario manda oficial, ADR 0020). Se sumó la misma llamada acá,
+con el mismo tono informativo — «no se cobra a este valor» — para no dar a
+entender que el blue puede reemplazar al oficial en ningún cálculo.
+
+Verificado que DolarAPI responde de verdad desde este entorno (`curl` directo
+a `/v1/dolares/blue` y `/v1/dolares/oficial`, los dos con datos frescos).
+Typecheck 0 · lint 0 · build 0 · los 89+24 tests de `divisas` en verde.

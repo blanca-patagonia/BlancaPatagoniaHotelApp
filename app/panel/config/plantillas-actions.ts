@@ -2,8 +2,9 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { requerirAcceso, requerirRol } from '@/lib/auth/session'
+import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { cortarSiFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
 import { EVENTOS_EMAIL, type EventoEmail } from '@/lib/domain/plantillas'
 
@@ -59,7 +60,11 @@ export async function guardarPlantilla(
   _prev: EstadoPlantilla,
   formData: FormData,
 ): Promise<EstadoPlantilla> {
-  const sesion = await requerirRol('admin', 'gerencia')
+  // `requerirRol` es para cuando una acción es MÁS restrictiva que su área
+  // (agencias, mantenimiento — ver el docblock de esa función); acá no hace
+  // falta, `config` ya es admin+gerencia en `lib/domain/permisos.ts`, así que
+  // usar `requerirAcceso` evita mantener la misma regla en dos lugares.
+  const sesion = await requerirAcceso('config')
 
   const evento = String(formData.get('evento') ?? '') as EventoEmail
   const asunto = String(formData.get('asunto') ?? '').trim()
@@ -86,12 +91,15 @@ export async function guardarPlantilla(
 
 /** Vuelve al texto original del código, borrando el override guardado. */
 export async function restaurarPlantillaOriginal(formData: FormData): Promise<void> {
-  await requerirRol('admin', 'gerencia')
+  await requerirAcceso('config')
 
   const evento = String(formData.get('evento') ?? '')
   if (EVENTOS_EMAIL.includes(evento as EventoEmail)) {
     const supabase = await crearClienteServidor()
-    await supabase.from('plantillas_email').delete().eq('evento', evento)
+    const { error } = await supabase.from('plantillas_email').delete().eq('evento', evento)
+    // Sin esto, un borrado que falla igual redirige sin `?error=`: parece
+    // restaurado pero el override sigue vigente la próxima vez que se envíe.
+    cortarSiFalla(error, '/panel/config/plantillas', 'plantilla_restaurar')
   }
   revalidatePath('/panel/config/plantillas')
   redirect('/panel/config/plantillas')

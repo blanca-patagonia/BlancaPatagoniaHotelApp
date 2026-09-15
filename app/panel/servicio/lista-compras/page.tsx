@@ -194,11 +194,28 @@ export default async function ListaComprasPage({
                       </button>
                     </form>
                   </td>
-                  <td className={`${TD} font-medium ${i.comprado ? 'line-through' : ''}`}>{i.nombre}</td>
+                  <td className={TD}>
+                    {/* El input de nombre vive en esta celda pero pertenece al MISMO
+                        formulario que cantidad/precio/nota (vía el atributo `form`,
+                        HTML estándar): se guardan los cuatro juntos con un solo
+                        "Guardar", aunque las celdas no sean contiguas en la fila. */}
+                    <input
+                      name="nombre"
+                      form={`editar-${i.id}`}
+                      defaultValue={i.nombre}
+                      required
+                      className={`${CAMPO} py-1.5 text-sm font-medium ${i.comprado ? 'line-through' : ''}`}
+                      aria-label="Artículo"
+                    />
+                  </td>
                   <td className={TD}>
                     {/* Cantidad, precio y nota se guardan juntos: es la fila spreadsheet-like
                         que se puede editar sin abrir nada aparte. */}
-                    <form action={editarItemCompra} className="flex flex-wrap items-end gap-2">
+                    <form
+                      id={`editar-${i.id}`}
+                      action={editarItemCompra}
+                      className="flex flex-wrap items-end gap-2"
+                    >
                       <input type="hidden" name="id" value={i.id} />
                       <label className="flex flex-col gap-0.5 text-xs text-stone-500">
                         Cantidad

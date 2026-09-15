@@ -159,6 +159,52 @@ export async function cambiarEstadoContrato(formData: FormData): Promise<void> {
 }
 
 /**
+ * Edita título, texto y vigencia de un contrato que sigue en borrador.
+ *
+ * El propio formulario de alta lo promete («se guarda como borrador: podés
+ * seguir editándolo hasta enviarlo a firmar») pero no existía ninguna acción
+ * que lo hiciera. Sólo se permite en `borrador`: enviar a firmar congela el
+ * texto y calcula su hash (ADR 0010), así que editarlo después invalidaría
+ * la firma sin que nada lo detecte.
+ */
+export async function editarContrato(formData: FormData): Promise<void> {
+  await exigirGestion()
+  const id = String(formData.get('contrato_id') ?? '')
+  if (!id) redirect('/panel/contratos')
+  const destino = `/panel/contratos/${id}`
+
+  const titulo = String(formData.get('titulo') ?? '').trim()
+  const contenido = String(formData.get('contenido') ?? '').trim()
+  const vigenciaDesde = String(formData.get('vigencia_desde') ?? '')
+  const vigenciaHasta = String(formData.get('vigencia_hasta') ?? '')
+
+  if (!titulo) redirect(`${destino}?error=titulo`)
+  if (!contenido) redirect(`${destino}?error=contenido`)
+  if (vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde) {
+    redirect(`${destino}?error=vigencia`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { data: contrato } = await supabase.from('contratos').select('estado').eq('id', id).single()
+  if (!contrato) redirect('/panel/contratos')
+  if (contrato.estado !== 'borrador') redirect(`${destino}?error=no_editable`)
+
+  const { error } = await supabase
+    .from('contratos')
+    .update({
+      titulo,
+      contenido,
+      vigencia_desde: vigenciaDesde || null,
+      vigencia_hasta: vigenciaHasta || null,
+    })
+    .eq('id', id)
+  cortarSiFalla(error, destino, 'editar')
+
+  revalidatePath(destino)
+  redirect(`${destino}?ok=editado`)
+}
+
+/**
  * Marca como vencidos los contratos enviados cuya vigencia ya terminó.
  *
  * Es el equivalente de `expirar_reservas_pendientes` para contratos: por ahora

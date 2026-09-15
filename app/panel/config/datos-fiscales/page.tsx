@@ -158,7 +158,7 @@ export default async function DatosFiscalesPage({
               </div>
 
               <div className="sm:col-span-3">
-                <BotonEnvio variante="secundario" cargando="Guardando…">
+                <BotonEnvio variante="secundario" cargando="Guardando…" extra="w-full sm:w-auto">
                   Guardar datos fiscales
                 </BotonEnvio>
               </div>

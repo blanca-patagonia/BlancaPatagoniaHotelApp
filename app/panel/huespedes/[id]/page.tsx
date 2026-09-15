@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarAccesoHuesped } from '@/lib/auditoria/accesos'
+import { registrarFalla } from '@/lib/acciones'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { TONO_ESTADO } from '../../_components/estilos'
 import {
@@ -11,6 +12,7 @@ import {
   EstadoVacio,
   Etiqueta,
   FILA,
+  Mensaje,
   Pagina,
   TD,
   TH,
@@ -64,22 +66,32 @@ export default async function DetalleHuespedPage({
   const { id } = await params
   const supabase = await crearClienteServidor()
 
-  const [{ data: huespedData }, { data: reservasData }] = await Promise.all([
-    supabase
-      .from('huespedes')
-      .select(
-        'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos, condicion_iva, residente_exterior, notas',
-      )
-      .eq('id', id)
-      .single(),
-    supabase
-      .from('reservas')
-      .select('id, codigo, estado, total, estadias(periodo)')
-      .eq('huesped_id', id)
-      .order('creada_en', { ascending: false }),
-  ])
+  const [{ data: huespedData, error: eHuesped }, { data: reservasData, error: eReservas }] =
+    await Promise.all([
+      supabase
+        .from('huespedes')
+        .select(
+          'id, apellido, nombre, email, telefono, doc_tipo, doc_numero, nacionalidad, puntos, condicion_iva, residente_exterior, notas',
+        )
+        .eq('id', id)
+        .single(),
+      supabase
+        .from('reservas')
+        .select('id, codigo, estado, total, estadias(periodo)')
+        .eq('huesped_id', id)
+        .order('creada_en', { ascending: false }),
+    ])
 
+  // Distinguir «falló la lectura» de «no existe»: mismo criterio que
+  // `editar/page.tsx` — sin esto, un corte de red se ve igual que un huésped
+  // borrado y dispara un 404 falso en vez del aviso de error real. Esta es la
+  // ficha de solo lectura, la que ve TODO el staff, no solo quien edita.
+  if (eHuesped) {
+    registrarFalla(eHuesped, 'huespedes:ficha')
+    throw new Error('No se pudo cargar el huésped')
+  }
   if (!huespedData) notFound()
+  registrarFalla(eReservas, 'huespedes:historial_reservas')
   await registrarAccesoHuesped(supabase, id, 'ficha_huesped')
   const huesped = huespedData as Huesped
   const reservas = (reservasData ?? []) as unknown as ReservaHist[]
@@ -168,6 +180,14 @@ export default async function DetalleHuespedPage({
 
       <div className="mt-4">
         <Tarjeta titulo="Historial de reservas" descripcion={`${reservas.length} en total`}>
+          {eReservas && (
+            <div className="p-5 pb-0">
+              <Mensaje tono="error">
+                No se pudo leer el historial de reservas. Puede estar incompleto o vacío sin que
+                eso signifique que no tiene reservas.
+              </Mensaje>
+            </div>
+          )}
           {reservas.length === 0 ? (
             <EstadoVacio
               titulo="Todavía no tiene reservas"

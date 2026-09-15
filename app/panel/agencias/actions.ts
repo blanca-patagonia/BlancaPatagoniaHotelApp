@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirRol } from '@/lib/auth/session'
 import { puedeAvanzar, type EtapaComercial } from '@/lib/domain/comercial'
-import { TIPOS_CUENTA, movimientoEnMoneda } from '@/lib/domain/cuentas'
+import { TIPOS_CUENTA, movimientoEnMoneda, type TipoCuenta } from '@/lib/domain/cuentas'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
@@ -158,11 +158,16 @@ export async function actualizarAgencia(formData: FormData): Promise<void> {
   const descuento = Number(formData.get('descuento_pct'))
   if (!id) redirect('/panel/agencias')
 
+  const tipo = String(formData.get('tipo') ?? '')
+
   const supabase = await crearClienteServidor()
   const { error } = await supabase
     .from('agencias')
     .update({
       nombre: String(formData.get('nombre') ?? '').trim(),
+      // Se valida contra el catálogo del dominio: un valor inesperado en el
+      // formulario no debe poder escribir cualquier texto en esta columna.
+      ...(TIPOS_CUENTA.includes(tipo as TipoCuenta) ? { tipo } : {}),
       cuit: String(formData.get('cuit') ?? '').trim() || null,
       email: String(formData.get('email') ?? '').trim() || null,
       telefono: String(formData.get('telefono') ?? '').trim() || null,

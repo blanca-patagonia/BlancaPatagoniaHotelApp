@@ -681,6 +681,27 @@ export const CAPITULOS: Capitulo[] = [
       },
     ],
   },
+  {
+    area: 'ia',
+    resumen: 'Preguntale por la ocupación, el ADR, la facturación del mes y demás números del hotel.',
+    pasos: [
+      {
+        titulo: 'Qué puede responder',
+        detalle:
+          'Ocupación, ADR y RevPAR de un mes, venta por categoría, lo facturado y cobrado, y el estado de las reservas. Cuando hace falta un dato, lo va a buscar al sistema en el momento: no inventa números.',
+      },
+      {
+        titulo: 'Qué NO hace',
+        detalle:
+          'No carga ni modifica nada. Es de solo lectura: para cambiar una tarifa o cargar una reserva hay que ir al módulo correspondiente.',
+      },
+      {
+        titulo: 'Si dice que no está configurado',
+        detalle:
+          'El asistente necesita un proveedor de IA enchufado por variable de entorno. Sin eso, la pantalla lo dice claramente en vez de simular una respuesta.',
+      },
+    ],
+  },
 ]
 
 /** Palabras del sistema que no son obvias para quien recién empieza. */

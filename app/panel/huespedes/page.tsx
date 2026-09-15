@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
 import {
   construirQuery,
@@ -17,6 +18,7 @@ import {
   EstadoVacio,
   Etiqueta,
   FILA,
+  Mensaje,
   Pagina,
   Paginacion,
   COL_SECUNDARIA,
@@ -72,7 +74,8 @@ export default async function HuespedesPage({
     )
   }
 
-  const { data, count } = await query.range(desde, hasta)
+  const { data, count, error } = await query.range(desde, hasta)
+  registrarFalla(error, 'huespedes:listado')
   const huespedes = (data ?? []) as Huesped[]
   const total = count ?? 0
 
@@ -94,6 +97,13 @@ export default async function HuespedesPage({
           </>
         }
       />
+
+      {error && (
+        <Mensaje tono="error">
+          No se pudo leer el padrón de huéspedes. El listado puede estar incompleto o vacío sin
+          que eso signifique que no hay huéspedes cargados.
+        </Mensaje>
+      )}
 
       <BarraHerramientas>
         <Buscador

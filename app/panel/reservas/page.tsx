@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { registrarFalla } from '@/lib/acciones'
 import {
   ETIQUETAS_ESTADO_RESERVA,
   ESTADOS_RESERVA,
@@ -174,10 +175,10 @@ export default async function ReservasPage({
   // Opciones de los selectores nuevos. Van en paralelo con el listado: son
   // catálogos chicos y ninguno depende del resultado.
   const [
-    { data, count },
-    { data: contratosData },
-    { data: unidadesData },
-    { data: tiposData },
+    { data, count, error: eReservas },
+    { data: contratosData, error: eContratos },
+    { data: unidadesData, error: eUnidades },
+    { data: tiposData, error: eTipos },
   ] = await Promise.all([
     consultaReservas(supabase, filtros, orTermino).range(desde, hasta),
     supabase.from('contratos').select('id, titulo').order('titulo').limit(200),
@@ -190,6 +191,15 @@ export default async function ReservasPage({
       .order('orden'),
     supabase.from('tipos_unidad').select('id, nombre').eq('activo', true).order('nombre'),
   ])
+  registrarFalla(eReservas, 'reservas:listado')
+  registrarFalla(eContratos, 'reservas:contratos_filtro')
+  registrarFalla(eUnidades, 'reservas:unidades_filtro')
+  registrarFalla(eTipos, 'reservas:tipos_filtro')
+  // El listado principal del módulo: sin esto, una lectura fallida se ve
+  // exactamente igual que "todavía no hay reservas" (auditoría QA/UX
+  // 2026-09-09, que había cerrado este patrón en ~53 pantallas — este
+  // archivo, el más grande del módulo, había quedado afuera de esa pasada).
+  const huboErrorDeLectura = Boolean(eReservas || eContratos || eUnidades || eTipos)
 
   const contratos = (contratosData ?? []) as { id: string; titulo: string }[]
   const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
@@ -272,6 +282,13 @@ export default async function ReservasPage({
       {sp.error && (
         <Mensaje tono="error">
           {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+        </Mensaje>
+      )}
+
+      {huboErrorDeLectura && (
+        <Mensaje tono="error">
+          No se pudieron leer algunos datos de esta pantalla. El listado o los filtros pueden
+          estar incompletos — no significa que no haya reservas.
         </Mensaje>
       )}
 

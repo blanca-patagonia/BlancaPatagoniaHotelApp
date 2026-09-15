@@ -148,6 +148,8 @@ const MENSAJES_ERROR: Record<string, string> = {
   checkin_inmediato: 'La reserva se creó, pero no se pudo marcar el check-in. Hacelo a mano cambiando el estado a "In house" acá abajo.',
   saldada: 'Se registró el pago, pero la reserva no quedó marcada como pagada. Revisá el estado antes de seguir.',
   consumo: 'No se pudo cargar el consumo. No se cobró ni se descontó del stock.',
+  consumo_verificar:
+    'No se pudo verificar si esta reserva admite un cargo nuevo. No se cargó nada — probá de nuevo.',
   quitar_consumo: 'No se pudo quitar el consumo. Sigue cargado a la cuenta.',
   factura:
     'Se pidió el CAE y se consumió el número de comprobante, pero la factura NO quedó guardada. Avisá antes de volver a emitir: el número ya se usó.',
@@ -181,6 +183,8 @@ const MENSAJES_ERROR: Record<string, string> = {
   destino_inactivo: 'La unidad de destino está dada de baja.',
   tarifa_destino:
     'La mudanza se hizo, pero no hay tarifa cargada para el tipo de destino: el total quedó sin recotizar.',
+  tarifa_tipo_verificar:
+    'La mudanza se hizo, pero no se pudo verificar si esta reserva es neta o rack: el total quedó sin recotizar. Revisalo a mano antes de facturar.',
   mudanza: 'No se pudo cambiar la unidad.',
   origen_pago:
     'No se pudo guardar el origen del pago. La exención de IVA quedó como estaba: revisala antes de facturar.',
@@ -490,20 +494,32 @@ export default async function DetalleReservaPage({
   )
   const senia = seniaSugerida(Number(reserva.total), noches)
 
-  const [{ data: consumosData }, { data: productosData }, { data: facturaData }] =
-    await Promise.all([
-      supabase
-        .from('consumos')
-        .select('id, cantidad, precio_unitario, producto:productos_servicios(nombre, categoria)')
-        .eq('reserva_id', id)
-        .order('creado_en'),
-      supabase
-        .from('productos_servicios')
-        .select('id, nombre, categoria, precio')
-        .eq('activo', true)
-        .order('categoria'),
-      supabase.from('facturas').select('numero').eq('reserva_id', id).maybeSingle(),
-    ])
+  const [
+    { data: consumosData, error: eConsumos },
+    { data: productosData, error: eProductos },
+    { data: facturaData, error: eFactura },
+  ] = await Promise.all([
+    supabase
+      .from('consumos')
+      .select('id, cantidad, precio_unitario, producto:productos_servicios(nombre, categoria)')
+      .eq('reserva_id', id)
+      .order('creado_en'),
+    supabase
+      .from('productos_servicios')
+      .select('id, nombre, categoria, precio')
+      .eq('activo', true)
+      .order('categoria'),
+    supabase.from('facturas').select('numero').eq('reserva_id', id).maybeSingle(),
+  ])
+  registrarFalla(eConsumos, 'reservas:consumos')
+  registrarFalla(eProductos, 'reservas:catalogo_productos')
+  // Mismo riesgo que `fallaPagos` arriba: si esto falla, `factura` da `null`
+  // igual que "todavía no facturada", y la pantalla podría ofrecer "Facturar"
+  // sobre una reserva que YA tiene factura (bloqueado después por
+  // `emitirFactura`, que sí revisa esto bien, pero no debería llegar a
+  // ofrecerse el botón en primer lugar).
+  const fallaFactura = Boolean(eFactura)
+  registrarFalla(eFactura, 'reservas:factura_existente')
   const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
   const productos = (productosData ?? []) as unknown as ProductoRow[]
   const factura = facturaData as { numero: string } | null
@@ -1350,6 +1366,14 @@ export default async function DetalleReservaPage({
             >
               Ver factura {factura.numero}
             </Link>
+          ) : fallaFactura ? (
+            /* No se pudo verificar si ya tiene factura: no corresponde ofrecer
+               "Emitir factura" sin saberlo — podría estar duplicando una que
+               ya existe. */
+            <span className="max-w-sm text-right text-xs text-red-700">
+              No se pudo verificar si esta reserva ya tiene factura. Recargá antes de emitir una
+              nueva.
+            </span>
           ) : motivoFactura ? (
             /* El botón no se ofrece si no corresponde: es más claro explicar por
                qué que dejar apretar y devolver un error. */

@@ -4,29 +4,19 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
 import { fechaHoraHotel } from '@/lib/fechas'
-import { Encabezado, Etiqueta, Mensaje, Pagina, Tarjeta, type Tono } from '../../_components/ui'
+import { CAMPO, Campo, Encabezado, Mensaje, Pagina, Tarjeta } from '../../_components/ui'
 import { SubirFoto } from '../../_components/subir-foto'
 import { FotoAdjunta } from '../../_components/foto-adjunta'
 import { BotonEnvio } from '../../_components/boton-envio'
-import { agregarFotoOrden } from '../actions'
+import { agregarFotoOrden, cambiarEstadoOrden, editarOrden } from '../actions'
 
 type Prioridad = 'baja' | 'media' | 'alta'
 type EstadoM = 'pendiente' | 'en_proceso' | 'resuelta'
 
-const TONO_PRIORIDAD: Record<Prioridad, Tono> = {
-  baja: 'neutro',
-  media: 'alerta',
-  alta: 'peligro',
-}
 const ETIQUETA_PRIORIDAD: Record<Prioridad, string> = {
   baja: 'Baja',
   media: 'Media',
   alta: 'Alta',
-}
-const TONO_ESTADO_M: Record<EstadoM, Tono> = {
-  pendiente: 'alerta',
-  en_proceso: 'lago',
-  resuelta: 'exito',
 }
 const ETIQUETA_ESTADO: Record<EstadoM, string> = {
   pendiente: 'Pendiente',
@@ -42,15 +32,23 @@ interface Orden {
   estado: EstadoM
   creada_en: string
   fotos: string[]
+  unidad_id: string | null
   unidad: { nombre: string } | null
 }
 
-/** Motivos con que `agregarFotoOrden` puede volver por `?error=`. */
+const PRIORIDADES: Prioridad[] = ['baja', 'media', 'alta']
+const ESTADOS: EstadoM[] = ['pendiente', 'en_proceso', 'resuelta']
+
+/** Motivos con que las acciones de esta pantalla pueden volver por `?error=`. */
 const MENSAJES_ERROR: Record<string, string> = {
   foto_falta: 'Elegí un archivo antes de subir.',
   foto_subida: 'No se pudo subir el archivo. Probá de nuevo.',
   foto_leer: 'No se pudo leer la orden para adjuntar la foto. No se guardó nada.',
   foto_guardar: 'La foto se subió pero no se pudo asociar a la orden. Probá de nuevo.',
+  orden_titulo: 'El título no puede quedar vacío.',
+  orden_prioridad: 'Prioridad inválida.',
+  orden_editar: 'No se pudieron guardar los cambios. Probá de nuevo.',
+  estado_orden: 'No se pudo cambiar el estado. Quedó como estaba.',
 }
 
 export default async function DetalleOrdenPage({
@@ -65,12 +63,18 @@ export default async function DetalleOrdenPage({
   const { ok, error } = await searchParams
   const supabase = await crearClienteServidor()
 
-  const { data, error: errorLectura } = await supabase
-    .from('ordenes_mantenimiento')
-    .select('id, titulo, descripcion, prioridad, estado, creada_en, fotos, unidad:unidades(nombre)')
-    .eq('id', id)
-    .maybeSingle()
+  const [{ data, error: errorLectura }, { data: unidadesData, error: eUnidades }] =
+    await Promise.all([
+      supabase
+        .from('ordenes_mantenimiento')
+        .select('id, titulo, descripcion, prioridad, estado, creada_en, fotos, unidad_id, unidad:unidades(nombre)')
+        .eq('id', id)
+        .maybeSingle(),
+      supabase.from('unidades').select('id, nombre').eq('activo', true).order('nombre'),
+    ])
   if (errorLectura) registrarFalla(errorLectura, 'mantenimiento:detalle_orden')
+  registrarFalla(eUnidades, 'mantenimiento:detalle_orden_unidades')
+  const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
   if (!data) {
     if (errorLectura) {
       return (
@@ -106,35 +110,77 @@ export default async function DetalleOrdenPage({
 
       <Encabezado
         titulo={orden.titulo}
-        descripcion={orden.unidad?.nombre ?? 'General'}
+        descripcion={`Creada el ${fechaHoraHotel(orden.creada_en)}`}
         icono="mantenimiento"
         acciones={
-          <>
-            <Etiqueta tono={TONO_PRIORIDAD[orden.prioridad]}>
-              {ETIQUETA_PRIORIDAD[orden.prioridad]}
-            </Etiqueta>
-            <Etiqueta tono={TONO_ESTADO_M[orden.estado]}>{ETIQUETA_ESTADO[orden.estado]}</Etiqueta>
-          </>
+          <form action={cambiarEstadoOrden} className="flex items-center gap-2">
+            <input type="hidden" name="id" value={orden.id} />
+            <input type="hidden" name="origen" value="detalle" />
+            <label className="flex items-center gap-1.5 text-xs text-stone-500">
+              Estado
+              <select
+                name="estado"
+                defaultValue={orden.estado}
+                aria-label="Estado de la orden"
+                className={`${CAMPO} py-1.5 text-sm`}
+              >
+                {ESTADOS.map((e) => (
+                  <option key={e} value={e}>
+                    {ETIQUETA_ESTADO[e]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <BotonEnvio variante="secundario" cargando="…" extra="px-3 py-1.5 text-sm">
+              Guardar
+            </BotonEnvio>
+          </form>
         }
       />
 
-      <Tarjeta titulo="Detalle" className="mt-4">
-        <div className="grid gap-3 p-5 sm:grid-cols-2">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-stone-500">Unidad</p>
-            <p className="text-sm text-stone-800">{orden.unidad?.nombre ?? 'General'}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide text-stone-500">Creada</p>
-            <p className="text-sm text-stone-800">{fechaHoraHotel(orden.creada_en)}</p>
-          </div>
+      <Tarjeta
+        titulo="Detalle"
+        descripcion="Siempre editable: corregí lo que haga falta y guardá."
+        className="mt-4"
+      >
+        <form action={editarOrden} className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
+          <input type="hidden" name="id" value={orden.id} />
+
+          <Campo etiqueta="¿Qué hay que arreglar?" requerido anchoCompleto>
+            <input name="titulo" required defaultValue={orden.titulo} className={CAMPO} />
+          </Campo>
+
+          <Campo etiqueta="Unidad afectada" ayuda="Dejalo en general si no es de una habitación puntual.">
+            <select name="unidad_id" defaultValue={orden.unidad_id ?? ''} className={CAMPO}>
+              <option value="">Sin unidad / general</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nombre}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo etiqueta="Prioridad" ayuda="Alta significa que impide usar la habitación.">
+            <select name="prioridad" defaultValue={orden.prioridad} className={CAMPO}>
+              {PRIORIDADES.map((p) => (
+                <option key={p} value={p}>
+                  {ETIQUETA_PRIORIDAD[p]}
+                </option>
+              ))}
+            </select>
+          </Campo>
+
+          <Campo etiqueta="Detalle" ayuda="Lo que necesita saber quien lo va a resolver." anchoCompleto>
+            <textarea name="descripcion" rows={4} defaultValue={orden.descripcion} className={CAMPO} />
+          </Campo>
+
           <div className="sm:col-span-2">
-            <p className="text-xs uppercase tracking-wide text-stone-500">Descripción</p>
-            <p className="text-sm whitespace-pre-wrap text-stone-800">
-              {orden.descripcion || 'Sin descripción.'}
-            </p>
+            <BotonEnvio cargando="Guardando…" extra="w-full sm:w-auto">
+              Guardar cambios
+            </BotonEnvio>
           </div>
-        </div>
+        </form>
       </Tarjeta>
 
       <Tarjeta

@@ -9,6 +9,7 @@ import {
   textoEstado,
 } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
+import { obtenerDolarBlueInformativo } from '@/lib/divisas'
 import { cargarCotizacion } from '../actions'
 import { CAMPO, Campo, Encabezado, Etiqueta, FILA, Mensaje, TD, TH, Tabla, Tarjeta, Pagina } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
@@ -33,9 +34,10 @@ export default async function DivisasPage({
   const sp = await searchParams
   const puedeEditar = sesion.rol === 'admin' || sesion.rol === 'gerencia'
 
-  const vigentes = await Promise.all(
-    MONEDAS_EXTRANJERAS.map(async (m) => ({ moneda: m, vigente: await cotizacionVigente(m) })),
-  )
+  const [vigentes, blue] = await Promise.all([
+    Promise.all(MONEDAS_EXTRANJERAS.map(async (m) => ({ moneda: m, vigente: await cotizacionVigente(m) }))),
+    obtenerDolarBlueInformativo(),
+  ])
 
   return (
     <Pagina>
@@ -91,7 +93,10 @@ export default async function DivisasPage({
                   <tr key={moneda} className={FILA}>
                     <td className={TD}>
                       <span className="font-medium text-stone-800">{moneda}</span>
-                      <span className="ml-2 text-xs text-stone-500">{ETIQUETAS_MONEDA[moneda]}</span>
+                      <span className="ml-2 text-xs text-stone-500">
+                        {ETIQUETAS_MONEDA[moneda]}
+                        {moneda === 'ARS' && ' · dólar oficial'}
+                      </span>
                     </td>
                     <td className={`${TD} tabular text-right text-stone-600`}>
                       {vigente ? formatearLocal(vigente.compra, moneda) : '—'}
@@ -135,6 +140,19 @@ export default async function DivisasPage({
               </tbody>
             </Tabla>
           </div>
+
+          {/* Sólo informativo: lo que el Tarifario manda cobrar es SIEMPRE el
+              oficial de la tabla de arriba (ADR 0020). Este número no alimenta
+              ningún cálculo del sistema — es la referencia que recepción suele
+              tener a mano para explicarle la diferencia a un huésped. */}
+          {blue && (
+            <p className="mt-3 rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-600">
+              <strong className="text-stone-800">Dólar blue (en vivo, solo referencia):</strong>{' '}
+              {formatearLocal(blue.venta, 'ARS')} venta ·{' '}
+              <span className="text-stone-500">{formatearLocal(blue.compra, 'ARS')} compra</span>
+              <span className="ml-1 text-stone-500">— no se cobra a este valor.</span>
+            </p>
+          )}
 
           {puedeEditar ? (
             <form action={cargarCotizacion} className="mt-4 grid gap-x-4 gap-y-3 sm:grid-cols-4">

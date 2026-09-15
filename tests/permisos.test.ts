@@ -10,7 +10,8 @@ describe('permisos por rol', () => {
   })
 
   it('housekeeping ve inicio, su área, mantenimiento, avisos y ayuda', () => {
-    // `conversaciones` estaba en esta lista y salió al apagarse el módulo.
+    // `conversaciones` está en esta lista pero salió por estar en
+    // `AREAS_OCULTAS` (ver el test de «áreas apagadas» más abajo).
     expect(areasDe('housekeeping')).toEqual([
       'dashboard',
       'housekeeping',
@@ -20,6 +21,9 @@ describe('permisos por rol', () => {
     ])
     expect(puedeAcceder('housekeeping', 'reservas')).toBe(false)
     expect(puedeAcceder('housekeeping', 'usuarios')).toBe(false)
+    // El asistente de IA queda para admin y gerencia: contesta con datos de
+    // plata, y housekeeping no entra ni a reportes.
+    expect(puedeAcceder('housekeeping', 'ia')).toBe(false)
   })
 
   it('la ayuda la ven todos los roles', () => {
@@ -54,10 +58,11 @@ describe('permisos por rol', () => {
 
   describe('áreas apagadas', () => {
     /*
-      El hotel decidió no usar auditoría, conversaciones ni objetos perdidos por
-      ahora. El código sigue entero y se vuelven a habilitar sacándolas de
-      `AREAS_OCULTAS`; estos tests fijan que mientras estén ahí queden apagadas para
-      TODOS, incluido admin, y que apagarlas no se lleve puesto lo demás.
+      El hotel decidió no usar auditoría, objetos perdidos ni conversaciones
+      por ahora (más contratos y respaldos, ver el test de arriba). El código
+      sigue entero y se vuelven a habilitar sacándolas de `AREAS_OCULTAS`;
+      estos tests fijan que mientras estén ahí queden apagadas para TODOS,
+      incluido admin, y que apagarlas no se lleve puesto lo demás.
     */
 
     it('ninguna área apagada la puede ver nadie, ni admin', () => {

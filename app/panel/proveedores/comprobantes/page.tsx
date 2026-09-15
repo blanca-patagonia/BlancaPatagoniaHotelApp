@@ -34,7 +34,7 @@ import {
 import { BotonEnvio } from '../../_components/boton-envio'
 import { EscanearComprobante } from './escanear'
 import { CargarAMano } from './a-mano'
-import { imputarComprobante } from './actions'
+import { eliminarComprobante, imputarComprobante } from './actions'
 
 /**
  * Comprobantes recibidos (objetivo 9 del pedido).
@@ -70,6 +70,10 @@ const MENSAJES_ERROR: Record<string, string> = {
   imputar: 'No se pudo registrar el movimiento en la cuenta del proveedor. No se guardó nada.',
   imputar_vinculo:
     'El movimiento SÍ se registró en la cuenta del proveedor, pero no se pudo dejar el vínculo con el comprobante. Revisalo en la ficha del proveedor antes de volver a imputarlo.',
+  comprobante_imputado:
+    'Ese comprobante ya está imputado a una cuenta corriente: borrarlo dejaría esa deuda sin documento de origen. Revertilo desde la cuenta del proveedor primero.',
+  eliminar_comprobante_lectura: 'No se pudo leer el comprobante. Probá de nuevo.',
+  eliminar_comprobante: 'No se pudo eliminar el comprobante. Sigue cargado.',
 }
 
 interface ComprobanteRow {
@@ -186,6 +190,7 @@ export default async function ComprobantesPage({
           Imputado a la cuenta del proveedor. Ya figura en su saldo y en la antigüedad.
         </Mensaje>
       )}
+      {sp.ok === 'comprobante_eliminado' && <Mensaje tono="ok">Comprobante eliminado.</Mensaje>}
 
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi titulo="En el filtro" valor={String(total)} detalle="comprobantes" icono="proveedores" />
@@ -376,6 +381,19 @@ export default async function ComprobantesPage({
                         </form>
                       ) : (
                         <span className="text-sm text-stone-500">Sin imputar</span>
+                      )}
+                      {puedeGestionar && !c.movimiento_id && (
+                        <form action={eliminarComprobante} className="mt-1.5">
+                          <input type="hidden" name="comprobante_id" value={c.id} />
+                          <BotonEnvio
+                            variante="fantasma"
+                            extra="px-0 py-0 text-xs text-red-700"
+                            cargando="Eliminando…"
+                            confirmar={`¿Eliminar el comprobante ${nombreDeComprobante(c.tipo_codigo)} ${numeroVisible(c.punto_venta, c.numero)}? No se puede deshacer.`}
+                          >
+                            Eliminar
+                          </BotonEnvio>
+                        </form>
                       )}
                     </td>
                   </tr>

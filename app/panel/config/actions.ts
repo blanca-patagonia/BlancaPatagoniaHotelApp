@@ -413,6 +413,45 @@ export async function guardarUbicacionUnidad(formData: FormData): Promise<void> 
 }
 
 /**
+ * Da de alta una unidad física (habitación o cabaña) nueva.
+ *
+ * No existía ningún camino en el panel para esto: el botón «Cargar unidades»
+ * del estado vacío de la grilla de ocupación apuntaba a una ruta que no
+ * existe, y de fondo no había ninguna Server Action que hiciera un `insert`
+ * sobre `unidades`. `tipo_unidad_id` se valida contra los tipos activos reales
+ * (no confiar en lo que mande el formulario) para no crear una unidad
+ * huérfana de un tipo inexistente o dado de baja.
+ */
+export async function crearUnidad(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const nombre = String(formData.get('nombre') ?? '').trim()
+  const tipoUnidadId = String(formData.get('tipo_unidad_id') ?? '')
+  if (!nombre) redirect('/panel/config/ubicaciones?error=unidad_nombre')
+  if (!tipoUnidadId) redirect('/panel/config/ubicaciones?error=unidad_tipo')
+
+  const supabase = await crearClienteServidor()
+  const { data: tipo, error: errorTipo } = await supabase
+    .from('tipos_unidad')
+    .select('id')
+    .eq('id', tipoUnidadId)
+    .eq('activo', true)
+    .maybeSingle()
+  if (errorTipo) cortarSiFalla(errorTipo, '/panel/config/ubicaciones', 'unidad_tipo_verificar')
+  if (!tipo) redirect('/panel/config/ubicaciones?error=unidad_tipo')
+
+  const { error } = await supabase
+    .from('unidades')
+    .insert({ nombre, tipo_unidad_id: tipoUnidadId })
+  cortarSiFalla(error, '/panel/config/ubicaciones', 'unidad_guardar')
+
+  revalidatePath('/panel/config/ubicaciones')
+  revalidatePath('/panel/ocupacion')
+  redirect('/panel/config/ubicaciones?ok=unidad')
+}
+
+/**
  * Guarda los datos del hotel como emisor de comprobantes (migración 0082).
  *
  * ── Por qué es de admin y no de gerencia ────────────────────────────────────

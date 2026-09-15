@@ -283,3 +283,37 @@ export async function imputarComprobante(formData: FormData): Promise<void> {
   revalidatePath(`/panel/proveedores/${proveedorId}`)
   redirect(`${DESTINO}?ok=imputado`)
 }
+
+/**
+ * Elimina un comprobante mal cargado (foto duplicada, factura de otra
+ * sucursal, un tipeo que ni vale la pena corregir).
+ *
+ * Bloqueado si ya está imputado: ahí el comprobante respalda un movimiento
+ * real en la cuenta corriente del proveedor (`movimiento_id`), y borrarlo
+ * dejaría esa deuda sin ningún documento de origen. La política RLS de la
+ * 0080 ya permite el `delete` a admin/gerencia — lo que faltaba era esta
+ * acción y el botón en pantalla.
+ */
+export async function eliminarComprobante(formData: FormData): Promise<void> {
+  await exigirGestion()
+
+  const id = String(formData.get('comprobante_id') ?? '')
+  if (!id) redirect(DESTINO)
+
+  const supabase = await crearClienteServidor()
+
+  const { data: comp, error: eLectura } = await supabase
+    .from('comprobantes_recibidos')
+    .select('id, movimiento_id')
+    .eq('id', id)
+    .maybeSingle<{ id: string; movimiento_id: string | null }>()
+  cortarSiFalla(eLectura, DESTINO, 'eliminar_comprobante_lectura')
+  if (!comp) redirect(`${DESTINO}?ok=comprobante_eliminado`)
+  if (comp.movimiento_id) redirect(`${DESTINO}?error=comprobante_imputado`)
+
+  const { error } = await supabase.from('comprobantes_recibidos').delete().eq('id', id)
+  cortarSiFalla(error, DESTINO, 'eliminar_comprobante')
+
+  revalidatePath(DESTINO)
+  redirect(`${DESTINO}?ok=comprobante_eliminado`)
+}
