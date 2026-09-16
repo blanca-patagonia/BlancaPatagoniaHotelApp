@@ -120,11 +120,16 @@ export async function crearHuesped(
   // Evita duplicar por email, que es como el alta desde el portal identifica al
   // huésped que vuelve.
   if (campos.email) {
-    const { data: existente } = await supabase
+    const { data: existente, error: eExistente } = await supabase
       .from('huespedes')
       .select('id')
       .eq('email', campos.email)
       .maybeSingle()
+    // Sin esto, una lectura que falla salteaba el chequeo de duplicados por
+    // completo y el alta seguía derecho al insert.
+    if (eExistente) {
+      return { error: 'No se pudo verificar si ya existe un huésped con ese email. Probá de nuevo.', valores: aValores(campos) }
+    }
     if (existente) return { error: 'Ya hay un huésped con ese email.', valores: aValores(campos) }
   }
 

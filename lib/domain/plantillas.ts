@@ -14,6 +14,8 @@
  * cosas distintas con el tiempo.
  */
 
+import { formatearUSD } from './moneda'
+
 /**
  * El catálogo de avisos.
  *
@@ -662,4 +664,50 @@ export function renderizar(
     cuerpoHtml: textoAHtml(cuerpo),
     faltantes: variablesFaltantes(plantilla, variables),
   }
+}
+
+/**
+ * Datos de muestra para probar cualquier plantilla: la vista previa de
+ * `/panel/config/plantillas` y el botón «Enviar prueba» de esa misma pantalla
+ * (`enviarPlantillaPrueba`, en `plantillas-actions.ts`).
+ *
+ * ⚠️ Fuente única a propósito. Antes cada uno tenía su propia copia, y
+ * divergieron: la de la vista previa sabía de variables nuevas como `saldo` o
+ * `detalle_cancelacion`, la del envío de prueba no — así que la vista previa
+ * se veía bien y apretar «Enviar prueba» fallaba con «Faltan datos para
+ * completar la plantilla», sin que nada en pantalla lo explicara. Cubre TODAS
+ * las variables que declara alguna plantilla en `PLANTILLAS`; si se agrega una
+ * plantilla con una variable nueva, hay que sumarla acá una sola vez.
+ *
+ * Los importes van con `formatearUSD`, igual que los arma el código real al
+ * enviar (ver `lib/notificaciones/eventos.ts`): así la muestra se parece a lo
+ * que de verdad le llega a un huésped, no a un número pelado.
+ */
+export const MUESTRA_PLANTILLAS: Record<string, string | number> = {
+  nombre: 'Ana',
+  huesped: 'Ana Pérez',
+  codigo: 'BP-DEMO',
+  check_in: '10/09/2026',
+  check_out: '13/09/2026',
+  hora_check_in: '15:00',
+  hora_check_out: '10:00',
+  total: formatearUSD(642.51),
+  sena: formatearUSD(150),
+  importe: formatearUSD(200),
+  saldo: formatearUSD(90),
+  detalle_cancelacion: `primera noche (${formatearUSD(145.2)})`,
+  enlace: 'https://blancapatagonia.com/ejemplo',
+  nivel: 'Oro',
+  puntos: 2100,
+  origen: 'Booking',
+  medio: 'MercadoPago',
+  canal: 'Booking',
+  detalle: 'el feed no respondió en el último intento',
+  cantidad: 3,
+  devengado: formatearUSD(1200),
+  facturado: formatearUSD(1150),
+  diferencia: formatearUSD(50),
+  unidad: 'Bolados 3',
+  titulo: 'Pérdida de agua en el baño',
+  prioridad: 'Alta',
 }

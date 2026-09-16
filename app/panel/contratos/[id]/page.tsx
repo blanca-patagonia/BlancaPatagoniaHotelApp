@@ -48,6 +48,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   vigencia: 'La vigencia no puede terminar antes de empezar.',
   no_editable: 'Este contrato ya no es un borrador: no se puede editar.',
   editar: 'No se pudieron guardar los cambios. Quedó como estaba.',
+  lectura_contrato: 'No se pudo leer el contrato. No se hizo ningún cambio — probá de nuevo.',
 }
 
 const MENSAJES_OK: Record<string, string> = {

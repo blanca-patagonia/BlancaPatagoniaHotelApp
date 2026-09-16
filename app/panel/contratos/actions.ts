@@ -90,12 +90,16 @@ export async function enviarAFirmar(formData: FormData): Promise<void> {
   if (!id) redirect('/panel/contratos')
 
   const supabase = await crearClienteServidor()
-  const { data: contrato } = await supabase
+  const { data: contrato, error: eContrato } = await supabase
     .from('contratos')
     .select('id, titulo, estado')
     .eq('id', id)
     .single()
 
+  // Sin esto, una lectura que falla se confunde con "el contrato no existe"
+  // y manda al listado sin ningún aviso — quien lo mandó a firmar no se
+  // entera de que en realidad no pasó nada.
+  if (eContrato) redirect(`/panel/contratos/${id}?error=lectura_contrato`)
   if (!contrato) redirect('/panel/contratos')
   if (!puedeEnviar(contrato.estado as EstadoContrato)) {
     redirect(`/panel/contratos/${id}?error=no_enviable`)
@@ -141,12 +145,13 @@ export async function cambiarEstadoContrato(formData: FormData): Promise<void> {
   if (!id) redirect('/panel/contratos')
 
   const supabase = await crearClienteServidor()
-  const { data: contrato } = await supabase
+  const { data: contrato, error: eContrato } = await supabase
     .from('contratos')
     .select('estado')
     .eq('id', id)
     .single()
 
+  if (eContrato) redirect(`/panel/contratos/${id}?error=lectura_contrato`)
   if (!contrato) redirect('/panel/contratos')
   if (!puedeTransicionar(contrato.estado as EstadoContrato, nuevo)) {
     redirect(`/panel/contratos/${id}?error=transicion`)
@@ -185,7 +190,12 @@ export async function editarContrato(formData: FormData): Promise<void> {
   }
 
   const supabase = await crearClienteServidor()
-  const { data: contrato } = await supabase.from('contratos').select('estado').eq('id', id).single()
+  const { data: contrato, error: eContrato } = await supabase
+    .from('contratos')
+    .select('estado')
+    .eq('id', id)
+    .single()
+  if (eContrato) redirect(`${destino}?error=lectura_contrato`)
   if (!contrato) redirect('/panel/contratos')
   if (contrato.estado !== 'borrador') redirect(`${destino}?error=no_editable`)
 

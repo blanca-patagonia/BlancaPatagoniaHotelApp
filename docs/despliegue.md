@@ -81,7 +81,7 @@ emite un CAE inventado sobre una factura real.
 | **Resend (entrega)** | `RESEND_WEBHOOK_SECRET` | Sin esto **no se detectan los rebotes**: el aviso queda «enviada» para siempre |
 | **WhatsApp** | `WHATSAPP_PROVIDER`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_IDIOMA` | Ver §1.5 |
 | **Booking (iCal)** | `BOOKING_ICAL_FEEDS` | Pares `CODIGO_TIPO=url` separados por comas |
-| **Divisas** | `DOLARAPI_URL`, `ARGENTINADATOS_URL` | Opcionales: vacías usan las públicas |
+| **Divisas** | `DOLARAPI_URL`, `ARGENTINADATOS_URL`, `AMBITO_URL` | Opcionales: vacías usan las públicas. `AMBITO_URL` es solo para el dato informativo de Banco Nación del dashboard (no participa del cobro); si Ámbito no responde, esa fila del widget simplemente no aparece |
 | **Login con Google** | `AUTH_GOOGLE_HABILITADO` | `1` lo habilita |
 
 ### 1.4 De desarrollo — **no ponerlas en producción**

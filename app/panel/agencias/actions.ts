@@ -133,12 +133,13 @@ export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
   if (!id) redirect('/panel/agencias')
 
   const supabase = await crearClienteServidor()
-  const { data: agencia } = await supabase
+  const { data: agencia, error: eAgencia } = await supabase
     .from('agencias')
     .select('etapa')
     .eq('id', id)
     .single()
 
+  if (eAgencia) redirect('/panel/agencias?error=etapa_lectura')
   if (!agencia) redirect('/panel/agencias')
   if (!puedeAvanzar(agencia.etapa as EtapaComercial, nueva)) {
     redirect('/panel/agencias?error=etapa')

@@ -63,6 +63,7 @@ const TONO_ETAPA: Record<EtapaComercial, 'neutro' | 'lago' | 'calafate' | 'exito
 const MENSAJES_ERROR: Record<string, string> = {
   etapa: 'Ese salto de etapa no está permitido: hay que avanzar de a una.',
   etapa_guardar: 'No se pudo guardar la etapa nueva. La agencia quedó como estaba.',
+  etapa_lectura: 'No se pudo leer la etapa actual de la agencia. No se cambió nada — probá de nuevo.',
 }
 
 export default async function AgenciasPage({

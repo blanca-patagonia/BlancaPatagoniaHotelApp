@@ -6665,3 +6665,507 @@ entender que el blue puede reemplazar al oficial en ningún cálculo.
 Verificado que DolarAPI responde de verdad desde este entorno (`curl` directo
 a `/v1/dolares/blue` y `/v1/dolares/oficial`, los dos con datos frescos).
 Typecheck 0 · lint 0 · build 0 · los 89+24 tests de `divisas` en verde.
+
+## 2026-09-16 — Widget del dashboard: Banco Nación distinto del oficial, y se refresca solo
+
+Pedido: en el widget «Dólar» del dashboard, mostrar Banco Nación, dólar blue y
+dólar oficial con compra y venta, actualizado cada 5 minutos.
+
+**Primero hubo que resolver una pregunta que no era obvia:** ¿de dónde sale un
+valor de Banco Nación que sea *distinto* del oficial? Se probó en vivo contra
+las dos fuentes que ya usa `CotizacionProvider` (DolarAPI, ArgentinaDatos) y
+ninguna distingue al BNA del «oficial» genérico — exponen una sola casa, que
+es justo lo que ya explicaba `DESCRIPCION_FUENTE` en `lib/domain/divisas.ts`.
+Se encontró un endpoint no documentado de Ámbito Financiero
+(`mercados.ambito.com/dolarnacion/variacion`) que sí publica el valor propio
+del banco, y hoy mismo difiere del oficial genérico. Se lo planteó al usuario
+—fuente sin contrato, puede cambiar de forma sin aviso— antes de sumarla.
+
+**`obtenerDolarBancoNacionInformativo()`** (`lib/divisas/index.ts`) replica
+exactamente el patrón de `obtenerDolarBlueInformativo()`: por fuera de
+`CotizacionProvider`/`resolverVigente` a propósito, no se persiste, no tiene
+caché ni reintento, nunca lanza. Lo que se cobra sigue siendo el oficial
+(ADR 0020, sin cambios) — esto es puramente informativo, igual que el blue.
+Ámbito devuelve compra/venta como texto con coma decimal (`"1480,00"`); se
+reusó el parser `numero()` que ya sabía convertir eso.
+
+**El refresco automático era la parte sin precedente en el repo:** no había
+ningún polling client-side de datos de negocio en todo `app/panel` (se
+relevó antes de escribir código). Se partió el widget en dos: `cotizacion.tsx`
+sigue siendo el Server Component async que trae la primera carga —server-side,
+bajo el mismo `<Suspense>` de siempre— y el nuevo `cotizacion-cliente.tsx`
+(`'use client'`) recibe ese dato inicial como prop y arma un
+`setInterval` de 5 minutos que vuelve a pedirle a `GET /api/cotizacion`
+(que ya existía para esto: cachea la fuente externa 30 min por proceso, así
+que el polling del cliente no la castiga). Un fallo de refresco se ignora en
+silencio y se queda con el último dato bueno — nunca limpia la pantalla por
+un corte de red transitorio. Se extendió `/api/cotizacion` para devolver
+también `informativas: { blue, bancoNacion }`, sin tocar la forma de
+`cotizaciones` que ya consumían otras seis pantallas.
+
+Se agregó un addendum al ADR 0020 (no se reabre la decisión: el cobro sigue
+igual) y `AMBITO_URL` a la tabla de variables opcionales de
+`docs/despliegue.md`.
+
+Typecheck 0 · lint 0 · build 0 · tests de `divisas-proveedor` en verde
+(3 casos nuevos para el parseo de Ámbito, con `fetch` mockeado — sin red real
+en la suite).
+
+**Verificado en el navegador y encontrado un bug real en el camino:** con el
+dev server corriendo, Banco Nación no aparecía — el log del servidor mostraba
+403 en cada intento. Ámbito (Cloudflare) rechaza el `user-agent` por defecto
+que manda `fetch` de Node; confirmado en vivo con `curl` (mismo pedido, con
+`-A node` da 403, con cualquier otro — incluso vacío — da 200). Se agregó un
+`user-agent` propio a `traerJson()` (afecta a las tres fuentes, sin costo para
+DolarAPI/ArgentinaDatos) y un test que lo deja en contrato: sin él, la fila de
+Banco Nación quedaría vacía en **todo** entorno que corra en Node, no solo en
+este. Reverificado en el navegador después del fix: las tres filas —oficial,
+Banco Nación, blue— muestran valores distintos.
+
+## 2026-09-16 (misma vuelta) — Menú lateral: colapsar a solo íconos
+
+Pedido: que el menú lateral se pueda plegar y quede solo con los íconos.
+
+El shell (`app/panel/_components/shell.tsx`) ya tenía dos preferencias de
+layout persistidas en `localStorage` con el mismo patrón —ancho arrastrable
+(`lateral.ts`) y plegado por grupo (`nav-plegado.ts`), las dos con
+`useSyncExternalStore` + una variable en memoria de módulo + `Set` de
+oyentes—. Se sumó una tercera, `lib/domain/nav-colapso.ts`, siguiendo
+exactamente el mismo molde: `CLAVE_COLAPSADO = 'bp:nav-colapsado'`, un
+booleano, sin lógica nueva que inventar.
+
+**Es exclusivo de la barra de escritorio.** El cajón móvil reusa el mismo
+componente `Enlaces`, pero nunca recibe la prop `colapsado` — no tendría
+sentido angostar a íconos un cajón que ya se abre y cierra por completo. Dos
+instancias del mismo componente, una con el prop y otra sin él, en vez de una
+rama nueva.
+
+**Qué pasa colapsado (68 px, `ANCHO_COLAPSADO`):** los encabezados de grupo
+desaparecen —no entra el texto— y con ellos el plegado por grupo, que se
+fuerza a `false` para que ningún grupo quede escondido sin su encabezado a la
+vista para reabrirlo. Cada enlace pasa a `title` + `aria-label` con el nombre
+de la sección (no hay componente de tooltip en el repo; es el mismo criterio
+que ya usa la manija de ancho). La manija de ancho arrastrable también
+desaparece —el ancho de íconos es fijo— y reaparece igual que estaba al
+expandir, porque el ancho guardado nunca se toca: colapsar es una capa
+encima, no un reemplazo.
+
+El botón para alternar vive en el pie de la barra, donde antes solo estaba
+"El Calafate · Santa Cruz" (que se oculta colapsado, no entra). Reusa los
+íconos `anterior`/`siguiente` que ya existían para paginación —son
+exactamente una flecha izquierda y una derecha— en vez de sumar un ícono
+nuevo.
+
+Verificado en el navegador: colapsa, el contenido ocupa el espacio liberado,
+el ítem activo se sigue viendo resaltado, el `aria-label` da el nombre
+correcto de cada sección (confirmado con el árbol de accesibilidad), y la
+preferencia persiste al navegar a otra pantalla — recargó en `/panel/ocupacion`
+todavía colapsado.
+
+Typecheck 0 · lint 0 · build 0.
+
+## 2026-09-16 (misma vuelta) — Tarjetas de cotización, modal de confirmación y avisos flotantes propios
+
+Tres pedidos relacionados con «que se vea propio del sistema»:
+
+**1) El widget de cotización pasa a tres tarjetas** (oficial, Banco Nación,
+blue), cada una con chips VENTA/COMPRA y el precio grande — el estilo que el
+usuario trajo de referencia (una app de cotización de terceros), rehecho con
+la paleta del proyecto (`lago`/`stone`, ADR 0026) y **sin** gráfico ni % de
+variación (alcance acordado explícitamente: guardar historial para eso es
+otro trabajo). Apiladas en una columna y no en grilla de columnas —el widget
+vive en un tercio del dashboard (`lg:col-span-1` de 3) y ese ancho no alcanza
+para tres tarjetas legibles lado a lado, y en el teléfono ese tercio pasa a
+ser la pantalla entera. Una columna nunca desborda, sea cual sea el ancho.
+
+**2) `window.confirm` reemplazado por un modal propio**, en los dos lugares
+donde se usaba (`BotonEnvio` y `AjustePorcentajeTarifario`). El diálogo nativo
+es síncrono; el modal no puede serlo —se pinta y espera un clic—, así que el
+envío se corta con `preventDefault()` SIEMPRE que hay algo que confirmar, y
+recién se dispara con `form.requestSubmit(boton)` si la respuesta fue que sí.
+Pasar el botón como *submitter* es necesario para no romper el caso de dos
+botones de envío compartiendo un mismo `<form>` (`movimientos_externos`,
+conciliación). Probado en el navegador con el ajuste por porcentaje del
+tarifario: el modal muestra el texto exacto, "Cancelar" no dispara nada
+(precios sin cambios, verificado), y el foco por omisión queda en "Cancelar"
+—no en "Confirmar"— a propósito: son todos textos de acciones sin vuelta
+atrás, y un Enter reflejo no tiene por qué caer del lado destructivo.
+
+**3) Avisos flotantes (toast) nuevos**, para lo que `Mensaje`/`ExitoConPasos`
+no cubren: una acción de **cliente** que no pasa por un `<form>` de servidor.
+El primer uso real es el refresco automático de la cotización (cada 5
+minutos): si `/api/cotizacion` falla, aparece un aviso de error sin borrar el
+último valor bueno de las tres tarjetas, y si se recupera aparece un aviso de
+que volvió. Con throttle por *flanco* (un `useRef` booleano), no por intento:
+sin eso, una caída larga de la fuente mandaría un aviso nuevo cada 5 minutos
+en vez de uno solo cuando algo cambia de estado. Tres tonos —`ok` (4 s),
+`error` (8 s, con botón para cerrarlo a mano) y `cargando` (no se
+autodestruye solo)— y el mismo `Girador` que ya usaba `BotonEnvio`, exportado
+en vez de duplicado.
+
+⚠️ **Bug encontrado y corregido en el camino:** el valor del contexto de
+avisos se armaba como `{ mostrar, quitar }` en cada render del *provider*, sin
+`useMemo`. Como el *provider* vive una sola vez en todo el panel
+(`PanelShell`), cualquier aviso que apareciera o desapareciera en CUALQUIER
+pantalla recreaba ese objeto y disparaba de nuevo el `useEffect` del refresco
+de cotización que lo tiene como dependencia — reiniciando el intervalo de 5
+minutos sin necesidad. Se cazó revisando el propio código antes de darlo por
+terminado, no en el navegador.
+
+**Los dos proveedores (`AvisosProvider`, `ConfirmarProvider`) se montan una
+sola vez en `PanelShell`**, así cualquier componente cliente del panel puede
+usar `useAvisos()`/`useConfirmar()` sin volver a envolver nada. **No se tocó
+`Mensaje`/`ExitoConPasos`**: siguen siendo el camino para el éxito y el error
+de las Server Actions, que es la enorme mayoría de las pantallas — migrarlas
+no era el pedido y hubiera sido un cambio grande sobre código ya probado, sin
+necesidad concreta.
+
+Typecheck 0 · lint 0 · build 0 · 1731 tests en verde (561 salteados por falta
+de Docker local, sin relación con este cambio). Sin tests de componente para
+`toast.tsx`/`confirmar.tsx`: el proyecto no tiene infraestructura para
+eso todavía (`vitest` corre en `environment: 'node'`, ver la oportunidad
+detectada en la auditoría QA/UX 2026-09-09) — verificado a mano en el
+navegador en su lugar, mismo criterio que el resto de los componentes
+interactivos de cliente del panel.
+
+## 2026-09-16 (última de la vuelta) — Auditoría funcional con Claude + Chrome: 17 hallazgos, cerrados
+
+Otra sesión de Claude Code con la extensión de Chrome recorrió el panel entero
+navegando de verdad (clic, teclado, consola, `Errores del sistema`) y entregó
+un informe de 8 secciones con más de 20 hallazgos. Antes de tocar nada se
+cruzó cada uno contra el código y la base real — varios no eran lo que
+parecían.
+
+**Lo primero: por qué "no guarda" y "el KPI no se pudo verificar" pasaban
+juntos.** Con `psql` directo contra la base local se encontró que
+`supabase_migrations.schema_migrations` decía aplicadas las migraciones
+0087-0095, pero `canal_restricciones` (0087) y la columna
+`canal_reservas.divergencia` (0088) **no existen** en el esquema real — y las
+migraciones 0096 a 0108 nunca se aplicaron. No es un bug de código: esta base
+local quedó en un estado a medio migrar (probablemente un `migration repair`
+que marcó versiones sin correr el SQL). Se le explicó al usuario y quedó
+pendiente un `npx supabase db reset` que el usuario todavía no autorizó — el
+resto de esta vuelta se hizo **sin tocar Supabase**, sólo código.
+
+**Dos correcciones al propio informe, antes de "arreglar" algo que no estaba roto:**
+- **"Temporadas duplicadas"** (1.6): no hay duplicados ni falta la validación
+  —hay un `EXCLUDE USING gist (rango WITH &&)` en la base y funciona—. Son 16
+  rangos genuinamente distintos, en **dos años del Tarifario** (2025/26 y
+  2026/27). El bug real, mucho más chico: `formatoFechaCorta()` omite el año
+  a propósito, así que "01/09 al 30/09" de 2025 y de 2026 se leen idénticos.
+- **"Publicación al canal: dice Guardado y no guarda"** (parte de 1.1):
+  probado en vivo — el valor SÍ se guarda y SÍ persiste al recargar
+  (`guardarMapeoCanal` usa `cortarSiFalla` correctamente). La confusión venía
+  del otro formulario de esa misma pantalla (`canal_restricciones`, fechas),
+  que sí depende de la tabla faltante — pero ese código también usa
+  `cortarSiFalla` bien. Es 100% el drift de la base, no una escritura mal
+  clasificada.
+
+**Bugs de código reales, corregidos:**
+1. **Embed ambiguo `reservas`↔`agencias`** (2.6): `reservas` tiene DOS FKs a
+   `agencias` (`agencia_id` y `folio_b_agencia_id`, folio B) — confirmado con
+   `pg_constraint`. El KPI de overbooking de canal fallaba por esto. Mismo
+   arreglo que ya existía para huéspedes: `agencias!reservas_agencia_id_fkey`.
+2. **"RESERVAS ACTIVAS · en curso"** (2.1): el conteo usa `ESTADOS_ACTIVOS`
+   (pendiente+confirmada+pagada+in_house, el criterio de "ocupa inventario"
+   del anti-overbooking) — correcto. El subtítulo "en curso" hacía pensar
+   que eran huéspedes alojados ahora mismo. Cambiado a "ocupan una unidad".
+3. **FACTURADO no depende del mes elegido** (2.2): `traerFacturas()` nunca
+   filtró por fecha, a propósito, igual que "Ingresos cobrados" (que ya
+   estaba rotulado "(histórico)"). Sólo le faltaba la misma etiqueta a
+   "Facturado" — no una reescritura de la consulta.
+4. **Inconsistencia neto/bruto entre meses** (2.3): investigado con una
+   consulta de sólo lectura. `metricasDePeriodo` usa siempre `precio_noche`
+   (neto) para Ingreso/ADR/RevPAR, sin excepción — no hay bug de cálculo. Lo
+   que varía es `reservas.total` (no usado por esos KPIs): la reserva de
+   agosto tiene `total` sin el 21% de IVA que sí tienen las otras dos, y no
+   es una exención legítima del ADR 0024. Es un dato de carga de esa reserva
+   puntual — no se tocó (no hay que escribir en Supabase).
+5. **Ocupación/RevPAR en "0%"/"USD 0,00" con poco volumen** (2.4): 1 noche
+   sobre 1410 disponibles es 0,07% y USD 0,17 — `Math.round` los dejaba
+   indistinguibles de "no vendí nada". Nuevas `textoOcupacion`/`textoRevPAR`
+   en `lib/domain/metricas.ts` (con tests), que muestran "<1%" y el valor sin
+   redondear a entero cuando hubo venta real. Aplicado en el índice de
+   Reportes y en el informe de Ocupación.
+6. **"Enviar prueba" de Plantillas "no respondía"** (4.1): SÍ respondía —el
+   `?ok=envio` se veía en la URL— pero el aviso se pintaba en el TOP de una
+   página con ~25 plantillas, y quien probó una del medio nunca lo vio (sin
+   scroll automático). Ahora el aviso va junto a la plantilla que corresponde
+   (`?evento=` en el redirect). De paso, un bug real encontrado en el camino:
+   `enviarPlantillaPrueba` tenía su PROPIA copia de datos de muestra,
+   desincronizada de la de la vista previa — probar "Reserva cancelada"
+   fallaba con "Faltan datos: detalle_cancelacion" aunque la vista previa se
+   veía perfecta. Unificadas en `MUESTRA_PLANTILLAS` (`lib/domain/plantillas.ts`).
+7. **Variables crudas en la vista previa** (4.2): `{{saldo}}`, `{{importe}}`,
+   `{{sena}}`, `{{detalle_cancelacion}}` y otras seis no estaban en la
+   muestra. Cubiertas todas (con `formatearUSD`, igual que el código real de
+   envío) en la misma `MUESTRA_PLANTILLAS` del punto anterior.
+8. **Vista HTML de plantilla "cortada"** (4.4): el iframe SÍ scrollea, pero
+   la barra nativa —sobre todo en macOS— es invisible hasta que se la toca.
+   Se agregó el aviso explícito en vez de confiar en que se note.
+9. **Bug real encontrado auditando el punto 6**: `obtenerOverridePlantilla`
+   (`lib/email/index.ts`) descartaba el `{ error }` de su lectura de
+   `plantillas_email` — si esa lectura fallara por cualquier motivo, un
+   correo saldría con el texto ORIGINAL en vez del editado, sin que nadie se
+   enterara. Corregido con `registrarFalla`.
+10. **Guardar en Publicación al canal saltaba al principio** (4.5): con 23
+    filas, guardar la última devolvía arriba de todo. Se agregó un ancla
+    `#tipo-<id>` en los redirects de `guardarMapeoCanal` y el `id`
+    correspondiente en cada `<tr>`. Probado: la fila queda resaltada donde
+    estaba, sin saltar.
+11. **"Conectar Mercado Pago" quedaba colgado para siempre** (1.2, parte de
+    código): sin `ENCRYPTION_KEY` la ventana emergente de OAuth muestra un
+    500 pero NUNCA se cierra sola ni manda el mensaje de éxito, así que
+    `conectando` quedaba en `true` sin límite y sin ninguna pista. Se agregó
+    un timeout de 90 s con mensaje explícito, y manejo del caso en que el
+    navegador bloquea la ventana emergente (`window.open` devuelve `null`).
+    La causa raíz (falta la variable) sigue siendo de configuración, no de
+    código — no se toca acá. Investigado aparte: "Traer de MercadoPago"
+    (Conciliación, hallazgo 4.6) NO tenía este bug — usa `useActionState`
+    correctamente y ya declaraba bien el error de "falta configurar". La
+    auditoría probablemente confundió los dos botones.
+12. **Formato de números y fechas** (4.7): `servicio/page.tsx` usaba
+    `.toFixed(2)` (punto) en vez de `importe()` (coma, es-AR) en 4 lugares —
+    corregido, verificado "USD 0,00" con coma. "Hace más de 143 horas" ahora
+    reusa `textoAntiguedad` (ya existía en `lib/domain/divisas.ts`, es
+    genérica) → "hace 6 días". "Próxima: 10/03" en Mantenimiento preventivo
+    ahora lleva el año (`formatoFecha`), porque un plan puede estar
+    programado con más de 12 meses de anticipación. NO se tocó
+    "Última sincronización: 10/9/2026, 12:06:25": ya usa el helper correcto
+    (`fechaHoraHotel`, zona horaria + 24 hs) y el detalle completo es
+    apropiado para un log de sincronización.
+13. **Mezcla de idiomas en inputs nativos** (4.8): el texto "Choose File /
+    No file chosen" lo pone el navegador según SU idioma, no `<html lang>`.
+    Nuevo `CampoArchivo` (`app/panel/_components/campo-archivo.tsx`): label
+    propio en español sobre un input real oculto (`sr-only`), aplicado en
+    los 3 lugares que subían CSV con el nativo a la vista. NO se tocó
+    `<input type="month">` (Reportes, Costos y comisión): un selector de mes
+    propio es una reconstrucción completa, desproporcionada para un hallazgo
+    cosmético.
+14. **Buscador global, tres problemas** (4.9): (a) **bug funcional real** —
+    la búsqueda de reservas sólo miraba `codigo`, nunca el huésped, pese a
+    que el placeholder promete "huésped, reserva o sección". Ahora reusa los
+    huéspedes ya encontrados y busca reservas por `codigo` O `huesped_id in
+    (esos ids)`. Probado con "almiron" (el término exacto de la auditoría):
+    antes sólo aparecía el huésped, ahora también BP-260910-9078. (b)
+    Pluralización fija ("encontradas"/"encontrados" sin importar la
+    cantidad) → concordancia real con el número y el género. (c) El campo
+    "se limpiaba" porque la página de resultados no tenía su propio
+    buscador — se agregó uno, precargado con el término actual. NO se hizo
+    (features más grandes, no bugs): buscar mientras se escribe y semántica
+    ARIA de combobox.
+15. **Desborde horizontal en mobile por el menú de cuenta** (4.11): el
+    formulario de búsqueda y el contenedor del menú de cuenta en el header
+    eran `flex-1` sin `min-w-0` — la trampa exacta que CLAUDE.md ya
+    documenta en otros lugares del repo. Agregado en los dos. No se pudo
+    confirmar visualmente: la herramienta de resize de este entorno no logra
+    achicar el viewport real del navegador.
+16. **"Requiere atención" sin filtro en el link** (4.10): investigado y
+    dejado como está. El criterio real ("confirmada con check-in vencido" O
+    "in_house con check-out vencido", con saldo > 0 calculado con
+    `cuentaConsolidada`/`resumenPagos`) no tiene un filtro de URL
+    equivalente en el listado de reservas — las 10 "vistas" existentes son
+    filtros simples de estado/fecha, no cálculos agregados. Construir uno
+    exige llevar ese cálculo a la capa de consulta: desproporcionado para un
+    hallazgo de severidad baja.
+
+**Verificación:** cada punto se probó en el navegador por separado a medida
+que se cerraba (no al final, en bloque). Al cierre de la vuelta: typecheck 0
+· lint 0 · build 0 · **1733 tests en verde**, 561 salteados por falta de
+Docker local (sin relación con estos cambios) — 2 más que al empezar la
+vuelta, por los tests nuevos de `textoOcupacion`/`textoRevPAR`.
+
+## 2026-09-16 (última de la vuelta) — Seis lecturas más que descartaban `{ error }`
+
+Después de cerrar la auditoría de arriba, un agente aparte barrió el patrón
+`const { data } = await supabase...` sin revisar `error` en todo `app/` y
+`lib/` — el mismo defecto que apareció hoy en `obtenerOverridePlantilla`
+(punto 9 de la entrada anterior), y que la auditoría QA/UX del 2026-09-09 ya
+había barrido una vez y dado por cerrada. Encontró ~40 casos; de los de
+mayor impacto (dinero, inventario, una regla de negocio), seis:
+
+1. **`reservas/actions.ts` — capacidad de la unidad.** Si la lectura de
+   `capacidad_max` fallaba, `validarOcupantes` recibía `undefined` y
+   **saltea el chequeo entero** (es su propio comportamiento documentado:
+   sin capacidad no hay límite que aplicar) — una habitación de 2 podía
+   quedar cargada con 10 personas sin que nada lo note. Se corta con un
+   mensaje: no hay valor por omisión seguro para "cuánto entra acá".
+2. **`reservas/actions.ts` — condición fiscal de la agencia, al facturar.**
+   Si fallaba, el receptor caía a `responsable_inscripto` con `cuit: null`
+   — la condición MÁS exigente (pide CUIT válido) con el dato que hace
+   falta para cumplirla en null. Corregido con `cortarSiFalla`, mismo
+   patrón que ya usan las otras lecturas de esta función (`lectura_reserva`,
+   `lectura_consumos`). Nuevo motivo `lectura_agencia_fiscal` en el mapa de
+   errores de la ficha.
+3. **`lib/reservas/cancelacion.ts` — política de cancelación.** Investigado
+   a fondo antes de tocar: los dos lugares que llaman a esto son una vista
+   previa en pantalla y el texto de un correo, ninguno haría un cobro real
+   con el resultado — `textoDeCancelacion` ya declara explícito que `null`
+   nunca dice "sin cargo", dice "te lo confirmamos por este medio". No hacía
+   falta cortar nada; sí hacía falta poder **distinguir en el log** "no hay
+   política cargada" de "la lectura falló", que hoy se ven idénticos.
+   Agregado `registrarFalla`.
+4. **`config/actions.ts` — reponer stock.** Si la lectura del stock actual
+   fallaba, el `if` de abajo no entraba y la función caía derecho al
+   `redirect` — la reposición se perdía y la pantalla recargaba como si se
+   hubiera hecho. `cortarSiFalla`, reusando el motivo `stock` que ya existía
+   para el `update`.
+5. **`mantenimiento/actions.ts` y `proveedores/actions.ts` — resultado de un
+   RPC mandado directo al contador de la URL** (`?generadas=${data ?? 0}` /
+   `?vencidos=${data ?? 0}`). Un RPC que falla y uno que de verdad no
+   encuentra nada terminaban en el mismo "0" — indistinguibles. Cortado con
+   `cortarSiFalla` en los dos, con su motivo nuevo en el mapa de errores de
+   cada pantalla. **Al agregarlo a proveedores se encontró la trampa que
+   avisa AGENTS.md**: esa pantalla ni siquiera tenía `error` en el tipo de
+   `searchParams` ni lo renderizaba en ningún lado — un `?error=` ahí se
+   hubiera perdido en silencio pese al `cortarSiFalla`. Se agregó el bloque
+   de `Mensaje tono="error"` que faltaba.
+6. **`lib/canales/servicio.ts` — qué entrantes ya se habían importado, para
+   el cálculo de conflicto de cupo.** Investigado con cuidado por ser el
+   área más sensible del sistema (overbooking de canal). Si esta lectura
+   falla, `importadas` queda vacío y las entrantes YA importadas se tratan
+   como nuevas: su cupo se vuelve a sumar sobre uno que `ocupacion` ya
+   contaba, así que pueden quedar marcadas `conflicto: true` de más. Se
+   verificó la dirección del error: no es la falla peligrosa (no hace
+   desaparecer un conflicto real, lo exagera hacia el lado conservador),
+   pero sí genera falsas alarmas — la clase de ruido que hace que después
+   nadie mire la lista de "con problema". `registrarFalla`, mismo criterio
+   que ya usan las dos escrituras de conflicto un poco más abajo en la
+   misma función.
+
+No se agregaron tests nuevos dedicados a cada uno: son aplicaciones
+mecánicas de un patrón (`cortarSiFalla`/`registrarFalla`) que ya está
+probado en el resto del código donde se usa, y ninguno de los otros cientos
+de call-sites existentes tiene tampoco un test dedicado a "qué pasa si esta
+lectura en particular falla" — mantener esa misma densidad.
+
+Typecheck 0 · lint 0 · build 0 · 1733 tests en verde (sin cambios en la
+cuenta: no hay lógica de dominio nueva, sólo manejo de error en Server
+Actions ya existentes).
+
+## 2026-09-16 (última de la vuelta) — El resto del barrido: los ~16 de prioridad media
+
+Cierra la lista completa que había dejado el barrido de `{ data }` sin
+`{ error }`. Todos con el mismo criterio: si la lectura sirve para decidir
+algo (transición de estado, deduplicar, mudar una reserva), se corta con
+`cortarSiFalla`/`return { error }` y un mensaje que distingue "no se pudo
+leer" de "no existe"; si es un aviso accesorio que su propio comentario ya
+declara "nunca corta", se deja así y sólo se le suma `registrarFalla` para
+que la falla quede en el log en vez de perderse en silencio.
+
+- **Contratos** (3 lugares): enviar a firmar, cambiar de estado y editar
+  leían el contrato antes de actuar y, si la lectura fallaba, redirigían al
+  LISTADO sin ningún `?error=` — ni siquiera el genérico. Ahora cortan hacia
+  la ficha con el motivo nuevo `lectura_contrato`.
+- **Agencias**: cambiar de etapa comercial, mismo patrón. Motivo nuevo
+  `etapa_lectura`.
+- **Housekeeping** (3 lugares): dos son el aviso "habitación lista" al
+  mostrador, que su propio comentario dice **nunca corta** — correcto, se
+  les sumó sólo `registrarFalla`. El tercero es distinto: `marcarLimpiaDesdeMovil`,
+  la acción con la que una mucama cierra su habitación desde el celular en
+  el pasillo. Ahí una lectura fallida se confundía con "esta habitación no
+  existe" — mensaje equivocado para quien está mirando el teléfono. Motivo
+  nuevo `lectura`, distinto de `no_existe`.
+- **Reprogramar y mudar una reserva** (`reservas/actions.ts`, 3 lugares):
+  `reprogramarReserva` redirigía sin `?error=` igual que contratos —
+  agregado `repro_lectura`. `cambiarUnidadReserva` (la que dispara el
+  arrastre en la grilla, ADR 0033) confundía "no se pudo leer la estadía"
+  con "esta reserva no tiene estadía" — un mensaje mucho más alarmante del
+  que correspondía. Motivo nuevo `lectura_estadia`, agregado en las DOS
+  pantallas a las que puede volver la mudanza (ficha de reserva y grilla de
+  ocupación — la ruta de vuelta es una lista blanca, ver `lib/retorno.ts`).
+- **Deduplicación por email, 4 lugares** (alta individual y grupal en
+  `reservas/actions.ts`, alta manual en `huespedes/actions.ts`, alta
+  automática desde un canal en `lib/canales/servicio.ts`): en los cuatro,
+  si la búsqueda por email fallaba, el código seguía como si no existiera
+  nadie con ese email y creaba una ficha nueva — un huésped con historial y
+  puntos de fidelidad podía terminar duplicado. Cortados los cuatro con un
+  mensaje que pide reintentar, sin tocar la ficha.
+- **Login** (`lib/auth/session.ts`, la función que corre en CADA pantalla
+  del panel): sigue fallando cerrado — es lo correcto, `sin_rol`/`activo:
+  false` tienen que rechazar el acceso (AGENTS.md ya documenta que "me
+  devuelve al login" no es un bug). Lo único que faltaba era poder
+  distinguir esa situación normal de una lectura que de verdad falló; las
+  dos mandaban a la misma persona de vuelta al login con el mismo silencio.
+  Sumado `registrarFalla`, sin cambiar ningún camino de decisión.
+
+Typecheck 0 · lint 0 · build 0 · 1733 tests en verde. Como en la tanda
+anterior, sin tests nuevos dedicados: son la misma aplicación mecánica del
+patrón `cortarSiFalla`/`registrarFalla` que ya está probado donde se usa en
+el resto del código.
+
+Con esto se cierran los 6 hallazgos de alta prioridad y los ~16 de
+prioridad media del barrido. Quedan afuera, a propósito, los de baja
+prioridad/accesorios que el propio barrido marcó como de impacto menor
+(insert que ya tiene su propio chequeo, un nombre que cae a "—", etc.) — no
+justifican el mismo tratamiento.
+
+## 2026-09-16 — Buscador global con resultados en vivo (combobox) y selector de mes en español
+
+Cierra dos hallazgos de la auditoría funcional: el buscador del encabezado
+sólo mandaba a `/panel/buscar` (había que confirmar y esperar una carga de
+página completa para saber si algo existía) y `<input type="month">` seguía
+en inglés ("September 2026") pese a que toda la pantalla alrededor está en
+español — el `lang="es"` del documento no alcanza porque ese texto lo pone
+el navegador, no la página.
+
+**Buscador — `lib/busqueda/servicio.ts` + `/api/buscar` + `buscador-global.tsx`:**
+- Antes de tocar nada se extrajo `buscarGlobal()` desde `app/panel/buscar/page.tsx`
+  a un servicio compartido (`lib/busqueda/servicio.ts`), a propósito: construir
+  el combobox sobre una copia de la consulta habría repetido el bug de
+  `MUESTRA_PLANTILLAS` (dos lugares con la misma lógica que divergen con el
+  tiempo). Ahora la página completa y el combobox llaman la MISMA función.
+- `/api/buscar` (nuevo route handler, `dynamic = 'force-dynamic'`,
+  `requerirSesion()`) expone esa consulta acotada a 5 resultados por
+  categoría para el uso en vivo.
+- `BuscadorGlobal` (`app/panel/_components/buscador-global.tsx`) sigue el
+  patrón WAI-ARIA de combobox: `role="combobox"` + `aria-expanded` +
+  `aria-controls` + `aria-activedescendant` en el input, opciones en un
+  `role="listbox"` aparte, navegación con flechas y Enter selecciona la
+  resaltada. El `<form method="get" action="/panel/buscar">` de siempre
+  sigue ahí sin JS: es mejora progresiva, no reemplazo.
+- **Decisión de accesibilidad:** los resultados viejos quedan en pantalla
+  mientras llega el fetch siguiente (con un `Girador` chico como única señal
+  de "hay una consulta en camino"), en vez de vaciar la lista en cada letra
+  — mismo criterio que ya usa el refresco de la cotización.
+- Reemplazado en `shell.tsx`, sin tocar el `min-w-0` que ya evitaba el
+  desborde lateral en el teléfono.
+- ⚠️ **Trampa del linter evitada:** la primera versión ponía el debounce +
+  fetch dentro de un `useEffect([q])`, con una rama temprana que llamaba 4
+  `setState` de forma síncrona — exactamente lo que corta
+  `react-hooks/set-state-in-effect`. Se resolvió moviendo toda esa lógica a
+  una función `buscar()` invocada desde el `onChange` del input (un manejador
+  de evento sí puede llamar `setState` sin problema); el único `useEffect`
+  que queda es de limpieza al desmontar, y sólo actúa en su función de
+  cleanup, nunca en el cuerpo.
+- Verificado en el navegador: tipear "almiron" mostró RESERVAS y HUÉSPEDES
+  con el resultado correcto; flecha abajo resaltó el primero; Enter navegó
+  directo a la ficha de esa reserva.
+
+**Selector de mes — `app/panel/_components/selector-mes.tsx`:**
+- Reemplazo en español de `<input type="month">`, drop-in: sigue viajando
+  como `name=valor` en `YYYY-MM` vía un `<input type="hidden">`, así que
+  funciona igual dentro de un formulario que navega por GET (`SelectorDeMes`
+  de reportes, "Mes a conciliar" de canales) como dentro de uno que envía
+  por Server Action ("Mes que factura", con `required`).
+- Botón con el mes en palabras ("agosto de 2026") + popover con navegación
+  de año y grilla de 12 meses en español.
+- Aplicado en los 3 lugares que tenían el input nativo:
+  `app/panel/reportes/_componentes.tsx` (`SelectorDeMes`, todos los
+  informes), y en `app/panel/canales/page.tsx` los dos campos de la pestaña
+  "Costos y comisión" ("Mes a conciliar" y "Mes que factura").
+- ⚠️ **Trampa evitada:** el primer borrador reemplazaba `className` entero
+  en vez de agregarlo, lo que habría roto el layout (`flex`, alineación con
+  el ícono) apenas un llamador pasara su propio `className` (como
+  `CAMPO` en canales). Se dejó igual que `botonClases(variante, extra)`: la
+  base de layout siempre presente, lo que llega por prop se agrega.
+- Verificado en el navegador en los 3 sitios: en Reportes, elegir "agosto"
+  actualizó el botón y el `?mes=2026-08` real navegó y refrescó los KPIs
+  (Ocupación AGO 26, ingresos imputados a ago 26); en Canales, "Mes a
+  conciliar" actualizó igual por GET, y "Mes que factura" —el campo
+  `required` dentro del formulario de `Registrar` factura, por Server
+  Action— también actualizó su valor oculto correctamente.
+
+Typecheck 0 · lint 0 · test 1733 pasados / 561 salteados (sin cambios en la
+cuenta: son componentes de interfaz, no lógica de dominio nueva) · build 0.
+No se tocó Supabase en ningún momento de este tramo.

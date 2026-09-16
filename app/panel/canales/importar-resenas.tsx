@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react'
 import { importarResenasCanal, type EstadoImportacionResenas } from './actions'
-import { CAMPO, Campo, Mensaje, botonClases } from '../_components/ui'
+import { Mensaje, botonClases } from '../_components/ui'
+import { CampoArchivo } from '../_components/campo-archivo'
 
 const ESTADO_INICIAL: EstadoImportacionResenas = {}
 
@@ -29,18 +30,13 @@ export function ImportarResenas() {
         descargarlas. Subí ese archivo acá.
       </p>
 
-      <Campo
+      <CampoArchivo
+        nombre="archivo"
         etiqueta="Archivo de reseñas"
         ayuda="Las que traigan el número de reserva quedan ligadas solas. Las demás se pueden ligar en un clic desde la lista."
-      >
-        <input
-          type="file"
-          name="archivo"
-          accept=".csv,text/csv,text/plain"
-          required
-          className={CAMPO}
-        />
-      </Campo>
+        accept=".csv,text/csv,text/plain"
+        requerido
+      />
 
       {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
       {estado.ok && <Mensaje tono="ok">{estado.ok}</Mensaje>}

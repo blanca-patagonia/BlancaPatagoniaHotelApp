@@ -9,6 +9,8 @@ import {
   etiquetaSemana,
   variacionPct,
   etiquetaMes,
+  textoOcupacion,
+  textoRevPAR,
   type EstadiaMetrica,
 } from '@/lib/domain/metricas'
 
@@ -125,5 +127,21 @@ describe('métricas hoteleras de la semana', () => {
   it('etiquetaSemana muestra el rango corto, dentro y a través de un mes', () => {
     expect(etiquetaSemana('2026-09-14')).toBe('14-20 sep')
     expect(etiquetaSemana('2026-09-28')).toBe('28 sep - 4 oct')
+  })
+})
+
+describe('precisión con poco volumen', () => {
+  it('textoOcupacion distingue "vendí poco" de "no vendí nada"', () => {
+    // 1 noche sobre 1410 disponibles: 0,07%, Math.round ya lo dejó en 0.
+    expect(textoOcupacion(1, 0)).toBe('<1%')
+    expect(textoOcupacion(0, 0)).toBe('0%')
+    expect(textoOcupacion(300, 45)).toBe('45%')
+  })
+
+  it('textoRevPAR recalcula sin el redondeo a entero cuando hubo ingreso', () => {
+    // USD 240 sobre 1410 noches disponibles: USD 0,17, no "USD 0,00".
+    expect(textoRevPAR(240, 1410, 0)).toBe('USD 0,17')
+    expect(textoRevPAR(0, 1410, 0)).toBe('USD 0,00')
+    expect(textoRevPAR(45000, 1000, 45)).toBe('USD 45,00')
   })
 })

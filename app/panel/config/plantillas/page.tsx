@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
-import { EVENTOS_EMAIL, PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
+import { EVENTOS_EMAIL, PLANTILLAS, MUESTRA_PLANTILLAS, renderizar } from '@/lib/domain/plantillas'
 import { obtenerProveedorEmail } from '@/lib/email'
 import { enviarPlantillaPrueba } from '../plantillas-actions'
 import { PlantillaEditable } from '../plantilla-editable'
@@ -14,21 +14,6 @@ interface OverridePlantilla {
   cuerpo: string | null
 }
 
-/** Datos de muestra para previsualizar cada plantilla. */
-const MUESTRA = {
-  nombre: 'Ana',
-  codigo: 'BP-DEMO',
-  check_in: '10/09/2026',
-  check_out: '13/09/2026',
-  hora_check_in: '15:00',
-  hora_check_out: '10:00',
-  total: '642,51',
-  enlace: 'https://blancapatagonia.com/ejemplo',
-  dias_restantes: '2 días',
-  nivel: 'Oro',
-  puntos: 2100,
-}
-
 const MENSAJES_ERROR: Record<string, string> = {
   plantilla: 'Esa plantilla no existe.',
   plantilla_restaurar: 'No se pudo restaurar el texto original. Probá de nuevo.',
@@ -37,7 +22,7 @@ const MENSAJES_ERROR: Record<string, string> = {
 export default async function PlantillasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; ok?: string; detalle?: string }>
+  searchParams: Promise<{ error?: string; ok?: string; detalle?: string; evento?: string }>
 }) {
   const sesion = await requerirAcceso('config')
   const sp = await searchParams
@@ -72,10 +57,18 @@ export default async function PlantillasPage({
         icono="config"
       />
 
-      {sp.error && (
+      {/*
+        El resultado de "Enviar prueba" se muestra ABAJO, junto a la plantilla
+        que corresponde (`sp.evento`) — no acá. Esta página tiene ~25
+        plantillas: un aviso genérico arriba de todo queda invisible para
+        quien clickeó "Enviar prueba" de una que está más abajo, sin scroll
+        automático que lo traiga de vuelta al principio. Es exactamente el
+        bug que se reportó como «el botón no responde nada»: sí respondía,
+        pero fuera de la vista de quien lo apretó.
+      */}
+      {sp.error && sp.error !== 'envio' && (
         <Mensaje tono="error">{sp.detalle ?? MENSAJES_ERROR[sp.error] ?? 'No se pudo enviar.'}</Mensaje>
       )}
-      {sp.ok === 'envio' && <Mensaje tono="ok">{sp.detalle ?? 'Correo procesado.'}</Mensaje>}
       {eOverrides && (
         <Mensaje tono="error">
           No se pudo leer qué plantillas están editadas — puede mostrarse el texto original de
@@ -88,7 +81,7 @@ export default async function PlantillasPage({
           {EVENTOS_EMAIL.map((evento) => {
             const plantilla = PLANTILLAS[evento]
             const override = overrides.get(evento)
-            const vista = renderizar(evento, MUESTRA, override)
+            const vista = renderizar(evento, MUESTRA_PLANTILLAS, override)
             return (
               <div
                 key={evento}
@@ -106,13 +99,25 @@ export default async function PlantillasPage({
                   <p className="text-sm font-medium text-stone-800">{vista.asunto}</p>
                   <p className="mt-3 text-xs tracking-wide text-stone-600 uppercase">Cuerpo (texto plano)</p>
                   <p className="mt-1 text-sm whitespace-pre-line text-stone-700">{vista.cuerpo}</p>
-                  <p className="mt-3 text-xs tracking-wide text-stone-600 uppercase">Vista HTML</p>
+                  <p className="mt-3 text-xs tracking-wide text-stone-600 uppercase">
+                    Vista HTML{' '}
+                    <span className="font-normal normal-case text-stone-400">
+                      — el marco tiene alto fijo, desplazate adentro para ver el resto
+                    </span>
+                  </p>
                   {/*
                     `sandbox` sin valor es la caja más chica que existe: ni scripts, ni
                     formularios, ni same-origin. Es una vista previa, no contenido de
                     confianza — el texto de origen viene de {{nombre}} y compañía, y
                     aunque `textoAHtml` ya escapa antes de formatear, esta es la segunda
                     barrera si algún día una plantilla nueva no pasa por ese camino.
+
+                    El iframe SÍ scrollea solo cuando el contenido no entra —
+                    no hace falta `overflow` a mano—, pero la barra nativa (sobre
+                    todo en macOS) es invisible hasta que se la toca: sin aviso,
+                    un cuerpo largo se ve cortado y nada indica que sigue. Por eso
+                    el texto de arriba lo dice explícito, en vez de confiar en que
+                    se note.
                   */}
                   <iframe
                     title={`Vista HTML — ${plantilla.nombre}`}
@@ -126,23 +131,35 @@ export default async function PlantillasPage({
                 </div>
 
                 {puedeEditar && (
-                  <form
-                    action={enviarPlantillaPrueba}
-                    className="mt-4 flex flex-wrap items-end gap-2"
-                  >
-                    <input type="hidden" name="evento" value={evento} />
-                    <div className="min-w-0 flex-1 sm:max-w-xs">
-                      <Campo
-                        etiqueta="Mandarme una prueba"
-                        ayuda="Si lo dejás vacío, va a tu propio email."
-                      >
-                        <input name="para" type="email" className={CAMPO} />
-                      </Campo>
-                    </div>
-                    <BotonEnvio variante="secundario" cargando="Enviando…">
-                      Enviar prueba
-                    </BotonEnvio>
-                  </form>
+                  <>
+                    <form
+                      action={enviarPlantillaPrueba}
+                      className="mt-4 flex flex-wrap items-end gap-2"
+                    >
+                      <input type="hidden" name="evento" value={evento} />
+                      <div className="min-w-0 flex-1 sm:max-w-xs">
+                        <Campo
+                          etiqueta="Mandarme una prueba"
+                          ayuda="Si lo dejás vacío, va a tu propio email."
+                        >
+                          <input name="para" type="email" className={CAMPO} />
+                        </Campo>
+                      </div>
+                      <BotonEnvio variante="secundario" cargando="Enviando…">
+                        Enviar prueba
+                      </BotonEnvio>
+                    </form>
+                    {sp.evento === evento && sp.ok === 'envio' && (
+                      <div className="mt-2">
+                        <Mensaje tono="ok">{sp.detalle ?? 'Correo procesado.'}</Mensaje>
+                      </div>
+                    )}
+                    {sp.evento === evento && sp.error === 'envio' && (
+                      <div className="mt-2">
+                        <Mensaje tono="error">{sp.detalle ?? 'No se pudo enviar.'}</Mensaje>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <PlantillaEditable

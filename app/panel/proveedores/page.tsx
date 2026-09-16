@@ -43,10 +43,15 @@ interface Proveedor {
   activo: boolean
 }
 
+const MENSAJES_ERROR: Record<string, string> = {
+  vencer_comprobantes:
+    'No se pudo revisar qué comprobantes están vencidos. No se marcó ninguno — probá de nuevo.',
+}
+
 export default async function ProveedoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; saldo?: string; vencidos?: string }>
+  searchParams: Promise<{ q?: string; saldo?: string; vencidos?: string; error?: string }>
 }) {
   const sesion = await requerirAcceso('proveedores')
   // Solo admin y gerencia dan de alta: la acción lo exige, así que la pantalla
@@ -160,6 +165,12 @@ export default async function ProveedoresPage({
           </>
         }
       />
+
+      {sp.error && (
+        <Mensaje tono="error">
+          {MENSAJES_ERROR[sp.error] ?? 'No se pudo completar la operación.'}
+        </Mensaje>
+      )}
 
       {sp.vencidos && (
         <Mensaje tono="ok">

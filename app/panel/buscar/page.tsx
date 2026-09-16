@@ -1,16 +1,10 @@
 import Link from 'next/link'
 import { requerirSesion } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
-import {
-  ETIQUETAS_AMBITO,
-  ambitosPara,
-  seccionesQueCoinciden,
-  terminoBuscado,
-  terminosQueCoinciden,
-} from '@/lib/domain/busqueda'
+import { ETIQUETAS_ESTADO_RESERVA } from '@/lib/domain/reservas'
+import { ETIQUETAS_AMBITO } from '@/lib/domain/busqueda'
+import { buscarGlobal, TOPE_BUSQUEDA } from '@/lib/busqueda/servicio'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
-import { patronOr } from '@/lib/listados'
 import { TONO_ESTADO } from '../_components/estilos'
 import {
   Encabezado,
@@ -21,17 +15,6 @@ import {
   botonClases,
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
-
-/** Tope por ámbito: la búsqueda es para encontrar algo puntual, no para listar. */
-const TOPE = 8
-
-interface ReservaHit {
-  id: string
-  codigo: string
-  estado: EstadoReserva
-  huesped: { apellido: string; nombre: string } | null
-  estadias: { periodo: string }[]
-}
 
 /**
  * Búsqueda global.
@@ -50,75 +33,44 @@ export default async function BuscarPage({
 }) {
   const sesion = await requerirSesion()
   const { q } = await searchParams
-  const termino = terminoBuscado(q)
-  const ambitos = ambitosPara(sesion.rol)
   const supabase = await crearClienteServidor()
 
-  const puede = (a: string) => ambitos.includes(a as never)
-
-  const [reservas, huespedes, agencias, proveedores] = termino
-    ? await Promise.all([
-        puede('reservas')
-          ? supabase
-              .from('reservas')
-              .select(
-                'id, codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre), estadias(periodo)',
-              )
-              .ilike('codigo', `%${termino}%`)
-              .limit(TOPE)
-              .then((r) => (r.data ?? []) as unknown as ReservaHit[])
-          : Promise.resolve([]),
-        puede('huespedes')
-          ? supabase
-              .from('huespedes')
-              .select('id, apellido, nombre, email, doc_numero')
-              .or(
-                `apellido.ilike.${patronOr(termino)},nombre.ilike.${patronOr(termino)},email.ilike.${patronOr(termino)},doc_numero.ilike.${patronOr(termino)}`,
-              )
-              .limit(TOPE)
-              .then((r) => (r.data ?? []) as Record<string, string>[])
-          : Promise.resolve([]),
-        puede('agencias')
-          ? supabase
-              .from('agencias')
-              .select('id, nombre, tipo')
-              .ilike('nombre', `%${termino}%`)
-              .limit(TOPE)
-              .then((r) => (r.data ?? []) as Record<string, string>[])
-          : Promise.resolve([]),
-        puede('proveedores')
-          ? supabase
-              .from('proveedores')
-              .select('id, nombre, rubro')
-              .ilike('nombre', `%${termino}%`)
-              .limit(TOPE)
-              .then((r) => (r.data ?? []) as Record<string, string>[])
-          : Promise.resolve([]),
-      ])
-    : [[], [], [], []]
-
-  /*
-    Secciones del sistema y palabras del glosario.
-
-    Se calculan en memoria sobre las constantes del dominio: no hay consulta, así
-    que no suman latencia ni pueden fallar. Y se usan el rol y el término CRUDO —no
-    el que devuelve `terminoBuscado`—, porque ése viene con los comodines de
-    PostgREST escapados y acá no hay ningún LIKE que interpretar.
-  */
-  const textoCrudo = (q ?? '').trim()
-  const secciones = termino ? seccionesQueCoinciden(sesion.rol, textoCrudo) : []
-  const glosario = termino ? terminosQueCoinciden(textoCrudo) : []
-
-  const total =
-    reservas.length +
-    huespedes.length +
-    agencias.length +
-    proveedores.length +
-    secciones.length +
-    glosario.length
+  const { termino, ambitos, secciones, glosario, reservas, huespedes, agencias, proveedores, total } =
+    await buscarGlobal(supabase, sesion.rol, q)
 
   return (
     <Pagina>
+      {/*
+        Buscar de nuevo, sin volver al principio.
+
+        El campo del encabezado (`shell.tsx`) es el mismo en TODAS las
+        pantallas y siempre arranca vacío: no sabe qué se buscó para llegar
+        acá. Sin un campo propio en esta pantalla, refinar una búsqueda
+        —sacar una letra, agregar el apellido— obligaba a borrar y escribir
+        todo de nuevo. Este sí arranca con el término actual.
+      */}
+      <form action="/panel/buscar" method="get" className="mb-4">
+        <label className="sr-only" htmlFor="busqueda-de-nuevo">
+          Buscar en todo el sistema
+        </label>
+        <div className="relative max-w-lg">
+          <span
+            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-500"
+            aria-hidden="true"
+          >
+            <Icono nombre="buscar" tam={16} />
+          </span>
+          <input
+            id="busqueda-de-nuevo"
+            type="search"
+            name="q"
+            defaultValue={(q ?? '').trim()}
+            placeholder="Buscar huésped, reserva o una sección…"
+            className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-9 text-stone-800 outline-none transition placeholder:text-stone-500 focus:border-lago-600"
+          />
+        </div>
+      </form>
+
       <Encabezado
         titulo={termino ? `Resultados de «${(q ?? '').trim()}»` : 'Buscar'}
         descripcion={
@@ -218,7 +170,10 @@ export default async function BuscarPage({
         )}
 
         {reservas.length > 0 && (
-          <Tarjeta titulo={ETIQUETAS_AMBITO.reservas} descripcion={`${reservas.length} encontradas`}>
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.reservas}
+            descripcion={`${reservas.length} ${reservas.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
             <ul>
               {reservas.map((r) => {
                 const p = r.estadias?.[0] ? parsearPeriodo(r.estadias[0].periodo) : null
@@ -251,7 +206,7 @@ export default async function BuscarPage({
         {huespedes.length > 0 && (
           <Tarjeta
             titulo={ETIQUETAS_AMBITO.huespedes}
-            descripcion={`${huespedes.length} encontrados`}
+            descripcion={`${huespedes.length} ${huespedes.length === 1 ? 'encontrado' : 'encontrados'}`}
           >
             <ul>
               {huespedes.map((h) => (
@@ -277,7 +232,10 @@ export default async function BuscarPage({
         )}
 
         {agencias.length > 0 && (
-          <Tarjeta titulo={ETIQUETAS_AMBITO.agencias} descripcion={`${agencias.length} encontradas`}>
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.agencias}
+            descripcion={`${agencias.length} ${agencias.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
             <ul>
               {agencias.map((a) => (
                 <li key={a.id} className="border-t border-stone-100 first:border-0">
@@ -297,7 +255,7 @@ export default async function BuscarPage({
         {proveedores.length > 0 && (
           <Tarjeta
             titulo={ETIQUETAS_AMBITO.proveedores}
-            descripcion={`${proveedores.length} encontrados`}
+            descripcion={`${proveedores.length} ${proveedores.length === 1 ? 'encontrado' : 'encontrados'}`}
           >
             <ul>
               {proveedores.map((p) => (
@@ -321,7 +279,7 @@ export default async function BuscarPage({
 
       {termino && total > 0 && (
         <p className="mt-4 text-sm text-stone-500">
-          Se muestran hasta {TOPE} resultados por sección. Si lo que buscás no está, entrá al
+          Se muestran hasta {TOPE_BUSQUEDA} resultados por sección. Si lo que buscás no está, entrá al
           módulo y usá su buscador, que tiene filtros y paginado.
         </p>
       )}

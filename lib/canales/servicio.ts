@@ -486,7 +486,7 @@ async function marcarConflictosDeCupo(
   }
 
   // Las que ya se importaron no vuelven a sumar: su cupo ya está en `ocupacion`.
-  const { data: yaImportadas } = await client
+  const { data: yaImportadas, error: eImportadas } = await client
     .from('canal_reservas')
     .select('external_id')
     .eq('canal', canal)
@@ -495,6 +495,17 @@ async function marcarConflictosDeCupo(
       'external_id',
       vigentes.map((e) => e.externalId),
     )
+  /*
+    Si esto falla, `importadas` queda vacío y TODAS las entrantes se tratan
+    como si nunca se hubieran importado — las que sí lo estaban vuelven a
+    sumar un cupo que `ocupacion` ya contaba, y `detectarConflictoDeCupo`
+    puede marcarlas `conflicto: true` de más. No es la falla peligrosa (no
+    hace que se pierda un conflicto real, lo empeora hacia el lado
+    conservador), pero sí es ruido: una reserva ya importada y sin problema
+    apareciendo en "con problema" es la clase de falsa alarma que hace que
+    después nadie mire la lista.
+  */
+  registrarFalla(eImportadas, 'canales:ya_importadas_para_conflicto')
 
   const importadas = new Set(
     ((yaImportadas ?? []) as { external_id: string }[]).map((x) => x.external_id),
@@ -717,11 +728,20 @@ export async function importarEntrante(
   // personas distintas, que es peor que tener dos fichas de la misma.
   let huespedId: string | null = null
   if (e.huesped_email) {
-    const { data: existente } = await client
+    const { data: existente, error: eExistente } = await client
       .from('huespedes')
       .select('id')
       .eq('email', e.huesped_email)
       .maybeSingle<{ id: string }>()
+    // Sin esto, una lectura que falla se confunde con "no hay huésped con
+    // ese email" y el paso de abajo le crea una ficha NUEVA — duplicando a
+    // alguien que ya se había alojado antes, con importación automática y
+    // sin que nadie lo revise.
+    if (eExistente) {
+      const motivo = 'No se pudo verificar si el huésped ya está cargado.'
+      await marcar(client, e.id, 'error', motivo)
+      return { ok: false, error: motivo }
+    }
     huespedId = existente?.id ?? null
   }
 

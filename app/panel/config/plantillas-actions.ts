@@ -6,7 +6,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { cortarSiFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
-import { EVENTOS_EMAIL, type EventoEmail } from '@/lib/domain/plantillas'
+import { EVENTOS_EMAIL, MUESTRA_PLANTILLAS, type EventoEmail } from '@/lib/domain/plantillas'
 
 export interface EstadoPlantilla {
   error?: string
@@ -28,22 +28,17 @@ export async function enviarPlantillaPrueba(formData: FormData): Promise<void> {
 
   if (!EVENTOS_EMAIL.includes(evento)) redirect('/panel/config/plantillas?error=plantilla')
 
-  // Datos de muestra: alcanzan para ver el resultado sin tocar una reserva real.
+  // Datos de muestra: alcanzan para ver el resultado sin tocar una reserva
+  // real. `MUESTRA_PLANTILLAS` es la MISMA que usa la vista previa de esta
+  // pantalla — antes cada una tenía su propia copia y divergieron (ver el
+  // comentario de esa constante).
   const resultado = await enviarPlantilla(evento, para || sesion.email, {
+    ...MUESTRA_PLANTILLAS,
     nombre: sesion.nombre.split(' ')[0],
-    codigo: 'BP-DEMO',
-    check_in: '10/09/2026',
-    check_out: '13/09/2026',
-    hora_check_in: '15:00',
-    hora_check_out: '10:00',
-    total: '642,51',
-    enlace: 'https://blancapatagonia.com/ejemplo',
-    nivel: 'Oro',
-    puntos: 2100,
   })
 
   redirect(
-    `/panel/config/plantillas?${resultado.ok ? 'ok' : 'error'}=envio&detalle=${encodeURIComponent(resultado.detalle)}`,
+    `/panel/config/plantillas?${resultado.ok ? 'ok' : 'error'}=envio&evento=${evento}&detalle=${encodeURIComponent(resultado.detalle)}`,
   )
 }
 

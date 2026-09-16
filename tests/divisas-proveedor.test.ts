@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { obtenerProveedorCotizacion } from '@/lib/divisas'
+import { obtenerProveedorCotizacion, obtenerDolarBancoNacionInformativo } from '@/lib/divisas'
 
 /**
  * Tests del adapter de cotizaciones.
@@ -297,5 +297,55 @@ describe('selección de proveedor', () => {
   it('en producción se puede pedir el modo manual de forma explícita', () => {
     vi.stubEnv('NODE_ENV', 'production')
     expect(obtenerProveedorCotizacion('manual').nombre).toBe('manual')
+  })
+})
+
+describe('dólar Banco Nación informativo (Ámbito Financiero)', () => {
+  it('parsea compra y venta con coma decimal', async () => {
+    globalThis.fetch = fetchFalso({
+      '/dolarnacion/variacion': {
+        cuerpo: { compra: '1480,00', venta: '1530,00', fecha: '16/09/2026 - 10:45' },
+      },
+    }) as never
+
+    expect(await obtenerDolarBancoNacionInformativo()).toEqual({ compra: 1480, venta: 1530 })
+  })
+
+  it('devuelve null si la fuente no responde', async () => {
+    globalThis.fetch = fetchFalso({}) as never
+
+    expect(await obtenerDolarBancoNacionInformativo()).toBeNull()
+  })
+
+  it('devuelve null si algún valor no es positivo', async () => {
+    globalThis.fetch = fetchFalso({
+      '/dolarnacion/variacion': { cuerpo: { compra: '0', venta: '1530,00' } },
+    }) as never
+
+    expect(await obtenerDolarBancoNacionInformativo()).toBeNull()
+  })
+
+  it('manda un user-agent propio: Ámbito devuelve 403 al de Node por defecto', async () => {
+    /*
+      No es un caso hipotético: se verificó en vivo contra el endpoint real que
+      el `user-agent` que manda `fetch` de Node ("node") recibe 403 de
+      Cloudflare, mientras que `curl` (que manda el suyo propio) pasa. Sin este
+      header, la fila de Banco Nación del widget queda vacía en TODOS los
+      entornos que corren en Node, no solo en éste.
+    */
+    const espia = vi.fn(async (_url: string, _init?: RequestInit) => {
+      void _url
+      void _init
+      return new Response(JSON.stringify({ compra: '1480,00', venta: '1530,00' }), { status: 200 })
+    })
+    globalThis.fetch = espia as never
+
+    await obtenerDolarBancoNacionInformativo()
+
+    expect(espia).toHaveBeenCalledTimes(1)
+    const [, init] = espia.mock.calls[0]
+    const headers = new Headers(init?.headers)
+    expect(headers.get('user-agent')).toBeTruthy()
+    expect(headers.get('user-agent')).not.toMatch(/^node$/i)
   })
 })

@@ -156,3 +156,19 @@ peso, que se usa todos los días, no pasa por un cruce.
   definición de producto, no técnica.
 - **No se cambió ningún importe almacenado.** Nada de esto toca `tarifas`,
   `reservas.total`, `pagos.monto` ni `facturas.total`: siguen en USD.
+
+## Addenda
+
+**2026-09-16 — Banco Nación informativo, por fuera de este ADR.** El widget del
+dashboard ahora muestra, además del oficial (el que cobra este ADR) y del blue,
+el valor específico del Banco Nación (`obtenerDolarBancoNacionInformativo()`,
+`lib/divisas/index.ts`), tomado de un endpoint no documentado de Ámbito
+Financiero (`AMBITO_URL`, por defecto `mercados.ambito.com`). Se agrega porque
+DolarAPI y ArgentinaDatos —las dos fuentes de este ADR— **no distinguen** al
+BNA del «oficial» genérico de los bancos públicos: exponen una sola casa. Igual
+que el blue, queda deliberadamente fuera de `CotizacionProvider` y de
+`resolverVigente`: no participa del cobro, no se persiste, no tiene caché ni
+reintento. La Decisión 1 de este ADR sigue vigente sin cambios: lo que se cobra
+sigue siendo el oficial de DolarAPI/ArgentinaDatos. El widget también se
+refresca solo cada 5 minutos contra `/api/cotizacion` (antes solo se resolvía
+una vez, al cargar la página).

@@ -133,7 +133,10 @@ export async function marcarComprobantePagado(formData: FormData): Promise<void>
 export async function vencerComprobantes(): Promise<void> {
   await exigirGestion()
   const supabase = await crearClienteServidor()
-  const { data } = await supabase.rpc('vencer_comprobantes_proveedor')
+  const { data, error } = await supabase.rpc('vencer_comprobantes_proveedor')
+  // Sin esto, un RPC que falla termina en «?vencidos=0» — igual que si de
+  // verdad no hubiera ningún comprobante para vencer.
+  cortarSiFalla(error, '/panel/proveedores', 'vencer_comprobantes')
   redirect(`/panel/proveedores?vencidos=${data ?? 0}`)
 }
 

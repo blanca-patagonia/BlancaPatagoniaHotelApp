@@ -23,8 +23,12 @@ import {
   PASO_TECLADO,
 } from '@/lib/domain/lateral'
 import { alternarGrupo, estaPlegado, leerPlegadosGuardado, CLAVE_PLEGADO } from '@/lib/domain/nav-plegado'
+import { leerColapsadoGuardado, CLAVE_COLAPSADO, ANCHO_COLAPSADO } from '@/lib/domain/nav-colapso'
 import type { Rol } from '@/lib/domain/roles'
 import { Icono, Logotipo, type NombreIcono } from './iconos'
+import { ConfirmarProvider } from './confirmar'
+import { AvisosProvider } from './toast'
+import { BuscadorGlobal } from './buscador-global'
 
 /*
   Solo el ICONO vive acá. La ruta de cada área la da `RUTA_AREA`
@@ -80,8 +84,28 @@ function estaActivo(pathname: string, area: Area, href: string): boolean {
  * Los encabezados son `<p>` dentro de un `<ul>` propio por grupo, y cada grupo
  * se anuncia con `aria-labelledby`: para un lector de pantalla son cinco listas
  * con nombre, no una sola de 18 elementos.
+ *
+ * ── Modo colapsado (solo íconos) ─────────────────────────────────────────
+ *
+ * `colapsado` es exclusivo de la barra de escritorio: el cajón móvil nunca lo
+ * pasa (ver `PanelShell`), porque ahí el espacio no es el problema que este
+ * modo resuelve. Colapsado, los encabezados de grupo desaparecen —no hay
+ * lugar para el texto— y con ellos la posibilidad de plegar un grupo
+ * puntual: se fuerza `plegado = false` para que ningún grupo quede escondido
+ * sin que su encabezado esté a la vista para volver a abrirlo. La etiqueta de
+ * cada sección sigue disponible como `title` (tooltip nativo) y `aria-label`.
  */
-function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alNavegar?: () => void }) {
+function Enlaces({
+  rol,
+  pathname,
+  alNavegar,
+  colapsado = false,
+}: {
+  rol: Rol
+  pathname: string
+  alNavegar?: () => void
+  colapsado?: boolean
+}) {
   const grupos = agruparAreas(areasDe(rol))
   const plegados = useSyncExternalStore(
     suscribirPlegado,
@@ -104,10 +128,11 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
         // esto, alguien podría plegar «Comercial» y quedarse navegando dentro
         // de un grupo del que no ve ni el propio encabezado.
         const contieneActivo = grupo.areas.some((area) => estaActivo(pathname, area, NAV[area].href))
-        const plegado = grupo.titulo !== null && estaPlegado(plegados, grupo.titulo) && !contieneActivo
+        const plegado =
+          !colapsado && grupo.titulo !== null && estaPlegado(plegados, grupo.titulo) && !contieneActivo
         return (
           <div key={grupo.titulo ?? 'sin-titulo'}>
-            {grupo.titulo && (
+            {grupo.titulo && !colapsado && (
               <button
                 type="button"
                 id={idTitulo}
@@ -125,7 +150,10 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
               </button>
             )}
             {!plegado && (
-              <ul className="flex flex-col gap-0.5" aria-labelledby={grupo.titulo ? idTitulo : undefined}>
+              <ul
+                className="flex flex-col gap-0.5"
+                aria-labelledby={grupo.titulo && !colapsado ? idTitulo : undefined}
+              >
                 {grupo.areas.map((area) => {
                 const { href, icono } = NAV[area]
                 const activo = estaActivo(pathname, area, href)
@@ -135,11 +163,15 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
                       href={href}
                       onClick={alNavegar}
                       aria-current={activo ? 'page' : undefined}
+                      title={colapsado ? ETIQUETAS_AREA[area] : undefined}
+                      aria-label={colapsado ? ETIQUETAS_AREA[area] : undefined}
                       /* `min-h-11` = 44 px. El mínimo táctil que `globals.css`
                          ya aplica bajo `pointer: coarse` alcanza a `button` y
                          `select`, pero no a un `<a>`, y el panel se usa en
                          tablet desde el mostrador. */
-                      className={`group relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      className={`group relative flex min-h-11 items-center rounded-lg py-2 text-sm font-medium transition ${
+                        colapsado ? 'justify-center px-2' : 'gap-3 px-3'
+                      } ${
                         activo
                           ? 'bg-white/15 text-white'
                           : 'text-lago-100/80 hover:bg-white/10 hover:text-white'
@@ -156,7 +188,7 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
                       >
                         <Icono nombre={icono} tam={18} />
                       </span>
-                      {ETIQUETAS_AREA[area]}
+                      {!colapsado && ETIQUETAS_AREA[area]}
                     </Link>
                   </li>
                 )
@@ -170,18 +202,22 @@ function Enlaces({ rol, pathname, alNavegar }: { rol: Rol; pathname: string; alN
   )
 }
 
-function Marca() {
+function Marca({ colapsado = false }: { colapsado?: boolean }) {
   return (
-    <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
+    <div
+      className={`flex items-center gap-3 border-b border-white/10 py-4 ${colapsado ? 'justify-center px-2' : 'px-4'}`}
+    >
       <Logotipo tam={34} />
-      <div className="min-w-0">
-        <p className="font-display truncate text-base leading-tight font-semibold text-white">
-          Blanca Patagonia
-        </p>
-        <p className="truncate text-[11px] tracking-wide text-lago-200/80 uppercase">
-          Gestión hotelera
-        </p>
-      </div>
+      {!colapsado && (
+        <div className="min-w-0">
+          <p className="font-display truncate text-base leading-tight font-semibold text-white">
+            Blanca Patagonia
+          </p>
+          <p className="truncate text-[11px] tracking-wide text-lago-200/80 uppercase">
+            Gestión hotelera
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -377,6 +413,38 @@ function alternarPlegado(titulo: string): void {
   oyentesPlegado.forEach((avisar) => avisar())
 }
 
+/* ── Colapso a solo íconos, con el mismo patrón que el ancho y el plegado ─── */
+
+let colapsadoEnMemoria: boolean | null = null
+const oyentesColapso = new Set<() => void>()
+
+function suscribirColapso(alCambiar: () => void): () => void {
+  oyentesColapso.add(alCambiar)
+  return () => {
+    oyentesColapso.delete(alCambiar)
+  }
+}
+
+function leerColapso(): boolean {
+  if (colapsadoEnMemoria !== null) return colapsadoEnMemoria
+  try {
+    colapsadoEnMemoria = leerColapsadoGuardado(localStorage.getItem(CLAVE_COLAPSADO))
+  } catch {
+    colapsadoEnMemoria = false
+  }
+  return colapsadoEnMemoria
+}
+
+function guardarColapso(colapsado: boolean): void {
+  colapsadoEnMemoria = colapsado
+  try {
+    localStorage.setItem(CLAVE_COLAPSADO, colapsado ? '1' : '0')
+  } catch {
+    // La preferencia no sobrevive a la recarga, pero colapsar/expandir funciona.
+  }
+  oyentesColapso.forEach((avisar) => avisar())
+}
+
 interface Props {
   rol: Rol
   nombre: string
@@ -399,6 +467,11 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
     suscribirAncho,
     leerAncho,
     () => ANCHO_POR_DEFECTO, // En el servidor no hay navegador que consultar.
+  )
+  const colapsado = useSyncExternalStore(
+    suscribirColapso,
+    leerColapso,
+    () => false, // En el servidor no hay preferencia guardada que leer: expandido.
   )
   const refLateral = useRef<HTMLElement>(null)
 
@@ -484,6 +557,8 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
   }, [abierto])
 
   return (
+    <AvisosProvider>
+    <ConfirmarProvider>
     <div className="flex flex-1 bg-stone-50">
       <a
         href="#contenido"
@@ -511,17 +586,39 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
       */}
       <aside
         ref={refLateral}
-        style={{ width: ancho }}
+        style={{ width: colapsado ? ANCHO_COLAPSADO : ancho }}
         className={`relative hidden shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:h-screen ${FONDO_LATERAL}`}
       >
-        <Marca />
-        <Enlaces rol={rol} pathname={pathname} />
-        <p className="border-t border-white/10 px-4 py-3 text-[11px] text-lago-200/70">
-          El Calafate · Santa Cruz
-        </p>
+        <Marca colapsado={colapsado} />
+        <Enlaces rol={rol} pathname={pathname} colapsado={colapsado} />
 
         {/*
-          Manija para cambiar el ancho del menú.
+          Pie: ubicación (solo expandido, no entra en 68 px) + botón para
+          colapsar/expandir. `aria-pressed` es lo que corresponde a un control
+          de dos estados persistente, no un botón de acción puntual.
+        */}
+        <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3 py-3">
+          {!colapsado && (
+            <p className="truncate px-1 text-[11px] text-lago-200/70">El Calafate · Santa Cruz</p>
+          )}
+          <button
+            type="button"
+            onClick={() => guardarColapso(!colapsado)}
+            aria-pressed={colapsado}
+            title={colapsado ? 'Expandir el menú' : 'Colapsar el menú a solo íconos'}
+            aria-label={colapsado ? 'Expandir el menú' : 'Colapsar el menú a solo íconos'}
+            className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-lago-200/70 transition hover:bg-white/10 hover:text-white ${
+              colapsado ? 'mx-auto' : ''
+            }`}
+          >
+            <Icono nombre={colapsado ? 'siguiente' : 'anterior'} tam={16} />
+          </button>
+        </div>
+
+        {/*
+          Manija para cambiar el ancho del menú. No tiene sentido colapsado —
+          el ancho de íconos es fijo— así que desaparece junto con el resto de
+          lo que no entra en 68 px.
 
           Es un `separator` enfocable, que es el rol que la norma ARIA da a un
           divisor ajustable: con eso un lector de pantalla lo anuncia y dice en
@@ -533,27 +630,29 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
           arrastró sin querer y no sabe cómo volver — y está dicha en el `title`,
           no escondida.
         */}
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Ajustar el ancho del menú"
-          aria-valuenow={ancho}
-          aria-valuemin={ANCHO_MINIMO}
-          aria-valuemax={ANCHO_MAXIMO}
-          tabIndex={0}
-          onPointerDown={alArrastrar}
-          onKeyDown={alTeclear}
-          onDoubleClick={() => guardarAncho(ANCHO_POR_DEFECTO)}
-          title="Arrastrá para cambiar el ancho del menú. Doble clic para volver al original."
-          className="group absolute inset-y-0 -right-1 z-20 flex w-2 cursor-col-resize touch-none items-center justify-center"
-        >
-          {/* La línea es fina y translúcida hasta que se la busca: el borde del
-              menú no tiene que competir con la navegación. */}
-          <span
-            aria-hidden="true"
-            className="h-full w-px bg-white/10 transition group-hover:w-0.5 group-hover:bg-lenga-400 group-focus-visible:w-0.5 group-focus-visible:bg-lenga-400"
-          />
-        </div>
+        {!colapsado && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Ajustar el ancho del menú"
+            aria-valuenow={ancho}
+            aria-valuemin={ANCHO_MINIMO}
+            aria-valuemax={ANCHO_MAXIMO}
+            tabIndex={0}
+            onPointerDown={alArrastrar}
+            onKeyDown={alTeclear}
+            onDoubleClick={() => guardarAncho(ANCHO_POR_DEFECTO)}
+            title="Arrastrá para cambiar el ancho del menú. Doble clic para volver al original."
+            className="group absolute inset-y-0 -right-1 z-20 flex w-2 cursor-col-resize touch-none items-center justify-center"
+          >
+            {/* La línea es fina y translúcida hasta que se la busca: el borde
+                del menú no tiene que competir con la navegación. */}
+            <span
+              aria-hidden="true"
+              className="h-full w-px bg-white/10 transition group-hover:w-0.5 group-hover:bg-lenga-400 group-focus-visible:w-0.5 group-focus-visible:bg-lenga-400"
+            />
+          </div>
+        )}
       </aside>
 
       {/* Cajón — móvil */}
@@ -628,32 +727,16 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
             columnas: así el campo queda centrado respecto del contenido y no se
             corre cuando el nombre de quien inició sesión es más largo o más corto.
           */}
-          <form
-            action="/panel/buscar"
-            method="get"
-            className="w-full max-w-md flex-1 lg:max-w-lg lg:flex-none"
-          >
-            <label className="sr-only" htmlFor="busqueda-global">
-              Buscar en todo el sistema
-            </label>
-            <div className="relative">
-              <span
-                className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-600"
-                aria-hidden="true"
-              >
-                <Icono nombre="buscar" tam={16} />
-              </span>
-              <input
-                id="busqueda-global"
-                type="search"
-                name="q"
-                placeholder="Buscar huésped, reserva o una sección…"
-                className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-9 text-stone-800 outline-none transition placeholder:text-stone-500 focus:border-lago-600"
-              />
-            </div>
-          </form>
+          {/*
+            `min-w-0` (dentro de `BuscadorGlobal`): sin él, este ítem de flex
+            no se achica más allá del ancho natural de su contenido (la
+            trampa documentada en CLAUDE.md) y en una ventana muy angosta
+            empuja al menú de cuenta fuera de la pantalla en vez de ceder
+            espacio.
+          */}
+          <BuscadorGlobal />
 
-          <div className="ml-auto flex flex-1 justify-end lg:ml-0">
+          <div className="ml-auto flex min-w-0 flex-1 justify-end lg:ml-0">
             <MenuCuenta nombre={nombre} rolEtiqueta={rolEtiqueta} salir={salir} />
           </div>
         </header>
@@ -663,5 +746,7 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
         </main>
       </div>
     </div>
+    </ConfirmarProvider>
+    </AvisosProvider>
   )
 }

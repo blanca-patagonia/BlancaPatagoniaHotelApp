@@ -72,7 +72,11 @@ export default async function TarifarioPage() {
     if (!r.temporada) continue
     const { desde, hasta } = parsearRango(r.rango)
     const lista = rangosPorTemporada.get(r.temporada.codigo) ?? []
-    lista.push(textoRango(desde, hasta))
+    // Con año: acá se concatenan TODOS los rangos de una temporada, y el
+    // Tarifario carga más de un año calendario (ver el comentario de
+    // `textoRango`). Sin año, dos rangos de años distintos se leen como el
+    // mismo dato repetido.
+    lista.push(textoRango(desde, hasta, true))
     rangosPorTemporada.set(r.temporada.codigo, lista)
   }
   const fechasPorTemporada: Partial<Record<string, string>> = Object.fromEntries(
@@ -188,10 +192,21 @@ export default async function TarifarioPage() {
                         {ORDEN_TEMP.map((t) => {
                           const p = f.precios.get(t)
                           return (
-                            <div key={t} className="rounded-lg bg-stone-50 px-3 py-2 ring-1 ring-stone-200">
+                            <div
+                              key={t}
+                              className="min-w-0 max-w-56 rounded-lg bg-stone-50 px-3 py-2 ring-1 ring-stone-200"
+                            >
                               <p className="text-xs font-medium text-stone-500 capitalize">Temporada {t}</p>
                               {fechasPorTemporada[t] && (
-                                <p className="text-xs text-stone-400">{fechasPorTemporada[t]}</p>
+                                // `min-w-0` en el contenedor es lo que permite que
+                                // este texto llegue a envolver: sin él, un ítem de
+                                // flex no se achica más allá de su contenido (la
+                                // trampa documentada en CLAUDE.md) y la cadena de
+                                // varios rangos concatenados se corta en vez de
+                                // pasar a la línea siguiente.
+                                <p className="text-xs break-words text-stone-400">
+                                  {fechasPorTemporada[t]}
+                                </p>
                               )}
                               {p ? (
                                 <p className="tabular text-sm text-stone-800">

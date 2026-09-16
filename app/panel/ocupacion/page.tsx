@@ -131,6 +131,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   ...MENSAJES_RECHAZO_ARRASTRE,
   sin_destino: 'No se indicó a qué habitación mudar la reserva.',
   sin_estadia: 'Esa reserva no tiene una estadía para mudar.',
+  lectura_estadia: 'No se pudo leer la estadía para mudarla. No se cambió nada — probá de nuevo.',
   destino_inexistente: 'La habitación de destino ya no existe.',
   mudanza: 'No se pudo cambiar la habitación. Probá de nuevo.',
   tarifa_destino:

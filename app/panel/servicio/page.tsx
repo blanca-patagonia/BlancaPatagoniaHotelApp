@@ -3,6 +3,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { traerTodo } from '@/lib/paginado'
 import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
+import { importe } from '@/lib/domain/moneda'
 import {
   listaDeDesayuno,
   resumenDeVentas,
@@ -347,7 +348,7 @@ export default async function ServicioPage({
 
       <Tarjeta
         titulo="Consumos vendidos"
-        descripcion={`Del ${formatoFechaCorta(desde)} al ${formatoFechaCorta(hasta)} · ${ventas.dias} día(s) · ${ventas.totalUnidades} unidades · USD ${ventas.totalGeneral.toFixed(2)}`}
+        descripcion={`Del ${formatoFechaCorta(desde)} al ${formatoFechaCorta(hasta)} · ${ventas.dias} día(s) · ${ventas.totalUnidades} unidades · USD ${importe(ventas.totalGeneral)}`}
       >
         {ventas.lineas.length === 0 ? (
           <EstadoVacio titulo="No se vendió nada en ese período" />
@@ -368,13 +369,13 @@ export default async function ServicioPage({
                     <td className={`${TD} font-medium`}>{l.productoNombre}</td>
                     <td className={TD}>{ETIQUETAS_CATEGORIA_PRODUCTO[l.categoria]}</td>
                     <td className={`${TD} tabular-nums`}>{l.cantidad}</td>
-                    <td className={`${TD} tabular-nums`}>{l.total.toFixed(2)}</td>
+                    <td className={`${TD} tabular-nums`}>{importe(l.total)}</td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-stone-300 font-semibold">
                   <td className={TD} colSpan={2}>Total</td>
                   <td className={`${TD} tabular-nums`}>{ventas.totalUnidades}</td>
-                  <td className={`${TD} tabular-nums`}>{ventas.totalGeneral.toFixed(2)}</td>
+                  <td className={`${TD} tabular-nums`}>{importe(ventas.totalGeneral)}</td>
                 </tr>
               </tbody>
             </Tabla>
@@ -393,7 +394,7 @@ export default async function ServicioPage({
                   <tr key={c.categoria} className={FILA}>
                     <td className={`${TD} font-medium`}>{ETIQUETAS_CATEGORIA_PRODUCTO[c.categoria]}</td>
                     <td className={`${TD} tabular-nums`}>{c.cantidad}</td>
-                    <td className={`${TD} tabular-nums`}>{c.total.toFixed(2)}</td>
+                    <td className={`${TD} tabular-nums`}>{importe(c.total)}</td>
                   </tr>
                 ))}
               </tbody>
