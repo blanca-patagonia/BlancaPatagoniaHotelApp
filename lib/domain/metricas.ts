@@ -19,6 +19,7 @@ import {
   nochesEnVentana,
   parsearPeriodo,
 } from '@/lib/fechas'
+import { formatearUSD } from './moneda'
 
 /** Lo mínimo que se necesita de una estadía para calcular las métricas. */
 export interface EstadiaMetrica {
@@ -164,4 +165,40 @@ export function etiquetaSemana(semana: string): string {
   const [, mFin, dFin] = domingo.split('-').map(Number)
   if (mIni === mFin) return `${dIni}-${dFin} ${nombres[mFin - 1]}`
   return `${dIni} ${nombres[mIni - 1]} - ${dFin} ${nombres[mFin - 1]}`
+}
+
+/* ───────────────────────────────────────── precisión con poco volumen ──── */
+
+/**
+ * Texto de la ocupación, distinguiendo «no vendí nada» de «vendí tan poco que
+ * redondea a 0».
+ *
+ * `MetricasPeriodo.ocupacionPct` ya viene redondeado a entero (lo usan
+ * gráficos y comparaciones que necesitan un número, no un string) y con poco
+ * inventario eso esconde información real: 1 noche vendida sobre 1410
+ * disponibles es 0,07 %, y `Math.round` lo deja en «0 %» — igual que si no se
+ * hubiera vendido nada. Con un hotel chico y pocas reservas cargadas (como en
+ * desarrollo, o un hotel recién arrancando) esto no es un caso raro.
+ */
+export function textoOcupacion(nochesVendidas: number, ocupacionPct: number): string {
+  if (nochesVendidas > 0 && ocupacionPct === 0) return '<1%'
+  return `${ocupacionPct}%`
+}
+
+/**
+ * Texto del RevPAR, con la misma lógica que `textoOcupacion` — acá para
+ * plata en vez de porcentaje.
+ *
+ * `MetricasPeriodo.revpar` viene redondeado al dólar entero. Con poco
+ * inventario, un ingreso real de USD 240 repartido en 1410 noches disponibles
+ * da USD 0,17: `Math.round` lo deja en «USD 0,00», indistinguible de no haber
+ * facturado nada. Acá se recalcula sin el redondeo a entero —division simple,
+ * la misma cuenta que `metricasDePeriodo`— y se deja que `formatearUSD` haga
+ * su propio redondeo a centavos, que es el que corresponde para mostrar plata.
+ */
+export function textoRevPAR(ingreso: number, nochesDisponibles: number, revpar: number): string {
+  if (ingreso > 0 && revpar === 0 && nochesDisponibles > 0) {
+    return formatearUSD(ingreso / nochesDisponibles)
+  }
+  return formatearUSD(revpar)
 }

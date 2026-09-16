@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
-import { hoyISO, sumarDias, formatoFechaCorta } from '@/lib/fechas'
+import { hoyISO, sumarDias, formatoFechaCorta, formatoFecha } from '@/lib/fechas'
 import {
   parsearRango,
   huecosDeCobertura,
@@ -277,11 +277,15 @@ export default async function TemporadasPage({
                         <span className="ml-2 text-xs font-medium text-lago-700">· en curso</span>
                       )}
                     </td>
+                    {/* Con año, no `formatoFechaCorta`: el Tarifario 2025/2026
+                        carga temporadas para más de un año calendario (la
+                        misma temporada "alta" tiene un rango en dic-2025 y
+                        otro en dic-2026), y sin año dos filas de años
+                        distintos se ven idénticas — parecen datos duplicados
+                        sin serlo. */}
+                    <td className={`${TD} tabular text-stone-700`}>{formatoFecha(p.desde)}</td>
                     <td className={`${TD} tabular text-stone-700`}>
-                      {formatoFechaCorta(p.desde)}
-                    </td>
-                    <td className={`${TD} tabular text-stone-700`}>
-                      {formatoFechaCorta(ultimoDia)}
+                      {formatoFecha(ultimoDia)}
                       <span className="tabular block text-xs text-stone-500 sm:hidden">
                         {diasDelRango(p)} días
                       </span>
@@ -296,7 +300,7 @@ export default async function TemporadasPage({
                           <BotonEnvio
                             variante="peligro"
                             cargando="Quitando…"
-                            confirmar={`¿Quitar el período del ${formatoFechaCorta(p.desde)} al ${formatoFechaCorta(ultimoDia)}? Esas fechas van a quedar sin tarifa.`}
+                            confirmar={`¿Quitar el período del ${formatoFecha(p.desde)} al ${formatoFecha(ultimoDia)}? Esas fechas van a quedar sin tarifa.`}
                           >
                             Quitar
                           </BotonEnvio>

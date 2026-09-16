@@ -8,6 +8,7 @@ import {
   type EstadoTraerLiquidacion,
 } from './actions'
 import { CAMPO, Campo, Mensaje, botonClases } from '../_components/ui'
+import { CampoArchivo } from '../_components/campo-archivo'
 
 const ESTADO_EXTRACTO: EstadoImportacionExtracto = {}
 const ESTADO_LIQUIDACION: EstadoTraerLiquidacion = {}
@@ -31,18 +32,13 @@ export function ImportarExtracto({ monedas }: { monedas: readonly string[] }) {
       </p>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Campo
+        <CampoArchivo
+          nombre="archivo"
           etiqueta="Archivo del extracto"
           ayuda="CSV exportado del Home Banking."
-        >
-          <input
-            type="file"
-            name="archivo"
-            accept=".csv,text/csv,text/plain"
-            required
-            className={CAMPO}
-          />
-        </Campo>
+          accept=".csv,text/csv,text/plain"
+          requerido
+        />
 
         {/*
           La moneda la elige quien importa, y no se deduce del archivo.

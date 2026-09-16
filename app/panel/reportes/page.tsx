@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { mesActual } from '@/lib/fechas'
-import { metricasDeMes, etiquetaMes } from '@/lib/domain/metricas'
+import { metricasDeMes, etiquetaMes, textoOcupacion, textoRevPAR } from '@/lib/domain/metricas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { INFORMES, rutaDeInforme, mesValido } from '@/lib/domain/informes'
 import { traerUnidades, traerEstadias, traerPagos, traerFacturas } from './datos'
@@ -74,7 +74,10 @@ export default async function ReportesPage({
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
           titulo={`Ocupación ${etiquetaMes(mes)}`}
-          valor={`${actual.ocupacionPct}%`}
+          // Con poco inventario, `Math.round` puede dejar en "0%" una venta
+          // real (1 noche sobre 1410 disponibles es 0,07%). `textoOcupacion`
+          // lo distingue de "no vendí nada" — ver su comentario en metricas.ts.
+          valor={textoOcupacion(actual.nochesVendidas, actual.ocupacionPct)}
           detalle={`${actual.nochesVendidas} de ${actual.nochesDisponibles} noches-unidad`}
           icono="ocupacion"
         />
@@ -86,7 +89,7 @@ export default async function ReportesPage({
         />
         <Kpi
           titulo="RevPAR"
-          valor={formatearUSD(actual.revpar)}
+          valor={textoRevPAR(actual.ingreso, actual.nochesDisponibles, actual.revpar)}
           detalle="por unidad disponible (neto)"
           icono="reportes"
         />
@@ -106,7 +109,12 @@ export default async function ReportesPage({
         <Kpi
           titulo="Facturado"
           valor={formatearUSD(facturado)}
-          detalle="comprobantes emitidos"
+          // Igual que "Ingresos cobrados": `traerFacturas()` no filtra por
+          // fecha, es la suma de TODOS los comprobantes emitidos alguna vez,
+          // no del mes elegido arriba. Sin el "(histórico)" quedaba adentro
+          // de una grilla con "Ocupación {mes}"/"imputado a {mes}" al lado,
+          // dando a entender que también respondía al selector de mes.
+          detalle="comprobantes emitidos (histórico)"
           icono="agencias"
           tono="calafate"
         />

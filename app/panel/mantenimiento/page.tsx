@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
-import { hoyISO, diasEntre, formatoFechaCorta } from '@/lib/fechas'
+import { hoyISO, diasEntre, formatoFecha } from '@/lib/fechas'
 import {
   construirQuery,
   terminoBusqueda,
@@ -111,6 +111,8 @@ const MENSAJES_ERROR: Record<string, string> = {
   plan_eliminar: 'No se pudo eliminar el plan. Sigue activo.',
   plan_marcar_hecho: 'No se pudo registrar la tarea como hecha. La próxima fecha no cambió.',
   estado_orden: 'No se pudo cambiar el estado de la orden. Quedó como estaba.',
+  generar_preventivo:
+    'No se pudo revisar qué planes preventivos están vencidos. No se generó ninguna orden — probá de nuevo.',
 }
 
 export default async function MantenimientoPage({
@@ -352,7 +354,10 @@ export default async function MantenimientoPage({
                 <li key={p.id} className="border-t border-stone-100 px-5 py-3 first:border-0">
                   <div className="mb-2 flex flex-wrap items-center gap-3">
                     <span className="tabular text-xs text-stone-500">
-                      Próxima: {formatoFechaCorta(p.proxima_ejecucion)}
+                      {/* Con año: un plan preventivo puede estar programado con
+                          más de 12 meses de anticipación, y sin año "10/03"
+                          no dice si es este marzo o el que viene. */}
+                      Próxima: {formatoFecha(p.proxima_ejecucion)}
                     </span>
                     {vencido ? (
                       <Etiqueta tono="peligro">Vencido</Etiqueta>

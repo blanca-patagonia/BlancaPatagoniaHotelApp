@@ -5,7 +5,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { ESTADOS_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
 import { requerirAcceso } from '@/lib/auth/session'
 import { revalidatePath } from 'next/cache'
-import { cortarSiFalla } from '@/lib/acciones'
+import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
 import { siguienteEstadoMucama } from '@/lib/domain/housekeeping'
 import { avisarHabitacionLista } from '@/lib/notificaciones/eventos'
 import { hoyISO } from '@/lib/fechas'
@@ -57,11 +57,14 @@ async function avisarUnidadLista(
   client: Awaited<ReturnType<typeof crearClienteServidor>>,
   unidadId: string,
 ): Promise<void> {
-  const { data: unidad } = await client
+  const { data: unidad, error: eUnidad } = await client
     .from('unidades')
     .select('nombre')
     .eq('id', unidadId)
     .maybeSingle<{ nombre: string }>()
+  // Sigue sin cortar —la unidad ya quedó marcada, ver el comentario de la
+  // función—, pero antes una lectura que fallaba se perdía sin dejar rastro.
+  registrarFalla(eUnidad, 'housekeeping:unidad_para_avisar')
   if (!unidad) return
 
   /*
@@ -80,13 +83,16 @@ async function avisarUnidadLista(
     así que después de las 21 el segundo devuelve mañana.
   */
   const hoy = hoyISO()
-  const { data: llegada } = await client
+  const { data: llegada, error: eLlegada } = await client
     .from('estadias')
     .select('reserva:reservas!inner(huesped:huespedes!reservas_huesped_id_fkey(nombre, apellido))')
     .eq('unidad_id', unidadId)
     .eq('check_in', hoy)
     .limit(1)
     .maybeSingle()
+  // Tampoco corta acá: el nombre es un marcador opcional (ver el comentario
+  // de arriba). Solo se deja de perder en silencio si la lectura falla.
+  registrarFalla(eLlegada, 'housekeeping:llegada_para_avisar')
 
   const h = (llegada as unknown as {
     reserva: { huesped: { nombre: string; apellido: string } | null } | null
@@ -138,12 +144,16 @@ export async function marcarLimpiaDesdeMovil(formData: FormData): Promise<void> 
   const supabase = await crearClienteServidor()
 
   // Se lee el estado actual para que el destino salga del dominio y no del cliente.
-  const { data: unidad } = await supabase
+  const { data: unidad, error: eUnidad } = await supabase
     .from('unidades')
     .select('estado, asignada_a')
     .eq('id', id)
     .maybeSingle<{ estado: EstadoHousekeeping; asignada_a: string | null }>()
 
+  // Antes una lectura que fallaba se confundía con "esta unidad no existe" —
+  // para quien está en el pasillo con el teléfono, son dos mensajes muy
+  // distintos: uno dice "revisá el enlace", el otro "probá de nuevo".
+  if (eUnidad) redirect(`${DESTINO_MOVIL}?error=lectura`)
   if (!unidad) redirect(`${DESTINO_MOVIL}?error=no_existe`)
 
   // Una mucama sólo cierra lo suyo. Admin y gerencia pueden cerrar cualquiera —a
