@@ -192,9 +192,11 @@ export const FOTOS: Readonly<Partial<Record<string, string>>> = {
   'HOST-SUITE': '/alojamientos/suite-principal.jpg',
   'CAB-ONELLI': '/alojamientos/cabana-1-dormitorio.jpg',
   'CAB-SPEGAZZINI': '/alojamientos/cabana-2-dormitorios-4.jpg',
-  'CAB-2D-5P': '/alojamientos/cabana-2-dormitorios-5.jpg',
   'CAB-BOLADOS': '/alojamientos/cabana-3-dormitorios-6.jpg',
-  'CAB-3D-7P': '/alojamientos/cabana-3-dormitorios-7.jpg',
+  // `CAB-2D-5P` y `CAB-3D-7P` estaban acá y se fueron: la migración 0107 los
+  // borró de `tipos_unidad` porque el relevamiento del inventario físico real
+  // mostró que no existen. Eran entradas muertas —`fotoDe()` no las iba a
+  // resolver nunca— y sus dos .jpg quedaban huérfanas en `public/`.
 }
 
 export function fotoDe(codigo: string): string | null {
