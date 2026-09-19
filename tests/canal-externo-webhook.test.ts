@@ -64,8 +64,23 @@ describe.skipIf(!hayDB)('Webhook · canal externo', () => {
     // El borrado de `canales_externos` arrastra su mapeo por `on delete cascade`.
     ctx.aBorrar.push({ tabla: 'canales_externos', id: canalId })
 
-    const { data: tipo } = await ctx.db.from('tipos_unidad').select('id').limit(1).single<{ id: string }>()
-    tipoId = tipo!.id
+    // Un tipo que **tenga tarifa vigente**, no uno cualquiera.
+    //
+    // Antes era `tipos_unidad ... limit(1)` sin `order by`: la base devolvía el
+    // tipo que quisiera. Eso funcionó mientras todos tuvieran tarifa, y dejó de
+    // funcionar con la migración 0106, que carga el inventario real del hotel y
+    // suma `CAB-UPSALA` y `CAB-MORENO` **a propósito sin tarifa**, hasta que el
+    // hotel confirme el precio. Cuando la elección caía en una de esas dos, el
+    // webhook respondía 409 «No hay tarifa cargada para todas esas fechas» y el
+    // test fallaba por algo que no estaba probando.
+    const { data: tipo, error: eTipo } = await ctx.db
+      .from('tarifas')
+      .select('tipo_unidad_id')
+      .eq('vigente', true)
+      .limit(1)
+      .single<{ tipo_unidad_id: string }>()
+    expect(eTipo, 'no hay ninguna tarifa vigente: revisá el seed').toBeNull()
+    tipoId = tipo!.tipo_unidad_id
 
     await ctx.db.from('canal_externo_tipos').insert({
       canal_externo_id: canalId,
