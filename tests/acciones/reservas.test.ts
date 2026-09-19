@@ -157,14 +157,34 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       no ingresó.
     */
     describe('exención de IVA al turista del exterior', () => {
-      /** Emite y devuelve la factura resultante, registrándola para el borrado. */
+      /**
+       * Emite y devuelve la factura resultante, registrándola para el borrado.
+       *
+       * ── Por qué se mira el destino y no se descarta ─────────────────────────
+       *
+       * `emitirFactura` informa un fallo como informa un fallo todo el panel:
+       * redirigiendo con `?error=…` (`cortarSiFalla`, Fase 20). `destinoDe`
+       * devuelve ese destino, y acá se descartaba. El resultado es que cuando la
+       * emisión fallaba el test no se enteraba, seguía de largo, no encontraba la
+       * factura y reventaba dos líneas más abajo con
+       * `Cannot read properties of null (reading 'id')` — un mensaje que no dice
+       * **nada** sobre la causa.
+       *
+       * Es el mismo fallo silencioso que el proyecto persigue en el código de
+       * producción, acá en el andamiaje del test. Mirar el destino convierte un
+       * `TypeError` mudo en el motivo real.
+       */
       async function facturaDe(reservaId: string) {
-        await destinoDe(() => emitirFactura(formulario({ reserva_id: reservaId })))
-        const { data } = await ctx.db
+        const destino = await destinoDe(() => emitirFactura(formulario({ reserva_id: reservaId })))
+        expect(destino, `la emisión de la factura falló y redirigió a ${destino}`).not.toContain(
+          'error=',
+        )
+        const { data, error } = await ctx.db
           .from('facturas')
           .select('id, neto, iva, total, exento, motivo_exencion, alicuota_iva')
           .eq('reserva_id', reservaId)
           .single()
+        expect(error, `no quedó la factura de la reserva ${reservaId}`).toBeNull()
         const f = data as {
           id: string
           neto: number | string
