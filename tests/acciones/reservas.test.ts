@@ -157,14 +157,34 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       no ingresó.
     */
     describe('exención de IVA al turista del exterior', () => {
-      /** Emite y devuelve la factura resultante, registrándola para el borrado. */
+      /**
+       * Emite y devuelve la factura resultante, registrándola para el borrado.
+       *
+       * ── Por qué se mira el destino y no se descarta ─────────────────────────
+       *
+       * `emitirFactura` informa un fallo como informa un fallo todo el panel:
+       * redirigiendo con `?error=…` (`cortarSiFalla`, Fase 20). `destinoDe`
+       * devuelve ese destino, y acá se descartaba. El resultado es que cuando la
+       * emisión fallaba el test no se enteraba, seguía de largo, no encontraba la
+       * factura y reventaba dos líneas más abajo con
+       * `Cannot read properties of null (reading 'id')` — un mensaje que no dice
+       * **nada** sobre la causa.
+       *
+       * Es el mismo fallo silencioso que el proyecto persigue en el código de
+       * producción, acá en el andamiaje del test. Mirar el destino convierte un
+       * `TypeError` mudo en el motivo real.
+       */
       async function facturaDe(reservaId: string) {
-        await destinoDe(() => emitirFactura(formulario({ reserva_id: reservaId })))
-        const { data } = await ctx.db
+        const destino = await destinoDe(() => emitirFactura(formulario({ reserva_id: reservaId })))
+        expect(destino, `la emisión de la factura falló y redirigió a ${destino}`).not.toContain(
+          'error=',
+        )
+        const { data, error } = await ctx.db
           .from('facturas')
           .select('id, neto, iva, total, exento, motivo_exencion, alicuota_iva')
           .eq('reserva_id', reservaId)
           .single()
+        expect(error, `no quedó la factura de la reserva ${reservaId}`).toBeNull()
         const f = data as {
           id: string
           neto: number | string
@@ -445,6 +465,66 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       return { desde, hasta }
     }
 
+    /**
+     * Un tipo de unidad que **tenga tarifa cargada**.
+     *
+     * ── Por qué no alcanza con `tipos_unidad ... limit(1)` ──────────────────
+     *
+     * Eso es lo que había, sin `order by`: la base devuelve el tipo que quiere.
+     * Funcionó mientras **todos** los tipos tuvieran tarifa, y dejó de funcionar
+     * con la migración 0106, que carga el inventario real del hotel y suma
+     * `CAB-UPSALA` y `CAB-MORENO` **a propósito sin tarifa**, a la espera de que
+     * el hotel confirme el precio. Cuando la elección arbitraria caía en una de
+     * esas dos, el alta no podía cotizarse y el test fallaba con «No hay tarifa
+     * cargada para todas esas fechas» — un motivo que no tiene nada que ver con
+     * lo que el test venía a probar.
+     *
+     * Preguntarle a `tarifas` en vez de a `tipos_unidad` invierte la relación:
+     * no «un tipo cualquiera, ojalá tenga precio» sino «un tipo que lo tiene».
+     */
+    async function tipoConTarifa(): Promise<string> {
+      const { data, error } = await ctx.db
+        .from('tarifas')
+        .select('tipo_unidad_id')
+        .eq('vigente', true)
+        .limit(1)
+        .single<{ tipo_unidad_id: string }>()
+      expect(error, 'no hay ninguna tarifa vigente: revisá el seed').toBeNull()
+      return data!.tipo_unidad_id
+    }
+
+    /**
+     * Una unidad libre de verdad para esas fechas **y de un tipo con tarifa**.
+     *
+     * Las dos condiciones son necesarias y por motivos distintos. Libre, porque
+     * otro test del archivo pudo haber ocupado la primera unidad del primer tipo
+     * para las mismas fechas. Con tarifa, por lo mismo que `tipoConTarifa`: la
+     * 0106 cargó también las **unidades físicas** de Upsala y Moreno, así que la
+     * primera fila de `unidades_disponibles` puede ser una unidad real y libre
+     * de un tipo que todavía no se puede cotizar.
+     */
+    async function unidadLibreConTarifa(
+      desde: string,
+      hasta: string,
+    ): Promise<{ id: string; tipo_unidad_id: string }> {
+      const { data: libres } = await ctx.db.rpc('unidades_disponibles', {
+        desde,
+        hasta,
+        p_categoria: null,
+      })
+      const { data: conPrecio } = await ctx.db
+        .from('tarifas')
+        .select('tipo_unidad_id')
+        .eq('vigente', true)
+      const tarifados = new Set((conPrecio ?? []).map((t) => t.tipo_unidad_id as string))
+
+      const unidad = (libres as { id: string; tipo_unidad_id: string }[] | null)?.find((u) =>
+        tarifados.has(u.tipo_unidad_id),
+      )
+      expect(unidad, `no hay ninguna unidad libre con tarifa entre ${desde} y ${hasta}`).toBeDefined()
+      return unidad!
+    }
+
     it('guarda el vínculo con la agencia y aplica tarifa neta', async () => {
       const { desde, hasta } = await fechasConTarifa()
 
@@ -456,13 +536,13 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       const agenciaId = (ag as { id: string }).id
       ctx.aBorrar.push({ tabla: 'agencias', id: agenciaId })
 
-      const { data: tipo } = await ctx.db.from('tipos_unidad').select('id').limit(1).single()
+      const tipoUnidadId = await tipoConTarifa()
 
       const destino = await destinoDe(() =>
         crearReservaAction(
           {},
           formulario({
-            tipo_unidad_id: (tipo as { id: string }).id,
+            tipo_unidad_id: tipoUnidadId,
             check_in: desde,
             check_out: hasta,
             huespedes: 1,
@@ -575,17 +655,7 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
 
     it('respeta la unidad puntual elegida a mano (walk-in)', async () => {
       const { desde, hasta } = await fechasConTarifa()
-      // Se toma de `unidades_disponibles` (la misma función que usa la
-      // pantalla) en vez de la primera fila de `unidades_unidad`: otro test de
-      // este archivo ya pudo haber ocupado la primera unidad del primer tipo
-      // para las mismas fechas, y `.limit(1)` ciego habría elegido una que ya
-      // no está libre.
-      const { data: libres } = await ctx.db.rpc('unidades_disponibles', {
-        desde,
-        hasta,
-        p_categoria: null,
-      })
-      const unidad = (libres as { id: string; tipo_unidad_id: string }[])[0]
+      const unidad = await unidadLibreConTarifa(desde, hasta)
 
       const destino = await destinoDe(() =>
         crearReservaAction(
@@ -626,16 +696,7 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
 
     it('marca in_house de una vez con "check-in inmediato"', async () => {
       const { desde, hasta } = await fechasConTarifa()
-      // Un tipo con unidad libre de verdad para estas fechas: otro test del
-      // archivo pudo haber ocupado la primera unidad del primer tipo, y un
-      // `.limit(1)` ciego elegiría una que ya no está libre (ver el test de
-      // arriba).
-      const { data: libres } = await ctx.db.rpc('unidades_disponibles', {
-        desde,
-        hasta,
-        p_categoria: null,
-      })
-      const unidad = (libres as { id: string; tipo_unidad_id: string }[])[0]
+      const unidad = await unidadLibreConTarifa(desde, hasta)
 
       const destino = await destinoDe(() =>
         crearReservaAction(
