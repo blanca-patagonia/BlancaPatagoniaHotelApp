@@ -12,6 +12,8 @@ import {
   variacionPct,
   etiquetaMes,
   etiquetaSemana,
+  textoOcupacion,
+  textoRevPAR,
 } from '@/lib/domain/metricas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { mesValido, semanaValida } from '@/lib/domain/informes'
@@ -166,7 +168,14 @@ function TarjetasKpi({
   etiquetaActual,
   etiquetaBase,
 }: {
-  actual: { ocupacionPct: number; nochesVendidas: number; nochesDisponibles: number; adr: number; revpar: number }
+  actual: {
+    ocupacionPct: number
+    nochesVendidas: number
+    nochesDisponibles: number
+    ingreso: number
+    adr: number
+    revpar: number
+  }
   previo: { ocupacionPct: number; adr: number; revpar: number }
   etiquetaActual: string
   etiquetaBase?: string
@@ -176,7 +185,7 @@ function TarjetasKpi({
       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">Ocupación {etiquetaActual}</p>
         <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
-          {actual.ocupacionPct}%
+          {textoOcupacion(actual.nochesVendidas, actual.ocupacionPct)}
         </p>
         <p className="mt-1.5 text-xs text-stone-600">
           {actual.nochesVendidas} de {actual.nochesDisponibles} noches-unidad
@@ -200,7 +209,7 @@ function TarjetasKpi({
       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">RevPAR</p>
         <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
-          {formatearUSD(actual.revpar)}
+          {textoRevPAR(actual.ingreso, actual.nochesDisponibles, actual.revpar)}
         </p>
         <p className="mt-1.5 text-xs text-stone-600">por unidad disponible (neto)</p>
         <p className="mt-1">

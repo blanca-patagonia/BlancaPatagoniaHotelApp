@@ -3,7 +3,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { obtenerProveedorCanal } from '@/lib/canales'
 import { describirUltimaLectura } from '@/lib/canales/ical-saliente'
-import { MONEDAS_EXTRANJERAS } from '@/lib/domain/divisas'
+import { MONEDAS_EXTRANJERAS, textoAntiguedad } from '@/lib/domain/divisas'
 import { urlDelSitio } from '@/lib/env'
 import {
   fechaHoraHotel,
@@ -20,6 +20,7 @@ import { construirQuery } from '@/lib/listados'
 import { registrarFalla } from '@/lib/acciones'
 import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
+import { SelectorMes } from '../_components/selector-mes'
 import {
   BarraHerramientas,
   CAMPO,
@@ -344,7 +345,16 @@ export default async function CanalesPage({
   let consultaEntrantes = supabase
     .from('canal_reservas')
     .select(
-      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, divergencia, divergencia_desde, reserva_id, reserva:reservas(codigo, agencia:agencias(nombre))',
+      /*
+        `agencia:agencias(nombre)` a secas es AMBIGUO: `reservas` tiene DOS FKs
+        hacia `agencias` (`agencia_id` y `folio_b_agencia_id`, para el folio B).
+        Sin `!reservas_agencia_id_fkey`, PostgREST no puede elegir sola y
+        responde "more than one relationship was found" — el embed entero
+        falla, y con él el KPI de posible overbooking de canal que depende de
+        esta consulta. Mismo patrón que `huespedes!reservas_huesped_id_fkey`
+        en `reservas/consulta.ts` (ahí también hay 2 FKs).
+      */
+      'id, canal, external_id, operacion, estado, motivo, huesped_apellido, huesped_nombre, huesped_email, huesped_pais, tipo_unidad_codigo, check_in, check_out, huespedes, importe_canal, moneda_canal, comision, modalidad_cobro, liquidado_en, conflicto, notas, divergencia, divergencia_desde, reserva_id, reserva:reservas(codigo, agencia:agencias!reservas_agencia_id_fkey(nombre))',
     )
     .gte('check_in', sumarDias(hoyISO(), -14))
     .order('check_in', { ascending: true })
@@ -931,7 +941,11 @@ export default async function CanalesPage({
                   <div className="mt-2 flex gap-2 rounded-lg bg-calafate-50 p-2 text-xs text-stone-700">
                     <Icono nombre="alerta" tam={14} />
                     <p>
-                      Hace más de {Math.floor(horasDesde(ultima.corrida_en))} horas que no se
+                      {/* "Hace 6 días" en vez de "Hace más de 144 horas": mismo criterio de
+                          lectura que ya usa el widget de cotización (`textoAntiguedad`,
+                          `lib/domain/divisas.ts`), reusado acá porque es genérico —
+                          convierte una duración en texto, no tiene nada de dólares. */}
+                      {textoAntiguedad(Math.round(horasDesde(ultima.corrida_en) * 60))} que no se
                       sincroniza.{' '}
                       {capacidades.traeReservas
                         ? 'Si la sincronización automática está configurada, algo la está impidiendo; si no, conviene correrla a mano.'
@@ -1420,13 +1434,7 @@ export default async function CanalesPage({
               <input type="hidden" name="vista" value="costos" />
               <label className="flex flex-col gap-1 text-xs">
                 <span className="text-stone-500">Mes a conciliar</span>
-                <input
-                  type="month"
-                  name="mes"
-                  defaultValue={mesConciliacion}
-                  aria-label="Mes a conciliar"
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm focus:border-lago-500 focus:outline-none"
-                />
+                <SelectorMes name="mes" defaultValue={mesConciliacion} ariaLabel="Mes a conciliar" />
               </label>
               <button className={botonClases('secundario', 'px-3 py-1.5 text-sm')}>Ver</button>
             </form>
@@ -1525,7 +1533,7 @@ export default async function CanalesPage({
                 />
               </Campo>
               <Campo etiqueta="Mes que factura">
-                <input id="periodo" name="periodo" type="month" required className={CAMPO} />
+                <SelectorMes name="periodo" id="periodo" required ariaLabel="Mes que factura" className={CAMPO} />
               </Campo>
               {/* Booking no factura en dólares: emite en euros o en pesos según el
                   contrato. Sin este campo el importe entraba como USD al libro
@@ -2053,7 +2061,10 @@ export default async function CanalesPage({
                     {tiposUnidad.map((t) => {
                       const m = mapeoPorTipo.get(t.id)
                       return (
-                        <tr key={t.id} className={FILA}>
+                        // El id es el ancla de `guardarMapeoCanal`: sin él, guardar
+                        // esta fila devuelve al principio de una tabla de 23 y el
+                        // aviso de "Guardado" queda lejos de lo que se editó.
+                        <tr key={t.id} id={`tipo-${t.id}`} className={FILA}>
                           <td className={TD}>
                             <span className="font-medium text-stone-800">{t.nombre}</span>
                             <span className="block font-mono text-xs text-stone-500">

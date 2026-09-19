@@ -175,11 +175,15 @@ export async function reponerStock(formData: FormData): Promise<void> {
   const cantidad = Number(formData.get('cantidad') ?? 0)
   if (id && Number.isFinite(cantidad) && cantidad > 0) {
     const supabase = await crearClienteServidor()
-    const { data: p } = await supabase
+    const { data: p, error: eLectura } = await supabase
       .from('productos_servicios')
       .select('stock')
       .eq('id', id)
       .single()
+    // Antes, si esto fallaba, `p` quedaba `undefined`, el `if` de abajo no
+    // entraba, y la función caía derecho al `redirect` sin reponer nada — la
+    // pantalla recargaba como si la reposición se hubiera hecho.
+    cortarSiFalla(eLectura, '/panel/config/inventario', 'stock')
     if (p && p.stock != null) {
       const { error } = await supabase
         .from('productos_servicios')

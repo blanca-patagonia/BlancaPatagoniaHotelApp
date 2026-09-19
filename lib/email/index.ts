@@ -16,6 +16,7 @@ import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
 
 import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
+import { registrarFalla } from '@/lib/acciones'
 import { ProveedorResend } from './resend'
 
 export interface MensajeEmail {
@@ -129,11 +130,17 @@ export function obtenerProveedorEmail(
 async function obtenerOverridePlantilla(
   evento: EventoEmail,
 ): Promise<{ asunto: string | null; cuerpo: string | null } | null> {
-  const { data } = await crearClienteAdmin()
+  const { data, error } = await crearClienteAdmin()
     .from('plantillas_email')
     .select('asunto, cuerpo')
     .eq('evento', evento)
     .maybeSingle()
+  // Sin esto, una lectura que falla (RLS, la tabla caída, lo que sea) se
+  // confunde con «no hay texto editado para este evento»: el correo sale
+  // igual, pero con el texto ORIGINAL del código en vez del que alguien
+  // personalizó a mano, y nadie se entera de que la personalización no se
+  // aplicó.
+  registrarFalla(error, 'email:override_plantilla')
   return data
 }
 

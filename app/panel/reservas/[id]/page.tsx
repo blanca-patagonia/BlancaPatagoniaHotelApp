@@ -160,8 +160,11 @@ const MENSAJES_ERROR: Record<string, string> = {
   lectura_reserva: 'No se pudieron leer los datos de la reserva. No se emitió ninguna factura.',
   lectura_consumos:
     'No se pudieron leer los consumos, así que no se emitió la factura: habría salido por menos de lo que se consumió, y una vez emitida no se corrige.',
+  lectura_agencia_fiscal:
+    'No se pudieron leer los datos fiscales de la agencia, así que no se emitió la factura: habría salido con la condición y el CUIT equivocados.',
   total: 'El cambio se hizo, pero no se pudo recalcular el precio. La reserva quedó con el total anterior.',
   repro: 'No se pudo reprogramar la estadía.',
+  repro_lectura: 'No se pudieron leer los datos para reprogramar. No se cambió nada — probá de nuevo.',
   // Cobro (Fase 23).
   monto: 'El importe tiene que ser mayor que cero.',
   pago: 'No se pudo registrar el pago. No quedó nada cobrado.',
@@ -179,6 +182,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   ocupada: 'Esa unidad ya está ocupada en las fechas de la reserva.',
   sin_destino: 'Elegí la unidad de destino.',
   sin_estadia: 'La reserva no tiene una estadía asociada.',
+  lectura_estadia: 'No se pudo leer la estadía para mudarla. No se cambió nada — probá de nuevo.',
   destino_inexistente: 'La unidad de destino no existe.',
   destino_inactivo: 'La unidad de destino está dada de baja.',
   tarifa_destino:

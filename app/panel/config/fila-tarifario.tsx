@@ -93,8 +93,10 @@ export function FilaTarifario({
                 )
               }
               return (
-                <div key={t} className="flex flex-col gap-1 rounded-lg bg-stone-50 p-2">
-                  {fechas?.[t] && <span className="text-xs text-stone-400">{fechas[t]}</span>}
+                <div key={t} className="flex min-w-0 max-w-56 flex-col gap-1 rounded-lg bg-stone-50 p-2">
+                  {fechas?.[t] && (
+                    <span className="text-xs break-words text-stone-400">{fechas[t]}</span>
+                  )}
                   <div className="flex items-end gap-2">
                   <input type="hidden" name={`tarifa_id_${t}`} value={p.id} />
                   <label className="flex flex-col gap-1 text-xs">
@@ -147,10 +149,10 @@ export function FilaTarifario({
               return (
                 <div
                   key={t}
-                  className="rounded-lg bg-stone-50 px-3 py-2 ring-1 ring-stone-200"
+                  className="min-w-0 max-w-56 rounded-lg bg-stone-50 px-3 py-2 ring-1 ring-stone-200"
                 >
                   <p className="text-xs font-medium text-stone-500">Temporada {ETIQUETAS_TEMP[t].toLowerCase()}</p>
-                  {fechas?.[t] && <p className="text-xs text-stone-400">{fechas[t]}</p>}
+                  {fechas?.[t] && <p className="text-xs break-words text-stone-400">{fechas[t]}</p>}
                   {p ? (
                     <p className="tabular text-sm text-stone-800">
                       <span className="font-semibold text-stone-900">{formatearUSD(p.rack)}</span>

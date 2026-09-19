@@ -12,7 +12,7 @@
  */
 
 import type { CategoriaUnidad } from './unidades'
-import { sumarDias, formatoFechaCorta } from '@/lib/fechas'
+import { sumarDias, formatoFechaCorta, formatoFecha } from '@/lib/fechas'
 
 /** Un tipo de alojamiento, tal como lo ve el público. */
 export interface TipoCatalogo {
@@ -137,13 +137,18 @@ export function textoCapacidad(capacidadMax: number): string {
  * sitio, y el reclamo llega en el mostrador.
  *
  * Se resta un día para que la fecha que se lee sea la última noche real.
+ *
+ * `conAño`: por defecto `false` (el caso de uso original, un huésped mirando
+ * fechas cercanas). En `false`. Pasar `true` donde se muestran VARIOS rangos
+ * de la misma temporada juntos y pueden pertenecer a años de Tarifario
+ * distintos — sin año, «01/09 al 30/09» de 2025 y de 2026 se leen como el
+ * mismo dato repetido dos veces, cuando no lo son.
  */
-export function textoRango(desde: string, hasta: string): string {
+export function textoRango(desde: string, hasta: string, conAño = false): string {
   const ultimaNoche = sumarDias(hasta, -1)
+  const fecha = conAño ? formatoFecha : formatoFechaCorta
   // Un rango de un solo día quedaría como «05/04 al 05/04»: se dice una vez.
-  return ultimaNoche <= desde
-    ? formatoFechaCorta(desde)
-    : `${formatoFechaCorta(desde)} al ${formatoFechaCorta(ultimaNoche)}`
+  return ultimaNoche <= desde ? fecha(desde) : `${fecha(desde)} al ${fecha(ultimaNoche)}`
 }
 
 /* --------------------------------------------------------------- fotos -- */

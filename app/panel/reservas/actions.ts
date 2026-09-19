@@ -196,11 +196,26 @@ export async function crearReservaAction(
   // El desglose se valida contra la capacidad de la unidad elegida. Se hace acá y
   // no en la base porque el mensaje tiene que decir cuántos entran y por qué, no
   // «viola una restricción».
-  const { data: tipoElegido } = await (await crearClienteServidor())
+  const { data: tipoElegido, error: eTipoElegido } = await (await crearClienteServidor())
     .from('tipos_unidad')
     .select('capacidad_max')
     .eq('id', tipoUnidadId)
     .maybeSingle<{ capacidad_max: number }>()
+
+  /*
+    Si esto falla y se sigue de largo, `validarOcupantes` recibe `undefined`
+    de capacidad y SALTEA el chequeo entero (ver su propio código: sin
+    capacidad no hay límite que aplicar) — una habitación de 2 podría
+    quedar cargada con 10 personas sin que la validación lo note. No hay un
+    valor por omisión seguro para "cuánto entra en esta unidad": se corta.
+  */
+  if (eTipoElegido) {
+    registrarFalla(eTipoElegido, 'reservas:capacidad_max')
+    return {
+      error: 'No se pudo verificar la capacidad de la unidad. Probá de nuevo.',
+      valores,
+    }
+  }
 
   const problemas = validarOcupantes(ocupantes, tipoElegido?.capacidad_max)
   if (problemas.length > 0) return { error: problemas[0], valores }
@@ -239,11 +254,17 @@ export async function crearReservaAction(
   // Reusar el huésped por email o crearlo.
   let huespedId: string | null = null
   if (email) {
-    const { data: existente } = await supabase
+    const { data: existente, error: eExistente } = await supabase
       .from('huespedes')
       .select('id')
       .eq('email', email)
       .maybeSingle()
+    // Sin esto, una lectura que falla se confunde con "no hay huésped con
+    // ese email" y el paso de abajo crea uno NUEVO — un huésped que ya tenía
+    // ficha (con su historial, su nivel de fidelidad) termina duplicado.
+    if (eExistente) {
+      return { error: 'No se pudo verificar si el huésped ya está cargado. Probá de nuevo.', valores }
+    }
     huespedId = existente?.id ?? null
   }
 
@@ -1056,11 +1077,20 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   // huésped. De ahí sale la letra del comprobante.
   let receptor: ReceptorFactura
   if (reserva.agencia_id) {
-    const { data: agencia } = await supabase
+    const { data: agencia, error: eAgencia } = await supabase
       .from('agencias')
       .select('condicion_iva, cuit')
       .eq('id', reserva.agencia_id)
       .single()
+    /*
+      Sin esto, una lectura fallida no se distingue de una agencia sin CUIT
+      cargado: `receptor` caía a `responsable_inscripto` con `cuit: null` — la
+      condición fiscal MÁS exigente (exige CUIT válido) con el dato que
+      justamente hace falta para cumplirla en `null`. Emitir así, o exigirle
+      el CUIT al usuario por un dato que en realidad SÍ está cargado y solo no
+      se pudo leer, son las dos caras del mismo error.
+    */
+    cortarSiFalla(eAgencia, `/panel/reservas/${reservaId}`, 'lectura_agencia_fiscal')
     receptor = {
       condicion: (agencia?.condicion_iva ?? 'responsable_inscripto') as CondicionIva,
       cuit: (agencia?.cuit as string) ?? null,
@@ -1482,7 +1512,14 @@ export async function crearReservaGrupal(
 
   let huespedId: string | null = null
   if (email) {
-    const { data: existente } = await supabase.from('huespedes').select('id').eq('email', email).maybeSingle()
+    const { data: existente, error: eExistente } = await supabase
+      .from('huespedes')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
+    // Mismo motivo que en el alta individual: sin esto, una lectura que
+    // falla duplica al titular en vez de reusar su ficha.
+    if (eExistente) return { error: 'No se pudo verificar si el titular ya está cargado. Probá de nuevo.' }
     huespedId = existente?.id ?? null
   }
   if (!huespedId) {
@@ -1561,19 +1598,22 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   if (!checkIn || !checkOut || checkOut <= checkIn) redirect(`/panel/reservas/${id}?error=fechas`)
 
   const supabase = await crearClienteServidor()
-  const { data: estadia } = await supabase
+  const { data: estadia, error: eEstadia } = await supabase
     .from('estadias')
     .select('id, tipo_unidad_id')
     .eq('reserva_id', id)
     .limit(1)
     .single()
-  const { data: reserva } = await supabase
+  const { data: reserva, error: eReserva } = await supabase
     .from('reservas')
     .select(
       'tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono)',
     )
     .eq('id', id)
     .single()
+  // Antes esto redirigía SIN `?error=` — la pantalla recargaba en silencio y
+  // no había forma de saber que la reprogramación no había pasado nada.
+  if (eEstadia || eReserva) redirect(`/panel/reservas/${id}?error=repro_lectura`)
   if (!estadia || !reserva) redirect(`/panel/reservas/${id}`)
 
   const tarifaTipo: TarifaTipo = reserva.tarifa_tipo === 'neto' ? 'neto' : 'rack'
@@ -1681,11 +1721,15 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
   if (!unidadDestino) redirect(volverA({ error: 'sin_destino' }))
 
   const supabase = await crearClienteServidor()
-  const { data: estadia } = await supabase
+  const { data: estadia, error: eEstadia } = await supabase
     .from('estadias')
     .select('unidad_id, estado, periodo')
     .eq('reserva_id', id)
     .maybeSingle()
+  // Distinto de "sin_estadia": para quien está arrastrando una reserva en la
+  // grilla, "no se pudo leer, probá de nuevo" no es lo mismo que "esta
+  // reserva no tiene estadía", que suena a un problema de datos mucho peor.
+  if (eEstadia) redirect(volverA({ error: 'lectura_estadia' }))
   if (!estadia) redirect(volverA({ error: 'sin_estadia' }))
 
   // Se valida en el dominio ANTES de ir a la base: da un mensaje claro y evita

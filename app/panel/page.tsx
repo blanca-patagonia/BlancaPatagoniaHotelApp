@@ -465,7 +465,12 @@ export default async function DashboardPage() {
         <Kpi
           titulo="Reservas activas"
           valor={kpi(reservasActivas, eActivas)}
-          detalle="en curso"
+          // No es "en curso": cuenta ESTADOS_ACTIVOS (pendiente + confirmada +
+          // pagada + in_house), el mismo criterio del motor anti-overbooking
+          // (`ocupaInventario`) — reservas que TIENEN una unidad tomada, aunque
+          // el huésped todavía no haya llegado. "En curso" hacía pensar que las
+          // dos de hoy eran huéspedes alojados en este momento.
+          detalle="ocupan una unidad"
           icono="reservas"
           href={puede('reservas') ? '/panel/reservas' : undefined}
         />

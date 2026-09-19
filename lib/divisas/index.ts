@@ -85,7 +85,11 @@ async function traerJson(url: string, contexto: string): Promise<unknown | null>
     const r = await fetch(url, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: 'no-store',
-      headers: { accept: 'application/json' },
+      // Ámbito Financiero (Cloudflare) devuelve 403 al `user-agent` por defecto
+      // de `fetch` en Node — verificado en vivo: el mismo pedido con `curl`
+      // pasa, con `-A node` no. Un `user-agent` explícito es gratis para
+      // DolarAPI/ArgentinaDatos y necesario para no perder Ámbito por completo.
+      headers: { accept: 'application/json', 'user-agent': 'BlancaPatagoniaPMS/1.0' },
     })
 
     if (!r.ok) {
@@ -261,6 +265,46 @@ export async function obtenerDolarBlueInformativo(): Promise<{
   const j = await traerJson(`${DOLARAPI_BASE}/dolares/blue`, 'dolarapi-blue')
   if (!j || typeof j !== 'object') return null
 
+  const d = j as Record<string, unknown>
+  const compra = numero(d.compra)
+  const venta = numero(d.venta)
+  if (!(compra > 0) || !(venta > 0)) return null
+
+  return { compra, venta }
+}
+
+/* ────────────────────────────────────────────────────── Banco Nación ──── */
+
+/** Base de Ámbito Financiero. Configurable por el mismo motivo que las otras dos. */
+const AMBITO_BASE = process.env.AMBITO_URL?.replace(/\/$/, '') ?? 'https://mercados.ambito.com'
+
+/**
+ * Dólar Banco Nación, SOLO informativo (dashboard).
+ *
+ * Ni DolarAPI ni ArgentinaDatos —las dos fuentes de `CotizacionProvider`—
+ * distinguen al BNA del «oficial» genérico: las dos exponen una única casa
+ * `oficial`, que es la referencia que replican los bancos públicos y no la
+ * cotización propia del banco (ver `DESCRIPCION_FUENTE` en
+ * `lib/domain/divisas.ts`, y el ADR 0020). Ámbito Financiero sí publica el
+ * valor del BNA por separado (`dolarnacion`), pero es un endpoint **no
+ * documentado** de un medio periodístico, no una API pública con contrato:
+ * puede cambiar de forma sin aviso.
+ *
+ * Por eso, igual que el blue de arriba, queda deliberadamente FUERA de
+ * `CotizacionProvider`/`resolverVigente`: lo que se cobra sigue siendo
+ * siempre el oficial de DolarAPI/ArgentinaDatos, nunca este valor. No se
+ * persiste, no tiene caché ni reintento — si falla, esta fila del dashboard
+ * simplemente no aparece.
+ */
+export async function obtenerDolarBancoNacionInformativo(): Promise<{
+  compra: number
+  venta: number
+} | null> {
+  const j = await traerJson(`${AMBITO_BASE}/dolarnacion/variacion`, 'ambito-nacion')
+  if (!j || typeof j !== 'object') return null
+
+  // Ámbito devuelve compra/venta como texto con coma decimal ("1480,00"),
+  // no como número. `numero()` ya sabe convertir eso.
   const d = j as Record<string, unknown>
   const compra = numero(d.compra)
   const venta = numero(d.venta)

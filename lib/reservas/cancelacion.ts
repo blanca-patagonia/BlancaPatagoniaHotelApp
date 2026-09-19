@@ -11,6 +11,7 @@ import {
 import { formatearUSD } from '@/lib/domain/moneda'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { diasEntre, hoyISO } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
 
 /**
  * «¿Cuánto se le cobra a esta reserva si se cancela hoy?»
@@ -53,11 +54,22 @@ export async function cargoDeCancelacion(
     noShow?: boolean
   },
 ): Promise<CargoDeCancelacion | null> {
-  const { data: pol } = await client
+  const { data: pol, error: ePol } = await client
     .from('politicas_cancelacion')
     .select('reglas')
     .eq('codigo', 'estandar')
     .maybeSingle()
+
+  /*
+    No se corta acá —los dos que llaman a esto son una vista previa en
+    pantalla y el texto de un correo, ninguno tiene dónde mostrar un error
+    bloqueante—, pero SÍ hay que poder distinguir en el log «no hay política
+    cargada» de «la lectura falló». Sin esto, las dos se ven exactamente
+    igual: `null`, y "si corresponde algún cargo te lo confirmamos por este
+    medio" en el correo, cuando en el segundo caso el cargo real SÍ se podría
+    haber calculado.
+  */
+  registrarFalla(ePol, 'cancelacion:politica')
 
   const reglas = (pol?.reglas ?? []) as ReglaCancelacion[]
   if (reglas.length === 0) return null

@@ -255,7 +255,11 @@ export async function generarPreventivo(): Promise<void> {
   await requerirRol('admin', 'gerencia')
 
   const supabase = await crearClienteServidor()
-  const { data } = await supabase.rpc('generar_mantenimiento_preventivo')
+  const { data, error } = await supabase.rpc('generar_mantenimiento_preventivo')
+  // Sin esto, un RPC que falla termina en «?generadas=0» — igual que si de
+  // verdad no hubiera ningún plan vencido. Las dos situaciones piden
+  // reacciones opuestas: una no requiere nada, la otra hay que reintentarla.
+  cortarSiFalla(error, '/panel/mantenimiento', 'generar_preventivo')
 
   revalidatePath('/panel/mantenimiento')
   redirect(`/panel/mantenimiento?generadas=${data ?? 0}`)

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { esRolValido, type Rol } from '@/lib/domain/roles'
 import { puedeAcceder, type Area } from '@/lib/domain/permisos'
+import { registrarFalla } from '@/lib/acciones'
 
 /**
  * Resolución de la sesión del staff en el servidor. Combina el usuario de
@@ -44,11 +45,22 @@ export const obtenerSesion = cache(async (): Promise<Sesion | null> => {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: perfil } = await supabase
+  const { data: perfil, error: ePerfil } = await supabase
     .from('perfiles')
     .select('nombre, rol, activo')
     .eq('id', user.id)
     .single()
+
+  /*
+    NO cambia el comportamiento: sigue fallando cerrado, que es lo correcto
+    acá (ver AGENTS.md — "el login me acepta y me devuelve al login" NO es un
+    bug, es `sin_rol`/`activo=false` rechazando bien). Lo único que faltaba
+    era poder DISTINGUIR en el log esa situación —normal, esperable— de una
+    lectura que de verdad falló: hoy las dos mandan a la misma persona de
+    vuelta al login con el mismo silencio, y es la función que corre en
+    CADA pantalla del panel.
+  */
+  registrarFalla(ePerfil, 'auth:perfil')
 
   if (!perfil || !perfil.activo || !esRolValido(perfil.rol)) return null
 
