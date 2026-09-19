@@ -1,5 +1,6 @@
 import { obtenerSesion } from '@/lib/auth/session'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
+import { obtenerDolarBlueInformativo, obtenerDolarBancoNacionInformativo } from '@/lib/divisas'
 import {
   MONEDAS_EXTRANJERAS,
   esMonedaExtranjera,
@@ -30,6 +31,12 @@ import {
  *   ?monto=250       además de la cotización, devuelve la conversión de ese USD
  *   ?forzar=1        salta el caché en memoria (botón «Actualizar»)
  *
+ * Además de `cotizaciones` (lo que se COBRA), el cuerpo trae `informativas`:
+ * dólar blue y Banco Nación, solo para mostrar — no participan de ningún
+ * cálculo. Se completan cuando la consulta incluye ARS (siempre, salvo que se
+ * pida explícitamente otra moneda), y son `null` sin avisar si la fuente
+ * externa no respondió: mismo criterio que el widget del dashboard.
+ *
  * ── Por qué pide sesión ─────────────────────────────────────────────────────
  *
  * El valor en sí es público —lo publica un banco—, pero el servicio lee con el
@@ -55,6 +62,11 @@ interface Cuerpo {
   estado: string
   /** Solo si vino `?monto=`. */
   convertido?: number
+}
+
+interface Informativa {
+  compra: number
+  venta: number
 }
 
 export async function GET(req: Request) {
@@ -87,26 +99,41 @@ export async function GET(req: Request) {
     ? [pedida as MonedaExtranjera]
     : MONEDAS_EXTRANJERAS
 
-  const resultados = await Promise.all(
-    monedas.map(async (m): Promise<Cuerpo | null> => {
-      const v = await cotizacionVigente(m, { forzar })
-      if (!v) return null
+  // Blue y Banco Nación son ARS/USD únicamente: se piden solo si ARS está
+  // entre las monedas consultadas, para no disparar dos llamadas externas
+  // de más cuando alguien pide puntualmente BRL o EUR.
+  const conInformativas = monedas.includes('ARS')
 
-      return {
-        moneda: v.moneda,
-        compra: v.compra,
-        venta: v.venta,
-        fuente: v.fuente,
-        obtenidaEn: v.obtenidaEn,
-        origen: v.origen,
-        antiguedadMinutos: v.antiguedadMinutos,
-        vencida: v.vencida,
-        requiereAdvertencia: v.requiereAdvertencia,
-        estado: textoEstado(v),
-        ...(monto !== null ? { convertido: convertirDesdeUSD(monto, v) } : {}),
-      }
-    }),
-  )
+  const [resultados, informativas] = await Promise.all([
+    Promise.all(
+      monedas.map(async (m): Promise<Cuerpo | null> => {
+        const v = await cotizacionVigente(m, { forzar })
+        if (!v) return null
+
+        return {
+          moneda: v.moneda,
+          compra: v.compra,
+          venta: v.venta,
+          fuente: v.fuente,
+          obtenidaEn: v.obtenidaEn,
+          origen: v.origen,
+          antiguedadMinutos: v.antiguedadMinutos,
+          vencida: v.vencida,
+          requiereAdvertencia: v.requiereAdvertencia,
+          estado: textoEstado(v),
+          ...(monto !== null ? { convertido: convertirDesdeUSD(monto, v) } : {}),
+        }
+      }),
+    ),
+    conInformativas
+      ? Promise.all([obtenerDolarBlueInformativo(), obtenerDolarBancoNacionInformativo()]).then(
+          ([blue, bancoNacion]): { blue: Informativa | null; bancoNacion: Informativa | null } => ({
+            blue,
+            bancoNacion,
+          }),
+        )
+      : Promise.resolve({ blue: null, bancoNacion: null }),
+  ])
 
   const cotizaciones = resultados.filter((r): r is Cuerpo => r !== null)
 
@@ -119,6 +146,7 @@ export async function GET(req: Request) {
       // lista vacía a secas: quien consume tiene que poder distinguir «no hay
       // conversión disponible, mostrá USD» de «pediste una moneda que no cotizo».
       sinCotizacion: cotizaciones.length === 0,
+      informativas,
     },
     {
       // `no-store` y no un `max-age`: el caché real es el del servicio, que sabe

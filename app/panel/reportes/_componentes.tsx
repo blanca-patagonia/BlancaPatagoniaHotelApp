@@ -1,6 +1,7 @@
 import { mesRelativo, semanaRelativa, etiquetaSemana } from '@/lib/domain/metricas'
 import { Icono } from '../_components/iconos'
 import { BarraHerramientas, Mensaje, botonClases } from '../_components/ui'
+import { SelectorMes } from '../_components/selector-mes'
 
 /**
  * Piezas compartidas por los informes.
@@ -41,16 +42,7 @@ export function SelectorDeMes({ base, mes }: { base: string; mes: string }) {
       <form method="get" action={base} className="flex items-end gap-2">
         <label className="flex flex-col gap-1 text-xs">
           <span className="text-stone-500">Mes analizado</span>
-          <input
-            type="month"
-            name="mes"
-            defaultValue={mes}
-            aria-label="Mes analizado"
-            /* `py-2` y no `py-1.5`: el campo comparte una fila `items-end` con el
-               botón «Ver», y con 34 px contra los 38 del botón el desnivel se
-               veía. Se emparejan en 38. */
-            className="rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-lago-500 focus:outline-none"
-          />
+          <SelectorMes name="mes" defaultValue={mes} ariaLabel="Mes analizado" />
         </label>
         <button className={botonClases('primario')}>Ver</button>
       </form>

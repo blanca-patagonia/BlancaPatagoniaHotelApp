@@ -4,7 +4,8 @@ import Link from 'next/link'
 
 import { useActionState } from 'react'
 import { importarCsvCanal, type EstadoImportacionCsv } from './actions'
-import { CAMPO, Campo, Mensaje, botonClases } from '../_components/ui'
+import { Mensaje, botonClases } from '../_components/ui'
+import { CampoArchivo } from '../_components/campo-archivo'
 
 const ESTADO_INICIAL: EstadoImportacionCsv = {}
 
@@ -38,18 +39,13 @@ export function ImportarCsv() {
         importes pueden cambiar de formato.
       </p>
 
-      <Campo
+      <CampoArchivo
+        nombre="archivo"
         etiqueta="Archivo del informe"
         ayuda="CSV descargado del extranet. Las reservas quedan en la lista de abajo para revisar antes de importarlas."
-      >
-        <input
-          type="file"
-          name="archivo"
-          accept=".csv,text/csv,text/plain"
-          required
-          className={CAMPO}
-        />
-      </Campo>
+        accept=".csv,text/csv,text/plain"
+        requerido
+      />
 
       {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
 

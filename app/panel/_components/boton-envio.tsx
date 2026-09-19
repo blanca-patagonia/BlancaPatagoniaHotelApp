@@ -1,8 +1,9 @@
 'use client'
 
 import { useFormStatus } from 'react-dom'
-import type { ReactNode } from 'react'
+import { useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { botonClases, type VarianteBoton } from './ui'
+import { useConfirmar } from './confirmar'
 
 /**
  * Botón de envío que se bloquea mientras la acción está en curso.
@@ -20,6 +21,16 @@ import { botonClases, type VarianteBoton } from './ui'
  *
  * Es una red de seguridad de interfaz, no la garantía: las reglas que impiden
  * facturar dos veces siguen estando en el dominio y en la base.
+ *
+ * ── `confirmar`: modal propio, no `window.confirm` ──────────────────────────
+ *
+ * El diálogo nativo es síncrono y bloquea el hilo hasta que alguien responde;
+ * el modal propio (`confirmar.tsx`) no puede hacer eso — se pinta y espera un
+ * clic —, así que el envío se corta SIEMPRE con `preventDefault()` y recién
+ * se dispara con `form.requestSubmit(boton)` si la respuesta fue que sí.
+ * Pasar el botón como `submitter` es lo que mantiene el par `name`/`value`
+ * cuando dos botones de envío comparten un mismo `<form>` (ver el comentario
+ * de esa prop, abajo).
  */
 export function BotonEnvio({
   children,
@@ -59,22 +70,29 @@ export function BotonEnvio({
   'aria-label'?: string
 }) {
   const { pending } = useFormStatus()
+  const refBoton = useRef<HTMLButtonElement>(null)
+  const pedirConfirmacion = useConfirmar()
+  const [esperandoConfirmacion, setEsperandoConfirmacion] = useState(false)
+
+  async function alClickear(e: MouseEvent<HTMLButtonElement>) {
+    e.preventDefault()
+    if (esperandoConfirmacion) return // un doble clic no abre un segundo modal
+    setEsperandoConfirmacion(true)
+    const ok = await pedirConfirmacion(confirmar as string)
+    setEsperandoConfirmacion(false)
+    if (ok) refBoton.current?.form?.requestSubmit(refBoton.current)
+  }
 
   return (
     <button
+      ref={refBoton}
       type="submit"
-      disabled={pending}
+      disabled={pending || esperandoConfirmacion}
       aria-busy={pending}
       aria-label={etiquetaAccesible}
       name={name}
       value={value}
-      onClick={
-        confirmar
-          ? (e) => {
-              if (!window.confirm(confirmar)) e.preventDefault()
-            }
-          : undefined
-      }
+      onClick={confirmar ? alClickear : undefined}
       className={botonClases(variante, `disabled:cursor-wait disabled:opacity-70 ${extra}`)}
     >
       {pending && <Girador />}
@@ -83,8 +101,12 @@ export function BotonEnvio({
   )
 }
 
-/** Indicador circular de progreso. SVG propio: el proyecto no usa librerías de iconos. */
-function Girador() {
+/**
+ * Indicador circular de progreso. SVG propio: el proyecto no usa librerías de
+ * iconos. Exportado porque `toast.tsx` lo reusa para el aviso "cargando" —
+ * un solo símbolo de carga en todo el panel, no dos que puedan divergir.
+ */
+export function Girador() {
   return (
     <svg
       className="size-4 animate-spin"

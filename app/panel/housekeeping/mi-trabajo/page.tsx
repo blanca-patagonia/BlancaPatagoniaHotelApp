@@ -53,6 +53,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   no_corresponde: 'Esa habitación ya estaba marcada. No hacía falta tocar nada.',
   no_existe: 'No se encontró la habitación.',
   estado: 'No se pudo guardar el cambio. Probá de nuevo.',
+  lectura: 'No se pudo leer el estado de la habitación. No se cambió nada — probá de nuevo.',
 }
 
 /** Colores y ícono de cada prioridad. Siempre acompañados de texto. */

@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import { aplicarPorcentajeTarifario, type EstadoPorcentajeTarifario } from './actions'
 import { CAMPO, Campo } from '../_components/ui'
 import { BotonEnvio } from '../_components/boton-envio'
+import { useConfirmar } from '../_components/confirmar'
 
 const ESTADO_INICIAL: EstadoPorcentajeTarifario = {}
 
@@ -17,6 +18,7 @@ const ESTADO_INICIAL: EstadoPorcentajeTarifario = {}
 export function AjustePorcentajeTarifario() {
   const [estado, accion] = useActionState(aplicarPorcentajeTarifario, ESTADO_INICIAL)
   const [porcentaje, setPorcentaje] = useState('')
+  const pedirConfirmacion = useConfirmar()
 
   return (
     <form
@@ -24,11 +26,18 @@ export function AjustePorcentajeTarifario() {
       onSubmit={(e) => {
         const n = Number(porcentaje)
         if (!Number.isFinite(n) || n === 0) return // el `required` del campo ya lo frena; nada que confirmar
+        // El modal propio no puede bloquear el hilo como `window.confirm`: se
+        // corta el envío SIEMPRE y se reintenta con `requestSubmit()` si la
+        // respuesta es que sí (ver el comentario de `confirmar.tsx`).
+        e.preventDefault()
+        const formulario = e.currentTarget
         const verbo = n > 0 ? 'subir' : 'bajar'
         const texto =
           `¿Confirmás ${verbo} un ${Math.abs(n)}% el precio neto y rack de las tarifas elegidas? ` +
           'No hay un "deshacer" automático — quedaría otro ajuste por porcentaje, en sentido contrario.'
-        if (!window.confirm(texto)) e.preventDefault()
+        void pedirConfirmacion(texto).then((ok) => {
+          if (ok) formulario.requestSubmit()
+        })
       }}
       className="grid gap-3 p-5 sm:grid-cols-4 sm:items-end"
     >

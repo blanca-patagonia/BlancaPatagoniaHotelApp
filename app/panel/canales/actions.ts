@@ -909,7 +909,18 @@ export async function guardarMapeoCanal(formData: FormData): Promise<void> {
   const tipoId = String(formData.get('tipo_unidad_id') ?? '')
   const codigo = String(formData.get('codigo_canal') ?? '').trim().slice(0, 60)
   if (!tipoId) redirect(`${DESTINO}?vista=publicacion`)
-  if (!codigo) redirect(`${DESTINO}?vista=publicacion&error=mapeo_codigo`)
+
+  /*
+    Con el ancla `#tipo-<id>` (el mismo id que la fila lleva en `page.tsx`), el
+    navegador scrollea solo hasta ahí al aterrizar. Sin esto, guardar la fila
+    23 de 23 devolvía al principio de la página y el aviso de "Guardado"
+    quedaba a una pantalla y media de distancia de lo que se acababa de
+    editar — parecía que no había pasado nada.
+  */
+  const volver = `${DESTINO}?vista=publicacion`
+  const ancla = `#tipo-${tipoId}`
+
+  if (!codigo) redirect(`${volver}&error=mapeo_codigo${ancla}`)
 
   const topeCrudo = String(formData.get('tope_cupo') ?? '').trim()
   const minimoCrudo = String(formData.get('minimo_noches') ?? '').trim()
@@ -917,10 +928,10 @@ export async function guardarMapeoCanal(formData: FormData): Promise<void> {
   const minimo = minimoCrudo === '' ? null : Number(minimoCrudo)
 
   if (tope !== null && (!Number.isInteger(tope) || tope < 0)) {
-    redirect(`${DESTINO}?vista=publicacion&error=mapeo_tope`)
+    redirect(`${volver}&error=mapeo_tope${ancla}`)
   }
   if (minimo !== null && (!Number.isInteger(minimo) || minimo < 1)) {
-    redirect(`${DESTINO}?vista=publicacion&error=mapeo_minimo`)
+    redirect(`${volver}&error=mapeo_minimo${ancla}`)
   }
 
   const supabase = await crearClienteServidor()
@@ -941,12 +952,12 @@ export async function guardarMapeoCanal(formData: FormData): Promise<void> {
   // 23505 acá sólo puede ser el otro único: dos tipos con el mismo código del
   // canal. Se traduce, porque el mensaje de Postgres no dice qué hacer.
   if (error?.code === '23505') {
-    redirect(`${DESTINO}?vista=publicacion&error=mapeo_codigo_repetido`)
+    redirect(`${volver}&error=mapeo_codigo_repetido${ancla}`)
   }
-  cortarSiFalla(error, `${DESTINO}?vista=publicacion`, 'mapeo')
+  cortarSiFalla(error, volver, 'mapeo')
 
   revalidatePath(DESTINO)
-  redirect(`${DESTINO}?vista=publicacion&ok=mapeo`)
+  redirect(`${volver}&ok=mapeo${ancla}`)
 }
 
 /**
