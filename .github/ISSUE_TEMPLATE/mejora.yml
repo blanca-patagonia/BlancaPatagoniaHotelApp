@@ -1,0 +1,29 @@
+name: Mejora o funcionalidad
+description: Una idea nueva o algo que se puede hacer mejor
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: Contá la situación real del hotel o del equipo, no la solución.
+    validations:
+      required: true
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Propuesta
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas que consideraste
+  - type: checkboxes
+    id: impacto
+    attributes:
+      label: Impacto
+      options:
+        - label: Requiere migración de base de datos
+        - label: Cambia permisos o RLS
+        - label: Necesita un ADR
