@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/security/advisories/new
+    about: Las vulnerabilidades se reportan en privado, no como issue público. Ver SECURITY.md.

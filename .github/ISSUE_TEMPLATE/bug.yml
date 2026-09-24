@@ -1,0 +1,62 @@
+name: Error
+description: Algo no funciona como debería
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Reservas
+        - Portal público
+        - Pagos
+        - Facturación
+        - Consumos / Punto de venta
+        - Housekeeping / Mantenimiento
+        - Agencias y proveedores
+        - Reportes
+        - Canales de venta
+        - Base de datos / RLS
+        - Otra
+    validations:
+      required: true
+  - type: dropdown
+    id: rol
+    attributes:
+      label: Rol con el que ocurre
+      options:
+        - admin
+        - gerencia
+        - recepcion
+        - housekeeping
+        - Huésped (público, sin cuenta)
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducirlo
+      placeholder: |
+        1. Entrar a /panel/...
+        2. Hacer clic en ...
+        3. Ver el error
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué esperabas que pasara
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Qué pasó en realidad
+      description: Sumá capturas o el mensaje de error si lo hay.
+    validations:
+      required: true
+  - type: textarea
+    id: entorno
+    attributes:
+      label: Entorno
+      description: Local o nube, navegador, commit o versión.
