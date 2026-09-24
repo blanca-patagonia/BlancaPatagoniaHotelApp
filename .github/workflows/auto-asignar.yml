@@ -1,0 +1,41 @@
+name: Auto-asignar
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  asignar:
+    # Los bots no son personas: Dependabot sigue su propio flujo.
+    if: github.actor != 'dependabot[bot]' && github.event.sender.type == 'User'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const equipo = ['octi35', 'santimoran19'];
+            const autor = context.payload.sender.login;
+            const numero = (context.payload.issue || context.payload.pull_request).number;
+
+            // Quien lo abre se lo queda.
+            if (equipo.includes(autor)) {
+              await github.rest.issues.addAssignees({
+                ...context.repo, issue_number: numero, assignees: [autor],
+              });
+            }
+
+            // En los PR, la revisión se le pide a la otra persona del equipo.
+            if (context.payload.pull_request) {
+              const revisores = equipo.filter((u) => u !== autor);
+              if (revisores.length) {
+                await github.rest.pulls.requestReviewers({
+                  ...context.repo, pull_number: numero, reviewers: revisores,
+                });
+              }
+            }
