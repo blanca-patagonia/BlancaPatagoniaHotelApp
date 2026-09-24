@@ -1,0 +1,33 @@
+# Etiquetas automáticas según los archivos que toca cada PR.
+# Usa las etiquetas que ya existen en el repo.
+"area: frontend":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/**/*.tsx"
+          - "app/**/*.css"
+          - "public/**"
+"area: backend":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/api/**"
+          - "lib/**"
+          - "proxy.ts"
+          - "instrumentation.ts"
+"area: base de datos":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "supabase/**"
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "*.md"
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+seguridad:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - "proxy.ts"
