@@ -52,8 +52,32 @@ jobs:
       # expiración y alta atómica) se saltean en silencio y el CI queda verde
       # sin haber verificado la garantía central del sistema (ADR 0002).
       # El runner de GitHub ya trae Docker, y el CLI es una devDependency.
+      # `supabase start` baja varias imágenes de `supabase/*` desde Docker
+      # Hub, y los runners de GitHub comparten IP entre miles de jobs: es
+      # común pegarle al límite de pulls anónimos ("toomanyrequests: Rate
+      # exceeded") sin que el cambio del PR tenga nada que ver. Encontrado en
+      # las corridas de los PRs #95 y #96 (bumps de GitHub Actions, sin
+      # relación con Docker). Tres intentos con `stop` entre medio -si quedó
+      # algún contenedor a medio levantar, el segundo `start` falla con "ya
+      # está corriendo" en vez de reintentar- y espera creciente para no
+      # pegarle al límite de nuevo enseguida.
       - name: Levantar Supabase local
-        run: npx supabase start
+        run: |
+          intentos=3
+          espera=30
+          for i in $(seq 1 "$intentos"); do
+            if npx supabase start; then
+              exit 0
+            fi
+            echo "::warning::'supabase start' falló (intento $i de $intentos)."
+            if [ "$i" = "$intentos" ]; then
+              echo "::error::'supabase start' no arrancó tras $intentos intentos."
+              exit 1
+            fi
+            npx supabase stop || true
+            sleep "$espera"
+            espera=$((espera * 2))
+          done
 
       - name: Exportar credenciales de la base
         run: |
