@@ -7168,6 +7168,78 @@ el navegador, no la página.
 
 Typecheck 0 · lint 0 · test 1733 pasados / 561 salteados (sin cambios en la
 cuenta: son componentes de interfaz, no lógica de dominio nueva) · build 0.
+
+## 2026-10-05 — Issue #85: el camino de estados de una reserva, atómico (migración 0109)
+
+- **El hallazgo.** `saldarSiCorresponde` (`lib/reservas/saldar.ts`) calcula el
+  camino entre el estado actual de una reserva y el que corresponde según lo
+  cobrado —`pendiente → pagada` no es una transición válida, hay que pasar
+  por `confirmada`— y lo recorría con un `update` POR PASO, cada uno un viaje
+  separado a la base. Si el primero entraba y el segundo fallaba (una caída
+  de red, un RLS que lo bloquea), la reserva quedaba en el estado intermedio
+  **para siempre**: ya estaba cobrada del todo pero el sistema seguía
+  mostrándola como si sólo tuviera la seña, y nada vuelve a llamar a esta
+  función para esa reserva salvo que llegue otro pago. Es el caso exacto que
+  describe el issue #85: "un fallo a mitad de camino avisa pero deja los
+  datos incompletos".
+- **El resto de los flujos de reserva de varios pasos, auditados y ya
+  atómicos** (no hubo que tocarlos): el alta (`crear_reserva`, con la
+  agencia DENTRO desde la 0084) y la escritura conjunta de precio+total en
+  reprogramación/mudanza (`aplicar_precio_reserva`, 0085) ya corren en una
+  sola transacción. La reserva grupal (`crearReservaGrupal`) queda
+  deliberadamente **no** atómica —un grupo de 5 que consigue 4 unidades
+  conviene quedárselo, no abortar el lote— y ya reporta el resultado parcial
+  en vez de esconderlo; no es el defecto que el issue pedía cerrar.
+- **La solución.** `avanzar_estado_reserva(p_reserva_id, p_desde, p_camino)`
+  (migración 0109): recorre el camino COMPLETO en una sola función
+  `plpgsql` (una función = una transacción), con `for update` para
+  serializar contra una llamada concurrente (mostrador cobrando + webhook
+  avisando el mismo pago) y el mismo recaudo de `aplicar_precio_reserva`:
+  comprueba `FOUND` después de cada `update`, porque siendo `security
+  invoker` un RLS que bloquee la escritura no lanza, afecta cero filas y
+  seguiría de largo con un «listo» falso.
+- **Por qué sigue yendo paso a paso y no salta directo al estado final:**
+  `reservas_estado_auditoria` (0020) audita cada cambio de `estado` por
+  separado — saltar de `pendiente` a `pagada` de un salto borraría el
+  rastro de que la reserva pasó por `confirmada` (cuándo quedó garantizada
+  con la seña), que es justo el dato que esa auditoría existe para no
+  perder.
+- **Por qué no se reimplementó la máquina de estados en SQL:** `TRANSICIONES`
+  (`lib/domain/reservas.ts`) ya decide qué caminos son válidos. Copiar esa
+  tabla a SQL es la misma trampa que ya separó una regla de plata en dos
+  copias que divergieron (por eso existe el propio `saldarSiCorresponde`).
+  La función recibe el camino YA CALCULADO por el dominio; lo único que
+  valida en la base es que el punto de partida (`p_desde`) siga siendo el
+  actual antes de aplicar nada.
+- **Tests** (`tests/avanzar-estado-reserva-atomico.test.ts`, 5 casos): un
+  camino de dos pasos se aplica entero; si un paso del medio es inválido,
+  **ni siquiera el primero —por sí solo válido— queda aplicado** (la prueba
+  de la atomicidad); el punto de partida desactualizado se informa y no
+  toca nada; camino vacío y reserva inexistente, cada uno con su motivo.
+  `lib/reservas/saldar.ts` pasó de updates sueltos a una llamada a la nueva
+  función; eso rompía el cliente falseado de `tests/webhook-pagos.test.ts`
+  (no tenía `.rpc()`) — se le agregó, con la misma convención de
+  `respuestas` por clave que ya usaba `from`.
+- ⚠️ **Entorno de este tramo:** la base local de este sandbox tenía el
+  historial de migraciones desincronizado del esquema real (`supabase
+  migration up` se quejaba de que `conexiones_proveedores` —0096— ya
+  existía, con el historial marcado sólo hasta la 0101). La 0109 se aplicó
+  igual con `psql` directo contra `127.0.0.1:54322`, sin tocar
+  `schema_migrations`. Quedan **6 archivos de test pre-existentes, sin
+  relación con este cambio**, fallando en esta misma base por ese
+  desacople (`anon-no-escribe`, `rls-por-rol`, `ari-servicio`,
+  `canal-cargos`, `canal-servicio`, `cotizacion` — las tablas de canal/ARI
+  son justo las de las migraciones 0094-0108 que el historial no tenía
+  marcadas, y `cotizacion` da precios ×2,04 el valor esperado). Confirmado
+  con `git stash` que ya fallaban ANTES de este cambio. No se tocó porque
+  reconciliar `schema_migrations` a mano en una base compartida es quirúrgico
+  y queda fuera del alcance de este issue; en un `supabase db reset` limpio
+  (o en CI, que arranca de cero) no debería reproducirse.
+
+Typecheck 0 · lint 0 · build no corrido en este tramo (sin cambios de
+código de aplicación fuera de `lib/reservas/saldar.ts`) · tests: los 5
+nuevos y los 12 de `webhook-pagos` en verde; el resto de la suite, igual
+que antes de este cambio.
 No se tocó Supabase en ningún momento de este tramo.
 
 ## 2026-10-06 — Pulido integral, Fase 0: línea de base y plan
