@@ -7375,3 +7375,43 @@ políticas RLS (105 sobre 52, contra las "más de 103 sobre 56" de
 `CLAUDE.md`); los manuales de usuario y técnico no se revisaron.
 
 Typecheck 0 · lint 0 (sin cambios de código, solo documentación).
+
+## 2026-10-06 — Pulido integral, Fase 2 (parcial): máquina de estados y atomicidad
+
+**Qué.** Se adelantaron dos puntos de la Fase 2 (reservada para otra sesión,
+pero sencillos y sin depender del resto):
+
+1. **Se trajo a esta rama el fix de atomicidad de `saldarSiCorresponde`**
+   (issue #85) que había quedado en una rama separada de la sesión
+   anterior: `avanzar_estado_reserva` (migración 0109) aplica el camino de
+   estados completo en una transacción. Verificado otra vez contra base
+   local: los 17 tests de `avanzar-estado-reserva-atomico.test.ts` +
+   `webhook-pagos.test.ts` pasan, y la suite completa da el mismo resultado
+   que antes de traerlo (6 archivos con fallas preexistentes del entorno,
+   ninguno relacionado — ya documentado en la Fase 0).
+2. **Máquina de estados, verificada y con contrato nuevo.** `ESTADOS_RESERVA`
+   coincide exactamente con el enum `estado_reserva` de la base (creado una
+   sola vez en la migración 0005, nunca alterado — se revisaron las 108).
+   La pantalla de ficha de reserva **no puede ofrecer una transición
+   inválida ni omitir una válida**: los botones se generan con
+   `transicionesPosibles(reserva.estado)`, la misma fuente que usa el
+   dominio, no una lista aparte — y `cambiarEstadoReserva` revalida del lado
+   del servidor con `puedeTransicionar` antes de escribir. No había ningún
+   test que afirmara la sincronización del enum, solo un comentario
+   ("debe mantenerse en sincronía"); se agregó
+   `tests/estado-reserva-sincronizado.test.ts`, que lee las migraciones del
+   disco (no necesita base) y falla si alguna vez un lado cambia sin el
+   otro.
+
+**Por qué.** El usuario pidió seguir con lo más sencillo de la Fase 2 que
+se pudiera dejar terminado sin depender del resto. Las dos cosas lo eran:
+la primera ya estaba hecha y probada, solo faltaba traerla; la segunda era
+una verificación con un gap de test concreto y chico.
+
+**Decisiones.** No se tocó la atomicidad de `emitirFactura` (issue #85,
+pendiente P1 de `docs/analisis-pendientes-2026-09-09.md`): es la pieza
+grande de la Fase 2 y queda para la sesión que la haga completa.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2046 tests pasados / 265
+salteados (149 archivos) — mismas 6 fallas preexistentes del entorno que
+en la Fase 0, ninguna nueva.
