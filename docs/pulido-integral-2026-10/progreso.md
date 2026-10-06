@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
 | 1 | Ramas y PRs | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 1: ramas y PRs» |
-| 2 | Lógica de reservas | **fuera de esta corrida** | — | — |
+| 2 | Lógica de reservas | ⏳ parcial (puntos 1, 2 y 6 de 8; ver nota abajo) | 2026-10-06 | «Pulido integral, Fase 2 (parcial): máquina de estados y atomicidad» + «Fase 2.6» |
 | 3 | Botones, formularios y acciones | **fuera de esta corrida** | — | — |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
 | 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
@@ -31,6 +31,18 @@
 
 ## Cosas que la próxima sesión necesita saber
 
+- **Fase 2: lo que queda.** Hechos los puntos 1 (máquina de estados,
+  `tests/estado-reserva-sincronizado.test.ts`), 2 (atomicidad de
+  `saldarSiCorresponde`, migración 0109 — pero OJO: la atomicidad de
+  `emitirFactura`, que es la otra mitad del punto 2, **sigue sin
+  resolver**, es el pendiente P1 más viejo del repo) y 6 (nada escribe
+  `reservas.total` a mano, `tests/reservas-total-sin-mano.test.ts`).
+  Quedan el **3** (cotización — USD 0 por falta de temporada), **4**
+  (disponibilidad — la garantía GiST en los tres caminos), **5**
+  (cancelación/no-show — los bordes día 14 y día 7), **7** (portal
+  público de punta a punta) y **8** (pagos y saldo). El **3, 4, 5 y 7**
+  piden navegador real contra la base local (el brief es explícito:
+  "probá en el navegador"), que esta sesión no usó.
 - **Confirmado con Octi (2026-10-06): el deploy sigue sin pasar de
   verdad.** Los crons de `vercel.json` están listos para cuando se
   despliegue, pero el sistema todavía no corre en Vercel/Supabase cloud en
