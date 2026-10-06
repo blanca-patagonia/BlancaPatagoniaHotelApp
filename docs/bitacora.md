@@ -7256,3 +7256,50 @@ detalle completo, con la evidencia de cada veredicto, está en
 
 Typecheck 0 · lint 0 · build 0 en esta rama y en cada worktree de
 Dependabot revisado. Tests: 1733/2294 en todos, sin cambios en la cuenta.
+
+## 2026-10-06 — Pulido integral, Fase 7 (acotada): deriva de README/CLAUDE.md/PENDIENTES
+
+**Qué.** `README.md`: seis números corregidos contra el repo real (tests,
+archivos con `service_role`, ADRs, migraciones, tabla/políticas RLS) y el
+link de "Auditoría de seguridad" redirigido al documento vigente de
+pendientes en vez de a `docs/audit/`, que está congelado desde 2026-08-14.
+`CLAUDE.md`: el conteo de ADRs ("35, último 0035") pasa a "39, numerados
+hasta el 0040" — al verificar apareció que **el ADR 0034 nunca se escribió
+como archivo** (era la pieza de WhatsApp por Cloud API, descartada; el
+propio documento ya lo explicaba más abajo, solo que la cuenta de arriba
+no lo reflejaba), y se extendió la cadena de ADRs recientes (0036 a 0040).
+También se encontró que el pendiente final "inventario físico real de
+unidades y tarifa rack de cabañas" tenía la primera mitad **ya resuelta**
+(ADR 0040) y nadie lo había tachado.
+
+**Lo que NO se tocó, a propósito.** La línea "Deploy (Vercel + Supabase
+cloud) pendiente" — el brief pide confirmarla con Octi antes de corregirla,
+y de paso se verificó contra `vercel.json`: son **6 crons** configurados
+(canales, salud, mantenimiento, notificaciones, recordatorios, ari), no 5
+como decía un análisis anterior. Queda la pregunta sin responder: ¿el
+sistema llegó a desplegarse, o los crons están listos para cuando se
+despliegue?
+
+**Decisión de consolidación.** `docs/analisis-pendientes-2026-09-09.md`
+queda como el documento VIGENTE de pendientes; `docs/PENDIENTES.md` se
+marca HISTÓRICO (congelado en migración 0064), con una nota cruzada entre
+los dos. Hallazgo de paso: ninguno de los dos es hoy la fuente más actual
+— desde el PR #90 (2026-10-01) el proyecto trackea pendientes como
+**issues de GitHub** (21 abiertos), algo que no existía cuando se
+escribió ninguno de los dos documentos. Se anotó en el vigente en vez de
+fusionar todo a las apuradas: los issues tienen label y prioridad: los
+documentos tienen el *por qué*, que es lo que normalmente un issue no
+lleva.
+
+**Por qué.** Es una tesis: la documentación pesa tanto como el código, y
+tres de los documentos más visibles del repo tenían números que cualquiera
+podía desmentir con un `find` o un `ls`.
+
+**Queda para el cierre final** (fuera del recorte de esta corrida):
+`COMO-LEVANTARLO.md` tiene la misma deriva que tenía `README.md` antes de
+hoy (67 migraciones, 1555 tests, 27 ADRs); `AGENTS.md` repite "24 archivos"
+con `service_role` (hoy 29) y da un tercer número distinto de tablas/
+políticas RLS (105 sobre 52, contra las "más de 103 sobre 56" de
+`CLAUDE.md`); los manuales de usuario y técnico no se revisaron.
+
+Typecheck 0 · lint 0 (sin cambios de código, solo documentación).

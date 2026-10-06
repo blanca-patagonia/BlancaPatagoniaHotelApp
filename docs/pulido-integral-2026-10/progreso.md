@@ -16,7 +16,7 @@
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
 | 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
 | 6 | Deuda que se puede pagar hoy | **fuera de esta corrida** | — | — |
-| 7 | Documentación al día (acotada: README/CLAUDE.md/PENDIENTES) | pendiente | — | — |
+| 7 | Documentación al día (acotada: README/CLAUDE.md/PENDIENTES) | ✅ hecha (acotada) | 2026-10-06 | «Pulido integral, Fase 7 (acotada): deriva de README/CLAUDE.md/PENDIENTES» |
 
 ## Reglas de esta corrida (mensaje 2 de Octi)
 
@@ -31,6 +31,22 @@
 
 ## Cosas que la próxima sesión necesita saber
 
+- **Pregunta sin responder para Octi (Fase 7): ¿el sistema se desplegó de
+  verdad o no?** `CLAUDE.md` sigue diciendo "Deploy pendiente" — no se
+  tocó, porque el brief pide confirmarlo con él antes de corregirlo. Si ya
+  se desplegó, hay que revisar esa línea Y la de `README.md` ("Despliegue
+  previsto en Vercel").
+- **El cierre final de la Fase 7 queda con tres documentos por actualizar
+  que esta corrida no tocó** (fuera del recorte explícito): `COMO-
+  LEVANTARLO.md` (misma deriva que tenía `README.md`: 67 migraciones, 1555
+  tests, 27 ADRs), `AGENTS.md` (24→29 archivos con `service_role`; da
+  "105 políticas sobre 52 tablas" contra las "más de 103 sobre 56" de
+  `CLAUDE.md` — unificar los dos en un solo número, o en la misma frase
+  que ya no promete un número exacto) y los manuales de usuario/técnico.
+- **`docs/PENDIENTES.md` y `docs/analisis-pendientes-2026-09-09.md` ya
+  tienen veredicto**: el primero es histórico, el segundo es el vigente —
+  pero ambos quedan atrás de los issues de GitHub (#68-#89), que es donde
+  hay que mirar primero para saber qué falta hoy.
 - **P0 de la Fase 0, confirmado y resuelto EN RECOMENDACIÓN por la Fase 1:**
   la RCE crítica de Next.js (`next/og ImageResponse`, GHSA-vcvr-r3jv-pc5j) la
   arregla el PR de Dependabot **#94**, verificado en worktree aislado

@@ -299,11 +299,29 @@ Tarifario 2025/2026 (Anexo A).
      reservas 199 ms, los tres sin ningún error de consola — más el tamaño
      del bundle (~1.6 MB) y los planes de consulta con `EXPLAIN ANALYZE`.
      Son números de referencia en desarrollo, no un build de producción.
-- **Hay 35 ADRs.** El último es el **0035** (preparación para un channel
+- **Hay 39 ADRs, numerados hasta el 0040** (el 0034 quedó retirado: era la
+  WhatsApp por Cloud API de Meta, descartada antes de escribirse como
+  archivo — ver más abajo, "la pieza de WhatsApp... NO entró con esta
+  pasada"). El último es el **0040** (inventario físico real de
+  unidades: nombres reales de habitación/cabaña y la franja de calendario de
+  Ocupación, migración 0106). El anterior, el **0039** (asistente de IA del
+  panel con herramientas de datos de **solo lectura** — distinto del
+  `AsistenteProvider` del portal público, que sigue siendo reglas fijas sin
+  LLM, ADR 0011, a propósito: un huésped preguntando por plata o
+  disponibilidad a un modelo que puede alucinar no era un riesgo que
+  valiera la pena). El previo, el **0038** (Payway como tercera pasarela —
+  posnet/tarjeta local — con el patrón de los dos pasos del lado del
+  integrador que exige su Gateway API, distinto del checkout alojado de
+  Mercado Pago/Stripe del ADR 0027). Antes, el **0037** (Supabase Storage
+  para fotos operativas: bucket privado, acceso siempre por URL firmada
+  generada en el servidor) y el **0036** (cifrado en reposo de credenciales
+  de terceros — los `access_token`/`refresh_token` de OAuth2 de Mercado
+  Pago y Google, no los tokens propios del sistema como `agencias.token`,
+  que les alcanza con RLS). El **0035** (preparación para un channel
   manager genérico: catálogo `canales_externos` + webhook receptor, sin
   tocar el módulo de Booking/Expedia que sigue siendo de un solo canal a
-  propósito). El anterior, el **0034** (WhatsApp por Cloud API oficial de
-  Meta). El previo, el **0033** (el arrastre en la grilla cambia de
+  propósito; el 0034 que seguiría en la numeración es el retirado, arriba).
+  El **0033** (el arrastre en la grilla cambia de
   habitación y no de fechas). Los previos: **ADR 0016** el precio neto fuera del alcance
   público · **ADR 0017** el alta de usuario nace sin privilegios · **ADR 0018** los
   simuladores fallan fuerte en producción · **ADR 0019** cobro efectivo de la
@@ -746,7 +764,10 @@ Tarifario 2025/2026 (Anexo A).
   —está en este repositorio, que es público—, así que sirve para `127.0.0.1` y no
   para una base alcanzable desde internet.
 - Al embeber `huespedes` desde `reservas` usar `huespedes!reservas_huesped_id_fkey` (hay 2 FKs).
-- Pendiente de confirmar con el hotel: **inventario físico real** de unidades y
-  **tarifa rack de cabañas**. El Tarifario cargado es 2025/2026 (anterior a la fecha del sistema).
+- ✅ **Inventario físico real de unidades, resuelto** (ADR 0040, migraciones
+  0106-0108: nombres reales de habitaciones/cabañas y baja de las cabañas
+  ficticias del seed representativo). **Sigue pendiente de confirmar con el
+  hotel la tarifa rack de cabañas** (hoy igual al neto). El Tarifario cargado
+  es 2025/2026 (anterior a la fecha del sistema).
 
 @AGENTS.md

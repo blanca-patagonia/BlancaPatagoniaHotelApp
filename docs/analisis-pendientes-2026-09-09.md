@@ -1,11 +1,24 @@
-# Análisis de lo que le falta al proyecto (2026-09-09)
+# Análisis de lo que le falta al proyecto (2026-09-09) — documento vigente
 
-> Foto tomada sobre `main` en `0d61664` (después de mergear el PR #41). No es un
-> reemplazo de `docs/PENDIENTES.md`: ese archivo quedó congelado en el cierre de
-> `feat/relevamiento-cliente-agosto` (migración 0064) y varios de sus pendientes
-> —por ejemplo B7, el feed iCal de salida— ya se resolvieron después (ADR 0022).
-> Este documento junta lo que sigue abierto **hoy**, verificado contra el código
-> y los ADRs, no inventado.
+> **Documento vigente de pendientes** (decisión de la Fase 7 del pulido
+> integral 2026-10, `docs/pulido-integral-2026-10/`): `docs/PENDIENTES.md`
+> quedó marcado histórico, congelado en el cierre de
+> `feat/relevamiento-cliente-agosto` (migración 0064) — varios de sus
+> pendientes, por ejemplo B7 (el feed iCal de salida), ya se resolvieron
+> después (ADR 0022). Este documento junta lo que seguía abierto el
+> **2026-09-09**, verificado contra el código y los ADRs, no inventado.
+>
+> ⚠️ **Y este documento también quedó atrás, aunque menos.** Desde el PR #90
+> (2026-10-01) el proyecto pasó a trackear pendientes como **issues de
+> GitHub** (hoy #68 a #89, 21 abiertos), con plantilla, labels de prioridad y
+> área. Para el estado más actual de qué falta, lo primero es mirar ahí —
+> `gh issue list` o la pestaña Issues del repo — y usar este documento como
+> contexto de **por qué** cada cosa sigue abierta, no como la lista en sí.
+> No se fusionó este archivo con los issues en esta pasada: son formatos
+> distintos (prosa con motivo vs. tracker con label) y mezclarlos a las
+> apuradas perdería el porqué que este documento sí tiene.
+>
+> Foto tomada sobre `main` en `0d61664` (después de mergear el PR #41).
 
 ## 1. Integraciones reales pendientes
 

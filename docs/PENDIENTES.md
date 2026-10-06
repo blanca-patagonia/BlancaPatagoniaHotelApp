@@ -1,11 +1,21 @@
-# Pendientes
+# Pendientes — HISTÓRICO (congelado 2026-08-24)
+
+> ⚠️ **Este documento quedó congelado y NO es la fuente vigente de pendientes.**
+> El vigente es [`docs/analisis-pendientes-2026-09-09.md`](analisis-pendientes-2026-09-09.md)
+> (y, desde el 2026-10-01, los **issues de GitHub** — ver ahí mismo). Se
+> conserva acá por su detalle del bloque Booking y de la auditoría de RLS en
+> el momento en que se escribió; úsalo como contexto histórico, no como lista
+> de qué falta hoy. Decisión tomada en la Fase 7 del pulido integral 2026-10
+> (`docs/pulido-integral-2026-10/`), siguiendo la instrucción de dejar UN
+> documento vigente y marcar el otro como histórico.
 
 > Estado al cerrar la rama `feat/relevamiento-cliente-agosto`.
 > **Tests verdes, cero salteados.** Lint, typecheck y build en verde.
-> Migraciones hasta la **0064**.
+> Migraciones hasta la **0064** (hoy, 108).
 
-Este archivo reemplaza a `docs/audit/00-pendientes.md` y `docs/audit/HANDOFF.md`, que
-quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior.
+Este archivo reemplazaba a `docs/audit/00-pendientes.md` y `docs/audit/HANDOFF.md`, que
+quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior. Esos dos
+siguen frescos como referencia histórica más vieja todavía.
 
 ---
 

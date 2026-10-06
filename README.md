@@ -13,7 +13,7 @@ concentran el **79 %** de las reservas del hotel.
 
 ## Estado del proyecto
 
-**1914 tests en verde** (118 archivos, cero salteados contra la base local) · typecheck,
+**2294 tests en verde** (146 archivos, cero salteados contra la base local) · typecheck,
 lint y build limpios · CI verificado en GitHub.
 
 ### Qué está funcionando
@@ -43,7 +43,7 @@ La integridad crítica no depende de la aplicación:
 
 - **Anti-overbooking** — restricción de exclusión GiST sobre `estadias`; dos
   reservas no pueden solapar la misma unidad aunque la app falle ([ADR 0002](docs/decisiones/0002-motor-de-disponibilidad.md)).
-- **RLS activado en las 51 tablas** (103 políticas), con lectura pública solo del catálogo.
+- **RLS activado en todas las tablas** (bastante más de 103 políticas sobre 56 tablas, y sigue creciendo), con lectura pública solo del catálogo.
 - **Auditoría *append-only*** por trigger genérico: el staff lee, no escribe.
 - **Límite de tasa** en las entradas públicas, atómico (inserta y después cuenta).
 
@@ -72,9 +72,9 @@ no cada tres horas.
 
 Tres pendientes técnicos, anotados donde viven y no solo acá:
 
-- **Auditar las 103 políticas RLS una por una.** Que estén activadas en las 51
+- **Auditar las políticas RLS una por una.** Que estén activadas en todas las
   tablas no dice qué permite cada una. La matriz de **lectura** ya es exhaustiva
-  (51 tablas × 4 roles, `tests/rls-por-rol.test.ts`); la de **escritura** es
+  (todas las tablas × 4 roles, `tests/rls-por-rol.test.ts`); la de **escritura** es
   dirigida, no exhaustiva, y está declarado en el propio archivo.
 - **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
   de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
@@ -138,7 +138,7 @@ contraseña perdida se recupera en **`/login/recuperar`**.
 
 ## Correr los tests — esto sí necesita Docker
 
-Los tests **no** se corren contra el proyecto de la nube: 24 archivos escriben con
+Los tests **no** se corren contra el proyecto de la nube: 29 archivos escriben con
 `service_role` —que saltea RLS— y borran filas de `reservas`, `huespedes`,
 `tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso destruye datos del
 hotel, así que `tests/db.ts` corta si las variables no apuntan a una base local.
@@ -171,8 +171,11 @@ Toda la documentación vive en [`docs/`](docs/), en español:
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
 - [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
 - [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
-- [Decisiones (ADR)](docs/decisiones/) — 22 decisiones de arquitectura numeradas.
-- [Auditoría de seguridad](docs/audit/) — qué se corrigió y qué queda abierto.
+- [Decisiones (ADR)](docs/decisiones/) — 40 decisiones de arquitectura numeradas.
+- [Qué queda pendiente](docs/analisis-pendientes-2026-09-09.md) — documento vigente; el
+  estado más actual son los [issues de GitHub](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/issues).
+  [`docs/audit/`](docs/audit/) y [`docs/PENDIENTES.md`](docs/PENDIENTES.md) quedaron
+  congelados, como referencia histórica.
 - [Manual de usuario](docs/manual-usuario.md) · [Manual técnico](docs/manual-tecnico.md)
 - [Seguridad](docs/SEGURIDAD.md) · [Auditoría inicial](docs/AUDITORIA_INICIAL.md) ·
   [Revisión de RLS y endpoints](docs/revision-seguridad.md)
@@ -189,9 +192,9 @@ app/            # Next.js App Router
   portal/       #   portal de agencias y proveedores por token
   api/          #   route handlers, webhooks y cron
 lib/            # dominio puro, disponibilidad, pagos, canales, divisas, clientes Supabase
-supabase/       # 83 migraciones SQL numeradas + seed
+supabase/       # 108 migraciones SQL numeradas + seed
 docs/           # documentación del proyecto / tesis
-tests/          # 1914 tests (Vitest)
+tests/          # 146 archivos, 2294 tests (Vitest)
 ```
 
 ## Scripts
@@ -209,7 +212,7 @@ tests/          # 1914 tests (Vitest)
 El test de integración anti-overbooking necesita la base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.
 
-Para correr los 1914 en local hay que exportar las tres variables — vitest no lee
+Para correr la suite completa en local hay que exportar las tres variables — vitest no lee
 `.env.local`, y sin la clave publicable los 4 tests del borde público saltean sin
 avisar aunque `EXIGIR_DB=1` esté puesto:
 
