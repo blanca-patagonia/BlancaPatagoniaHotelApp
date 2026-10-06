@@ -1,0 +1,1 @@
+Hotel Blanca Patagonia · El Calafate, Santa Cruz — Proyecto de tesis de Analista de Sistemas (IES), por Octavio Fakiani y Santiago Morán · La fuente de verdad es el [repositorio](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp); este wiki explica el porqué.
