@@ -7415,3 +7415,29 @@ grande de la Fase 2 y queda para la sesión que la haga completa.
 Typecheck 0 · lint 0 · build 0 · con base local: 2046 tests pasados / 265
 salteados (149 archivos) — mismas 6 fallas preexistentes del entorno que
 en la Fase 0, ninguna nueva.
+
+## 2026-10-06 — Pulido integral, Fase 2.6: nada escribe `reservas.total` a mano
+
+**Qué.** Grep completo de `app/` y `lib/` buscando cualquier
+`.from('reservas').update({...})` que incluya `total`. **Ninguno la
+incluye** — los únicos `update` sobre `reservas` encontrados escriben
+`estado`, `pago_desde_exterior`, `grupo_id`, `folio_alojamiento`,
+`folio_b_titular` o los campos de la tarjeta de garantía; el `total` sale
+exclusivamente de `crear_reserva` o `aplicar_precio_reserva` (0085), las
+dos funciones SQL que lo escriben junto con el precio por noche de la
+estadía en la misma transacción.
+
+Se agregó `tests/reservas-total-sin-mano.test.ts`: lee los archivos del
+repo (no necesita base, mismo enfoque que
+`tests/observabilidad-del-dinero.test.ts`) y falla si alguna vez aparece
+un `update` suelto con `total`. Incluye un caso armado a propósito que
+confirma que el patrón de búsqueda detecta de verdad lo que dice detectar
+—no solo que no encontró nada—.
+
+**Por qué.** Cerraba el punto 6 de la Fase 2 ("grep y test", tal cual lo
+pedía el brief): era una verificación chica y autocontenida, no dependía
+de nada de lo que falta del resto de la fase.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2050 tests pasados / 265
+salteados (151 archivos) — mismas 6 fallas preexistentes del entorno,
+ninguna nueva.
