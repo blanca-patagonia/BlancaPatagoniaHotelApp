@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
 | 1 | Ramas y PRs | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 1: ramas y PRs» |
-| 2 | Lógica de reservas | ⏳ parcial (puntos 1, 2, 4 y 6 de 8; ver nota abajo) | 2026-10-06 | Fases 2(parcial), 2.4, 2.6 — ver entradas del 2026-10-06 |
+| 2 | Lógica de reservas | ⏳ parcial (puntos 1, 2, 3, 4, 6 y 7 de 8 — ver nota abajo) | 2026-10-06 | ver entradas del 2026-10-06 en `docs/bitacora.md` |
 | 3 | Botones, formularios y acciones | **fuera de esta corrida** | — | — |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
 | 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
@@ -42,16 +42,19 @@
   a mano, `tests/reservas-total-sin-mano.test.ts`). El punto 5
   (cancelación, bordes día 14/7) se revisó y **ya estaba cubierto** por
   `tests/cancelacion.test.ts` desde antes — no hizo falta tocar nada.
-  Quedan el **3** (cotización — USD 0 por falta de temporada; el portal
-  YA deriva `hayPrecio` de `faltanTarifas`, `app/reservar/page.tsx:73`,
-  pero no se verificó en el navegador que el botón quede deshabilitado de
-  verdad), **7** (portal público de punta a punta) y **8** (pagos y
-  saldo — ya tiene bastante cobertura en
+  **El 3 y el 7 se verificaron en el navegador de verdad** (ver bitácora
+  del 2026-10-06, "Fase 2.3 y 2.7"), contra Supabase local — sin tocar
+  `.env.local` ni la nube en ningún momento: fechas sin tarifa (panel Y
+  portal, los dos con aviso claro y sin forma de avanzar a un precio
+  cero) y el checkout completo del portal (alta → seña → saldo →
+  `pagada`), que de paso confirmó en vivo que el fix de atomicidad del
+  punto 2 funciona en el camino real del webhook, no solo en el test
+  unitario. Ningún bug encontrado en ninguno de los dos.
+  Queda el **8** (pagos y saldo — ya tiene bastante cobertura en
   `tests/acciones/reservas.test.ts`: idempotencia del cobro, "pagada" solo
   con consumos cubiertos; falta el repaso explícito de comentarios "⚠️"
-  sin test que pide el brief). El **3 y 7** piden navegador real contra
-  la base local (el brief es explícito:
-  "probá en el navegador"), que esta sesión no usó.
+  sin test que pide el brief, y el navegador ya probó el camino feliz
+  completo).
 - **Confirmado con Octi (2026-10-06): el deploy sigue sin pasar de
   verdad.** Los crons de `vercel.json` están listos para cuando se
   despliegue, pero el sistema todavía no corre en Vercel/Supabase cloud en

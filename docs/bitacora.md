@@ -7469,3 +7469,64 @@ ese tramo, para no heredar un choque de otro archivo.
 
 Typecheck 0 · lint 0 · build 0 · con base local: 2052 tests pasados / 265
 salteados (152 archivos) — mismas 6 fallas preexistentes, ninguna nueva.
+
+## 2026-10-06 — Pulido integral, Fase 2.3 y 2.7: verificado en el navegador, contra base local
+
+**Qué.** Primera verificación de esta rama hecha con el navegador de verdad,
+como pide el brief (`.claude/launch.json` / `npm run dev`), apuntando
+explícitamente a Supabase **local** y nunca a la nube: las cuatro variables
+se exportaron en el mismo shell que levantó el dev server, nunca se tocó
+`.env.local` (ni se pudo leer: el permiso lo bloquea). Confirmado que
+apuntaba a local antes de tocar nada: `npm run seed:usuarios` actualizó
+`admin@blancapatagonia.local` y se verificó por `psql` directo que el
+`updated_at` de ESE usuario en la base local cambió en el mismo segundo.
+
+**Fase 2.3 — fechas sin tarifa, en los dos frentes:**
+- **Panel** (`/panel/reservas/nueva`), fechas de invierno (10-13/07/2026,
+  sin temporada cargada por diseño): aviso rojo *"No hay tarifas cargadas
+  para esas fechas. Hay unidades libres, pero sin precio no se puede
+  cotizar"* con link a Configuración → Temporadas, cada tipo de unidad
+  muestra "Sin tarifa cargada" y **los radios quedan deshabilitados de
+  verdad** — se intentó clickear uno a propósito y no se seleccionó.
+  Ninguna forma de avanzar a un alta con precio cero.
+- **Portal** (`/reservar`), fechas más allá de lo cargado (10-13/07/2027):
+  aviso amarillo *"Tenemos lugar en esas fechas, pero todavía no
+  publicamos las tarifas del período. Escribinos y te pasamos el precio en
+  el día"* — distingue correctamente "hay lugar, falta precio" de "no hay
+  lugar", con cada opción mostrando "Precio a confirmar" + botón
+  "Consultar" en vez de "Reservar". Ningún "USD 0" en pantalla.
+- *Nota de método:* el buscador del portal no se pudo ejercitar con la
+  fecha escrita a mano por el navegador automatizado (el `<input
+  type="date">` con segmentos se arma mal al tipear por partes con la
+  herramienta); se verificó navegando directo a la URL con los
+  `searchParams` que ese mismo formulario genera (`method="get"`), que
+  ejercita exactamente el mismo código de la página. Documentado como
+  limitación del método de prueba, no como hallazgo.
+
+**Fase 2.7 — checkout del portal de punta a punta, igual al instructivo de
+`COMO-LEVANTARLO.md`:** catálogo (`/reservar`, fechas de hoy) → elegir
+Standard → completar datos → `Confirmar la reserva` (con el estado
+`Reservando…` del botón, bloqueando el doble clic) → código **BP-261006-AD9D**
+→ `Pagar la seña` → pasarela simulada con la advertencia de que no mueve
+dinero → `Aprobar el pago` → la reserva pasa a **Confirmada** sola (se
+verificó también desde `/panel/reservas`, saldo USD 352,98 correcto) →
+`Pagar el saldo` → aprobar → pasa a **Pagada**, saldo USD 0,00. De punta a
+punta, sin un solo error de consola.
+
+Esto verifica en vivo, no solo con test unitario, el camino completo que
+integra el fix de atomicidad de la Fase 2 (`avanzar_estado_reserva`): el
+webhook del pago simulado disparó `saldarSiCorresponde` dos veces
+(pendiente→confirmada, después confirmada→pagada) y las dos transiciones
+se vieron reflejadas correctamente en el panel.
+
+**Por qué.** Eran las dos piezas de la Fase 2 que el brief marca
+explícitamente como necesitadas de navegador — no alcanzaba con grep ni con
+tests. Con las herramientas de navegador disponibles en esta sesión, se
+pudieron cerrar sin esperar a otra corrida.
+
+**Decisiones.** No se tocó nada del código: las dos verificaciones
+confirmaron un comportamiento ya correcto, no encontraron un bug. No se
+limpió la reserva de prueba de la base local (vive solo en el volumen
+Docker, se va con el próximo `db reset`).
+
+Sin cambios de código en esta entrada — solo verificación.
