@@ -27,6 +27,20 @@ updates:
       # React y Next van juntos o no van: subir uno sin el otro rompe tipos.
       react-y-next:
         patterns: ['next', 'react', 'react-dom', '@types/react', '@types/react-dom', 'eslint-config-next']
+    ignore:
+      # El mayor de ESLint se propuso y se cerró sin mergear tres veces (PRs
+      # #20, #34 y #57): `eslint-plugin-react` —que llega vía
+      # `eslint-config-next`, no como dependencia directa— todavía no declara
+      # soporte para ESLint 10 en su `peerDependencies` (última versión
+      # publicada, 7.37.5, tope en `^9.7`) y rompe con "contextOrFilename.
+      # getFilename is not a function" en cualquier regla `react/*`. Volver a
+      # abrir el mismo PR cada semana sin que nada cambie aguas arriba es
+      # ruido, no una propuesta real. Sacar esta línea el día que
+      # `eslint-config-next` (que SÍ se actualiza en el grupo `react-y-next`
+      # de arriba) suba su propio `eslint-plugin-react` a una versión
+      # compatible.
+      - dependency-name: 'eslint'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
