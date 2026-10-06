@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
 | 1 | Ramas y PRs | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 1: ramas y PRs» |
-| 2 | Lógica de reservas | ⏳ parcial (puntos 1, 2 y 6 de 8; ver nota abajo) | 2026-10-06 | «Pulido integral, Fase 2 (parcial): máquina de estados y atomicidad» + «Fase 2.6» |
+| 2 | Lógica de reservas | ⏳ parcial (puntos 1, 2, 4 y 6 de 8; ver nota abajo) | 2026-10-06 | Fases 2(parcial), 2.4, 2.6 — ver entradas del 2026-10-06 |
 | 3 | Botones, formularios y acciones | **fuera de esta corrida** | — | — |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
 | 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
@@ -35,13 +35,22 @@
   `tests/estado-reserva-sincronizado.test.ts`), 2 (atomicidad de
   `saldarSiCorresponde`, migración 0109 — pero OJO: la atomicidad de
   `emitirFactura`, que es la otra mitad del punto 2, **sigue sin
-  resolver**, es el pendiente P1 más viejo del repo) y 6 (nada escribe
-  `reservas.total` a mano, `tests/reservas-total-sin-mano.test.ts`).
-  Quedan el **3** (cotización — USD 0 por falta de temporada), **4**
-  (disponibilidad — la garantía GiST en los tres caminos), **5**
-  (cancelación/no-show — los bordes día 14 y día 7), **7** (portal
-  público de punta a punta) y **8** (pagos y saldo). El **3, 4, 5 y 7**
-  piden navegador real contra la base local (el brief es explícito:
+  resolver**, es el pendiente P1 más viejo del repo), 4 (el choque de
+  cupo en el alta —`crearReservaEnUnidadLibre`— nunca tuvo test contra la
+  restricción real; mudanza y recotización ya lo tenían. Nuevo
+  `tests/crear-reserva-choque.test.ts`) y 6 (nada escribe `reservas.total`
+  a mano, `tests/reservas-total-sin-mano.test.ts`). El punto 5
+  (cancelación, bordes día 14/7) se revisó y **ya estaba cubierto** por
+  `tests/cancelacion.test.ts` desde antes — no hizo falta tocar nada.
+  Quedan el **3** (cotización — USD 0 por falta de temporada; el portal
+  YA deriva `hayPrecio` de `faltanTarifas`, `app/reservar/page.tsx:73`,
+  pero no se verificó en el navegador que el botón quede deshabilitado de
+  verdad), **7** (portal público de punta a punta) y **8** (pagos y
+  saldo — ya tiene bastante cobertura en
+  `tests/acciones/reservas.test.ts`: idempotencia del cobro, "pagada" solo
+  con consumos cubiertos; falta el repaso explícito de comentarios "⚠️"
+  sin test que pide el brief). El **3 y 7** piden navegador real contra
+  la base local (el brief es explícito:
   "probá en el navegador"), que esta sesión no usó.
 - **Confirmado con Octi (2026-10-06): el deploy sigue sin pasar de
   verdad.** Los crons de `vercel.json` están listos para cuando se
