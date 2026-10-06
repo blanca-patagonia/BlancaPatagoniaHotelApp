@@ -7215,3 +7215,44 @@ candidato directo a resolverla, con evidencia antes de recomendar nada.
 Typecheck 0 · lint 0 · build 0 · tests 1733 pasados / 561 salteados (sin
 Docker, declarado) · `npm audit`: 1 crítica + 7 altas, sin resolver todavía
 (ver Fase 1).
+
+## 2026-10-06 — Pulido integral, Fase 1: ramas y PRs
+
+**Qué.** Las 10 ramas que el brief daba por absorbidas se reconfirmaron por
+contenido (no por SHA, porque `main` es historia de squashes) y se
+sostiene el veredicto en las diez, incluido el caso puntual pedido
+(`fix/panel-nav-y-desbordes`: su plegado de menú ya está cubierto en
+`main` y en uso real desde `shell.tsx`; su plegado de secciones de
+Configuración no tiene equivalente directo porque `main` lo resolvió
+mejor, partiendo esa pantalla en 7 páginas propias). Se rescató el único
+commit de valor de `docs/deriva-y-env-incompleto` (26 tests sin adaptar
+una línea) y, de `claude/github-repo-improvements-o2o8qz`, 7 agentes que
+los 4 actuales no cubren más su `README`, y las 12 páginas de la wiki con
+tres números desactualizados corregidos al copiar (67→108 migraciones,
+1555→2294 tests, 24→33 `actions.ts`; "43 tablas" se sacó por no poder
+verificarse sin Docker en esta corrida). El PR #91 se revisó y se
+recomienda mergear: `CODEOWNERS` apunta a cuentas y rutas reales.
+
+**Dependabot, uno por uno** en worktrees separados, con `npm ci` +
+`check` completo cada uno: #94, #55, #58 y #56 (éste, mayor) pasan limpio
+y se recomienda mergear los cuatro — **#94 además resuelve la RCE crítica
+de Next.js** que apareció en la Fase 0 (de 1 crítica + 7 altas a 0 + 7).
+#95 y #96 solo tocan workflows y su rojo es el rate-limit de Docker Hub,
+no el cambio — se trajo a esta rama el fix de reintento de la sesión
+anterior (`chore/ci-docker-rate-limit-retry`, cherry-pick) y se recomienda
+mergear los dos. #57 (ESLint 10) vuelve a romper por tercera vez
+(`eslint-plugin-react` sin soporte): se agregó un `ignore` en
+`.github/dependabot.yml` para que no se reabra solo cada semana.
+
+**Por qué.** Limpiar lo que ya no aporta y no perder lo que sí, antes de
+seguir construyendo sobre esta rama.
+
+**Decisiones.** Ninguna rama se borró ni ningún PR se mergeó: el brief
+reserva esas dos acciones para el OK de Octi, y además esta cuenta de
+GitHub no tiene permiso de `push` sobre el repo (confirmado con la API:
+`permissions.push: false`, y un intento real de push lo rechaza). El
+detalle completo, con la evidencia de cada veredicto, está en
+`docs/pulido-integral-2026-10/fase-1-ramas-y-prs.md`.
+
+Typecheck 0 · lint 0 · build 0 en esta rama y en cada worktree de
+Dependabot revisado. Tests: 1733/2294 en todos, sin cambios en la cuenta.

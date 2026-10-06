@@ -10,7 +10,7 @@
 | Fase | Título | Estado | Sesión | Entrada en bitácora |
 |---|---|---|---|---|
 | 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
-| 1 | Ramas y PRs | ⏳ en curso | 2026-10-06 | — |
+| 1 | Ramas y PRs | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 1: ramas y PRs» |
 | 2 | Lógica de reservas | **fuera de esta corrida** | — | — |
 | 3 | Botones, formularios y acciones | **fuera de esta corrida** | — | — |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
@@ -31,12 +31,14 @@
 
 ## Cosas que la próxima sesión necesita saber
 
-- **P0 de la Fase 0: `npm audit --audit-level=high` da 1 crítica (RCE en
-  `next/og ImageResponse`, GHSA-vcvr-r3jv-pc5j) + 7 altas, sobre `main` tal
-  cual está.** Se decide en la Fase 1 (candidato: PR de Dependabot #94).
-  Detalle en `fase-0-linea-de-base.md` §3. Si al leer esto la Fase 1 todavía
-  dice "⏳ en curso" o "pendiente" en la tabla de arriba, la vulnerabilidad
-  sigue sin resolver — priorizarla antes que cualquier otra cosa.
+- **P0 de la Fase 0, confirmado y resuelto EN RECOMENDACIÓN por la Fase 1:**
+  la RCE crítica de Next.js (`next/og ImageResponse`, GHSA-vcvr-r3jv-pc5j) la
+  arregla el PR de Dependabot **#94**, verificado en worktree aislado
+  (`npm audit` pasa de 1 crítica + 7 altas a 0 + 7, resto del `check` en
+  verde). **Sigue sin mergearse** — esta cuenta no tiene permiso de `push`.
+  Si al leer esto el PR #94 todavía está abierto, es la acción más urgente
+  de todo este trabajo: avisarle a Octi, no esperar a que termine el resto
+  de las fases.
 - **El slot de migración 0109 YA ESTÁ TOMADO**, fuera de esta rama: una
   sesión anterior (misma ventana de trabajo, previa a este brief) escribió
   `supabase/migrations/0109_avanzar_estado_reserva_atomico.sql` en la rama
