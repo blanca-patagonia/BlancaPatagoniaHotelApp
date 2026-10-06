@@ -7441,3 +7441,31 @@ de nada de lo que falta del resto de la fase.
 Typecheck 0 · lint 0 · build 0 · con base local: 2050 tests pasados / 265
 salteados (151 archivos) — mismas 6 fallas preexistentes del entorno,
 ninguna nueva.
+
+## 2026-10-06 — Pulido integral, Fase 2.4 (parcial): el choque de cupo en el alta, sin test hasta hoy
+
+**Qué.** El rechazo por solapamiento (23P01, ADR 0002) ya tenía test para
+la mudanza (`tests/acciones/mudanza.test.ts`) y para la recotización
+(`tests/precio-reserva-atomico.test.ts`). Lo que **nunca tuvo test** era
+`crearReservaEnUnidadLibre` (`lib/reservas/crear.ts`) — el camino que
+comparten el alta del panel Y el checkout del portal público, el único de
+los tres con un huésped esperando en vivo del otro lado. Nuevo
+`tests/crear-reserva-choque.test.ts`, dos casos: una unidad puntual ya
+ocupada (el camino del panel, con `unidadId` explícito) y un tipo entero
+agotado sin indicar unidad (el camino del portal). Los dos confirman que
+la función devuelve `{ ok: false, error: '...' }` legible — nunca una
+excepción sin capturar camino a un 500.
+
+**Por qué.** Era el gap concreto que quedaba del punto 4 de la Fase 2
+("que el error de solapamiento llegue como mensaje legible, nunca como
+500, en los tres caminos"): mudanza y recotización ya estaban cubiertos,
+faltaba el alta.
+
+**Decisión de las fechas.** Usa el rango de temporada real cargado
+2026-04-05/2026-06-01 (`crearReservaEnUnidadLibre` cotiza de verdad, a
+diferencia de `crear_reserva` a secas que recibe el precio ya calculado):
+se verificó por grep que ningún otro test contra base local usa fechas en
+ese tramo, para no heredar un choque de otro archivo.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2052 tests pasados / 265
+salteados (152 archivos) — mismas 6 fallas preexistentes, ninguna nueva.
