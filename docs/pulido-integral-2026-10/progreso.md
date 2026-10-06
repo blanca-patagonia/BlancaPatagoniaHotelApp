@@ -9,8 +9,8 @@
 
 | Fase | Título | Estado | Sesión | Entrada en bitácora |
 |---|---|---|---|---|
-| 0 | Línea de base y plan | ⏳ en curso | 2026-10-06 | — |
-| 1 | Ramas y PRs | pendiente | — | — |
+| 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
+| 1 | Ramas y PRs | ⏳ en curso | 2026-10-06 | — |
 | 2 | Lógica de reservas | **fuera de esta corrida** | — | — |
 | 3 | Botones, formularios y acciones | **fuera de esta corrida** | — | — |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
@@ -31,6 +31,12 @@
 
 ## Cosas que la próxima sesión necesita saber
 
+- **P0 de la Fase 0: `npm audit --audit-level=high` da 1 crítica (RCE en
+  `next/og ImageResponse`, GHSA-vcvr-r3jv-pc5j) + 7 altas, sobre `main` tal
+  cual está.** Se decide en la Fase 1 (candidato: PR de Dependabot #94).
+  Detalle en `fase-0-linea-de-base.md` §3. Si al leer esto la Fase 1 todavía
+  dice "⏳ en curso" o "pendiente" en la tabla de arriba, la vulnerabilidad
+  sigue sin resolver — priorizarla antes que cualquier otra cosa.
 - **El slot de migración 0109 YA ESTÁ TOMADO**, fuera de esta rama: una
   sesión anterior (misma ventana de trabajo, previa a este brief) escribió
   `supabase/migrations/0109_avanzar_estado_reserva_atomico.sql` en la rama

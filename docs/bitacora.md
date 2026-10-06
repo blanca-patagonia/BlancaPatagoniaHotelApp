@@ -7169,3 +7169,49 @@ el navegador, no la página.
 Typecheck 0 · lint 0 · test 1733 pasados / 561 salteados (sin cambios en la
 cuenta: son componentes de interfaz, no lógica de dominio nueva) · build 0.
 No se tocó Supabase en ningún momento de este tramo.
+
+## 2026-10-06 — Pulido integral, Fase 0: línea de base y plan
+
+**Qué.** Arranca la rama `pulido/integral-2026-10` (brief completo guardado
+en `docs/pulido-integral-2026-10/brief.md`, para que cualquier sesión lo
+retome sin depender del chat). Esta corrida hace solo las fases 0, 1 y 7
+(acotada); las 2-6 quedan para después, sobre la misma rama — así lo pidió
+el pedido original.
+
+**Por qué.** Antes de tocar nada hace falta saber en qué estado está el
+repo de verdad, no en el que los documentos dicen que está.
+
+**Verificado, no asumido:** los siete datos de partida del brief (`main` en
+`cd8e8f7`, CI verde, 146 archivos de test, 108 migraciones, ADR 0040,
+`environment: 'node'`, cero tests de componente/E2E) coinciden todos con lo
+que hay en el repo hoy. Detalle en
+`docs/pulido-integral-2026-10/fase-0-linea-de-base.md`.
+
+**Línea de base, sin Docker (pedido explícito de esta corrida):** lint 0 ·
+typecheck 0 · build 0 · tests 1733 pasados / 561 salteados (146 archivos:
+113 corren, 33 saltean por completo — son los de integración contra
+Postgres). No es el "verde, cero salteados" que exige `AGENTS.md` con
+`EXIGIR_DB=1`; es la foto de esta corrida puntual, sin base local, declarada
+como tal.
+
+**Hallazgo que no estaba en el plan: `npm audit --audit-level=high` da 8
+vulnerabilidades (7 altas + 1 crítica) sobre `main`, tal cual está hoy, sin
+que yo tocara nada.** La crítica es una RCE en `next/og ImageResponse`
+(GHSA-vcvr-r3jv-pc5j) que afecta next 16.2.0–16.3.5; el proyecto tiene
+`"next": "^16.3.5"`, que ya permite subir a una versión arreglada
+(16.3.6+, hoy la estable es 16.3.8) sin tocar `package.json` ni contar como
+"agregar una dependencia". No se corrió `npm audit fix` en esta rama — se
+decide en la Fase 1, donde el PR de Dependabot #94 (react+next) es
+candidato directo a resolverla, con evidencia antes de recomendar nada.
+
+**Decisiones:**
+- El `error.tsx` que cubre 79 de 80 rutas no es un hallazgo: es un único
+  `error.tsx` por segmento (`app/error.tsx`, `app/panel/error.tsx`)
+  cubriendo en cascada, como corresponde en Next.js.
+- El inventario completo de pantallas (loading/actions/tamaño) y el plan
+  priorizado P0/P1/P2 para las fases 2-6 quedan escritos en el documento de
+  la fase, no se actúa sobre ninguno ahora.
+
+Typecheck 0 · lint 0 · build 0 · tests 1733 pasados / 561 salteados (sin
+Docker, declarado) · `npm audit`: 1 crítica + 7 altas, sin resolver todavía
+(ver Fase 1).
