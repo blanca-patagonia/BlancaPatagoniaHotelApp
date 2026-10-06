@@ -31,11 +31,11 @@
 
 ## Cosas que la próxima sesión necesita saber
 
-- **Pregunta sin responder para Octi (Fase 7): ¿el sistema se desplegó de
-  verdad o no?** `CLAUDE.md` sigue diciendo "Deploy pendiente" — no se
-  tocó, porque el brief pide confirmarlo con él antes de corregirlo. Si ya
-  se desplegó, hay que revisar esa línea Y la de `README.md` ("Despliegue
-  previsto en Vercel").
+- **Confirmado con Octi (2026-10-06): el deploy sigue sin pasar de
+  verdad.** Los crons de `vercel.json` están listos para cuando se
+  despliegue, pero el sistema todavía no corre en Vercel/Supabase cloud en
+  producción. `CLAUDE.md` y `README.md` quedan como estaban — la línea era
+  correcta, no deriva.
 - **El cierre final de la Fase 7 queda con tres documentos por actualizar
   que esta corrida no tocó** (fuera del recorte explícito): `COMO-
   LEVANTARLO.md` (misma deriva que tenía `README.md`: 67 migraciones, 1555
