@@ -14,7 +14,7 @@
 | 2 | Lógica de reservas | ✅ hecha (los 8 puntos, cerrados o confirmados ya resueltos) | 2026-10-06/07 | ver entradas del 2026-10-06 y 2026-10-07 en `docs/bitacora.md` |
 | 3 | Botones, formularios y acciones | ✅ hecha (por grep dirigido, no archivo por archivo — ver nota) | 2026-10-07 | «Pulido integral, Fase 3: botones, formularios y acciones» |
 | 4 | Interfaz gráfica | ⏳ parcial (todo lo verificable por grep, cero navegador — ver `fase-4-interfaz-grafica.md`) | 2026-10-07 | «Pulido integral, Fase 4: interfaz gráfica» |
-| 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
+| 5 | Portal público del huésped | ⏳ parcial (los 3 riesgos del brief verificados por código, cero navegador — ver `fase-5-portal-publico.md`) | 2026-10-07 | «Pulido integral, Fase 5: portal público del huésped» |
 | 6 | Deuda que se puede pagar hoy | **fuera de esta corrida** | — | — |
 | 7 | Documentación al día (acotada: README/CLAUDE.md/PENDIENTES) | ✅ hecha (acotada) | 2026-10-06 | «Pulido integral, Fase 7 (acotada): deriva de README/CLAUDE.md/PENDIENTES» |
 

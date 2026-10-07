@@ -7695,3 +7695,27 @@ confirmar sin un navegador funcionando.
 
 Typecheck 0 · lint 0 (sin cambios de código: todo lo revisado ya estaba
 bien).
+
+## 2026-10-07 — Pulido integral, Fase 5: portal público del huésped
+
+**Qué.** Mismo bloqueo de navegador. Verificación por código de los tres
+riesgos concretos del brief:
+
+1. **Ningún dato de otro huésped por URL.** Las 6 rutas públicas por token
+   resuelven su fila con `.eq('token', token)` primero y todo lo demás sale
+   del `id` de esa fila — nunca de un parámetro aparte.
+2. **Ningún precio neto expuesto.** `tarifasPublicas()` selecciona solo
+   `precio_rack`; las tres cotizaciones del portal tienen `tarifaTipo:
+   'rack'` hardcodeado; los catálogos pasan todo por `conIva()`. El
+   "neto" que sí aparece en la factura por token es el neto fiscal del
+   comprobante (obligatorio en cualquier factura), no el de agencia.
+3. **Fotos del catálogo.** `CAB-UPSALA`/`CAB-MORENO` (sin tarifa a
+   propósito) tampoco tienen foto, y el componente ya tiene un diseño de
+   respaldo terminado para cuando falta — no un ícono roto.
+
+**Decisiones.** Cero hallazgos, cero cambios de código. El recorrido real
+de checkout ya se había verificado en vivo en la Fase 2.7 (2026-10-06);
+falta el resto de las pantallas públicas y el asistente, que necesitan
+navegador.
+
+Typecheck 0 · lint 0.
