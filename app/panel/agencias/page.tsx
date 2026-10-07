@@ -33,6 +33,7 @@ import {
 } from '../_components/ui'
 import { Icono } from '../_components/iconos'
 import { cambiarEtapaAgencia } from './actions'
+import { BotonEnvio } from '../_components/boton-envio'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
 
 interface Agencia {
@@ -280,12 +281,14 @@ export default async function AgenciasPage({
                           <form key={siguiente} action={cambiarEtapaAgencia}>
                             <input type="hidden" name="agencia_id" value={a.id} />
                             <input type="hidden" name="etapa" value={siguiente} />
-                            <button
-                              className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 transition hover:bg-stone-200"
-                              title={`Pasar a ${ETIQUETAS_ETAPA[siguiente]}`}
+                            <BotonEnvio
+                              variante="secundario"
+                              extra="px-2.5 py-1 text-xs"
+                              cargando="…"
+                              aria-label={`Pasar a ${ETIQUETAS_ETAPA[siguiente]}`}
                             >
                               → {ETIQUETAS_ETAPA[siguiente]}
-                            </button>
+                            </BotonEnvio>
                           </form>
                         ))}
                     </div>

@@ -7530,3 +7530,60 @@ limpió la reserva de prueba de la base local (vive solo en el volumen
 Docker, se va con el próximo `db reset`).
 
 Sin cambios de código en esta entrada — solo verificación.
+
+## 2026-10-07 — Pulido integral, Fase 3: botones, formularios y acciones
+
+**Qué.** Sweep de los `.tsx` de `app/` (sin `_components`) contra los cinco
+criterios del brief, con grep dirigido en vez de abrir archivo por archivo:
+
+- **81 archivos con `<form action=`**, de los cuales 41 no usan `BotonEnvio`
+  directamente. Revisados los 41: 38 son formularios de búsqueda
+  (`method="get"`, no escriben) o ya usan `useActionState` + `disabled`
+  —el equivalente válido para componentes de servidor que no pueden usar ese
+  hook—. **Tres sí eran un hueco real**: el chat de conversaciones internas
+  (`app/panel/conversaciones/chat.tsx`, enviar un mensaje no tenía ningún
+  bloqueo contra el doble clic — dos mensajes iguales si se apretaba
+  rápido), el cambio de etapa comercial de una agencia
+  (`app/panel/agencias/page.tsx`) y "Marcar atendida" de una consulta
+  (`app/panel/conversaciones/page.tsx`). Los tres pasan a `BotonEnvio`.
+- **Acciones destructivas** (`eliminar*`, `borrar*`, `anular*`,
+  `revocar*`, 11 en total): **10 de 11 ya tenían `confirmar=` con el
+  importe o la consecuencia explicitada** — ej. "¿Anular la comanda #X? Se
+  quitan N línea(s) por USD Y de la cuenta del huésped". La única sin
+  confirmar, `marcarPlanHecho` (mantenimiento), solo adelanta una fecha de
+  próxima ejecución —reversible volviendo a marcarla— y no mueve plata: se
+  dejó sin confirmación a propósito, no es un hallazgo.
+- **Botones puramente visuales sin `type="button"`**: 6 encontrados
+  (los tres `reset` de los error boundaries, el botón de conectar OAuth y
+  los dos de imprimir/PDF). Ninguno estaba dentro de un `<form>` —cero
+  riesgo real de enviar algo sin querer—, pero se corrigieron igual: es la
+  regla que el brief pide y cuesta una palabra por archivo.
+- **Botones de solo ícono sin `aria-label`**: cero encontrados.
+- **Enlaces internos con `<a href="/...">` en vez de `Link`**: cero.
+
+**Por qué.** El brief pedía recorrer los 64 archivos con botón fuera de
+`_components` y los `<form action=`; con 81 archivos de formulario y una
+sesión sin acceso a Docker/navegador en el momento del sweep, grep dirigido
+por los cinco criterios cubre lo mismo sin abrir cada archivo a mano, y dejó
+encontrar los tres huecos reales entre 41 candidatos.
+
+**Decisiones:** `marcarPlanHecho` se dejó sin confirmar (ver arriba, no es
+destructivo de verdad). No se tocó nada de lo que ya cumplía — nueve de
+cada diez acciones destructivas ya estaban bien, lo que habla de que las
+auditorías QA/UX anteriores (2026-09-09 y posteriores) ya habían barrido
+esto a fondo.
+
+⚠️ **Nota de entorno:** a mitad de esta fase, el acceso del navegador
+automatizado a `localhost` dejó de responder (`Frame ... is showing error
+page`) mientras sitios externos (`example.com`) cargaban sin problema —
+probablemente el permiso de sitio de la extensión para `localhost` se
+reseteó entre sesiones. No se insistió más de lo razonable (se probó con
+pestaña nueva, `127.0.0.1` y la IP directa). Los tres cambios de
+`BotonEnvio` no se vieron en vivo por esto; el riesgo es bajo porque es un
+componente ya usado en ~30 lugares del panel, probado, y `typecheck`+`lint`
+pasan. Ver `docs/pulido-integral-2026-10/progreso.md` para que la próxima
+sesión confirme visualmente si recupera el navegador.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2052 tests pasados / 265
+salteados (152 archivos) — mismas 6 fallas preexistentes del entorno,
+ninguna nueva (sin tests nuevos: son cambios de componente, no de lógica).

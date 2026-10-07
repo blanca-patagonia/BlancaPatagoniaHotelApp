@@ -9,12 +9,12 @@ import {
   Etiqueta,
   Kpi,
   Tarjeta,
-  botonClases,
   Pagina,
   Mensaje,
 } from '../_components/ui'
 import { Chat, type MensajeVista } from './chat'
 import { marcarConsultaRespondida } from './actions'
+import { BotonEnvio } from '../_components/boton-envio'
 import { fechaHoraHotel } from '@/lib/fechas'
 import { registrarFalla } from '@/lib/acciones'
 
@@ -200,9 +200,9 @@ export default async function ConversacionesPage({
                     ) : (
                       <form action={marcarConsultaRespondida}>
                         <input type="hidden" name="consulta_id" value={c.id} />
-                        <button className={botonClases('secundario', 'px-2.5 py-1 text-xs')}>
+                        <BotonEnvio variante="secundario" extra="px-2.5 py-1 text-xs" cargando="…">
                           Marcar atendida
-                        </button>
+                        </BotonEnvio>
                       </form>
                     )}
                   </li>

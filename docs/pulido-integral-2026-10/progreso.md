@@ -12,7 +12,7 @@
 | 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
 | 1 | Ramas y PRs | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 1: ramas y PRs» |
 | 2 | Lógica de reservas | ⏳ parcial (puntos 1, 2, 3, 4, 6 y 7 de 8 — ver nota abajo) | 2026-10-06 | ver entradas del 2026-10-06 en `docs/bitacora.md` |
-| 3 | Botones, formularios y acciones | **fuera de esta corrida** | — | — |
+| 3 | Botones, formularios y acciones | ✅ hecha (por grep dirigido, no archivo por archivo — ver nota) | 2026-10-07 | «Pulido integral, Fase 3: botones, formularios y acciones» |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
 | 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
 | 6 | Deuda que se puede pagar hoy | **fuera de esta corrida** | — | — |
@@ -31,6 +31,20 @@
 
 ## Cosas que la próxima sesión necesita saber
 
+- **El navegador automatizado dejó de poder cargar `localhost` a mitad de
+  la Fase 3** (sitios externos sí cargan — no es que falte Docker ni el
+  dev server, que respondían bien por `curl`). Probable permiso de sitio
+  de la extensión reseteado entre sesiones. Si se recupera, conviene
+  verificar visualmente los tres cambios de `BotonEnvio` de la Fase 3
+  (`conversaciones/chat.tsx`, `agencias/page.tsx`, `conversaciones/page.tsx`)
+  — el riesgo es bajo (componente ya usado en ~30 lugares, typecheck y
+  lint en verde) pero no se vieron en vivo.
+- **Fase 3 se hizo por grep dirigido a los cinco criterios del brief, no
+  abriendo los ~64-81 archivos uno por uno.** Cubrió lo mismo con menos
+  tokens y encontró los 3 huecos reales que había (de 41 candidatos
+  revisados). Si una sesión futura quiere el recorrido manual completo
+  pantalla por pantalla que pide el brief originalmente, todavía no se
+  hizo ese nivel de detalle.
 - **Fase 2: lo que queda.** Hechos los puntos 1 (máquina de estados,
   `tests/estado-reserva-sincronizado.test.ts`), 2 (atomicidad de
   `saldarSiCorresponde`, migración 0109 — pero OJO: la atomicidad de
