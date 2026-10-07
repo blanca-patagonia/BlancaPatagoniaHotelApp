@@ -106,7 +106,7 @@ export function BotonConectar({
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <button onClick={conectar} disabled={conectando} className={botonClases('primario')}>
+      <button type="button" onClick={conectar} disabled={conectando} className={botonClases('primario')}>
         {conectando ? 'Esperando confirmación…' : children}
       </button>
       {error && <Mensaje tono="error">{error}</Mensaje>}

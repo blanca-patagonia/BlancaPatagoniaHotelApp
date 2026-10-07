@@ -1,11 +1,24 @@
-# Análisis de lo que le falta al proyecto (2026-09-09)
+# Análisis de lo que le falta al proyecto (2026-09-09) — documento vigente
 
-> Foto tomada sobre `main` en `0d61664` (después de mergear el PR #41). No es un
-> reemplazo de `docs/PENDIENTES.md`: ese archivo quedó congelado en el cierre de
-> `feat/relevamiento-cliente-agosto` (migración 0064) y varios de sus pendientes
-> —por ejemplo B7, el feed iCal de salida— ya se resolvieron después (ADR 0022).
-> Este documento junta lo que sigue abierto **hoy**, verificado contra el código
-> y los ADRs, no inventado.
+> **Documento vigente de pendientes** (decisión de la Fase 7 del pulido
+> integral 2026-10, `docs/pulido-integral-2026-10/`): `docs/PENDIENTES.md`
+> quedó marcado histórico, congelado en el cierre de
+> `feat/relevamiento-cliente-agosto` (migración 0064) — varios de sus
+> pendientes, por ejemplo B7 (el feed iCal de salida), ya se resolvieron
+> después (ADR 0022). Este documento junta lo que seguía abierto el
+> **2026-09-09**, verificado contra el código y los ADRs, no inventado.
+>
+> ⚠️ **Y este documento también quedó atrás, aunque menos.** Desde el PR #90
+> (2026-10-01) el proyecto pasó a trackear pendientes como **issues de
+> GitHub** (hoy #68 a #89, 21 abiertos), con plantilla, labels de prioridad y
+> área. Para el estado más actual de qué falta, lo primero es mirar ahí —
+> `gh issue list` o la pestaña Issues del repo — y usar este documento como
+> contexto de **por qué** cada cosa sigue abierta, no como la lista en sí.
+> No se fusionó este archivo con los issues en esta pasada: son formatos
+> distintos (prosa con motivo vs. tracker con label) y mezclarlos a las
+> apuradas perdería el porqué que este documento sí tiene.
+>
+> Foto tomada sobre `main` en `0d61664` (después de mergear el PR #41).
 
 ## 1. Integraciones reales pendientes
 
@@ -56,10 +69,22 @@ simulador.
 
 - **El punto ciego más grande, en palabras del propio repo: nunca se restauró
   un backup.** Un backup que no se probó restaurar no es un backup.
-- Emitir factura en una sola transacción SQL sigue sin resolver
-  (`app/panel/reservas/actions.ts`): el test de concurrencia ya arma la
-  carrera, falta la garantía transaccional (riesgo: salto de numeración
-  fiscal, ADR 0015).
+- ✅ **Corregido — este ítem estaba desactualizado.** "Emitir factura en una
+  sola transacción SQL" ya estaba resuelto cuando se escribió esto: la
+  migración 0069 (2026-09-01, anterior a esta misma foto) hizo idempotente
+  `reservar_numero_factura` —misma reserva, siempre el mismo número— y
+  `emitirFactura` (`app/panel/reservas/actions.ts`) ya trata el 23505 de
+  `facturas_una_por_reserva` como una carrera resuelta, no como un error.
+  Verificado el 2026-10-07 corriendo
+  `tests/acciones/reservas.test.ts` ("con dos emisiones SIMULTÁNEAS, la base
+  deja pasar una sola"): el contador de `puntos_venta` avanza **1**, no 2,
+  con dos emisiones concurrentes sobre la misma reserva. No se necesita (ni
+  es posible) una única transacción SQL porque en el medio hay una llamada
+  HTTP real al proveedor de facturación — lo que hace falta es justamente la
+  idempotencia que ya existe. Queda UN borde documentado y aceptado: una
+  emisión que pide el CAE, lo rechazan, y nadie reintenta deja el número
+  reservado sin factura — antes desaparecía sin rastro; ahora queda visible
+  en `facturas_numeracion`.
 - Auditoría de las políticas RLS **una por una** sigue pendiente (están
   activadas en todas las tablas, pero eso no dice qué permite cada una).
 - 79 % de la lógica vive en `app/` en vez de `lib/` (190 llamadas `.from()`

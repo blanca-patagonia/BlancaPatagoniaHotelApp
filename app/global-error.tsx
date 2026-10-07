@@ -70,6 +70,7 @@ export default function GlobalError({
           </p>
 
           <button
+            type="button"
             onClick={reset}
             style={{
               background: '#136970',

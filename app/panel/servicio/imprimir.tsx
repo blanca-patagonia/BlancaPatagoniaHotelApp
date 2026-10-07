@@ -12,7 +12,7 @@ import { botonClases } from '../_components/ui'
  */
 export function BotonImprimir({ texto = 'Imprimir / Guardar PDF' }: { texto?: string }) {
   return (
-    <button onClick={() => window.print()} className={botonClases('primario', 'print:hidden')}>
+    <button type="button" onClick={() => window.print()} className={botonClases('primario', 'print:hidden')}>
       {texto}
     </button>
   )

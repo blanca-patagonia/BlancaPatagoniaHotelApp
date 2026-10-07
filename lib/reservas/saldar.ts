@@ -134,14 +134,33 @@ export async function saldarSiCorresponde(
   const camino = caminoDeEstados(reserva.estado as EstadoReserva, destino)
   if (!camino || camino.length === 0) return NADA
 
-  for (const paso of camino) {
-    const { error: eEstado } = await cliente
-      .from('reservas')
-      .update({ estado: paso })
-      .eq('id', reservaId)
-    if (eEstado) {
-      return { ...NADA, error: `no se pudo pasar la reserva a «${paso}»: ${eEstado.message}` }
-    }
+  /*
+    El camino entero, en una sola transacción (0109).
+
+    Antes era un `update` por paso: si el de `confirmada → pagada` fallaba
+    después de que el de `pendiente → confirmada` ya hubiera entrado, la
+    reserva quedaba en `confirmada` para siempre —ya cobrada, mostrada como
+    si sólo tuviera la seña— porque nada vuelve a llamar a esta función para
+    esa reserva salvo que llegue otro pago. Ahora o entran todos los pasos o
+    no entra ninguno.
+  */
+  const { data: resultado, error: eCamino } = await cliente.rpc('avanzar_estado_reserva', {
+    p_reserva_id: reservaId,
+    p_desde: reserva.estado,
+    p_camino: camino,
+  })
+  if (eCamino) {
+    return { ...NADA, error: `no se pudo actualizar el estado de la reserva: ${eCamino.message}` }
+  }
+
+  const r = resultado as { ok: boolean; motivo?: string } | null
+  if (!r?.ok) {
+    // `estado_cambio`: otra llamada concurrente (mostrador y webhook para el
+    // mismo pago) ya movió la reserva entre que se leyó más arriba y que esta
+    // función la bloqueó. No es un fallo — la otra llamada hizo el trabajo —
+    // así que no se reporta como error.
+    if (r?.motivo === 'estado_cambio') return NADA
+    return { ...NADA, error: `no se pudo pasar la reserva a «${destino}»: ${r?.motivo}` }
   }
 
   return { ...NADA, marcadaPagada: destino === 'pagada', confirmada: destino === 'confirmada' }

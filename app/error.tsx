@@ -68,6 +68,7 @@ export default function ErrorPublico({
 
         <div className="mt-2 flex flex-wrap justify-center gap-2">
           <button
+            type="button"
             onClick={reset}
             className="rounded-lg bg-lago-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-lago-800"
           >

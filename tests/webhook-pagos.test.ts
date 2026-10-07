@@ -18,7 +18,7 @@ import type { ResultadoWebhook, WebhookEvent } from '@/lib/payments'
 
 interface Op {
   tabla: string
-  verbo: 'select' | 'insert' | 'update' | 'delete'
+  verbo: 'select' | 'insert' | 'update' | 'delete' | 'rpc'
   /** `true` cuando la consulta pidió una sola fila (`single`/`maybeSingle`). */
   singular: boolean
 }
@@ -82,6 +82,14 @@ function clienteFalso() {
         },
       }
       return builder
+    },
+    // `saldarSiCorresponde` recorre el camino de estados con `avanzar_estado_reserva`
+    // (migración 0109) en vez de un `update` por paso. Misma convención de
+    // `respuestas` que `from`, con la clave `rpc:<función>`.
+    rpc(fn: string) {
+      ejecutadas.push({ tabla: fn, verbo: 'rpc', singular: false })
+      const r = respuestas[`rpc:${fn}`] ?? { data: { ok: true }, error: null }
+      return Promise.resolve(r)
     },
   }
 }
@@ -164,6 +172,9 @@ function reservaSaldada() {
 const hizo = (tabla: string, verbo: Op['verbo']) =>
   ejecutadas.some((o) => o.tabla === tabla && o.verbo === verbo)
 
+/** ¿Se llamó a la función transaccional que mueve el estado de la reserva? */
+const hizoRpc = (fn: string) => ejecutadas.some((o) => o.tabla === fn && o.verbo === 'rpc')
+
 describe('webhook de pagos · fallar cerrado', () => {
   beforeEach(() => {
     ejecutadas = []
@@ -179,14 +190,14 @@ describe('webhook de pagos · fallar cerrado', () => {
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({ ok: true })
     expect(hizo('pagos', 'update')).toBe(true)
-    expect(hizo('reservas', 'update')).toBe(true)
+    expect(hizoRpc('avanzar_estado_reserva')).toBe(true)
   })
 
   it('si no se puede leer el pago previo responde 500 y no toca nada', async () => {
     respuestas['pagos:select:one'] = { error: { message: 'sin conexión' } }
     const res = await llamar()
     expect(res.status).toBe(500)
-    expect(hizo('reservas', 'update')).toBe(false)
+    expect(hizoRpc('avanzar_estado_reserva')).toBe(false)
   })
 
   it('si falla la transición del pago responde 500: la pasarela tiene que reintentar', async () => {
@@ -196,7 +207,7 @@ describe('webhook de pagos · fallar cerrado', () => {
     const res = await llamar()
     expect(res.status).toBe(500)
     // No se sigue a saldar la reserva con el pago sin confirmar.
-    expect(hizo('reservas', 'update')).toBe(false)
+    expect(hizoRpc('avanzar_estado_reserva')).toBe(false)
   })
 
   it('si falla marcar la reserva como pagada responde 500 y NO ok', async () => {
@@ -204,7 +215,7 @@ describe('webhook de pagos · fallar cerrado', () => {
     // marcaba y la pasarela recibía un `ok` que le decía «no reintentes».
     cobroPendiente()
     reservaSaldada()
-    respuestas['reservas:update'] = { error: { message: 'no se pudo actualizar' } }
+    respuestas['rpc:avanzar_estado_reserva'] = { error: { message: 'no se pudo actualizar' } }
     const res = await llamar()
     expect(res.status).toBe(500)
   })
@@ -215,7 +226,7 @@ describe('webhook de pagos · fallar cerrado', () => {
     respuestas['consumos:select'] = { error: { message: 'sin conexión' } }
     const res = await llamar()
     expect(res.status).toBe(500)
-    expect(hizo('reservas', 'update')).toBe(false)
+    expect(hizoRpc('avanzar_estado_reserva')).toBe(false)
   })
 
   /*
@@ -230,7 +241,7 @@ describe('webhook de pagos · fallar cerrado', () => {
     const res = await llamar()
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toMatchObject({ revisar: expect.any(String) })
-    expect(hizo('reservas', 'update')).toBe(false)
+    expect(hizoRpc('avanzar_estado_reserva')).toBe(false)
     // Sí deja constancia sobre el pago.
     expect(hizo('pagos', 'update')).toBe(true)
   })
@@ -241,7 +252,7 @@ describe('webhook de pagos · fallar cerrado', () => {
     lectura = eventoCon({ estado: 'pendiente' })
     const res = await llamar()
     expect(res.status).toBe(200)
-    expect(hizo('reservas', 'update')).toBe(false)
+    expect(hizoRpc('avanzar_estado_reserva')).toBe(false)
   })
 
   it('un cobro que el sistema no originó se inserta con su reserva', async () => {

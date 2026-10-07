@@ -46,7 +46,7 @@ export default function ErrorPanel({
       {error.digest && (
         <p className="font-mono text-xs text-stone-600">Referencia: {error.digest}</p>
       )}
-      <button onClick={reset} className={botonClases('primario', 'mt-2')}>
+      <button type="button" onClick={reset} className={botonClases('primario', 'mt-2')}>
         Reintentar
       </button>
     </div>

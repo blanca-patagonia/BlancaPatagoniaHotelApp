@@ -7168,4 +7168,590 @@ el navegador, no la página.
 
 Typecheck 0 · lint 0 · test 1733 pasados / 561 salteados (sin cambios en la
 cuenta: son componentes de interfaz, no lógica de dominio nueva) · build 0.
+
+## 2026-10-05 — Issue #85: el camino de estados de una reserva, atómico (migración 0109)
+
+- **El hallazgo.** `saldarSiCorresponde` (`lib/reservas/saldar.ts`) calcula el
+  camino entre el estado actual de una reserva y el que corresponde según lo
+  cobrado —`pendiente → pagada` no es una transición válida, hay que pasar
+  por `confirmada`— y lo recorría con un `update` POR PASO, cada uno un viaje
+  separado a la base. Si el primero entraba y el segundo fallaba (una caída
+  de red, un RLS que lo bloquea), la reserva quedaba en el estado intermedio
+  **para siempre**: ya estaba cobrada del todo pero el sistema seguía
+  mostrándola como si sólo tuviera la seña, y nada vuelve a llamar a esta
+  función para esa reserva salvo que llegue otro pago. Es el caso exacto que
+  describe el issue #85: "un fallo a mitad de camino avisa pero deja los
+  datos incompletos".
+- **El resto de los flujos de reserva de varios pasos, auditados y ya
+  atómicos** (no hubo que tocarlos): el alta (`crear_reserva`, con la
+  agencia DENTRO desde la 0084) y la escritura conjunta de precio+total en
+  reprogramación/mudanza (`aplicar_precio_reserva`, 0085) ya corren en una
+  sola transacción. La reserva grupal (`crearReservaGrupal`) queda
+  deliberadamente **no** atómica —un grupo de 5 que consigue 4 unidades
+  conviene quedárselo, no abortar el lote— y ya reporta el resultado parcial
+  en vez de esconderlo; no es el defecto que el issue pedía cerrar.
+- **La solución.** `avanzar_estado_reserva(p_reserva_id, p_desde, p_camino)`
+  (migración 0109): recorre el camino COMPLETO en una sola función
+  `plpgsql` (una función = una transacción), con `for update` para
+  serializar contra una llamada concurrente (mostrador cobrando + webhook
+  avisando el mismo pago) y el mismo recaudo de `aplicar_precio_reserva`:
+  comprueba `FOUND` después de cada `update`, porque siendo `security
+  invoker` un RLS que bloquee la escritura no lanza, afecta cero filas y
+  seguiría de largo con un «listo» falso.
+- **Por qué sigue yendo paso a paso y no salta directo al estado final:**
+  `reservas_estado_auditoria` (0020) audita cada cambio de `estado` por
+  separado — saltar de `pendiente` a `pagada` de un salto borraría el
+  rastro de que la reserva pasó por `confirmada` (cuándo quedó garantizada
+  con la seña), que es justo el dato que esa auditoría existe para no
+  perder.
+- **Por qué no se reimplementó la máquina de estados en SQL:** `TRANSICIONES`
+  (`lib/domain/reservas.ts`) ya decide qué caminos son válidos. Copiar esa
+  tabla a SQL es la misma trampa que ya separó una regla de plata en dos
+  copias que divergieron (por eso existe el propio `saldarSiCorresponde`).
+  La función recibe el camino YA CALCULADO por el dominio; lo único que
+  valida en la base es que el punto de partida (`p_desde`) siga siendo el
+  actual antes de aplicar nada.
+- **Tests** (`tests/avanzar-estado-reserva-atomico.test.ts`, 5 casos): un
+  camino de dos pasos se aplica entero; si un paso del medio es inválido,
+  **ni siquiera el primero —por sí solo válido— queda aplicado** (la prueba
+  de la atomicidad); el punto de partida desactualizado se informa y no
+  toca nada; camino vacío y reserva inexistente, cada uno con su motivo.
+  `lib/reservas/saldar.ts` pasó de updates sueltos a una llamada a la nueva
+  función; eso rompía el cliente falseado de `tests/webhook-pagos.test.ts`
+  (no tenía `.rpc()`) — se le agregó, con la misma convención de
+  `respuestas` por clave que ya usaba `from`.
+- ⚠️ **Entorno de este tramo:** la base local de este sandbox tenía el
+  historial de migraciones desincronizado del esquema real (`supabase
+  migration up` se quejaba de que `conexiones_proveedores` —0096— ya
+  existía, con el historial marcado sólo hasta la 0101). La 0109 se aplicó
+  igual con `psql` directo contra `127.0.0.1:54322`, sin tocar
+  `schema_migrations`. Quedan **6 archivos de test pre-existentes, sin
+  relación con este cambio**, fallando en esta misma base por ese
+  desacople (`anon-no-escribe`, `rls-por-rol`, `ari-servicio`,
+  `canal-cargos`, `canal-servicio`, `cotizacion` — las tablas de canal/ARI
+  son justo las de las migraciones 0094-0108 que el historial no tenía
+  marcadas, y `cotizacion` da precios ×2,04 el valor esperado). Confirmado
+  con `git stash` que ya fallaban ANTES de este cambio. No se tocó porque
+  reconciliar `schema_migrations` a mano en una base compartida es quirúrgico
+  y queda fuera del alcance de este issue; en un `supabase db reset` limpio
+  (o en CI, que arranca de cero) no debería reproducirse.
+
+Typecheck 0 · lint 0 · build no corrido en este tramo (sin cambios de
+código de aplicación fuera de `lib/reservas/saldar.ts`) · tests: los 5
+nuevos y los 12 de `webhook-pagos` en verde; el resto de la suite, igual
+que antes de este cambio.
 No se tocó Supabase en ningún momento de este tramo.
+
+## 2026-10-06 — Pulido integral, Fase 0: línea de base y plan
+
+**Qué.** Arranca la rama `pulido/integral-2026-10` (brief completo guardado
+en `docs/pulido-integral-2026-10/brief.md`, para que cualquier sesión lo
+retome sin depender del chat). Esta corrida hace solo las fases 0, 1 y 7
+(acotada); las 2-6 quedan para después, sobre la misma rama — así lo pidió
+el pedido original.
+
+**Por qué.** Antes de tocar nada hace falta saber en qué estado está el
+repo de verdad, no en el que los documentos dicen que está.
+
+**Verificado, no asumido:** los siete datos de partida del brief (`main` en
+`cd8e8f7`, CI verde, 146 archivos de test, 108 migraciones, ADR 0040,
+`environment: 'node'`, cero tests de componente/E2E) coinciden todos con lo
+que hay en el repo hoy. Detalle en
+`docs/pulido-integral-2026-10/fase-0-linea-de-base.md`.
+
+**Línea de base, sin Docker (pedido explícito de esta corrida):** lint 0 ·
+typecheck 0 · build 0 · tests 1733 pasados / 561 salteados (146 archivos:
+113 corren, 33 saltean por completo — son los de integración contra
+Postgres). No es el "verde, cero salteados" que exige `AGENTS.md` con
+`EXIGIR_DB=1`; es la foto de esta corrida puntual, sin base local, declarada
+como tal.
+
+**Hallazgo que no estaba en el plan: `npm audit --audit-level=high` da 8
+vulnerabilidades (7 altas + 1 crítica) sobre `main`, tal cual está hoy, sin
+que yo tocara nada.** La crítica es una RCE en `next/og ImageResponse`
+(GHSA-vcvr-r3jv-pc5j) que afecta next 16.2.0–16.3.5; el proyecto tiene
+`"next": "^16.3.5"`, que ya permite subir a una versión arreglada
+(16.3.6+, hoy la estable es 16.3.8) sin tocar `package.json` ni contar como
+"agregar una dependencia". No se corrió `npm audit fix` en esta rama — se
+decide en la Fase 1, donde el PR de Dependabot #94 (react+next) es
+candidato directo a resolverla, con evidencia antes de recomendar nada.
+
+**Decisiones:**
+- El `error.tsx` que cubre 79 de 80 rutas no es un hallazgo: es un único
+  `error.tsx` por segmento (`app/error.tsx`, `app/panel/error.tsx`)
+  cubriendo en cascada, como corresponde en Next.js.
+- El inventario completo de pantallas (loading/actions/tamaño) y el plan
+  priorizado P0/P1/P2 para las fases 2-6 quedan escritos en el documento de
+  la fase, no se actúa sobre ninguno ahora.
+
+Typecheck 0 · lint 0 · build 0 · tests 1733 pasados / 561 salteados (sin
+Docker, declarado) · `npm audit`: 1 crítica + 7 altas, sin resolver todavía
+(ver Fase 1).
+
+## 2026-10-06 — Pulido integral, Fase 1: ramas y PRs
+
+**Qué.** Las 10 ramas que el brief daba por absorbidas se reconfirmaron por
+contenido (no por SHA, porque `main` es historia de squashes) y se
+sostiene el veredicto en las diez, incluido el caso puntual pedido
+(`fix/panel-nav-y-desbordes`: su plegado de menú ya está cubierto en
+`main` y en uso real desde `shell.tsx`; su plegado de secciones de
+Configuración no tiene equivalente directo porque `main` lo resolvió
+mejor, partiendo esa pantalla en 7 páginas propias). Se rescató el único
+commit de valor de `docs/deriva-y-env-incompleto` (26 tests sin adaptar
+una línea) y, de `claude/github-repo-improvements-o2o8qz`, 7 agentes que
+los 4 actuales no cubren más su `README`, y las 12 páginas de la wiki con
+tres números desactualizados corregidos al copiar (67→108 migraciones,
+1555→2294 tests, 24→33 `actions.ts`; "43 tablas" se sacó por no poder
+verificarse sin Docker en esta corrida). El PR #91 se revisó y se
+recomienda mergear: `CODEOWNERS` apunta a cuentas y rutas reales.
+
+**Dependabot, uno por uno** en worktrees separados, con `npm ci` +
+`check` completo cada uno: #94, #55, #58 y #56 (éste, mayor) pasan limpio
+y se recomienda mergear los cuatro — **#94 además resuelve la RCE crítica
+de Next.js** que apareció en la Fase 0 (de 1 crítica + 7 altas a 0 + 7).
+#95 y #96 solo tocan workflows y su rojo es el rate-limit de Docker Hub,
+no el cambio — se trajo a esta rama el fix de reintento de la sesión
+anterior (`chore/ci-docker-rate-limit-retry`, cherry-pick) y se recomienda
+mergear los dos. #57 (ESLint 10) vuelve a romper por tercera vez
+(`eslint-plugin-react` sin soporte): se agregó un `ignore` en
+`.github/dependabot.yml` para que no se reabra solo cada semana.
+
+**Por qué.** Limpiar lo que ya no aporta y no perder lo que sí, antes de
+seguir construyendo sobre esta rama.
+
+**Decisiones.** Ninguna rama se borró ni ningún PR se mergeó: el brief
+reserva esas dos acciones para el OK de Octi, y además esta cuenta de
+GitHub no tiene permiso de `push` sobre el repo (confirmado con la API:
+`permissions.push: false`, y un intento real de push lo rechaza). El
+detalle completo, con la evidencia de cada veredicto, está en
+`docs/pulido-integral-2026-10/fase-1-ramas-y-prs.md`.
+
+Typecheck 0 · lint 0 · build 0 en esta rama y en cada worktree de
+Dependabot revisado. Tests: 1733/2294 en todos, sin cambios en la cuenta.
+
+## 2026-10-06 — Pulido integral, Fase 7 (acotada): deriva de README/CLAUDE.md/PENDIENTES
+
+**Qué.** `README.md`: seis números corregidos contra el repo real (tests,
+archivos con `service_role`, ADRs, migraciones, tabla/políticas RLS) y el
+link de "Auditoría de seguridad" redirigido al documento vigente de
+pendientes en vez de a `docs/audit/`, que está congelado desde 2026-08-14.
+`CLAUDE.md`: el conteo de ADRs ("35, último 0035") pasa a "39, numerados
+hasta el 0040" — al verificar apareció que **el ADR 0034 nunca se escribió
+como archivo** (era la pieza de WhatsApp por Cloud API, descartada; el
+propio documento ya lo explicaba más abajo, solo que la cuenta de arriba
+no lo reflejaba), y se extendió la cadena de ADRs recientes (0036 a 0040).
+También se encontró que el pendiente final "inventario físico real de
+unidades y tarifa rack de cabañas" tenía la primera mitad **ya resuelta**
+(ADR 0040) y nadie lo había tachado.
+
+**Lo que NO se tocó, a propósito.** La línea "Deploy (Vercel + Supabase
+cloud) pendiente" — el brief pide confirmarla con Octi antes de corregirla,
+y de paso se verificó contra `vercel.json`: son **6 crons** configurados
+(canales, salud, mantenimiento, notificaciones, recordatorios, ari), no 5
+como decía un análisis anterior. Queda la pregunta sin responder: ¿el
+sistema llegó a desplegarse, o los crons están listos para cuando se
+despliegue?
+
+**Decisión de consolidación.** `docs/analisis-pendientes-2026-09-09.md`
+queda como el documento VIGENTE de pendientes; `docs/PENDIENTES.md` se
+marca HISTÓRICO (congelado en migración 0064), con una nota cruzada entre
+los dos. Hallazgo de paso: ninguno de los dos es hoy la fuente más actual
+— desde el PR #90 (2026-10-01) el proyecto trackea pendientes como
+**issues de GitHub** (21 abiertos), algo que no existía cuando se
+escribió ninguno de los dos documentos. Se anotó en el vigente en vez de
+fusionar todo a las apuradas: los issues tienen label y prioridad: los
+documentos tienen el *por qué*, que es lo que normalmente un issue no
+lleva.
+
+**Por qué.** Es una tesis: la documentación pesa tanto como el código, y
+tres de los documentos más visibles del repo tenían números que cualquiera
+podía desmentir con un `find` o un `ls`.
+
+**Queda para el cierre final** (fuera del recorte de esta corrida):
+`COMO-LEVANTARLO.md` tiene la misma deriva que tenía `README.md` antes de
+hoy (67 migraciones, 1555 tests, 27 ADRs); `AGENTS.md` repite "24 archivos"
+con `service_role` (hoy 29) y da un tercer número distinto de tablas/
+políticas RLS (105 sobre 52, contra las "más de 103 sobre 56" de
+`CLAUDE.md`); los manuales de usuario y técnico no se revisaron.
+
+Typecheck 0 · lint 0 (sin cambios de código, solo documentación).
+
+## 2026-10-06 — Pulido integral, Fase 2 (parcial): máquina de estados y atomicidad
+
+**Qué.** Se adelantaron dos puntos de la Fase 2 (reservada para otra sesión,
+pero sencillos y sin depender del resto):
+
+1. **Se trajo a esta rama el fix de atomicidad de `saldarSiCorresponde`**
+   (issue #85) que había quedado en una rama separada de la sesión
+   anterior: `avanzar_estado_reserva` (migración 0109) aplica el camino de
+   estados completo en una transacción. Verificado otra vez contra base
+   local: los 17 tests de `avanzar-estado-reserva-atomico.test.ts` +
+   `webhook-pagos.test.ts` pasan, y la suite completa da el mismo resultado
+   que antes de traerlo (6 archivos con fallas preexistentes del entorno,
+   ninguno relacionado — ya documentado en la Fase 0).
+2. **Máquina de estados, verificada y con contrato nuevo.** `ESTADOS_RESERVA`
+   coincide exactamente con el enum `estado_reserva` de la base (creado una
+   sola vez en la migración 0005, nunca alterado — se revisaron las 108).
+   La pantalla de ficha de reserva **no puede ofrecer una transición
+   inválida ni omitir una válida**: los botones se generan con
+   `transicionesPosibles(reserva.estado)`, la misma fuente que usa el
+   dominio, no una lista aparte — y `cambiarEstadoReserva` revalida del lado
+   del servidor con `puedeTransicionar` antes de escribir. No había ningún
+   test que afirmara la sincronización del enum, solo un comentario
+   ("debe mantenerse en sincronía"); se agregó
+   `tests/estado-reserva-sincronizado.test.ts`, que lee las migraciones del
+   disco (no necesita base) y falla si alguna vez un lado cambia sin el
+   otro.
+
+**Por qué.** El usuario pidió seguir con lo más sencillo de la Fase 2 que
+se pudiera dejar terminado sin depender del resto. Las dos cosas lo eran:
+la primera ya estaba hecha y probada, solo faltaba traerla; la segunda era
+una verificación con un gap de test concreto y chico.
+
+**Decisiones.** No se tocó la atomicidad de `emitirFactura` (issue #85,
+pendiente P1 de `docs/analisis-pendientes-2026-09-09.md`): es la pieza
+grande de la Fase 2 y queda para la sesión que la haga completa.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2046 tests pasados / 265
+salteados (149 archivos) — mismas 6 fallas preexistentes del entorno que
+en la Fase 0, ninguna nueva.
+
+## 2026-10-06 — Pulido integral, Fase 2.6: nada escribe `reservas.total` a mano
+
+**Qué.** Grep completo de `app/` y `lib/` buscando cualquier
+`.from('reservas').update({...})` que incluya `total`. **Ninguno la
+incluye** — los únicos `update` sobre `reservas` encontrados escriben
+`estado`, `pago_desde_exterior`, `grupo_id`, `folio_alojamiento`,
+`folio_b_titular` o los campos de la tarjeta de garantía; el `total` sale
+exclusivamente de `crear_reserva` o `aplicar_precio_reserva` (0085), las
+dos funciones SQL que lo escriben junto con el precio por noche de la
+estadía en la misma transacción.
+
+Se agregó `tests/reservas-total-sin-mano.test.ts`: lee los archivos del
+repo (no necesita base, mismo enfoque que
+`tests/observabilidad-del-dinero.test.ts`) y falla si alguna vez aparece
+un `update` suelto con `total`. Incluye un caso armado a propósito que
+confirma que el patrón de búsqueda detecta de verdad lo que dice detectar
+—no solo que no encontró nada—.
+
+**Por qué.** Cerraba el punto 6 de la Fase 2 ("grep y test", tal cual lo
+pedía el brief): era una verificación chica y autocontenida, no dependía
+de nada de lo que falta del resto de la fase.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2050 tests pasados / 265
+salteados (151 archivos) — mismas 6 fallas preexistentes del entorno,
+ninguna nueva.
+
+## 2026-10-06 — Pulido integral, Fase 2.4 (parcial): el choque de cupo en el alta, sin test hasta hoy
+
+**Qué.** El rechazo por solapamiento (23P01, ADR 0002) ya tenía test para
+la mudanza (`tests/acciones/mudanza.test.ts`) y para la recotización
+(`tests/precio-reserva-atomico.test.ts`). Lo que **nunca tuvo test** era
+`crearReservaEnUnidadLibre` (`lib/reservas/crear.ts`) — el camino que
+comparten el alta del panel Y el checkout del portal público, el único de
+los tres con un huésped esperando en vivo del otro lado. Nuevo
+`tests/crear-reserva-choque.test.ts`, dos casos: una unidad puntual ya
+ocupada (el camino del panel, con `unidadId` explícito) y un tipo entero
+agotado sin indicar unidad (el camino del portal). Los dos confirman que
+la función devuelve `{ ok: false, error: '...' }` legible — nunca una
+excepción sin capturar camino a un 500.
+
+**Por qué.** Era el gap concreto que quedaba del punto 4 de la Fase 2
+("que el error de solapamiento llegue como mensaje legible, nunca como
+500, en los tres caminos"): mudanza y recotización ya estaban cubiertos,
+faltaba el alta.
+
+**Decisión de las fechas.** Usa el rango de temporada real cargado
+2026-04-05/2026-06-01 (`crearReservaEnUnidadLibre` cotiza de verdad, a
+diferencia de `crear_reserva` a secas que recibe el precio ya calculado):
+se verificó por grep que ningún otro test contra base local usa fechas en
+ese tramo, para no heredar un choque de otro archivo.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2052 tests pasados / 265
+salteados (152 archivos) — mismas 6 fallas preexistentes, ninguna nueva.
+
+## 2026-10-06 — Pulido integral, Fase 2.3 y 2.7: verificado en el navegador, contra base local
+
+**Qué.** Primera verificación de esta rama hecha con el navegador de verdad,
+como pide el brief (`.claude/launch.json` / `npm run dev`), apuntando
+explícitamente a Supabase **local** y nunca a la nube: las cuatro variables
+se exportaron en el mismo shell que levantó el dev server, nunca se tocó
+`.env.local` (ni se pudo leer: el permiso lo bloquea). Confirmado que
+apuntaba a local antes de tocar nada: `npm run seed:usuarios` actualizó
+`admin@blancapatagonia.local` y se verificó por `psql` directo que el
+`updated_at` de ESE usuario en la base local cambió en el mismo segundo.
+
+**Fase 2.3 — fechas sin tarifa, en los dos frentes:**
+- **Panel** (`/panel/reservas/nueva`), fechas de invierno (10-13/07/2026,
+  sin temporada cargada por diseño): aviso rojo *"No hay tarifas cargadas
+  para esas fechas. Hay unidades libres, pero sin precio no se puede
+  cotizar"* con link a Configuración → Temporadas, cada tipo de unidad
+  muestra "Sin tarifa cargada" y **los radios quedan deshabilitados de
+  verdad** — se intentó clickear uno a propósito y no se seleccionó.
+  Ninguna forma de avanzar a un alta con precio cero.
+- **Portal** (`/reservar`), fechas más allá de lo cargado (10-13/07/2027):
+  aviso amarillo *"Tenemos lugar en esas fechas, pero todavía no
+  publicamos las tarifas del período. Escribinos y te pasamos el precio en
+  el día"* — distingue correctamente "hay lugar, falta precio" de "no hay
+  lugar", con cada opción mostrando "Precio a confirmar" + botón
+  "Consultar" en vez de "Reservar". Ningún "USD 0" en pantalla.
+- *Nota de método:* el buscador del portal no se pudo ejercitar con la
+  fecha escrita a mano por el navegador automatizado (el `<input
+  type="date">` con segmentos se arma mal al tipear por partes con la
+  herramienta); se verificó navegando directo a la URL con los
+  `searchParams` que ese mismo formulario genera (`method="get"`), que
+  ejercita exactamente el mismo código de la página. Documentado como
+  limitación del método de prueba, no como hallazgo.
+
+**Fase 2.7 — checkout del portal de punta a punta, igual al instructivo de
+`COMO-LEVANTARLO.md`:** catálogo (`/reservar`, fechas de hoy) → elegir
+Standard → completar datos → `Confirmar la reserva` (con el estado
+`Reservando…` del botón, bloqueando el doble clic) → código **BP-261006-AD9D**
+→ `Pagar la seña` → pasarela simulada con la advertencia de que no mueve
+dinero → `Aprobar el pago` → la reserva pasa a **Confirmada** sola (se
+verificó también desde `/panel/reservas`, saldo USD 352,98 correcto) →
+`Pagar el saldo` → aprobar → pasa a **Pagada**, saldo USD 0,00. De punta a
+punta, sin un solo error de consola.
+
+Esto verifica en vivo, no solo con test unitario, el camino completo que
+integra el fix de atomicidad de la Fase 2 (`avanzar_estado_reserva`): el
+webhook del pago simulado disparó `saldarSiCorresponde` dos veces
+(pendiente→confirmada, después confirmada→pagada) y las dos transiciones
+se vieron reflejadas correctamente en el panel.
+
+**Por qué.** Eran las dos piezas de la Fase 2 que el brief marca
+explícitamente como necesitadas de navegador — no alcanzaba con grep ni con
+tests. Con las herramientas de navegador disponibles en esta sesión, se
+pudieron cerrar sin esperar a otra corrida.
+
+**Decisiones.** No se tocó nada del código: las dos verificaciones
+confirmaron un comportamiento ya correcto, no encontraron un bug. No se
+limpió la reserva de prueba de la base local (vive solo en el volumen
+Docker, se va con el próximo `db reset`).
+
+Sin cambios de código en esta entrada — solo verificación.
+
+## 2026-10-07 — Pulido integral, Fase 3: botones, formularios y acciones
+
+**Qué.** Sweep de los `.tsx` de `app/` (sin `_components`) contra los cinco
+criterios del brief, con grep dirigido en vez de abrir archivo por archivo:
+
+- **81 archivos con `<form action=`**, de los cuales 41 no usan `BotonEnvio`
+  directamente. Revisados los 41: 38 son formularios de búsqueda
+  (`method="get"`, no escriben) o ya usan `useActionState` + `disabled`
+  —el equivalente válido para componentes de servidor que no pueden usar ese
+  hook—. **Tres sí eran un hueco real**: el chat de conversaciones internas
+  (`app/panel/conversaciones/chat.tsx`, enviar un mensaje no tenía ningún
+  bloqueo contra el doble clic — dos mensajes iguales si se apretaba
+  rápido), el cambio de etapa comercial de una agencia
+  (`app/panel/agencias/page.tsx`) y "Marcar atendida" de una consulta
+  (`app/panel/conversaciones/page.tsx`). Los tres pasan a `BotonEnvio`.
+- **Acciones destructivas** (`eliminar*`, `borrar*`, `anular*`,
+  `revocar*`, 11 en total): **10 de 11 ya tenían `confirmar=` con el
+  importe o la consecuencia explicitada** — ej. "¿Anular la comanda #X? Se
+  quitan N línea(s) por USD Y de la cuenta del huésped". La única sin
+  confirmar, `marcarPlanHecho` (mantenimiento), solo adelanta una fecha de
+  próxima ejecución —reversible volviendo a marcarla— y no mueve plata: se
+  dejó sin confirmación a propósito, no es un hallazgo.
+- **Botones puramente visuales sin `type="button"`**: 6 encontrados
+  (los tres `reset` de los error boundaries, el botón de conectar OAuth y
+  los dos de imprimir/PDF). Ninguno estaba dentro de un `<form>` —cero
+  riesgo real de enviar algo sin querer—, pero se corrigieron igual: es la
+  regla que el brief pide y cuesta una palabra por archivo.
+- **Botones de solo ícono sin `aria-label`**: cero encontrados.
+- **Enlaces internos con `<a href="/...">` en vez de `Link`**: cero.
+
+**Por qué.** El brief pedía recorrer los 64 archivos con botón fuera de
+`_components` y los `<form action=`; con 81 archivos de formulario y una
+sesión sin acceso a Docker/navegador en el momento del sweep, grep dirigido
+por los cinco criterios cubre lo mismo sin abrir cada archivo a mano, y dejó
+encontrar los tres huecos reales entre 41 candidatos.
+
+**Decisiones:** `marcarPlanHecho` se dejó sin confirmar (ver arriba, no es
+destructivo de verdad). No se tocó nada de lo que ya cumplía — nueve de
+cada diez acciones destructivas ya estaban bien, lo que habla de que las
+auditorías QA/UX anteriores (2026-09-09 y posteriores) ya habían barrido
+esto a fondo.
+
+⚠️ **Nota de entorno:** a mitad de esta fase, el acceso del navegador
+automatizado a `localhost` dejó de responder (`Frame ... is showing error
+page`) mientras sitios externos (`example.com`) cargaban sin problema —
+probablemente el permiso de sitio de la extensión para `localhost` se
+reseteó entre sesiones. No se insistió más de lo razonable (se probó con
+pestaña nueva, `127.0.0.1` y la IP directa). Los tres cambios de
+`BotonEnvio` no se vieron en vivo por esto; el riesgo es bajo porque es un
+componente ya usado en ~30 lugares del panel, probado, y `typecheck`+`lint`
+pasan. Ver `docs/pulido-integral-2026-10/progreso.md` para que la próxima
+sesión confirme visualmente si recupera el navegador.
+
+Typecheck 0 · lint 0 · build 0 · con base local: 2052 tests pasados / 265
+salteados (152 archivos) — mismas 6 fallas preexistentes del entorno,
+ninguna nueva (sin tests nuevos: son cambios de componente, no de lógica).
+
+## 2026-10-07 — Corrección: `emitirFactura` ya era atómica, no era un pendiente
+
+**Qué.** Antes de escribir una función SQL transaccional nueva para
+`emitirFactura` (el resto del punto 2 de la Fase 2, según lo venía
+arrastrando esta misma rama desde el 2026-10-06 copiando la afirmación de
+`docs/analisis-pendientes-2026-09-09.md`), se leyó el código entero de la
+acción. La migración **0069** (2026-09-01 — anterior a esa misma foto de
+pendientes) ya había resuelto exactamente esto: `reservar_numero_factura`
+es idempotente por reserva (misma reserva, siempre el mismo número), y
+`emitirFactura` ya trata el 23505 de `facturas_una_por_reserva` como una
+carrera resuelta —muestra el comprobante que ganó, no un error—. Corrida
+`tests/acciones/reservas.test.ts -t "emisiones SIMULTÁNEAS"` contra base
+local: pasa, y afirma explícitamente que el contador de `puntos_venta`
+avanza **1**, no 2, con dos emisiones concurrentes sobre la misma reserva.
+
+**Por qué no hace falta (ni se puede) una única transacción SQL acá:** a
+diferencia de `aplicar_precio_reserva` o `avanzar_estado_reserva`, en el
+medio de `emitirFactura` hay una llamada HTTP real al proveedor de
+facturación (`solicitarCae`) — eso no se puede meter adentro de una
+transacción de Postgres. La idempotencia de la numeración es la solución
+correcta para esta restricción, no una aproximación.
+
+**Lo único que queda, documentado y aceptado (no es un bug nuevo):** si una
+emisión pide el CAE, lo rechazan, y nadie reintenta, el número queda
+reservado sin factura. Antes desaparecía sin dejar rastro; desde la 0069
+queda visible en `facturas_numeracion`.
+
+**Decisión.** Se corrigió `docs/analisis-pendientes-2026-09-09.md` §4 (el
+documento vigente de pendientes) para que ya no diga que esto sigue sin
+resolver, y se corrigió la nota equivalente en
+`docs/pulido-integral-2026-10/progreso.md`. Queda como lección anotada ahí
+mismo: no repetir una afirmación de un documento sobre el estado del
+código sin confirmarla cuando hay una forma barata de hacerlo —acá, correr
+un test que ya existía—.
+
+Sin cambios de código en esta entrada.
+
+## 2026-10-07 — Pulido integral, Fase 2.8: comentarios ⚠️ de pagos/saldo sin test
+
+**Qué.** Repaso de las advertencias `⚠️` en `lib/domain/cobro.ts`,
+`lib/reservas/{cancelacion,saldar}.ts`, `lib/payments/*` y
+`lib/notificaciones/cobros.ts`:
+
+- **La invariante central** ("`pagos.monto` está SIEMPRE en USD",
+  `lib/domain/cobro.ts`) ya está probada de punta a punta en
+  `tests/cobro.test.ts`, con la demostración explícita del bug que evita.
+- **El filtro de link reutilizable por `medio`** (`lib/payments/servicio.ts`,
+  las dos advertencias) ya está probado en
+  `tests/cobro-link-reutilizable.test.ts` ("NO devuelve el link de otra
+  pasarela" / "SÍ devuelve el link propio").
+- **`textoDeCancelacion` (`lib/reservas/cancelacion.ts`) no tenía NINGÚN
+  test** — ni siquiera uno genérico. La advertencia es puntual: con
+  `cargo: null` (no se pudo calcular) la frase tiene que remitir al hotel,
+  nunca decir "no hay cargo". Nuevo `tests/cancelacion-texto.test.ts`, 5
+  casos: el de `null`, monto cero, primera noche, total, y `textoDeNoShow`.
+- El resto (PAN de tarjeta nunca persistido, centavos de Stripe, Payway sin
+  sandbox, MercadoPago sin importe en el webhook) ya tiene su propio test
+  dedicado (`garantia-tarjeta.test.ts`, `pasarelas-reales.test.ts`) o es una
+  limitación documentada y no un hallazgo (Payway: no hay credenciales de
+  prueba, está dicho en el propio archivo).
+- La devolución PARCIAL de Stripe ("revisar a mano", `stripe.ts:344`) no
+  tiene un test con ese nombre, pero no hace falta uno nuevo: el parser
+  siempre devuelve el importe ORIGINAL del cargo (nunca el parcial), así que
+  cualquier reembolso parcial cae en el contraste de importe genérico que ya
+  prueba `tests/webhook-pagos.test.ts` ("un importe distinto del pedido NO
+  salda la reserva"). Es el mismo camino, no uno sin probar.
+
+**Por qué.** Cerraba el único punto que le faltaba a la Fase 2 del brief.
+
+Typecheck 0 · lint 0 · con base local: 2057 tests pasados / 265 salteados
+(153 archivos) — mismas 6 fallas preexistentes, ninguna nueva.
+
+**La Fase 2 queda completa: sus 8 puntos están cerrados, confirmados ya
+resueltos, o verificados en el navegador.**
+
+## 2026-10-07 — Pulido integral, Fase 4: interfaz gráfica
+
+**Qué.** El navegador seguía sin poder cargar `localhost` (se probó de
+nuevo con Supabase y el dev server recién levantados — mismo
+`Frame ... is showing error page`, sitios externos sin problema). La fase
+se hizo entera por grep dirigido contra los criterios del brief:
+
+- **`Pagina`**: 69/70 pantallas del panel, la única excepción
+  (`reservas/[id]/factura`) justificada — es el comprobante imprimible.
+- **Paleta**: cero `sky`/`amber` en `app/`.
+- **`Mensaje`/toasts/esqueletos**: ya tienen `role="alert"`/`role="status"`
+  y `aria-live` donde corresponde, sin que hiciera falta tocar nada.
+- **Se corrige un hallazgo falso de la Fase 0**: las "13 rutas sin
+  `loading.tsx`" no son una falta — cascada igual que `error.tsx`, las
+  cubre un ancestro (`app/panel`, `app/reservar` o `app/panel/canales`).
+- **Cero regresiones** de los dos bugs de formato ya cerrados antes:
+  ningún `.toLocaleString()` nuevo sobre un importe (los 9 usos
+  encontrados son cantidades, la excepción legítima), ningún
+  `new Date(iso).toLocaleDateString()` crudo fuera de `lib/fechas.ts`, y
+  el único `overflow-hidden` cerca de una tabla resultó ser el estado
+  vacío de la grilla, no la tabla con datos.
+
+**Decisiones.** Los cinco archivos más grandes no se tocaron: el propio
+brief exige que un corte "no cambie comportamiento" verificado con "los
+tests existentes", y no hay un solo test de componente en todo el repo
+—partir cualquiera de esas pantallas a ciegas es exactamente el riesgo que
+ese criterio quiere evitar. Responsive real, contraste AA medido,
+Lighthouse y orden de tabulación quedan sin verificar: ninguno se puede
+confirmar sin un navegador funcionando.
+
+Typecheck 0 · lint 0 (sin cambios de código: todo lo revisado ya estaba
+bien).
+
+## 2026-10-07 — Pulido integral, Fase 5: portal público del huésped
+
+**Qué.** Mismo bloqueo de navegador. Verificación por código de los tres
+riesgos concretos del brief:
+
+1. **Ningún dato de otro huésped por URL.** Las 6 rutas públicas por token
+   resuelven su fila con `.eq('token', token)` primero y todo lo demás sale
+   del `id` de esa fila — nunca de un parámetro aparte.
+2. **Ningún precio neto expuesto.** `tarifasPublicas()` selecciona solo
+   `precio_rack`; las tres cotizaciones del portal tienen `tarifaTipo:
+   'rack'` hardcodeado; los catálogos pasan todo por `conIva()`. El
+   "neto" que sí aparece en la factura por token es el neto fiscal del
+   comprobante (obligatorio en cualquier factura), no el de agencia.
+3. **Fotos del catálogo.** `CAB-UPSALA`/`CAB-MORENO` (sin tarifa a
+   propósito) tampoco tienen foto, y el componente ya tiene un diseño de
+   respaldo terminado para cuando falta — no un ícono roto.
+
+**Decisiones.** Cero hallazgos, cero cambios de código. El recorrido real
+de checkout ya se había verificado en vivo en la Fase 2.7 (2026-10-06);
+falta el resto de las pantallas públicas y el asistente, que necesitan
+navegador.
+
+Typecheck 0 · lint 0.
+
+## 2026-10-07 — Pulido integral, Fase 6: deuda que se puede pagar hoy
+
+**Qué.** Los cinco issues en el orden del brief, cada uno comentado en
+GitHub con evidencia:
+
+- **#86** (paginación y tokens): **los dos criterios ya estaban
+  resueltos.** Los 13 listados sin `Paginacion` explícita están todos
+  acotados de otra forma (límite, ventana de fecha, o a propósito sin
+  paginar como `agencias`/`proveedores`). La migración 0063 ya audita
+  cada tipo de token con su porqué; el único cabo suelto que ella misma
+  dejaba anotado —`firmas.token` abierto para siempre en un contrato sin
+  firmar— **también está resuelto**, sin que quedara marcado en ningún
+  lado: `motivoNoFirmable()` bloquea la firma según el estado del
+  contrato, con test propio.
+- **#70** (pruebas funcionales): comentado con el resumen de todo el
+  recorrido de esta rama como plan de pruebas — lo verificado en
+  navegador, lo verificado por código, lo encontrado y corregido, y lo
+  que falta por no tener navegador el resto de la sesión.
+- **#88** (cerrar las dos auditorías): **no se cierra entera** — el
+  alcance de las 103+ políticas RLS una por una excede lo que cabe en una
+  sesión de pulido, y el propio issue lo anticipa. Comentado con lo que sí
+  aporta esta rama de cada auditoría, sin inflar lo que queda sin tocar.
+- **#89** (config local): bloqueado — `.env.local` es de otra máquina y
+  está gitignorado. Comentado señalando que `.claude/launch.json`, que sí
+  está versionado, ya está limpio (sin el workaround que describe el
+  issue).
+- **#75** (fotos): bloqueado — necesita fotos reales del hotel.
+  Comentado confirmando que el mecanismo de carga ya funciona (Fase 5) y
+  que lo único que falta es conseguir las fotos.
+
+**Con esto, las siete fases de este pulido (0 a 6) tienen al menos una
+pasada**, acotada por no tener navegador disponible la mayor parte de la
+sesión.
+
+Sin cambios de código en esta entrada.
