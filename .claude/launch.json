@@ -7,6 +7,17 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "panel-clave-valida",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$l = Get-Content .env.local | Where-Object { $_ -like 'SUPABASE_SERVICE_ROLE_KEY=*' } | Select-Object -First 1; $env:SUPABASE_SERVICE_ROLE_KEY = $l.Substring($l.IndexOf('=') + 1).Trim().Trim([char]34).Trim([char]39); npm run dev"
+      ],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }
