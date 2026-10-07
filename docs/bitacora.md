@@ -7662,3 +7662,36 @@ Typecheck 0 · lint 0 · con base local: 2057 tests pasados / 265 salteados
 
 **La Fase 2 queda completa: sus 8 puntos están cerrados, confirmados ya
 resueltos, o verificados en el navegador.**
+
+## 2026-10-07 — Pulido integral, Fase 4: interfaz gráfica
+
+**Qué.** El navegador seguía sin poder cargar `localhost` (se probó de
+nuevo con Supabase y el dev server recién levantados — mismo
+`Frame ... is showing error page`, sitios externos sin problema). La fase
+se hizo entera por grep dirigido contra los criterios del brief:
+
+- **`Pagina`**: 69/70 pantallas del panel, la única excepción
+  (`reservas/[id]/factura`) justificada — es el comprobante imprimible.
+- **Paleta**: cero `sky`/`amber` en `app/`.
+- **`Mensaje`/toasts/esqueletos**: ya tienen `role="alert"`/`role="status"`
+  y `aria-live` donde corresponde, sin que hiciera falta tocar nada.
+- **Se corrige un hallazgo falso de la Fase 0**: las "13 rutas sin
+  `loading.tsx`" no son una falta — cascada igual que `error.tsx`, las
+  cubre un ancestro (`app/panel`, `app/reservar` o `app/panel/canales`).
+- **Cero regresiones** de los dos bugs de formato ya cerrados antes:
+  ningún `.toLocaleString()` nuevo sobre un importe (los 9 usos
+  encontrados son cantidades, la excepción legítima), ningún
+  `new Date(iso).toLocaleDateString()` crudo fuera de `lib/fechas.ts`, y
+  el único `overflow-hidden` cerca de una tabla resultó ser el estado
+  vacío de la grilla, no la tabla con datos.
+
+**Decisiones.** Los cinco archivos más grandes no se tocaron: el propio
+brief exige que un corte "no cambie comportamiento" verificado con "los
+tests existentes", y no hay un solo test de componente en todo el repo
+—partir cualquiera de esas pantallas a ciegas es exactamente el riesgo que
+ese criterio quiere evitar. Responsive real, contraste AA medido,
+Lighthouse y orden de tabulación quedan sin verificar: ninguno se puede
+confirmar sin un navegador funcionando.
+
+Typecheck 0 · lint 0 (sin cambios de código: todo lo revisado ya estaba
+bien).
