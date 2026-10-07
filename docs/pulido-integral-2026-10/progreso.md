@@ -4,6 +4,13 @@
 > fase, qué se hizo, qué quedó pendiente y qué cambió de plan. El detalle de
 > cada fase va además en `docs/bitacora.md` con fecha; esto es el índice
 > rápido para no releer la bitácora entera al retomar.
+>
+> ⚠️ **Para retomar el trabajo, empezá por
+> [`prompt-siguiente-sesion.md`](prompt-siguiente-sesion.md), no por acá.**
+> Es un prompt completo (2026-10-07) con todo lo hecho fase por fase, lo que
+> falta priorizado por qué tan fácil es resolverlo, y la deuda/fricciones
+> encontradas en el camino. Este archivo queda como índice rápido de
+> fechas y commits, pero el que orienta es el otro.
 
 ## Estado
 
