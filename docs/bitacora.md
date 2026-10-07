@@ -7719,3 +7719,39 @@ falta el resto de las pantallas públicas y el asistente, que necesitan
 navegador.
 
 Typecheck 0 · lint 0.
+
+## 2026-10-07 — Pulido integral, Fase 6: deuda que se puede pagar hoy
+
+**Qué.** Los cinco issues en el orden del brief, cada uno comentado en
+GitHub con evidencia:
+
+- **#86** (paginación y tokens): **los dos criterios ya estaban
+  resueltos.** Los 13 listados sin `Paginacion` explícita están todos
+  acotados de otra forma (límite, ventana de fecha, o a propósito sin
+  paginar como `agencias`/`proveedores`). La migración 0063 ya audita
+  cada tipo de token con su porqué; el único cabo suelto que ella misma
+  dejaba anotado —`firmas.token` abierto para siempre en un contrato sin
+  firmar— **también está resuelto**, sin que quedara marcado en ningún
+  lado: `motivoNoFirmable()` bloquea la firma según el estado del
+  contrato, con test propio.
+- **#70** (pruebas funcionales): comentado con el resumen de todo el
+  recorrido de esta rama como plan de pruebas — lo verificado en
+  navegador, lo verificado por código, lo encontrado y corregido, y lo
+  que falta por no tener navegador el resto de la sesión.
+- **#88** (cerrar las dos auditorías): **no se cierra entera** — el
+  alcance de las 103+ políticas RLS una por una excede lo que cabe en una
+  sesión de pulido, y el propio issue lo anticipa. Comentado con lo que sí
+  aporta esta rama de cada auditoría, sin inflar lo que queda sin tocar.
+- **#89** (config local): bloqueado — `.env.local` es de otra máquina y
+  está gitignorado. Comentado señalando que `.claude/launch.json`, que sí
+  está versionado, ya está limpio (sin el workaround que describe el
+  issue).
+- **#75** (fotos): bloqueado — necesita fotos reales del hotel.
+  Comentado confirmando que el mecanismo de carga ya funciona (Fase 5) y
+  que lo único que falta es conseguir las fotos.
+
+**Con esto, las siete fases de este pulido (0 a 6) tienen al menos una
+pasada**, acotada por no tener navegador disponible la mayor parte de la
+sesión.
+
+Sin cambios de código en esta entrada.
