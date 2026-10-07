@@ -7587,3 +7587,40 @@ sesión confirme visualmente si recupera el navegador.
 Typecheck 0 · lint 0 · build 0 · con base local: 2052 tests pasados / 265
 salteados (152 archivos) — mismas 6 fallas preexistentes del entorno,
 ninguna nueva (sin tests nuevos: son cambios de componente, no de lógica).
+
+## 2026-10-07 — Corrección: `emitirFactura` ya era atómica, no era un pendiente
+
+**Qué.** Antes de escribir una función SQL transaccional nueva para
+`emitirFactura` (el resto del punto 2 de la Fase 2, según lo venía
+arrastrando esta misma rama desde el 2026-10-06 copiando la afirmación de
+`docs/analisis-pendientes-2026-09-09.md`), se leyó el código entero de la
+acción. La migración **0069** (2026-09-01 — anterior a esa misma foto de
+pendientes) ya había resuelto exactamente esto: `reservar_numero_factura`
+es idempotente por reserva (misma reserva, siempre el mismo número), y
+`emitirFactura` ya trata el 23505 de `facturas_una_por_reserva` como una
+carrera resuelta —muestra el comprobante que ganó, no un error—. Corrida
+`tests/acciones/reservas.test.ts -t "emisiones SIMULTÁNEAS"` contra base
+local: pasa, y afirma explícitamente que el contador de `puntos_venta`
+avanza **1**, no 2, con dos emisiones concurrentes sobre la misma reserva.
+
+**Por qué no hace falta (ni se puede) una única transacción SQL acá:** a
+diferencia de `aplicar_precio_reserva` o `avanzar_estado_reserva`, en el
+medio de `emitirFactura` hay una llamada HTTP real al proveedor de
+facturación (`solicitarCae`) — eso no se puede meter adentro de una
+transacción de Postgres. La idempotencia de la numeración es la solución
+correcta para esta restricción, no una aproximación.
+
+**Lo único que queda, documentado y aceptado (no es un bug nuevo):** si una
+emisión pide el CAE, lo rechazan, y nadie reintenta, el número queda
+reservado sin factura. Antes desaparecía sin dejar rastro; desde la 0069
+queda visible en `facturas_numeracion`.
+
+**Decisión.** Se corrigió `docs/analisis-pendientes-2026-09-09.md` §4 (el
+documento vigente de pendientes) para que ya no diga que esto sigue sin
+resolver, y se corrigió la nota equivalente en
+`docs/pulido-integral-2026-10/progreso.md`. Queda como lección anotada ahí
+mismo: no repetir una afirmación de un documento sobre el estado del
+código sin confirmarla cuando hay una forma barata de hacerlo —acá, correr
+un test que ya existía—.
+
+Sin cambios de código en esta entrada.

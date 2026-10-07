@@ -69,10 +69,22 @@ simulador.
 
 - **El punto ciego más grande, en palabras del propio repo: nunca se restauró
   un backup.** Un backup que no se probó restaurar no es un backup.
-- Emitir factura en una sola transacción SQL sigue sin resolver
-  (`app/panel/reservas/actions.ts`): el test de concurrencia ya arma la
-  carrera, falta la garantía transaccional (riesgo: salto de numeración
-  fiscal, ADR 0015).
+- ✅ **Corregido — este ítem estaba desactualizado.** "Emitir factura en una
+  sola transacción SQL" ya estaba resuelto cuando se escribió esto: la
+  migración 0069 (2026-09-01, anterior a esta misma foto) hizo idempotente
+  `reservar_numero_factura` —misma reserva, siempre el mismo número— y
+  `emitirFactura` (`app/panel/reservas/actions.ts`) ya trata el 23505 de
+  `facturas_una_por_reserva` como una carrera resuelta, no como un error.
+  Verificado el 2026-10-07 corriendo
+  `tests/acciones/reservas.test.ts` ("con dos emisiones SIMULTÁNEAS, la base
+  deja pasar una sola"): el contador de `puntos_venta` avanza **1**, no 2,
+  con dos emisiones concurrentes sobre la misma reserva. No se necesita (ni
+  es posible) una única transacción SQL porque en el medio hay una llamada
+  HTTP real al proveedor de facturación — lo que hace falta es justamente la
+  idempotencia que ya existe. Queda UN borde documentado y aceptado: una
+  emisión que pide el CAE, lo rechazan, y nadie reintenta deja el número
+  reservado sin factura — antes desaparecía sin rastro; ahora queda visible
+  en `facturas_numeracion`.
 - Auditoría de las políticas RLS **una por una** sigue pendiente (están
   activadas en todas las tablas, pero eso no dice qué permite cada una).
 - 79 % de la lógica vive en `app/` en vez de `lib/` (190 llamadas `.from()`

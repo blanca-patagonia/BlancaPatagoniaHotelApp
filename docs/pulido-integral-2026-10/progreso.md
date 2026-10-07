@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
 | 1 | Ramas y PRs | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 1: ramas y PRs» |
-| 2 | Lógica de reservas | ⏳ parcial (puntos 1, 2, 3, 4, 6 y 7 de 8 — ver nota abajo) | 2026-10-06 | ver entradas del 2026-10-06 en `docs/bitacora.md` |
+| 2 | Lógica de reservas | ⏳ parcial (puntos 1-7 de 8 cerrados o confirmados ya resueltos; falta el 8 — ver nota abajo) | 2026-10-06/07 | ver entradas del 2026-10-06 y 2026-10-07 en `docs/bitacora.md` |
 | 3 | Botones, formularios y acciones | ✅ hecha (por grep dirigido, no archivo por archivo — ver nota) | 2026-10-07 | «Pulido integral, Fase 3: botones, formularios y acciones» |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
 | 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
@@ -45,11 +45,20 @@
   revisados). Si una sesión futura quiere el recorrido manual completo
   pantalla por pantalla que pide el brief originalmente, todavía no se
   hizo ese nivel de detalle.
+- **Corrección 2026-10-07: `emitirFactura` NO estaba pendiente — era una
+  nota de esta misma rama (y de `docs/analisis-pendientes-2026-09-09.md`)
+  que había quedado desactualizada sin verificar contra el código.** La
+  migración 0069 (2026-09-01) ya hizo idempotente `reservar_numero_factura`
+  y `emitirFactura` ya trata el choque de dos emisiones como una carrera
+  resuelta. Corrido `tests/acciones/reservas.test.ts` el 2026-10-07: el
+  contador avanza 1, no 2, con dos emisiones simultáneas. Se corrigió la
+  nota en `docs/analisis-pendientes-2026-09-09.md` §4. Lección: no repetir
+  una afirmación de un documento sin confirmarla contra el código cuando
+  hay forma barata de hacerlo (acá, correr un test que ya existía).
 - **Fase 2: lo que queda.** Hechos los puntos 1 (máquina de estados,
-  `tests/estado-reserva-sincronizado.test.ts`), 2 (atomicidad de
-  `saldarSiCorresponde`, migración 0109 — pero OJO: la atomicidad de
-  `emitirFactura`, que es la otra mitad del punto 2, **sigue sin
-  resolver**, es el pendiente P1 más viejo del repo), 4 (el choque de
+  `tests/estado-reserva-sincronizado.test.ts`) y 2 (atomicidad de
+  `saldarSiCorresponde`, migración 0109 — y, como se corrigió arriba, la
+  atomicidad de `emitirFactura` ya estaba resuelta de antes), 4 (el choque de
   cupo en el alta —`crearReservaEnUnidadLibre`— nunca tuvo test contra la
   restricción real; mudanza y recotización ya lo tenían. Nuevo
   `tests/crear-reserva-choque.test.ts`) y 6 (nada escribe `reservas.total`
