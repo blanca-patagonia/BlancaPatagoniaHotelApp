@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | 0 | Línea de base y plan | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 0: línea de base y plan» |
 | 1 | Ramas y PRs | ✅ hecha | 2026-10-06 | «Pulido integral, Fase 1: ramas y PRs» |
-| 2 | Lógica de reservas | ⏳ parcial (puntos 1-7 de 8 cerrados o confirmados ya resueltos; falta el 8 — ver nota abajo) | 2026-10-06/07 | ver entradas del 2026-10-06 y 2026-10-07 en `docs/bitacora.md` |
+| 2 | Lógica de reservas | ✅ hecha (los 8 puntos, cerrados o confirmados ya resueltos) | 2026-10-06/07 | ver entradas del 2026-10-06 y 2026-10-07 en `docs/bitacora.md` |
 | 3 | Botones, formularios y acciones | ✅ hecha (por grep dirigido, no archivo por archivo — ver nota) | 2026-10-07 | «Pulido integral, Fase 3: botones, formularios y acciones» |
 | 4 | Interfaz gráfica | **fuera de esta corrida** | — | — |
 | 5 | Portal público del huésped | **fuera de esta corrida** | — | — |
