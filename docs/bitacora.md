@@ -7624,3 +7624,41 @@ código sin confirmarla cuando hay una forma barata de hacerlo —acá, correr
 un test que ya existía—.
 
 Sin cambios de código en esta entrada.
+
+## 2026-10-07 — Pulido integral, Fase 2.8: comentarios ⚠️ de pagos/saldo sin test
+
+**Qué.** Repaso de las advertencias `⚠️` en `lib/domain/cobro.ts`,
+`lib/reservas/{cancelacion,saldar}.ts`, `lib/payments/*` y
+`lib/notificaciones/cobros.ts`:
+
+- **La invariante central** ("`pagos.monto` está SIEMPRE en USD",
+  `lib/domain/cobro.ts`) ya está probada de punta a punta en
+  `tests/cobro.test.ts`, con la demostración explícita del bug que evita.
+- **El filtro de link reutilizable por `medio`** (`lib/payments/servicio.ts`,
+  las dos advertencias) ya está probado en
+  `tests/cobro-link-reutilizable.test.ts` ("NO devuelve el link de otra
+  pasarela" / "SÍ devuelve el link propio").
+- **`textoDeCancelacion` (`lib/reservas/cancelacion.ts`) no tenía NINGÚN
+  test** — ni siquiera uno genérico. La advertencia es puntual: con
+  `cargo: null` (no se pudo calcular) la frase tiene que remitir al hotel,
+  nunca decir "no hay cargo". Nuevo `tests/cancelacion-texto.test.ts`, 5
+  casos: el de `null`, monto cero, primera noche, total, y `textoDeNoShow`.
+- El resto (PAN de tarjeta nunca persistido, centavos de Stripe, Payway sin
+  sandbox, MercadoPago sin importe en el webhook) ya tiene su propio test
+  dedicado (`garantia-tarjeta.test.ts`, `pasarelas-reales.test.ts`) o es una
+  limitación documentada y no un hallazgo (Payway: no hay credenciales de
+  prueba, está dicho en el propio archivo).
+- La devolución PARCIAL de Stripe ("revisar a mano", `stripe.ts:344`) no
+  tiene un test con ese nombre, pero no hace falta uno nuevo: el parser
+  siempre devuelve el importe ORIGINAL del cargo (nunca el parcial), así que
+  cualquier reembolso parcial cae en el contraste de importe genérico que ya
+  prueba `tests/webhook-pagos.test.ts` ("un importe distinto del pedido NO
+  salda la reserva"). Es el mismo camino, no uno sin probar.
+
+**Por qué.** Cerraba el único punto que le faltaba a la Fase 2 del brief.
+
+Typecheck 0 · lint 0 · con base local: 2057 tests pasados / 265 salteados
+(153 archivos) — mismas 6 fallas preexistentes, ninguna nueva.
+
+**La Fase 2 queda completa: sus 8 puntos están cerrados, confirmados ya
+resueltos, o verificados en el navegador.**
