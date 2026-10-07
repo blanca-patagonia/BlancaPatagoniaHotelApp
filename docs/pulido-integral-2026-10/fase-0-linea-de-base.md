@@ -78,13 +78,13 @@ Queda resuelto en la Fase 1, con evidencia.
 `app/alojamientos`, `app/portal`, `app/encuesta`, `app/firmar` (excluyendo
 `_components`). Tabla completa generada por script, no a mano:
 
-- **`loading.tsx`**: 67 de 80 lo tienen. Las 13 que no:
-  `app/panel/ayuda`, `app/panel/config/{datos-fiscales,tarifario,ubicaciones,
-  divisas,conexiones,plantillas,inventario}`, `app/panel/cierre-diario`,
-  `app/panel/reservas/[id]/factura`, `app/panel/canales/externos`,
-  `app/reservar/pagar/[token]`, `app/reservar/factura/[token]`.
-  Queda para la Fase 4 (estados de carga), que es donde el brief la pone —
-  acá solo se deja listada.
+- **`loading.tsx`**: 67 de 80 lo declaran en su propia carpeta. Las 13 que
+  no **tampoco son una falta** (corregido en la Fase 4, igual que
+  `error.tsx` abajo): `loading.tsx` cascada en Next.js igual que
+  `error.tsx`, y las tres carpetas ancestro (`app/panel/loading.tsx` —
+  explícitamente escrito como "cubre el resto", `app/reservar/loading.tsx`
+  y `app/panel/canales/loading.tsx`) cubren las 13 sin excepción. Ninguna
+  pantalla queda en blanco durante la carga.
 - **`error.tsx`**: solo existen `app/error.tsx` y `app/panel/error.tsx`. Eso
   **no es una falta** — en Next.js un `error.tsx` de segmento cubre en
   cascada todas las rutas anidadas que no declaren el propio—; está bien
@@ -115,13 +115,16 @@ para que la próxima sesión no arranque de cero.
    segundo, la reserva quedaba a medias para siempre. Ver
    `progreso.md` — rama `fix/avanzar-estado-reserva-atomico`, migración
    0109, con tests. Candidato a traer en la Fase 2.
-2. `emitirFactura` no es transaccional: un `PENDIENTES.md` abierto desde
-   agosto (carrera de numeración correlativa, riesgo fiscal ADR 0015). El
-   test de concurrencia existe pero no afirma ausencia de salto. Fase 2.
-3. Falta confirmar si las 13 rutas sin `loading.tsx` (§4) dejan a la persona
-   mirando una pantalla en blanco mientras carga, o si hay un loading padre
-   que las cubre — no verificado en el navegador en esta corrida (sin
-   navegador, por brief). Fase 4.
+2. ✅ **Corregido (2026-10-07): no era cierto.** La migración 0069
+   (2026-09-01) ya hizo idempotente la numeración; el test de concurrencia
+   sí afirma ausencia de salto (`tests/acciones/reservas.test.ts`, "con dos
+   emisiones SIMULTÁNEAS"), y pasa. Este punto venía copiado de
+   `docs/analisis-pendientes-2026-09-09.md`, que también se corrigió. Ver
+   bitácora del 2026-10-07.
+3. ✅ **Resuelto (2026-10-07): no era una falta.** Las 13 rutas quedan
+   cubiertas por el `loading.tsx` de un ancestro (`app/panel`,
+   `app/reservar` o `app/panel/canales`), que cascada igual que
+   `error.tsx`. Ninguna pantalla en blanco.
 4. 30 `actions.ts` contra 7 archivos dedicados de test (§4): cuantificar la
    cobertura real, no solo el conteo de archivos. Fase 3/6.
 
