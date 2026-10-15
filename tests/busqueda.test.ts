@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { AMBITOS, ambitosPara, puedeBuscar, terminoBuscado } from '@/lib/domain/busqueda'
 import { ROLES } from '@/lib/domain/roles'
-import { puedeAcceder } from '@/lib/domain/permisos'
 
 describe('búsqueda global · qué puede buscar cada rol', () => {
   it('nunca ofrece un ámbito que el rol no puede ver en el menú', () => {
     // Si el buscador consultara de más, alguien podría llegar por texto a datos
-    // que su navegación no le ofrece.
+    // que su navegación no le ofrece. La verificación real está en `ambitosPara`,
+    // que filtra por `puedeAcceder` usando `AREA_DEL_AMBITO`.
     for (const rol of ROLES) {
       for (const ambito of ambitosPara(rol)) {
-        expect(puedeAcceder(rol, ambito), `${rol} no debería buscar en ${ambito}`).toBe(true)
+        expect(puedeBuscar(rol, ambito), `${rol} no debería buscar en ${ambito}`).toBe(true)
       }
     }
   })

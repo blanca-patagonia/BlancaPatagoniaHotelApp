@@ -3,6 +3,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
 import { nivelFidelidad, ETIQUETAS_NIVEL } from '@/lib/domain/fidelidad'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import {
   construirQuery,
   paginaActual,
@@ -164,7 +165,7 @@ export default async function HuespedesPage({
                           href={`/panel/huespedes/${h.id}`}
                           className="font-medium text-lago-700 hover:underline"
                         >
-                          {h.apellido}, {h.nombre}
+                          {nombreCompleto(h)}
                         </Link>
                       </td>
                       <td className={`${TD} ${COL_SECUNDARIA} tabular text-stone-600`}>

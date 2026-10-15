@@ -2,6 +2,7 @@ import { requerirSesion } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { buscarGlobal } from '@/lib/busqueda/servicio'
 import { formatoFechaCorta, parsearPeriodo } from '@/lib/fechas'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { ETIQUETAS_ESTADO_RESERVA } from '@/lib/domain/reservas'
 import { ETIQUETAS_AMBITO } from '@/lib/domain/busqueda'
 
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
           href: `/panel/reservas/${r.id}`,
           titulo: r.codigo,
           detalle: [
-            r.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : 'Sin huésped',
+            r.huesped ? nombreCompleto(r.huesped) : 'Sin huésped',
             p ? `${formatoFechaCorta(p.desde)} → ${formatoFechaCorta(p.hasta)}` : null,
           ]
             .filter(Boolean)
@@ -71,7 +72,7 @@ export async function GET(req: Request) {
       huespedes: resultado.huespedes.map((h) => ({
         id: `huesped-${h.id}`,
         href: `/panel/huespedes/${h.id}`,
-        titulo: `${h.apellido}, ${h.nombre}`,
+        titulo: nombreCompleto(h),
         detalle: [h.email, h.doc_numero].filter(Boolean).join(' · ') || 'sin datos de contacto',
       })),
       agencias: resultado.agencias.map((a) => ({
@@ -85,6 +86,44 @@ export async function GET(req: Request) {
         href: `/panel/proveedores/${p.id}`,
         titulo: p.nombre,
         detalle: p.rubro || ETIQUETAS_AMBITO.proveedores,
+      })),
+      unidades: resultado.unidades.map((u) => ({
+        id: `unidad-${u.id}`,
+        href: `/panel/config/unidades`,
+        titulo: u.nombre,
+        detalle: [
+          u.tipo?.nombre,
+          u.piso !== null ? `Piso ${u.piso}` : null,
+          u.activo ? null : 'Inactiva',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      })),
+      tipos_unidad: resultado.tipos_unidad.map((t) => ({
+        id: `tipo-${t.id}`,
+        href: `/panel/config/tipos-alojamiento`,
+        titulo: t.nombre,
+        detalle: `Capacidad: ${t.capacidad_max} huéspedes`,
+      })),
+      productos: resultado.productos.map((p) => ({
+        id: `producto-${p.id}`,
+        href: `/panel/punto_venta`,
+        titulo: p.nombre,
+        detalle: [p.departamento?.nombre, `USD ${Number(p.precio).toFixed(2)}`]
+          .filter(Boolean)
+          .join(' · '),
+      })),
+      promociones: resultado.promociones.map((p) => ({
+        id: `promocion-${p.id}`,
+        href: `/panel/config/promociones`,
+        titulo: p.nombre,
+        detalle: p.activa ? 'Activa' : 'Inactiva',
+      })),
+      usuarios: resultado.usuarios.map((u) => ({
+        id: `usuario-${u.id}`,
+        href: `/panel/usuarios`,
+        titulo: u.nombre_completo || u.email,
+        detalle: u.nombre_completo ? `${u.email} · ${u.rol || 'sin rol'}` : (u.rol || 'sin rol'),
       })),
     },
     { headers: { 'cache-control': 'no-store' } },

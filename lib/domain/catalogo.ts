@@ -115,6 +115,61 @@ export function precioDesde(precios: readonly { precio: number }[]): number | nu
   return validos.length ? Math.min(...validos) : null
 }
 
+/**
+ * El precio que rige HOY, según la temporada en la que cae la fecha.
+ *
+ * Reemplaza a la tabla de «precio por temporada» del detalle: una tabla con
+ * tres precios obliga al huésped a calcular cuál le toca, y casi siempre mira
+ * el más bajo. Con esto la ficha muestra uno solo —el de hoy— y cambia sola
+ * el día que empieza la temporada siguiente (no hace falta tocar nada).
+ *
+ * - Si `hoy` cae en un rango con tarifa, devuelve ese precio y hasta cuándo
+ *   rige (`hasta`, con el fin EXCLUIDO, como el rango de Postgres).
+ * - Si no —el invierno, que el tarifario no publica—, devuelve la PRÓXIMA
+ *   temporada con tarifa y lo marca con `esProxima`, para que la pantalla diga
+ *   «desde el 1 de septiembre» y no presente como actual un precio futuro.
+ * - Si no hay ninguna temporada actual ni futura con tarifa, `null`: la
+ *   pantalla dice «precio a confirmar», nunca «USD 0» (Fase 18).
+ */
+export interface PrecioVigente {
+  precio: number
+  temporada: string
+  desde: string
+  hasta: string
+  esProxima: boolean
+}
+
+export function precioVigente(
+  precios: readonly { temporada: string; precio: number }[],
+  rangos: readonly { temporada: string; desde: string; hasta: string }[],
+  hoy: string,
+): PrecioVigente | null {
+  const precioDe = new Map<string, number>()
+  for (const p of precios) {
+    if (!Number.isFinite(p.precio) || p.precio <= 0) continue
+    // Dos tarifas para la misma temporada no deberían existir; si existieran,
+    // se anuncia la más baja, que es la que el sistema puede llegar a cobrar.
+    const previo = precioDe.get(p.temporada)
+    precioDe.set(p.temporada, previo === undefined ? p.precio : Math.min(previo, p.precio))
+  }
+
+  const conTarifa = rangos
+    .filter((r) => precioDe.has(r.temporada) && r.desde < r.hasta)
+    .sort((a, b) => a.desde.localeCompare(b.desde))
+
+  const actual = conTarifa.find((r) => r.desde <= hoy && hoy < r.hasta)
+  const elegido = actual ?? conTarifa.find((r) => r.desde > hoy)
+  if (!elegido) return null
+
+  return {
+    precio: precioDe.get(elegido.temporada)!,
+    temporada: elegido.temporada,
+    desde: elegido.desde,
+    hasta: elegido.hasta,
+    esProxima: !actual,
+  }
+}
+
 /** Temporadas ordenadas como las piensa el hotel: baja, media, alta. */
 export function ordenarPrecios(precios: readonly PrecioTemporada[]): PrecioTemporada[] {
   return [...precios].sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, 'es'))
@@ -180,19 +235,28 @@ export function textoRango(desde: string, hasta: string, conAño = false): strin
  * ⚠️ Las claves siguen el `codigo` de `tipos_unidad`. La migración 0106
  * renombró cinco (inventario físico real): `HOST-DBL-STD`→`HOST-STD`,
  * `HOST-DBL-SUP`→`HOST-SUP`, `CAB-1D-3P`→`CAB-ONELLI`, `CAB-2D-4P`→
- * `CAB-SPEGAZZINI`, `CAB-3D-6P`→`CAB-BOLADOS`. Se mueve la clave, no el
- * archivo: son fotos de stock por categoría, no de la unidad puntual, así
- * que la misma imagen sigue sirviendo.
+ * `CAB-SPEGAZZINI`, `CAB-3D-6P`→`CAB-BOLADOS`.
+ *
+ * ⚠️ **Hasta 2026-10-15 esto apuntaba a fotos de STOCK** (`public/alojamientos/`)
+ * y no al hotel: la de la suite era un cuarto minimalista con un volcán nevado
+ * de fondo, que no se parece en nada a una habitación de piedra y madera de El
+ * Calafate. Publicar la foto de otro hotel es prometer algo que no se entrega,
+ * y el huésped lo descubre al abrir la puerta. Ahora todas salen de
+ * `public/hotel/fotos/`, que son del hotel real.
+ *
+ * Al agregar un tipo nuevo: la foto tiene que mostrar **ese** tipo. Si no hay
+ * una propia, es preferible dejarlo sin foto —`fotoDe` devuelve `null` y la
+ * pantalla lo contempla— antes que poner la de otra categoría.
  */
 export const FOTOS: Readonly<Partial<Record<string, string>>> = {
-  'HOST-SINGLE': '/alojamientos/single.jpg',
-  'HOST-STD': '/alojamientos/doble-standard.jpg',
-  'HOST-SUP': '/alojamientos/doble-superior.jpg',
-  'HOST-TRIPLE': '/alojamientos/triple.jpg',
-  'HOST-SUITE': '/alojamientos/suite-principal.jpg',
-  'CAB-ONELLI': '/alojamientos/cabana-1-dormitorio.jpg',
-  'CAB-SPEGAZZINI': '/alojamientos/cabana-2-dormitorios-4.jpg',
-  'CAB-BOLADOS': '/alojamientos/cabana-3-dormitorios-6.jpg',
+  'HOST-SINGLE': '/hotel/fotos/hosteria/vista-ventana.jpg',
+  'HOST-STD': '/hotel/fotos/hosteria/vista-lago.jpg',
+  'HOST-SUP': '/hotel/fotos/hosteria/superior-ventanal.jpg',
+  'HOST-TRIPLE': '/hotel/fotos/hosteria/triple.jpg',
+  'HOST-SUITE': '/hotel/fotos/hosteria/suite-hidromasaje.jpg',
+  'CAB-ONELLI': '/hotel/fotos/cabanas/dormitorio.jpg',
+  'CAB-SPEGAZZINI': '/hotel/fotos/cabanas/living-vista-lago.jpg',
+  'CAB-BOLADOS': '/hotel/fotos/cabanas/cocina-comedor.jpg',
   // `CAB-2D-5P` y `CAB-3D-7P` estaban acá y se fueron: la migración 0107 los
   // borró de `tipos_unidad` porque el relevamiento del inventario físico real
   // mostró que no existen. Eran entradas muertas —`fotoDe()` no las iba a
@@ -201,4 +265,38 @@ export const FOTOS: Readonly<Partial<Record<string, string>>> = {
 
 export function fotoDe(codigo: string): string | null {
   return FOTOS[codigo] ?? null
+}
+
+/**
+ * Fotos para la galería de la ficha: primero la del tipo, después otras de su
+ * misma categoría.
+ *
+ * ⚠️ Sólo la PRIMERA es de ese alojamiento. Las demás son de otras
+ * habitaciones de la hostería (o de otras cabañas), y la pantalla lo dice
+ * debajo de la galería: mostrar el baño de la suite en la ficha de la single
+ * sin aclararlo sería prometer un hidromasaje que esa habitación quizá no
+ * tiene. Sin foto propia no hay galería: `[]`, y la ficha dibuja la cabecera
+ * de marca (ver `fotoDe`).
+ */
+const FOTOS_CATEGORIA: Readonly<Record<string, readonly string[]>> = {
+  hosteria: [
+    '/hotel/fotos/hosteria/suite-hidromasaje.jpg',
+    '/hotel/fotos/hosteria/superior-ventanal.jpg',
+    '/hotel/fotos/hosteria/cama-detalle.jpg',
+    '/hotel/fotos/hosteria/suite-piedra.jpg',
+    '/hotel/fotos/hosteria/vista-lago.jpg',
+  ],
+  cabana: [
+    '/hotel/fotos/cabanas/living-vista-lago.jpg',
+    '/hotel/fotos/cabanas/cocina-comedor.jpg',
+    '/hotel/fotos/cabanas/dormitorio-piedra.jpg',
+    '/hotel/fotos/cabanas/living.jpg',
+  ],
+}
+
+export function fotosDe(codigo: string, categoria: string, maximo = 5): string[] {
+  const propia = fotoDe(codigo)
+  if (!propia) return []
+  const otras = (FOTOS_CATEGORIA[categoria] ?? []).filter((f) => f !== propia)
+  return [propia, ...otras].slice(0, maximo)
 }

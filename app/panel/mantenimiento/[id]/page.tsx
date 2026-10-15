@@ -6,9 +6,9 @@ import { registrarFalla } from '@/lib/acciones'
 import { fechaHoraHotel } from '@/lib/fechas'
 import { CAMPO, Campo, Encabezado, Mensaje, Pagina, Tarjeta } from '../../_components/ui'
 import { SubirFoto } from '../../_components/subir-foto'
-import { FotoAdjunta } from '../../_components/foto-adjunta'
+import { FotoAdjuntaEliminable } from '../../_components/foto-adjunta-eliminable'
 import { BotonEnvio } from '../../_components/boton-envio'
-import { agregarFotoOrden, cambiarEstadoOrden, editarOrden } from '../actions'
+import { agregarFotoOrden, cambiarEstadoOrden, editarOrden, eliminarFotoOrden } from '../actions'
 
 type Prioridad = 'baja' | 'media' | 'alta'
 type EstadoM = 'pendiente' | 'en_proceso' | 'resuelta'
@@ -45,6 +45,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   foto_subida: 'No se pudo subir el archivo. Probá de nuevo.',
   foto_leer: 'No se pudo leer la orden para adjuntar la foto. No se guardó nada.',
   foto_guardar: 'La foto se subió pero no se pudo asociar a la orden. Probá de nuevo.',
+  foto_eliminar: 'No se pudo eliminar la foto. Probá de nuevo.',
   orden_titulo: 'El título no puede quedar vacío.',
   orden_prioridad: 'Prioridad inválida.',
   orden_editar: 'No se pudieron guardar los cambios. Probá de nuevo.',
@@ -105,6 +106,11 @@ export default async function DetalleOrdenPage({
       {ok === 'foto' && (
         <div className="mb-4">
           <Mensaje tono="ok">Foto agregada.</Mensaje>
+        </div>
+      )}
+      {ok === 'foto_eliminada' && (
+        <div className="mb-4">
+          <Mensaje tono="ok">Foto eliminada.</Mensaje>
         </div>
       )}
 
@@ -193,7 +199,13 @@ export default async function DetalleOrdenPage({
         ) : (
           <div className="flex flex-wrap gap-3 p-5">
             {orden.fotos.map((ruta) => (
-              <FotoAdjunta key={ruta} ruta={ruta} alt={`Foto de la orden ${orden.titulo}`} />
+              <FotoAdjuntaEliminable
+                key={ruta}
+                ruta={ruta}
+                alt={`Foto de la orden ${orden.titulo}`}
+                accion={eliminarFotoOrden}
+                camposOcultos={{ orden_id: orden.id }}
+              />
             ))}
           </div>
         )}

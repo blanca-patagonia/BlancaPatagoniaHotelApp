@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   filtroValido,
   filtrarPorCategoria,
@@ -9,6 +11,7 @@ import {
   textoCapacidad,
   textoRango,
   fotoDe,
+  FOTOS,
   type TipoCatalogo,
   type PrecioTemporada,
 } from '@/lib/domain/catalogo'
@@ -179,8 +182,24 @@ describe('fotos', () => {
     // todo, porque `FOTOS` estaba vacío a la espera de las fotos del hotel.
     // Eso fijaba una situación transitoria, no el contrato: lo que la función
     // promete es resolver el código al archivo de su portada.
-    expect(fotoDe('HOST-SUITE')).toBe('/alojamientos/suite-principal.jpg')
-    expect(fotoDe('CAB-ONELLI')).toBe('/alojamientos/cabana-1-dormitorio.jpg')
+    //
+    // Tampoco se afirma el NOMBRE del archivo, que es lo que hacía antes: al
+    // cambiar las fotos de stock por las reales (2026-10-15) este test se puso
+    // en rojo sin que nada estuviera mal. Lo que importa es que resuelva.
+    expect(fotoDe('HOST-SUITE')).toMatch(/^\/hotel\/fotos\/.+\.jpg$/)
+    expect(fotoDe('CAB-ONELLI')).toMatch(/^\/hotel\/fotos\/.+\.jpg$/)
+  })
+
+  it('todas las portadas apuntan a un archivo que existe', () => {
+    // Las rutas de `FOTOS` se escriben a mano y nada las valida: un error de
+    // tipeo deja la tarjeta sin imagen en producción, y como `PortadaAlojamiento`
+    // tiene una variante de marca para los tipos sin foto, **el hueco no se ve
+    // como roto**. Se descubriría mirando la web, que es tarde.
+    for (const [codigo, ruta] of Object.entries(FOTOS)) {
+      if (!ruta) continue
+      const archivo = join(process.cwd(), 'public', ruta)
+      expect(existsSync(archivo), `${codigo} apunta a ${ruta}, que no existe`).toBe(true)
+    }
   })
 
   it('devuelve null ante un código sin portada', () => {

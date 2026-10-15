@@ -111,6 +111,11 @@ export const CAPITULOS: Capitulo[] = [
           'Si hay que mudar al huésped —una avería, un pedido suyo—, usá "Cambiar de unidad". Solo aparecen las que están libres esas noches, y la que se libera queda marcada para limpieza.',
       },
       {
+        titulo: 'Corregir un dato de la ficha',
+        detalle:
+          'En "Editar ficha" se cambia el plan, el segmento, el voucher, las notas, las cunas, "no mover" y cuántos adultos/menores/bebés hay. No toca el precio ni el estado — si entran más personas de las que la habitación admite, lo avisa y no guarda nada.',
+      },
+      {
         titulo: 'Check-out y factura',
         detalle:
           'Al irse, apretá "Check-out": se suman los puntos de fidelidad y se le manda la encuesta. Recién ahí aparece el botón para facturar.',
@@ -156,6 +161,16 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'La condición frente al IVA',
         detalle:
           'Es el dato más importante de la ficha porque define la letra de la factura. Si es una empresa, cargá el CUIT: sin eso no se puede emitir factura A.',
+      },
+      {
+        titulo: 'Unir dos fichas de la misma persona',
+        detalle:
+          'Pasa seguido con el que entra por Booking sin documento y después vuelve directo. Desde "Fusionar con otra ficha" buscás la otra y se unen: el historial y los puntos pasan a la que estás mirando, y la otra desaparece. No se puede deshacer.',
+      },
+      {
+        titulo: 'Si alguien pide que se borren sus datos',
+        detalle:
+          '"Derecho de supresión" borra el nombre, el documento, el contacto y las notas, pero conserva las reservas y las facturas (hay que guardarlas por ley). No se puede hacer si tiene una reserva pendiente, confirmada, pagada o en curso: esperá al check-out o cancelala primero.',
       },
     ],
   },
@@ -666,7 +681,17 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Piso y bloque de cada unidad',
         detalle:
-          'Sirve para que housekeeping recorra en orden y para filtrar la grilla de ocupación por sector.',
+          'Sirve para que housekeeping recorra en orden y para filtrar la grilla de ocupación por sector. Desde la misma pantalla se da de alta una unidad nueva, se le cambia el nombre o se la da de baja (no se puede si tiene una estadía pendiente, confirmada, pagada o en curso).',
+      },
+      {
+        titulo: 'Tipos de alojamiento',
+        detalle:
+          'Hostería o Cabaña, con su capacidad y descripción. El código (el que usan las fotos y los canales de venta) no se puede cambiar una vez creado.',
+      },
+      {
+        titulo: 'Promociones',
+        detalle:
+          'Descuento por porcentaje o monto fijo, con noches mínimas y anticipación opcionales. Se elige en el paso de condiciones comerciales al crear una reserva; si no cumple sus propias condiciones, se cotiza sin descuento en vez de rechazar el alta.',
       },
     ],
   },

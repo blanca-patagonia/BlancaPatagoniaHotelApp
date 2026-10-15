@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRef, useState, useTransition } from 'react'
 import { preguntarAlAsistente } from './acciones'
 import type { AccionSugerida } from '@/lib/domain/asistente'
+import type { Diccionario } from '@/lib/i18n/diccionarios/es'
 
 /**
  * Asistente del portal público.
@@ -19,33 +20,42 @@ interface Burbuja {
   accion?: AccionSugerida
 }
 
-const SALUDO: Burbuja = {
-  de: 'asistente',
-  texto:
-    '¡Hola! Puedo ayudarte con horarios de check-in y check-out, política de cancelación, ' +
-    'servicios de la hostería y disponibilidad. ¿Qué necesitás saber?',
+/*
+  Idiomas.
+
+  El motor de reglas (ADR 0011) entiende español y responde en español: no
+  hay un LLM que traduzca, a propósito. Por eso las sugerencias **muestran**
+  la pregunta en el idioma del huésped pero **envían** la versión en español
+  (`consultasEs`): así un toque en «What time is check-in?» obtiene la
+  respuesta correcta en vez de un «no entendí». Y el aviso del encabezado
+  dice de entrada que las respuestas llegan en español, para que nadie lo
+  descubra a mitad de la conversación.
+*/
+interface Props {
+  t: Diccionario['asistente']
+  /** Las tres sugerencias en español, que es lo que entiende el motor. */
+  consultasEs: [string, string, string]
 }
 
-const SUGERENCIAS = [
-  '¿A qué hora es el check-in?',
-  '¿Cómo es la política de cancelación?',
-  '¿Qué servicios incluye?',
-]
-
-export function ChatAsistente() {
-  const [burbujas, setBurbujas] = useState<Burbuja[]>([SALUDO])
+export function ChatAsistente({ t, consultasEs }: Props) {
+  const [burbujas, setBurbujas] = useState<Burbuja[]>([{ de: 'asistente', texto: t.saludo }])
+  const sugerencias = [t.sugerencia1, t.sugerencia2, t.sugerencia3].map((etiqueta, i) => ({
+    etiqueta,
+    consulta: consultasEs[i],
+  }))
   const [pendiente, iniciarTransicion] = useTransition()
   const formRef = useRef<HTMLFormElement>(null)
 
-  function preguntar(pregunta: string) {
-    const texto = pregunta.trim()
+  /** `mostrar` es lo que ve el huésped; `consulta`, lo que recibe el motor. */
+  function preguntar(mostrar: string, consulta = mostrar) {
+    const texto = mostrar.trim()
     if (!texto || pendiente) return
 
     setBurbujas((previas) => [...previas, { de: 'huesped', texto }])
     formRef.current?.reset()
 
     iniciarTransicion(async () => {
-      const r = await preguntarAlAsistente(texto)
+      const r = await preguntarAlAsistente(consulta.trim())
       setBurbujas((previas) => [
         ...previas,
         { de: 'asistente', texto: r.texto, accion: r.accion },
@@ -63,9 +73,10 @@ export function ChatAsistente() {
         </span>
         <div>
           <h2 className="font-display text-base font-semibold text-stone-900">
-            Asistente de Blanca Patagonia
+            {t.nombre}
           </h2>
-          <p className="text-xs text-stone-500">Respondemos al instante las consultas frecuentes.</p>
+          <p className="text-xs text-stone-500">{t.subtitulo}</p>
+          {t.aviso && <p className="mt-0.5 text-xs text-lago-800">{t.aviso}</p>}
         </div>
       </header>
 
@@ -92,21 +103,21 @@ export function ChatAsistente() {
         ))}
         {pendiente && (
           <p className="self-start rounded-2xl bg-stone-100 px-3.5 py-2 text-sm text-stone-400">
-            Escribiendo…
+            {t.escribiendo}
           </p>
         )}
       </div>
 
       {burbujas.length === 1 && (
         <div className="flex flex-wrap gap-1.5 px-5 pb-3">
-          {SUGERENCIAS.map((s) => (
+          {sugerencias.map((s) => (
             <button
-              key={s}
+              key={s.etiqueta}
               type="button"
-              onClick={() => preguntar(s)}
+              onClick={() => preguntar(s.etiqueta, s.consulta)}
               className="rounded-full bg-stone-50 px-3 py-1 text-xs text-stone-600 ring-1 ring-stone-200 transition hover:bg-stone-100"
             >
-              {s}
+              {s.etiqueta}
             </button>
           ))}
         </div>
@@ -119,8 +130,8 @@ export function ChatAsistente() {
       >
         <input
           name="pregunta"
-          placeholder="Escribí tu consulta…"
-          aria-label="Tu consulta para el asistente"
+          placeholder={t.campo}
+          aria-label={t.campoEtiqueta}
           autoComplete="off"
           className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
         />
@@ -129,7 +140,7 @@ export function ChatAsistente() {
           disabled={pendiente}
           className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
         >
-          Enviar
+          {t.enviar}
         </button>
       </form>
     </section>

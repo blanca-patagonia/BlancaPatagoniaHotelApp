@@ -10,6 +10,7 @@ import { puedeAcceder } from '@/lib/domain/permisos'
 import { esMonedaExtranjera, validarCotizacionManual } from '@/lib/domain/divisas'
 import { registrarCotizacionManual } from '@/lib/divisas/servicio'
 import { cuitValido, normalizarCuit } from '@/lib/domain/facturacion'
+import { ESTADOS_ACTIVOS } from '@/lib/domain/reservas'
 
 export interface EstadoTarifasFila {
   error?: string
@@ -402,18 +403,72 @@ export async function guardarUbicacionUnidad(formData: FormData): Promise<void> 
   const id = String(formData.get('unidad_id') ?? '')
   if (!id) redirect('/panel/config/ubicaciones?error=unidad')
 
+  // El nombre viaja en el MISMO envío (criterio «una fila, un guardado», igual
+  // que el tarifario): antes esta pantalla dejaba crear una unidad pero nunca
+  // renombrarla — «Cabaña 7» quedaba así para siempre aunque el hotel le
+  // pusiera un nombre propio después.
+  const nombre = String(formData.get('nombre') ?? '').trim().slice(0, 80)
+  if (!nombre) redirect('/panel/config/ubicaciones?error=unidad_nombre')
+
   const bloque = String(formData.get('bloque') ?? '').trim().slice(0, 60)
   const piso = String(formData.get('piso') ?? '').trim().slice(0, 20)
   const ordenCrudo = Number(formData.get('orden'))
   const orden = Number.isFinite(ordenCrudo) ? Math.max(0, Math.trunc(ordenCrudo)) : 0
 
   const supabase = await crearClienteServidor()
-  const { error } = await supabase.from('unidades').update({ bloque, piso, orden }).eq('id', id)
+  const { error } = await supabase
+    .from('unidades')
+    .update({ nombre, bloque, piso, orden })
+    .eq('id', id)
 
   cortarSiFalla(error, '/panel/config/ubicaciones', 'ubicacion')
   revalidatePath('/panel/config/ubicaciones')
   revalidatePath('/panel/ocupacion')
   redirect('/panel/config/ubicaciones?ok=ubicacion')
+}
+
+/**
+ * Da de baja o reactiva una unidad física.
+ *
+ * ── Por qué se bloquea si tiene una estadía ACTIVA ──────────────────────────
+ *
+ * `activo = false` la saca de la grilla de ocupación y de cualquier alta
+ * nueva (mismo criterio que agencias, proveedores y tarifas — ADR/migración
+ * 0061). Pero si la unidad tiene una estadía en un estado que **ocupa
+ * inventario** (`ESTADOS_ACTIVOS`, el mismo que usa la restricción anti-
+ * overbooking de la base), desactivarla dejaría a un huésped alojado o por
+ * llegar en una habitación que ya no aparece en ningún listado. Para eso
+ * existe «cambiar de unidad» (migración 0028): hay que mudar la estadía
+ * primero.
+ */
+export async function alternarActivoUnidad(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const id = String(formData.get('unidad_id') ?? '')
+  const activo = formData.get('activo') === '1'
+  if (!id) redirect('/panel/config/ubicaciones?error=unidad')
+
+  const supabase = await crearClienteServidor()
+
+  if (!activo) {
+    const { data: ocupada, error: errorOcupada } = await supabase
+      .from('estadias')
+      .select('id')
+      .eq('unidad_id', id)
+      .in('estado', ESTADOS_ACTIVOS)
+      .limit(1)
+      .maybeSingle()
+    if (errorOcupada) cortarSiFalla(errorOcupada, '/panel/config/ubicaciones', 'unidad_verificar')
+    if (ocupada) redirect('/panel/config/ubicaciones?error=unidad_ocupada')
+  }
+
+  const { error } = await supabase.from('unidades').update({ activo }).eq('id', id)
+  cortarSiFalla(error, '/panel/config/ubicaciones', 'unidad_estado')
+
+  revalidatePath('/panel/config/ubicaciones')
+  revalidatePath('/panel/ocupacion')
+  redirect(`/panel/config/ubicaciones?ok=${activo ? 'unidad_activada' : 'unidad_dada_de_baja'}`)
 }
 
 /**
@@ -508,4 +563,267 @@ export async function guardarDatosFiscales(formData: FormData): Promise<void> {
   revalidatePath('/panel/config/datos-fiscales')
   revalidatePath('/panel/proveedores/comprobantes')
   redirect('/panel/config/datos-fiscales?ok=fiscales')
+}
+
+/**
+ * Da de alta un tipo de alojamiento (categoría comercial, no una unidad física).
+ *
+ * `codigo` es la clave que ya usan `lib/domain/catalogo.ts` (el mapa `FOTOS`) y
+ * los mapeos de canal (`canal_tipos`, `canal_mapeos_columnas`): una vez creado
+ * no se ofrece editarlo desde acá — ver `editarTipoUnidad`, que a propósito no
+ * lo toca —, así que tiene que quedar bien desde el alta.
+ */
+export async function crearTipoUnidad(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const codigo = String(formData.get('codigo') ?? '').trim().toUpperCase().slice(0, 40)
+  const nombre = String(formData.get('nombre') ?? '').trim().slice(0, 80)
+  const categoria = String(formData.get('categoria') ?? '')
+  const capacidadCruda = Number(formData.get('capacidad_max'))
+  const descripcion = String(formData.get('descripcion') ?? '').trim().slice(0, 500)
+
+  /*
+    Lo que se tecleó en el alta, para repoblar el formulario si algo rechaza
+    el envío (auditoría QA/UX 2026-10-14: antes volvía siempre vacío, aunque
+    la persona hubiera llenado los cinco campos bien y solo uno fallara).
+  */
+  const altaPrevia = new URLSearchParams({
+    alta_codigo: String(formData.get('codigo') ?? ''),
+    alta_nombre: nombre,
+    alta_categoria: categoria,
+    alta_capacidad: String(formData.get('capacidad_max') ?? ''),
+    alta_descripcion: descripcion,
+  }).toString()
+
+  if (!codigo || !/^[A-Z0-9-]+$/.test(codigo)) {
+    redirect(`/panel/config/tipos-alojamiento?error=tipo_codigo&${altaPrevia}`)
+  }
+  if (!nombre) redirect(`/panel/config/tipos-alojamiento?error=tipo_nombre&${altaPrevia}`)
+  if (categoria !== 'hosteria' && categoria !== 'cabana') {
+    redirect(`/panel/config/tipos-alojamiento?error=tipo_categoria&${altaPrevia}`)
+  }
+  if (!Number.isFinite(capacidadCruda) || capacidadCruda < 1) {
+    redirect(`/panel/config/tipos-alojamiento?error=tipo_capacidad&${altaPrevia}`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('tipos_unidad').insert({
+    codigo,
+    nombre,
+    categoria,
+    capacidad_max: Math.trunc(capacidadCruda),
+    descripcion,
+  })
+  // El código es `unique`: lo más probable es que ya exista uno igual.
+  if (error) {
+    redirect(
+      `/panel/config/tipos-alojamiento?error=${error.code === '23505' ? 'tipo_codigo_repetido' : 'tipo_guardar'}&${altaPrevia}`,
+    )
+  }
+
+  updateTag(ETIQUETA_CATALOGO)
+  revalidatePath('/panel/config/tipos-alojamiento')
+  revalidatePath('/panel/config/ubicaciones')
+  redirect('/panel/config/tipos-alojamiento?ok=tipo_creado')
+}
+
+/**
+ * Edita nombre, descripción y capacidad de un tipo YA existente.
+ *
+ * No recibe `codigo`: cambiarlo rompería en silencio el mapa `FOTOS` de
+ * `lib/domain/catalogo.ts` (que indexa por código) y los mapeos de canal, que
+ * también lo usan como clave estable. Si el hotel necesita cambiar un código,
+ * es una migración — igual que hizo la 0106 al renombrar el inventario —, no
+ * un campo de este formulario.
+ */
+export async function editarTipoUnidad(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const id = String(formData.get('tipo_id') ?? '')
+  const nombre = String(formData.get('nombre') ?? '').trim().slice(0, 80)
+  const descripcion = String(formData.get('descripcion') ?? '').trim().slice(0, 500)
+  const capacidadCruda = Number(formData.get('capacidad_max'))
+
+  // Con `edita_id` la pantalla sabe CUÁL fila repoblar con lo tecleado: las
+  // demás siguen mostrando lo que ya tenían guardado (auditoría QA/UX
+  // 2026-10-14).
+  const edicionPrevia = new URLSearchParams({
+    edita_id: id,
+    edita_nombre: nombre,
+    edita_capacidad: String(formData.get('capacidad_max') ?? ''),
+    edita_descripcion: descripcion,
+  }).toString()
+
+  if (!id) redirect(`/panel/config/tipos-alojamiento?error=tipo_guardar&${edicionPrevia}`)
+  if (!nombre) redirect(`/panel/config/tipos-alojamiento?error=tipo_nombre&${edicionPrevia}`)
+  if (!Number.isFinite(capacidadCruda) || capacidadCruda < 1) {
+    redirect(`/panel/config/tipos-alojamiento?error=tipo_capacidad&${edicionPrevia}`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('tipos_unidad')
+    .update({ nombre, descripcion, capacidad_max: Math.trunc(capacidadCruda) })
+    .eq('id', id)
+  cortarSiFalla(error, `/panel/config/tipos-alojamiento?${edicionPrevia}`, 'tipo_guardar')
+
+  updateTag(ETIQUETA_CATALOGO)
+  revalidatePath('/panel/config/tipos-alojamiento')
+  revalidatePath('/panel/config/ubicaciones')
+  redirect('/panel/config/tipos-alojamiento?ok=tipo_editado')
+}
+
+/**
+ * Da de baja o reactiva un tipo de alojamiento.
+ *
+ * No hace falta verificar unidades ni tarifas antes: `activo = false` sólo
+ * saca al tipo del catálogo público (migración 0002, política de `select`) y
+ * de la lista para crear una unidad nueva — exactamente lo que ya les pasa a
+ * `HOST-SINGLE`/`CAB-UPSALA`/`CAB-MORENO` sin que nadie lo tilde a mano (ver
+ * CLAUDE.md, migración 0106). Las unidades y tarifas que ya tenga no se tocan.
+ */
+export async function alternarActivoTipoUnidad(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const id = String(formData.get('tipo_id') ?? '')
+  const activo = formData.get('activo') === '1'
+  if (!id) redirect('/panel/config/tipos-alojamiento?error=tipo_guardar')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('tipos_unidad').update({ activo }).eq('id', id)
+  cortarSiFalla(error, '/panel/config/tipos-alojamiento', 'tipo_guardar')
+
+  updateTag(ETIQUETA_CATALOGO)
+  revalidatePath('/panel/config/tipos-alojamiento')
+  revalidatePath('/panel/config/ubicaciones')
+  redirect(`/panel/config/tipos-alojamiento?ok=${activo ? 'tipo_activado' : 'tipo_dado_de_baja'}`)
+}
+
+/**
+ * Lee y valida los campos comunes del alta y la edición de una promoción.
+ *
+ * `tipo` solo admite `porcentaje` y `monto`: `paquete` existe en el `check` de
+ * la base (y en `lib/domain/precios.ts`, para cuando haya una Fase que lo
+ * resuelva) pero hoy no ajusta ningún precio —`calcularEstadia` lo excluye a
+ * propósito—, así que ofrecerlo en el alta crearía una promoción que no hace
+ * nada y nadie lo notaría hasta reclamar el descuento que nunca se aplicó.
+ */
+function leerCamposPromocion(formData: FormData):
+  | {
+      nombre: string
+      tipo: 'porcentaje' | 'monto'
+      valor: number
+      minNoches: number | null
+      anticipacionDias: number | null
+      vigenciaDesde: string | null
+      vigenciaHasta: string | null
+    }
+  | { error: string } {
+  const nombre = String(formData.get('nombre') ?? '').trim().slice(0, 120)
+  const tipo = String(formData.get('tipo') ?? '')
+  const valorCrudo = Number(formData.get('valor'))
+  const minNochesCrudo = String(formData.get('min_noches') ?? '').trim()
+  const anticipacionCrudo = String(formData.get('anticipacion_dias') ?? '').trim()
+  const vigenciaDesde = String(formData.get('vigencia_desde') ?? '').trim()
+  const vigenciaHasta = String(formData.get('vigencia_hasta') ?? '').trim()
+
+  if (!nombre) return { error: 'promo_nombre' }
+  if (tipo !== 'porcentaje' && tipo !== 'monto') return { error: 'promo_tipo' }
+  if (!Number.isFinite(valorCrudo) || valorCrudo <= 0) return { error: 'promo_valor' }
+  if (tipo === 'porcentaje' && valorCrudo > 100) return { error: 'promo_valor' }
+  if (vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde) {
+    return { error: 'promo_vigencia' }
+  }
+
+  return {
+    nombre,
+    tipo,
+    valor: valorCrudo,
+    minNoches: minNochesCrudo ? Math.max(0, Math.trunc(Number(minNochesCrudo))) : null,
+    anticipacionDias: anticipacionCrudo ? Math.max(0, Math.trunc(Number(anticipacionCrudo))) : null,
+    vigenciaDesde: vigenciaDesde || null,
+    vigenciaHasta: vigenciaHasta || null,
+  }
+}
+
+/** Da de alta una promoción. El código queda fijo: es lo que se comunica como cupón. */
+export async function crearPromocion(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const codigo = String(formData.get('codigo') ?? '').trim().toUpperCase().slice(0, 40)
+  if (!codigo || !/^[A-Z0-9-]+$/.test(codigo)) redirect('/panel/config/promociones?error=promo_codigo')
+
+  const campos = leerCamposPromocion(formData)
+  if ('error' in campos) redirect(`/panel/config/promociones?error=${campos.error}`)
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('promociones').insert({
+    codigo,
+    nombre: campos.nombre,
+    tipo: campos.tipo,
+    valor: campos.valor,
+    condiciones: {
+      ...(campos.minNoches != null ? { min_noches: campos.minNoches } : {}),
+      ...(campos.anticipacionDias != null ? { anticipacion_dias: campos.anticipacionDias } : {}),
+    },
+    vigencia_desde: campos.vigenciaDesde,
+    vigencia_hasta: campos.vigenciaHasta,
+  })
+  if (error) redirect(`/panel/config/promociones?error=${error.code === '23505' ? 'promo_codigo_repetido' : 'promo_guardar'}`)
+
+  revalidatePath('/panel/config/promociones')
+  redirect('/panel/config/promociones?ok=promo_creada')
+}
+
+/** Edita una promoción existente. No recibe `codigo`: ver el comentario de `crearPromocion`. */
+export async function editarPromocion(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const id = String(formData.get('promocion_id') ?? '')
+  if (!id) redirect('/panel/config/promociones?error=promo_guardar')
+
+  const campos = leerCamposPromocion(formData)
+  if ('error' in campos) redirect(`/panel/config/promociones?error=${campos.error}`)
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('promociones')
+    .update({
+      nombre: campos.nombre,
+      tipo: campos.tipo,
+      valor: campos.valor,
+      condiciones: {
+        ...(campos.minNoches != null ? { min_noches: campos.minNoches } : {}),
+        ...(campos.anticipacionDias != null ? { anticipacion_dias: campos.anticipacionDias } : {}),
+      },
+      vigencia_desde: campos.vigenciaDesde,
+      vigencia_hasta: campos.vigenciaHasta,
+    })
+    .eq('id', id)
+  cortarSiFalla(error, '/panel/config/promociones', 'promo_guardar')
+
+  revalidatePath('/panel/config/promociones')
+  redirect('/panel/config/promociones?ok=promo_editada')
+}
+
+/** Da de baja o reactiva una promoción. No afecta reservas que ya la tengan aplicada. */
+export async function alternarActivoPromocion(formData: FormData): Promise<void> {
+  const sesion = await obtenerSesion()
+  if (!sesion || !puedeAcceder(sesion.rol, 'config')) redirect('/panel')
+
+  const id = String(formData.get('promocion_id') ?? '')
+  const activo = formData.get('activo') === '1'
+  if (!id) redirect('/panel/config/promociones?error=promo_guardar')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('promociones').update({ activo }).eq('id', id)
+  cortarSiFalla(error, '/panel/config/promociones', 'promo_guardar')
+
+  revalidatePath('/panel/config/promociones')
+  redirect(`/panel/config/promociones?ok=${activo ? 'promo_activada' : 'promo_dada_de_baja'}`)
 }

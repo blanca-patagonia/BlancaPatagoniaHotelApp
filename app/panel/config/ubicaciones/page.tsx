@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { crearUnidad, guardarUbicacionUnidad } from '../actions'
+import { crearUnidad, guardarUbicacionUnidad, alternarActivoUnidad } from '../actions'
 import { registrarFalla } from '@/lib/acciones'
-import { CAMPO, Campo, Encabezado, FILA, Mensaje, TD, TH, Tabla, Tarjeta, Pagina } from '../../_components/ui'
+import { CAMPO, Campo, Etiqueta, Encabezado, FILA, Mensaje, TD, TH, Tabla, Tarjeta, Pagina } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
 
 const MENSAJES_ERROR: Record<string, string> = {
@@ -13,6 +13,10 @@ const MENSAJES_ERROR: Record<string, string> = {
   unidad_tipo: 'Elegí un tipo de alojamiento válido.',
   unidad_tipo_verificar: 'No se pudo verificar el tipo. No se creó nada.',
   unidad_guardar: 'No se pudo crear la unidad. Probá de nuevo.',
+  unidad_verificar: 'No se pudo verificar si la unidad está ocupada. No se cambió nada.',
+  unidad_ocupada:
+    'No se puede dar de baja: tiene una estadía pendiente, confirmada, pagada o en curso. Mudá esa reserva a otra unidad primero.',
+  unidad_estado: 'No se pudo cambiar el estado de la unidad. Quedó como estaba.',
 }
 
 /**
@@ -35,8 +39,11 @@ export default async function UbicacionesPage({
   const [{ data, error }, { data: tiposData, error: errorTipos }] = await Promise.all([
     supabase
       .from('unidades')
-      .select('id, nombre, piso, bloque, orden, tipo:tipos_unidad(nombre)')
-      .eq('activo', true)
+      .select('id, nombre, piso, bloque, orden, activo, tipo:tipos_unidad(nombre)')
+      // Las inactivas se muestran igual, al final: de otro modo no habría
+      // forma de reactivar una unidad dada de baja por error desde esta misma
+      // pantalla, ni de ver que existe.
+      .order('activo', { ascending: false })
       .order('bloque')
       .order('piso')
       .order('orden'),
@@ -51,11 +58,12 @@ export default async function UbicacionesPage({
     piso: string
     bloque: string
     orden: number
+    activo: boolean
     tipo: { nombre: string } | null
   }[]
   const tipos = (tiposData ?? []) as { id: string; nombre: string }[]
 
-  const sinUbicar = unidades.filter((u) => !u.piso).length
+  const sinUbicar = unidades.filter((u) => u.activo && !u.piso).length
 
   return (
     <Pagina>
@@ -77,6 +85,10 @@ export default async function UbicacionesPage({
         <Mensaje tono="ok">Ubicación guardada. La grilla ya la usa para filtrar y ordenar.</Mensaje>
       )}
       {sp.ok === 'unidad' && <Mensaje tono="ok">Unidad creada. Ya aparece en la grilla de ocupación.</Mensaje>}
+      {sp.ok === 'unidad_dada_de_baja' && (
+        <Mensaje tono="ok">Unidad dada de baja. Deja de verse en la grilla y en el alta de reservas.</Mensaje>
+      )}
+      {sp.ok === 'unidad_activada' && <Mensaje tono="ok">Unidad reactivada.</Mensaje>}
       {error && (
         <Mensaje tono="error">
           No se pudo leer el listado de unidades. Los filtros de la grilla de ocupación pueden
@@ -131,24 +143,33 @@ export default async function UbicacionesPage({
           )}
 
           <div className="overflow-x-auto">
-            <Tabla resumen="Unidades con su bloque, piso y orden de recorrido">
+            <Tabla resumen="Unidades con su nombre, bloque, piso y orden de recorrido">
               <thead>
                 <tr>
                   <th className={TH}>Unidad</th>
                   <th className={TH}>Bloque</th>
                   <th className={TH}>Piso</th>
                   <th className={TH}>Orden</th>
-                  {puedeEditar && <th className={TH}>Guardar</th>}
+                  {puedeEditar && (
+                    <>
+                      <th className={TH}>Guardar</th>
+                      <th className={TH}>
+                        <span className="sr-only">Baja / reactivar</span>
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {unidades.map((u) => (
-                  <tr key={u.id} className={FILA}>
+                  <tr key={u.id} className={`${FILA} ${u.activo ? '' : 'opacity-60'}`}>
                     {puedeEditar ? (
                       <>
                         <td className={TD}>
-                          <span className="font-medium text-stone-800">{u.nombre}</span>
                           <span className="block text-xs text-stone-500">{u.tipo?.nombre}</span>
+                          {!u.activo && (
+                            <Etiqueta tono="alerta">De baja</Etiqueta>
+                          )}
                         </td>
                         <td className={TD} colSpan={4}>
                           <form
@@ -156,6 +177,14 @@ export default async function UbicacionesPage({
                             className="flex flex-wrap items-end gap-2"
                           >
                             <input type="hidden" name="unidad_id" value={u.id} />
+                            <Campo etiqueta="Nombre">
+                              <input
+                                name="nombre"
+                                defaultValue={u.nombre}
+                                required
+                                className={`${CAMPO} w-36`}
+                              />
+                            </Campo>
                             <Campo etiqueta="Bloque">
                               <input
                                 name="bloque"
@@ -186,11 +215,31 @@ export default async function UbicacionesPage({
                             </BotonEnvio>
                           </form>
                         </td>
+                        <td className={TD}>
+                          <form action={alternarActivoUnidad}>
+                            <input type="hidden" name="unidad_id" value={u.id} />
+                            <input type="hidden" name="activo" value={u.activo ? '0' : '1'} />
+                            <BotonEnvio
+                              variante="fantasma"
+                              cargando="…"
+                              confirmar={
+                                u.activo
+                                  ? `¿Dar de baja «${u.nombre}»? Deja de verse en la grilla y en el alta de reservas.`
+                                  : undefined
+                              }
+                            >
+                              {u.activo ? 'Dar de baja' : 'Reactivar'}
+                            </BotonEnvio>
+                          </form>
+                        </td>
                       </>
                     ) : (
                       <>
                         <td className={TD}>
                           <span className="font-medium text-stone-800">{u.nombre}</span>
+                          {!u.activo && (
+                            <Etiqueta tono="alerta">De baja</Etiqueta>
+                          )}
                         </td>
                         <td className={`${TD} text-stone-600`}>{u.bloque || '—'}</td>
                         <td className={`${TD} text-stone-600`}>{u.piso || '—'}</td>

@@ -12,6 +12,7 @@ import {
   type MetricasMes,
 } from '@/lib/domain/metricas'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { resumenPagos, type EstadoPago, type TipoPago } from '@/lib/domain/pagos'
 import { esVista, type VistaReservas } from '@/lib/domain/vistas-reservas'
 import {
@@ -155,7 +156,7 @@ const RECURSOS: Record<string, Definicion> = {
         { titulo: 'Código', valor: (r) => r.codigo },
         {
           titulo: 'Huésped',
-          valor: (r) => (r.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : ''),
+          valor: (r) => (r.huesped ? nombreCompleto(r.huesped) : ''),
         },
         { titulo: 'Email', valor: (r) => r.huesped?.email ?? '' },
         {
@@ -409,6 +410,32 @@ const RECURSOS: Record<string, Definicion> = {
       { titulo: 'Hallazgo', valor: (o) => o.fecha_hallazgo },
       { titulo: 'Estado', valor: (o) => o.estado },
     ]),
+  },
+
+  'lista-compras': {
+    area: 'servicio',
+    archivo: 'lista-compras',
+    generar: simple<{
+      nombre: string
+      cantidad: string
+      precio_estimado: number | string | null
+      comprado: boolean
+      nota: string
+    }>(
+      'lista_compras_cocina',
+      'nombre, cantidad, precio_estimado, comprado, nota',
+      'nombre',
+      [
+        { titulo: 'Artículo', valor: (i) => i.nombre },
+        { titulo: 'Cantidad', valor: (i) => i.cantidad },
+        {
+          titulo: 'Precio estimado ARS',
+          valor: (i) => (i.precio_estimado === null ? '' : Number(i.precio_estimado).toFixed(2)),
+        },
+        { titulo: 'Comprado', valor: (i) => SI_NO(i.comprado) },
+        { titulo: 'Nota', valor: (i) => i.nota },
+      ],
+    ),
   },
 }
 

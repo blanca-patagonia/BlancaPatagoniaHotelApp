@@ -225,10 +225,12 @@ export function CotizacionCliente({ inicial }: { inicial: DatosCotizacion }) {
               <Icono nombre="divisas" tam={16} />
             </span>
             <div>
-              <h3 className="text-xs font-semibold text-stone-700">Dólar oficial</h3>
+              <h3 className="text-xs font-semibold text-stone-700">Dólar oficial: sin cargar</h3>
               <p className="mt-1 text-[11px] text-stone-600">
-                No hay cotización disponible. Los importes se muestran en USD, que es la moneda del
-                sistema.
+                No hay una cotización oficial cargada para cobrar en pesos. Los importes se
+                muestran en USD, que es la moneda del sistema.
+                {(bancoNacion || blue) &&
+                  ' Lo que aparece abajo es solo de referencia (Banco Nación / blue): no sirve para cobrar.'}
               </p>
               <Link
                 href="/panel/config/divisas"

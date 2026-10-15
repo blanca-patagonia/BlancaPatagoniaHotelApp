@@ -1,0 +1,65 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node '/Users/mbackhaus/Desktop/BLANCA/.codex/hooks/proteger-archivos.mjs'",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node '/Users/mbackhaus/Desktop/BLANCA/.codex/hooks/detectar-secretos.mjs'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node '/Users/mbackhaus/Desktop/BLANCA/.codex/hooks/bloquear-destructivos.mjs'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node '/Users/mbackhaus/Desktop/BLANCA/.codex/hooks/formatear.mjs'",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node '/Users/mbackhaus/Desktop/BLANCA/.codex/hooks/al-iniciar.mjs'",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node '/Users/mbackhaus/Desktop/BLANCA/.codex/hooks/al-terminar.mjs'",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

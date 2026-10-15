@@ -17,61 +17,12 @@ import type { ReactNode } from 'react'
 
 /* --------------------------------------------------------------- marco -- */
 
-interface MarcoProps {
-  children: ReactNode
-  /** `angosto` para formularios y pantallas de un solo objetivo. */
-  ancho?: 'normal' | 'angosto'
-  /** Enlace de vuelta, cuando la pantalla es parte de un flujo. */
-  volver?: { href: string; texto: string }
-}
-
-/**
- * Estructura de toda pantalla pública: cabecera de marca, contenido y pie.
- *
- * La cabecera no es decorativa. Quien abre un enlace de firma o de encuesta
- * desde su correo necesita reconocer de inmediato de quién es la página; sin
- * eso, lo razonable de su parte es desconfiar y no completarla.
- */
-export function Marco({ children, ancho = 'normal', volver }: MarcoProps) {
-  return (
-    <div className="flex min-h-full flex-1 flex-col bg-stone-50">
-      <header className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Montana />
-            <span className="font-display text-lg leading-none font-semibold text-lago-800">
-              Blanca Patagonia
-            </span>
-          </Link>
-          <span className="hidden text-sm text-stone-500 sm:block">El Calafate · Santa Cruz</span>
-        </div>
-      </header>
-
-      <main
-        className={`mx-auto w-full flex-1 px-5 py-8 sm:px-6 sm:py-10 ${
-          ancho === 'angosto' ? 'max-w-2xl' : 'max-w-5xl'
-        }`}
-      >
-        {volver && (
-          <Link
-            href={volver.href}
-            className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
-          >
-            ‹ {volver.texto}
-          </Link>
-        )}
-        {children}
-      </main>
-
-      <footer className="border-t border-stone-200 bg-white">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2 px-5 py-5 text-sm text-stone-500 sm:px-6">
-          <span>Hostería y cabañas · El Calafate, Santa Cruz</span>
-          <span className="text-stone-400">Check-in 15:00 · Check-out 10:00</span>
-        </div>
-      </footer>
-    </div>
-  )
-}
+/*
+  El `Marco` (cabecera, contenido y pie de toda pantalla pública) vive en
+  `./marco.tsx`. Se separó porque lee los diccionarios de idioma, y este
+  archivo lo importan componentes de cliente (`buscador`, el formulario del
+  checkout): dejarlo acá arrastraría los cinco idiomas al navegador.
+*/
 
 /** Silueta de montaña: la marca del hotel, en SVG propio. */
 export function Montana() {
@@ -103,12 +54,14 @@ export function Titulo({
   descripcion?: string
 }) {
   return (
-    <div className="mb-6">
-      <h1 className="font-display text-3xl leading-tight font-semibold tracking-tight text-stone-900">
+    <div data-revelar className="mb-8">
+      <h1 className="font-display text-[2.1rem] leading-[1.08] font-semibold tracking-[-0.025em] text-balance text-tinta sm:text-5xl">
         {titulo}
       </h1>
       {descripcion && (
-        <p className="mt-2 text-base leading-relaxed text-stone-600">{descripcion}</p>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-tinta-suave sm:text-lg">
+          {descripcion}
+        </p>
       )}
     </div>
   )
@@ -134,11 +87,26 @@ export function Tarjeta({
        primera que se ponga en un `grid` con un `truncate` adentro repetiría el
        desbordamiento. Son dos componentes distintos con el mismo nombre; conviene
        que no diverjan. */
-    <section className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm ${className}`}>
+    /*
+      Radio chico, línea fina y sombra apenas perceptible.
+
+      La versión anterior era `rounded-2xl` + borde gris + sombra: la caja
+      blanca flotante que trae por omisión cualquier plantilla, y que hace que
+      seis pantallas distintas se vean iguales. Las referencias de hotelería
+      alta no apoyan el contenido sobre tarjetas —usan tipografía, aire y
+      filetes— así que acá se baja el peso de la caja para que mande el
+      contenido.
+
+      El título va en VERSALITAS con interletrado ancho, que es el recurso con
+      el que esos sitios rotulan sin gritar.
+    */
+    <section className={`min-w-0 rounded-lg bg-white/70 ring-1 ring-tinta/10 ${className}`}>
       {titulo && (
-        <header className="border-b border-stone-100 px-5 py-4 sm:px-6">
-          <h2 className="font-display text-lg font-semibold text-stone-900">{titulo}</h2>
-          {descripcion && <p className="mt-0.5 text-sm text-stone-500">{descripcion}</p>}
+        <header className="border-b border-tinta/10 px-5 py-4 sm:px-6">
+          <h2 className="text-[11px] font-semibold tracking-[0.18em] text-tinta-suave uppercase">
+            {titulo}
+          </h2>
+          {descripcion && <p className="mt-1.5 text-sm text-tinta-suave">{descripcion}</p>}
         </header>
       )}
       {children}
@@ -156,7 +124,9 @@ export function Tarjeta({
  */
 export function Etiqueta({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1 text-sm text-stone-700">
+    /* Filete a la izquierda en vez de píldora rellena: la píldora gris es el
+       recurso por omisión y satura la tarjeta cuando hay cinco comodidades. */
+    <span className="inline-flex items-center gap-1.5 border-l-2 border-lago-600/30 py-0.5 pl-2.5 text-sm text-tinta-suave">
       {children}
     </span>
   )
@@ -179,10 +149,12 @@ export function ChipEnlace({
     <Link
       href={href}
       aria-current={activo ? 'page' : undefined}
-      className={`toque inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition ${
+      /* El activo se marca con una línea gruesa abajo, no con un relleno azul:
+         se lee como pestaña —que es lo que es— y no como botón a presionar. */
+      className={`toque inline-flex items-center border-b-2 px-1 pb-1.5 text-sm font-medium tracking-tight transition ${
         activo
-          ? 'bg-lago-700 text-white'
-          : 'bg-white text-stone-600 ring-1 ring-stone-300 ring-inset hover:bg-stone-50 hover:text-stone-900'
+          ? 'border-lago-700 text-tinta'
+          : 'border-transparent text-tinta-suave hover:border-tinta/25 hover:text-tinta'
       }`}
     >
       {children}
@@ -284,7 +256,7 @@ const BOTON: Record<VarianteBoton, string> = {
  * con el pulgar y, muchas veces, una sola vez en toda la visita.
  */
 export function botonPublico(variante: VarianteBoton = 'primario', extra = ''): string {
-  return `toque inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${BOTON[variante]} ${extra}`.trim()
+  return `toque inline-flex items-center justify-center gap-2 rounded-md px-6 py-3 text-base font-medium tracking-tight transition disabled:cursor-not-allowed disabled:opacity-60 ${BOTON[variante]} ${extra}`.trim()
 }
 
 /* ------------------------------------------------------------- campos -- */
@@ -347,36 +319,3 @@ export function Mensaje({
   )
 }
 
-/**
- * Pantalla completa de un solo mensaje: enlace vencido, token inválido,
- * encuesta ya respondida.
- *
- * Existe porque estos casos son **frecuentes y no son errores del huésped**: un
- * enlace de firma que ya se usó, una encuesta contestada la semana pasada. Que
- * aparezca una pantalla en blanco o un 404 en inglés hace sentir que uno se
- * equivocó en algo.
- */
-export function Aviso({
-  titulo,
-  children,
-  accion,
-}: {
-  titulo: string
-  children: ReactNode
-  accion?: ReactNode
-}) {
-  return (
-    <Marco ancho="angosto">
-      <Tarjeta>
-        <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-          <span className="flex size-12 items-center justify-center rounded-2xl bg-stone-100 text-stone-400">
-            <Montana />
-          </span>
-          <h1 className="font-display text-2xl font-semibold text-stone-900">{titulo}</h1>
-          <div className="max-w-md leading-relaxed text-stone-600">{children}</div>
-          {accion && <div className="mt-2">{accion}</div>}
-        </div>
-      </Tarjeta>
-    </Marco>
-  )
-}

@@ -6,6 +6,7 @@ import { fechaHotel } from '@/lib/fechas'
 import { formatearLocal } from '@/lib/domain/divisas'
 import { totalPendiente, totalComprado, cantidadPendiente } from '@/lib/domain/lista-compras'
 import {
+  BotonExportar,
   Campo,
   CAMPO,
   Encabezado,
@@ -91,7 +92,12 @@ export default async function ListaComprasPage({
           titulo="Lista de compras"
           descripcion="Qué hay que comprarle al supermercado para el restaurante, con precio estimado."
           icono="reportes"
-          acciones={<BotonImprimir texto="Imprimir lista" />}
+          acciones={
+            <>
+              <BotonExportar href="/panel/exportar/lista-compras" />
+              <BotonImprimir texto="Imprimir lista" />
+            </>
+          }
         />
       </div>
 

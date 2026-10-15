@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { Encabezado, Pagina, Tarjeta } from '../../../_components/ui'
 import { FormularioHuesped, type DatosHuesped } from '../../formulario'
 
@@ -50,7 +51,7 @@ export default async function EditarHuespedPage({
 
       <Encabezado
         titulo="Editar huésped"
-        descripcion={`${huesped.apellido}, ${huesped.nombre}`}
+        descripcion={nombreCompleto(huesped)}
         icono="huespedes"
       />
 

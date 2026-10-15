@@ -68,6 +68,38 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
     <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       {esEdicion && <input type="hidden" name="huesped_id" value={huesped!.id} />}
 
+      {/*
+        Arriba de los campos, no abajo (auditoría QA/UX 2026-10-14). Al
+        registrar un huésped el formulario queda listo para el siguiente —
+        correcto para quien está anotando varios en el mostrador—, pero con
+        el aviso al final de nueve campos en blanco se leía como «se vació
+        sin guardar», no como «se guardó y está listo para el próximo».
+      */}
+      {estado.error && (
+        <div className="sm:col-span-2">
+          <Mensaje tono="error">{estado.error}</Mensaje>
+        </div>
+      )}
+
+      {estado.ok && (
+        <div className="sm:col-span-2">
+          <ExitoConPasos
+            mensaje={estado.ok}
+            pasos={
+              esEdicion
+                ? []
+                : [
+                    ...(estado.id
+                      ? [{ href: `/panel/huespedes/${estado.id}`, texto: 'Ver su ficha' }]
+                      : []),
+                    { href: '/panel/huespedes/nuevo', texto: 'Registrar otro' },
+                    { href: '/panel/huespedes', texto: 'Volver al listado' },
+                  ]
+            }
+          />
+        </div>
+      )}
+
       <Campo etiqueta="Apellido" requerido>
         <input name="apellido" required defaultValue={v.apellido ?? huesped?.apellido ?? ''} className={CAMPO} />
       </Campo>
@@ -176,31 +208,6 @@ export function FormularioHuesped({ huesped }: { huesped?: DatosHuesped }) {
       >
         <textarea name="notas" rows={3} defaultValue={v.notas ?? huesped?.notas ?? ''} className={CAMPO} />
       </Campo>
-
-      {estado.error && (
-        <div className="sm:col-span-2">
-          <Mensaje tono="error">{estado.error}</Mensaje>
-        </div>
-      )}
-
-      {estado.ok && (
-        <div className="sm:col-span-2">
-          <ExitoConPasos
-            mensaje={estado.ok}
-            pasos={
-              esEdicion
-                ? []
-                : [
-                    ...(estado.id
-                      ? [{ href: `/panel/huespedes/${estado.id}`, texto: 'Ver su ficha' }]
-                      : []),
-                    { href: '/panel/huespedes/nuevo', texto: 'Registrar otro' },
-                    { href: '/panel/huespedes', texto: 'Volver al listado' },
-                  ]
-            }
-          />
-        </div>
-      )}
 
       <PieDeFormulario>
         <button

@@ -138,12 +138,16 @@ function Enlaces({
                 id={idTitulo}
                 onClick={() => alternarPlegado(grupo.titulo as string)}
                 aria-expanded={!plegado}
-                className="flex w-full items-center justify-between gap-2 rounded-lg px-3 pb-1.5 text-[11px] font-semibold tracking-[0.12em] text-lago-200/70 uppercase transition hover:text-lago-100"
+                /* `min-h-11` (44px) a propósito, igual que los enlaces de abajo:
+                   antes medía ~26px (solo `pb-1.5`, texto de 11px) y era el
+                   botón más chico de todo el menú, bastante por debajo del
+                   mínimo táctil que el resto del panel ya respeta. */
+                className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold tracking-[0.12em] text-lago-200/70 uppercase transition hover:text-lago-100"
               >
                 {grupo.titulo}
                 <span
                   aria-hidden="true"
-                  className={`text-[9px] transition-transform ${plegado ? '-rotate-90' : ''}`}
+                  className={`text-sm transition-transform ${plegado ? '-rotate-90' : ''}`}
                 >
                   ▾
                 </span>
@@ -265,27 +269,36 @@ function MenuCuenta({
   const muestraRol = rolEtiqueta.toLowerCase() !== nombre.trim().toLowerCase()
 
   return (
-    <div className="relative" data-menu-cuenta>
+    <div className="relative min-w-0" data-menu-cuenta>
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
         aria-haspopup="menu"
-        className="toque flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition hover:bg-stone-100"
+        className="toque flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 transition hover:bg-stone-100"
       >
-        <span className="hidden text-right sm:block">
-          <span className="block text-sm leading-tight font-medium text-stone-800">{nombre}</span>
+        {/*
+          `min-w-0` + `truncate`: a 1096 px (QA 2026-10-14) un nombre o rol
+          largo —«Administrador» no tiene dónde partirse en dos líneas— no
+          entraba en el espacio que el buscador centrado le dejaba y se
+          desbordaba 24 px hacia la izquierda, encima del campo de búsqueda.
+          Sin `min-w-0` en cada ancestro de la cadena esto no se activa (ver
+          CLAUDE.md, la trampa de `truncate`): el avatar y la flechita llevan
+          `shrink-0` para que lo que se achique sea el texto, no el ícono.
+        */}
+        <span className="hidden min-w-0 text-right sm:block">
+          <span className="block truncate text-sm leading-tight font-medium text-stone-800">{nombre}</span>
           {/* El rol solo se muestra si aporta algo: con el admin de
               desarrollo, nombre y rol son ambos «Administrador». */}
-          {muestraRol && <span className="block text-xs text-stone-600">{rolEtiqueta}</span>}
+          {muestraRol && <span className="block truncate text-xs text-stone-600">{rolEtiqueta}</span>}
         </span>
         <span
-          className="flex size-9 items-center justify-center rounded-full bg-lago-100 text-sm font-semibold text-lago-800 ring-1 ring-lago-200"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-lago-100 text-sm font-semibold text-lago-800 ring-1 ring-lago-200"
           aria-hidden="true"
         >
           {nombre.slice(0, 1).toUpperCase()}
         </span>
-        <span aria-hidden="true" className="text-xs text-stone-500">
+        <span aria-hidden="true" className="shrink-0 text-xs text-stone-500">
           ▾
         </span>
       </button>

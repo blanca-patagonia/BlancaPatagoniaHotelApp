@@ -3,6 +3,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { ETIQUETAS_ROL, type Rol } from '@/lib/domain/roles'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { construirQuery, paginaActual, rangoDePagina } from '@/lib/listados'
 import {
   BarraHerramientas,
@@ -23,14 +24,15 @@ import {
 import { fechaHoraHotel } from '@/lib/fechas'
 import { registrarFalla } from '@/lib/acciones'
 
-/** Tablas auditadas (las que tienen trigger en la migración 0020). */
-const TABLAS = ['pagos', 'tarifas', 'reservas'] as const
+/** Tablas auditadas (las que tienen al menos un trigger de `registrar_auditoria`). */
+const TABLAS = ['pagos', 'tarifas', 'reservas', 'estadias'] as const
 type TablaAuditada = (typeof TABLAS)[number]
 
 const ETIQUETAS_TABLA: Record<TablaAuditada, string> = {
   pagos: 'Pagos',
   tarifas: 'Tarifas',
   reservas: 'Reservas',
+  estadias: 'Estadías',
 }
 
 const TONO_ACCION: Record<string, Tono> = {
@@ -142,7 +144,7 @@ export default async function AuditoriaPage({
         icono="auditoria"
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
         <Kpi titulo="Registros" valor={String(total)} detalle="en el filtro actual" icono="auditoria" />
         {TABLAS.map((t) => (
           <Kpi
@@ -150,7 +152,9 @@ export default async function AuditoriaPage({
             titulo={ETIQUETAS_TABLA[t]}
             valor={t === tabla ? String(total) : '—'}
             detalle="ver solo esta tabla"
-            icono={t === 'pagos' ? 'agencias' : t === 'tarifas' ? 'config' : 'reservas'}
+            icono={
+              t === 'pagos' ? 'agencias' : t === 'tarifas' ? 'config' : t === 'estadias' ? 'ocupacion' : 'reservas'
+            }
             href={`/panel/auditoria${construirQuery(filtros, { tabla: t, pagina: undefined })}`}
           />
         ))}
@@ -293,7 +297,7 @@ export default async function AuditoriaPage({
                     )}
                   </td>
                   <td className={`${TD} text-stone-700`}>
-                    {a.huesped ? `${a.huesped.apellido}, ${a.huesped.nombre}` : '—'}
+                    {a.huesped ? nombreCompleto(a.huesped) : '—'}
                   </td>
                   <td className={`${TD} text-stone-600`}>
                     {ETIQUETAS_ORIGEN_ACCESO[a.origen] ?? a.origen}

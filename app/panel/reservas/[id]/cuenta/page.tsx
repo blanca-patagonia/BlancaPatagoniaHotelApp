@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import {
   ETIQUETAS_FOLIO,
   FOLIOS,
@@ -228,9 +229,7 @@ export default async function CuentaPage({
   const totales = totalesDeCuenta(lineas)
   const cierran = foliosCierran(lineas)
   const mostrarB = folioBEnUso(lineas, reserva.folio_b_titular)
-  const huesped = reserva.huesped
-    ? `${reserva.huesped.apellido}, ${reserva.huesped.nombre}`
-    : 'Sin huésped'
+  const huesped = reserva.huesped ? nombreCompleto(reserva.huesped) : 'Sin huésped'
 
   return (
     <Pagina ancho="ancho">

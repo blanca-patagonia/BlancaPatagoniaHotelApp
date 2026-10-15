@@ -8,7 +8,8 @@ import { movimientoEnMoneda } from '@/lib/domain/cuentas'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
-import { subirAdjunto } from '@/lib/storage'
+import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
+import { registrarAviso } from '@/lib/registro'
 
 export interface EstadoProveedor {
   error?: string
@@ -225,4 +226,41 @@ export async function agregarFotoProveedor(formData: FormData): Promise<void> {
 
   revalidatePath(`/panel/proveedores/${proveedorId}`)
   redirect(`/panel/proveedores/${proveedorId}?ok=foto`)
+}
+
+/**
+ * Quita una foto/documento de un proveedor: del arreglo `fotos` y del bucket.
+ * Mismo criterio que `eliminarFotoOrden` en mantenimiento: se actualiza la
+ * base primero y recién después se borra el archivo, para no dejar la ficha
+ * mostrando una foto que ya no existe si el borrado del bucket fallara.
+ */
+export async function eliminarFotoProveedor(formData: FormData): Promise<void> {
+  await exigirGestion()
+
+  const proveedorId = String(formData.get('proveedor_id') ?? '')
+  const ruta = String(formData.get('ruta') ?? '')
+  if (!proveedorId || !ruta) redirect(`/panel/proveedores/${proveedorId}?error=foto_eliminar`)
+
+  const supabase = await crearClienteServidor()
+  const { data: actual, error: errorLectura } = await supabase
+    .from('proveedores')
+    .select('fotos')
+    .eq('id', proveedorId)
+    .single()
+  if (errorLectura) {
+    cortarSiFalla(errorLectura, `/panel/proveedores/${proveedorId}`, 'foto_leer')
+  }
+
+  const fotos = (((actual as { fotos: string[] } | null)?.fotos) ?? []).filter((f) => f !== ruta)
+  const { error } = await supabase
+    .from('proveedores')
+    .update({ fotos })
+    .eq('id', proveedorId)
+  cortarSiFalla(error, `/panel/proveedores/${proveedorId}`, 'foto_eliminar')
+
+  await eliminarAdjunto(ruta)
+  await registrarAviso('adjunto_eliminado', { modulo: 'proveedores', proveedor_id: proveedorId, ruta })
+
+  revalidatePath(`/panel/proveedores/${proveedorId}`)
+  redirect(`/panel/proveedores/${proveedorId}?ok=foto_eliminada`)
 }

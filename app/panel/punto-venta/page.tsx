@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ESTADOS_ACTIVOS } from '@/lib/domain/reservas'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { hoyISO, rangoISO, sumarDias } from '@/lib/fechas'
 import {
   resolutorDepartamentos,
@@ -139,9 +140,7 @@ export default async function PuntoVentaPage({
   ).map((e) => ({
     id: e.reserva_id,
     codigo: e.reserva?.codigo ?? '',
-    huesped: e.reserva?.huesped
-      ? `${e.reserva.huesped.apellido}, ${e.reserva.huesped.nombre}`
-      : 'Sin huésped',
+    huesped: e.reserva?.huesped ? nombreCompleto(e.reserva.huesped) : 'Sin huésped',
     unidad: e.unidad?.nombre ?? '—',
   }))
 

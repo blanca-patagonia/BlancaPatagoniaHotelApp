@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Aviso, botonPublico } from './_publico/ui'
+import { botonPublico } from './_publico/ui'
+import { Aviso } from './_publico/marco'
 
 /**
  * Pantalla pública de "no encontrado".

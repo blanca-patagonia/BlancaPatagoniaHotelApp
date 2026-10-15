@@ -77,6 +77,10 @@ const ENCABEZADOS_SERVICE_WORKER = [
 ]
 
 const nextConfig: NextConfig = {
+  // Sin esto, cada respuesta lleva `X-Powered-By: Next.js`: le regala a
+  // cualquiera que mire los encabezados el framework exacto, sin ganar nada a
+  // cambio.
+  poweredByHeader: false,
   async headers() {
     return [
       { source: '/:path*', headers: ENCABEZADOS_SEGURIDAD },

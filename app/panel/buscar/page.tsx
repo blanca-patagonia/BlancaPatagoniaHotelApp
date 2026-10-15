@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requerirSesion } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ETIQUETAS_ESTADO_RESERVA } from '@/lib/domain/reservas'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { ETIQUETAS_AMBITO } from '@/lib/domain/busqueda'
 import { buscarGlobal, TOPE_BUSQUEDA } from '@/lib/busqueda/servicio'
 import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
@@ -35,8 +36,22 @@ export default async function BuscarPage({
   const { q } = await searchParams
   const supabase = await crearClienteServidor()
 
-  const { termino, ambitos, secciones, glosario, reservas, huespedes, agencias, proveedores, total } =
-    await buscarGlobal(supabase, sesion.rol, q)
+  const {
+    termino,
+    ambitos,
+    secciones,
+    glosario,
+    reservas,
+    huespedes,
+    agencias,
+    proveedores,
+    unidades,
+    tipos_unidad,
+    productos,
+    promociones,
+    usuarios,
+    total,
+  } = await buscarGlobal(supabase, sesion.rol, q)
 
   return (
     <Pagina>
@@ -185,7 +200,7 @@ export default async function BuscarPage({
                     >
                       <span className="font-medium text-lago-700">{r.codigo}</span>
                       <span className="min-w-0 flex-1 text-stone-700">
-                        {r.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : 'Sin huésped'}
+                        {r.huesped ? nombreCompleto(r.huesped) : 'Sin huésped'}
                         {p && (
                           <span className="block text-sm text-stone-500">
                             {formatoFechaCorta(p.desde)} → {formatoFechaCorta(p.hasta)}
@@ -217,7 +232,7 @@ export default async function BuscarPage({
                   >
                     <span className="min-w-0 flex-1">
                       <span className="font-medium text-stone-800">
-                        {h.apellido}, {h.nombre}
+                        {nombreCompleto(h)}
                       </span>
                       <span className="block text-sm text-stone-500">
                         {[h.email, h.doc_numero].filter(Boolean).join(' · ') || 'sin datos de contacto'}
@@ -267,6 +282,142 @@ export default async function BuscarPage({
                     <span className="min-w-0 flex-1">
                       <span className="font-medium text-stone-800">{p.nombre}</span>
                       {p.rubro && <span className="block text-sm text-stone-500">{p.rubro}</span>}
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {unidades.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.unidades}
+            descripcion={`${unidades.length} ${unidades.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
+            <ul>
+              {unidades.map((u) => (
+                <li key={u.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/config/unidades"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">{u.nombre}</span>
+                      <span className="block text-sm text-stone-500">
+                        {[
+                          u.tipo?.nombre,
+                          u.piso !== null ? `Piso ${u.piso}` : null,
+                          u.activo ? null : 'Inactiva',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {tipos_unidad.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.tipos_unidad}
+            descripcion={`${tipos_unidad.length} ${tipos_unidad.length === 1 ? 'encontrado' : 'encontrados'}`}
+          >
+            <ul>
+              {tipos_unidad.map((t) => (
+                <li key={t.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/config/tipos-alojamiento"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">{t.nombre}</span>
+                      <span className="block text-sm text-stone-500">
+                        Capacidad: {t.capacidad_max} huéspedes
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {productos.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.productos}
+            descripcion={`${productos.length} ${productos.length === 1 ? 'encontrado' : 'encontrados'}`}
+          >
+            <ul>
+              {productos.map((p) => (
+                <li key={p.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/punto_venta"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">{p.nombre}</span>
+                      <span className="block text-sm text-stone-500">
+                        {[p.departamento?.nombre, `USD ${Number(p.precio).toFixed(2)}`]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {promociones.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.promociones}
+            descripcion={`${promociones.length} ${promociones.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
+            <ul>
+              {promociones.map((p) => (
+                <li key={p.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/config/promociones"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1 font-medium text-stone-800">{p.nombre}</span>
+                    <span className="text-sm text-stone-500">{p.activa ? 'Activa' : 'Inactiva'}</span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {usuarios.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.usuarios}
+            descripcion={`${usuarios.length} ${usuarios.length === 1 ? 'encontrado' : 'encontrados'}`}
+          >
+            <ul>
+              {usuarios.map((u) => (
+                <li key={u.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/usuarios"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">
+                        {u.nombre_completo || u.email}
+                      </span>
+                      <span className="block text-sm text-stone-500">
+                        {u.nombre_completo ? `${u.email} · ${u.rol || 'sin rol'}` : u.rol || 'sin rol'}
+                      </span>
                     </span>
                     <Icono nombre="siguiente" tam={16} />
                   </Link>

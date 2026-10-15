@@ -173,6 +173,13 @@ export const MEDIOS_DE_COBRO: readonly MedioDeCobro[] = [
   },
 ]
 
+/**
+ * Valor del medio de pago en el checkout cuando el huésped elige reservar sin
+ * pagar todavía. No es una pasarela: la reserva queda `pendiente` y el enlace
+ * para pagar la seña le llega por correo.
+ */
+export const PAGAR_DESPUES = 'despues'
+
 /** El medio de cobro con ese id, o `null` si no existe. */
 export function medioDeCobro(id: string): MedioDeCobro | null {
   return MEDIOS_DE_COBRO.find((m) => m.id === id) ?? null

@@ -72,6 +72,14 @@ export interface OpcionAgencia {
   descuento_pct: number
 }
 
+export interface OpcionPromocion {
+  id: string
+  codigo: string
+  nombre: string
+  tipo: 'porcentaje' | 'monto'
+  valor: number
+}
+
 export interface OpcionTipo {
   tipoUnidadId: string
   nombre: string
@@ -96,6 +104,7 @@ export function FormularioReserva({
   opciones,
   unidadesPorTipo,
   agencias,
+  promociones,
   checkIn,
   checkOut,
   huespedes,
@@ -104,6 +113,7 @@ export function FormularioReserva({
   opciones: OpcionTipo[]
   unidadesPorTipo: Record<string, OpcionUnidad[]>
   agencias: OpcionAgencia[]
+  promociones: OpcionPromocion[]
   checkIn: string
   checkOut: string
   huespedes: number
@@ -509,6 +519,20 @@ export function FormularioReserva({
 
           <Campo etiqueta="Voucher" ayuda="Número que dio la agencia o el canal, si hay.">
             <input name="voucher" defaultValue={v.voucher ?? ''} className={CAMPO} />
+          </Campo>
+
+          <Campo
+            etiqueta="Promoción"
+            ayuda="Si no cumple sus propias condiciones (noches mínimas, anticipación), se cotiza sin el descuento."
+          >
+            <select name="promocion_id" defaultValue={v.promocion_id ?? ''} className={CAMPO}>
+              <option value="">Sin promoción</option>
+              {promociones.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} · {p.tipo === 'porcentaje' ? `${p.valor}%` : `USD ${p.valor}`}
+                </option>
+              ))}
+            </select>
           </Campo>
 
           <Campo

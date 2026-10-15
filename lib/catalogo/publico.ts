@@ -2,6 +2,7 @@ import 'server-only'
 import { unstable_cache } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
 import { envServidor } from '@/lib/env'
+import type { ReglaCancelacion } from '@/lib/domain/cancelacion'
 
 /**
  * Catálogo público cacheado (Fase 5 de la auditoría — deuda de rendimiento).
@@ -62,6 +63,14 @@ export interface TarifaPublica {
   tipo_unidad_id: string
   precio_rack: number | string
   iva_pct: number | string
+  /** Código de la temporada (`baja`/`media`/`alta`), para el precio vigente. */
+  temporada: { codigo: string } | null
+}
+
+export interface RangoTemporadaPublico {
+  /** Rango de Postgres `[desde,hasta)`: el fin está EXCLUIDO. */
+  rango: string
+  temporada: { codigo: string } | null
 }
 
 /** Tipos de unidad activos. Cacheado. */
@@ -86,11 +95,58 @@ export const tarifasPublicas = unstable_cache(
   async (): Promise<TarifaPublica[]> => {
     const { data, error } = await clienteCatalogo()
       .from('tarifas')
-      .select('tipo_unidad_id, precio_rack, iva_pct')
+      .select('tipo_unidad_id, precio_rack, iva_pct, temporada:temporadas(codigo)')
       .eq('vigente', true)
     if (error) throw new Error(`Catálogo: no se pudieron leer las tarifas: ${error.message}`)
-    return (data ?? []) as TarifaPublica[]
+    // PostgREST tipa el embed como arreglo; por la FK es una sola fila.
+    return (data ?? []) as unknown as TarifaPublica[]
   },
   ['catalogo-tarifas'],
+  { tags: [ETIQUETA_CATALOGO], revalidate: VIGENCIA_S },
+)
+
+/**
+ * Rangos de fecha de cada temporada. Cacheado.
+ *
+ * ⚠️ Lo que se cachea son los rangos, NO cuál está vigente: «hoy» se resuelve
+ * en cada pedido con `precioVigente`, así que el 1 de noviembre el catálogo
+ * pasa solo a la tarifa de temporada alta, sin esperar a que venza la caché.
+ */
+export const rangosTemporadaPublicos = unstable_cache(
+  async (): Promise<RangoTemporadaPublico[]> => {
+    const { data, error } = await clienteCatalogo()
+      .from('temporada_rangos')
+      .select('rango, temporada:temporadas(codigo)')
+    if (error) throw new Error(`Catálogo: no se pudieron leer las temporadas: ${error.message}`)
+    return (data ?? []) as unknown as RangoTemporadaPublico[]
+  },
+  ['catalogo-temporada-rangos'],
+  { tags: [ETIQUETA_CATALOGO], revalidate: VIGENCIA_S },
+)
+
+/**
+ * Reglas de la política de cancelación estándar. Cacheado.
+ *
+ * La portada las publica, y es una promesa de plata: si el hotel cambia la
+ * política en el panel y la web sigue anunciando la vieja, el huésped reclama
+ * —con razón— lo que leyó. Por eso sale de la base y no de un texto escrito a
+ * mano, igual que ya hacía el asistente (`describirPoliticaCancelacion`).
+ *
+ * Devuelve `[]` si falla la lectura en vez de lanzar: una política que no se
+ * pudo leer tiene que **ocultar la sección**, no tirar abajo la portada ni
+ * —mucho peor— mostrar un texto por defecto que quizá no sea el vigente.
+ */
+export const politicaCancelacionPublica = unstable_cache(
+  async (): Promise<ReglaCancelacion[]> => {
+    const { data, error } = await clienteCatalogo()
+      .from('politicas_cancelacion')
+      .select('reglas')
+      .eq('codigo', 'estandar')
+      .maybeSingle()
+    if (error || !data) return []
+    const reglas = (data as { reglas: unknown }).reglas
+    return Array.isArray(reglas) ? (reglas as ReglaCancelacion[]) : []
+  },
+  ['catalogo-politica-cancelacion'],
   { tags: [ETIQUETA_CATALOGO], revalidate: VIGENCIA_S },
 )

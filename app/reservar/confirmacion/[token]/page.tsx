@@ -6,7 +6,8 @@ import { motivoNoSeCobra } from '@/lib/domain/cobro'
 import { formatearUSD } from '@/lib/domain/moneda'
 import type { EstadoReserva } from '@/lib/domain/reservas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
-import { Marco, Mensaje, Tarjeta, botonPublico } from '../../../_publico/ui'
+import { Mensaje, Tarjeta, botonPublico } from '../../../_publico/ui'
+import { Marco } from '../../../_publico/marco'
 
 interface Reserva {
   id: string
@@ -22,10 +23,15 @@ interface Reserva {
 
 export default async function ConfirmacionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ pago?: string }>
 }) {
   const { token } = await params
+  // `?pago=fallo`: el checkout creó la reserva pero la pasarela no abrió. La
+  // reserva está; lo que falta es la seña, y el botón para pagarla está abajo.
+  const pagoFallo = (await searchParams).pago === 'fallo'
   // El token opaco actúa como credencial de acceso; se consulta con service_role.
   const admin = crearClienteAdmin()
   const { data } = await admin
@@ -125,6 +131,14 @@ export default async function ConfirmacionPage({
         </dl>
 
         <div className="border-t border-stone-100 px-6 py-5 sm:px-8">
+          {pagoFallo && (
+            <div className="mb-4">
+              <Mensaje tono="aviso">
+                Tu reserva quedó tomada, pero no pudimos abrir el pago. Podés pagar la seña desde
+                acá, con el mismo u otro medio.
+              </Mensaje>
+            </div>
+          )}
           <EstadoDePago token={token} reserva={reserva} cobro={cobro} />
 
           <div className="mt-5 flex flex-wrap gap-2">

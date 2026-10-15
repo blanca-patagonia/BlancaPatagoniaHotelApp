@@ -55,6 +55,40 @@ export interface ProveedorHit {
   rubro?: string
 }
 
+export interface UnidadHit {
+  id: string
+  nombre: string
+  piso: number | null
+  activo: boolean
+  tipo: { nombre: string } | null
+}
+
+export interface TipoUnidadHit {
+  id: string
+  nombre: string
+  capacidad_max: number
+}
+
+export interface ProductoHit {
+  id: string
+  nombre: string
+  precio: number | string
+  departamento: { nombre: string } | null
+}
+
+export interface PromocionHit {
+  id: string
+  nombre: string
+  activa: boolean
+}
+
+export interface UsuarioHit {
+  id: string
+  email: string
+  nombre_completo: string | null
+  rol: string | null
+}
+
 export interface ResultadoBusqueda {
   termino: string | null
   ambitos: Ambito[]
@@ -64,6 +98,11 @@ export interface ResultadoBusqueda {
   huespedes: HuespedHit[]
   agencias: AgenciaHit[]
   proveedores: ProveedorHit[]
+  unidades: UnidadHit[]
+  tipos_unidad: TipoUnidadHit[]
+  productos: ProductoHit[]
+  promociones: PromocionHit[]
+  usuarios: UsuarioHit[]
   total: number
 }
 
@@ -77,36 +116,79 @@ export async function buscarGlobal(
   const ambitos = ambitosPara(rol)
   const puede = (a: string) => ambitos.includes(a as never)
 
-  const [huespedes, agencias, proveedores] = termino
-    ? await Promise.all([
-        puede('huespedes')
-          ? supabase
-              .from('huespedes')
-              .select('id, apellido, nombre, email, doc_numero')
-              .or(
-                `apellido.ilike.${patronOr(termino)},nombre.ilike.${patronOr(termino)},email.ilike.${patronOr(termino)},doc_numero.ilike.${patronOr(termino)}`,
-              )
-              .limit(tope)
-              .then((r) => (r.data ?? []) as HuespedHit[])
-          : Promise.resolve([]),
-        puede('agencias')
-          ? supabase
-              .from('agencias')
-              .select('id, nombre, tipo')
-              .ilike('nombre', `%${termino}%`)
-              .limit(tope)
-              .then((r) => (r.data ?? []) as AgenciaHit[])
-          : Promise.resolve([]),
-        puede('proveedores')
-          ? supabase
-              .from('proveedores')
-              .select('id, nombre, rubro')
-              .ilike('nombre', `%${termino}%`)
-              .limit(tope)
-              .then((r) => (r.data ?? []) as ProveedorHit[])
-          : Promise.resolve([]),
-      ])
-    : [[], [], []]
+  const [huespedes, agencias, proveedores, unidades, tipos_unidad, productos, promociones, usuarios] =
+    termino
+      ? await Promise.all([
+          puede('huespedes')
+            ? supabase
+                .from('huespedes')
+                .select('id, apellido, nombre, email, doc_numero')
+                .or(
+                  `apellido.ilike.${patronOr(termino)},nombre.ilike.${patronOr(termino)},email.ilike.${patronOr(termino)},doc_numero.ilike.${patronOr(termino)}`,
+                )
+                .limit(tope)
+                .then((r) => (r.data ?? []) as HuespedHit[])
+            : Promise.resolve([]),
+          puede('agencias')
+            ? supabase
+                .from('agencias')
+                .select('id, nombre, tipo')
+                .ilike('nombre', `%${termino}%`)
+                .limit(tope)
+                .then((r) => (r.data ?? []) as AgenciaHit[])
+            : Promise.resolve([]),
+          puede('proveedores')
+            ? supabase
+                .from('proveedores')
+                .select('id, nombre, rubro')
+                .ilike('nombre', `%${termino}%`)
+                .limit(tope)
+                .then((r) => (r.data ?? []) as ProveedorHit[])
+            : Promise.resolve([]),
+          puede('unidades')
+            ? supabase
+                .from('unidades')
+                .select('id, nombre, piso, activo, tipo:tipos_unidad(nombre)')
+                .ilike('nombre', `%${termino}%`)
+                .limit(tope)
+                .then((r) => (r.data ?? []) as unknown as UnidadHit[])
+            : Promise.resolve([]),
+          puede('tipos_unidad')
+            ? supabase
+                .from('tipos_unidad')
+                .select('id, nombre, capacidad_max')
+                .ilike('nombre', `%${termino}%`)
+                .limit(tope)
+                .then((r) => (r.data ?? []) as TipoUnidadHit[])
+            : Promise.resolve([]),
+          puede('productos')
+            ? supabase
+                .from('productos_servicios')
+                .select('id, nombre, precio, departamento:departamentos(nombre)')
+                .ilike('nombre', `%${termino}%`)
+                .limit(tope)
+                .then((r) => (r.data ?? []) as unknown as ProductoHit[])
+            : Promise.resolve([]),
+          puede('promociones')
+            ? supabase
+                .from('promociones')
+                .select('id, nombre, activa')
+                .ilike('nombre', `%${termino}%`)
+                .limit(tope)
+                .then((r) => (r.data ?? []) as PromocionHit[])
+            : Promise.resolve([]),
+          puede('usuarios')
+            ? supabase
+                .from('perfiles')
+                .select('id, email, nombre_completo, rol')
+                .or(
+                  `email.ilike.${patronOr(termino)},nombre_completo.ilike.${patronOr(termino)}`,
+                )
+                .limit(tope)
+                .then((r) => (r.data ?? []) as UsuarioHit[])
+            : Promise.resolve([]),
+        ])
+      : [[], [], [], [], [], [], [], []]
 
   /*
     Reservas: por código O por el huésped al que pertenecen.
@@ -152,8 +234,28 @@ export async function buscarGlobal(
     huespedes.length +
     agencias.length +
     proveedores.length +
+    unidades.length +
+    tipos_unidad.length +
+    productos.length +
+    promociones.length +
+    usuarios.length +
     secciones.length +
     glosario.length
 
-  return { termino, ambitos, secciones, glosario, reservas, huespedes, agencias, proveedores, total }
+  return {
+    termino,
+    ambitos,
+    secciones,
+    glosario,
+    reservas,
+    huespedes,
+    agencias,
+    proveedores,
+    unidades,
+    tipos_unidad,
+    productos,
+    promociones,
+    usuarios,
+    total,
+  }
 }

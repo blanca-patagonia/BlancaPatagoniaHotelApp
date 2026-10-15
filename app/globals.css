@@ -26,6 +26,16 @@
   convenciones que conviene no tocar.
 */
 
+/*
+  Variante `telefono:` — SÓLO teléfono en vertical.
+
+  Se pidió ganar ancho en el teléfono parado sin tocar la vista apaisada ni la
+  tablet: girado, el teléfono ya tiene ancho de sobra y lo que le falta es
+  alto. Por eso no alcanza con `max-sm:` (que también agarra el apaisado de un
+  teléfono chico) y va con `orientation: portrait`.
+*/
+@custom-variant telefono (@media (max-width: 639px) and (orientation: portrait));
+
 @theme {
   /* Azul de acción — color principal. El 600 es el que va en los botones. */
   --color-lago-50: #eaf3fb;
@@ -64,6 +74,24 @@
   --color-lenga-700: #966900;
   --color-lenga-800: #7a5500;
   --color-lenga-900: #664700;
+
+  /*
+    Paleta cálida de la PORTADA pública — no toca el panel.
+    ------------------------------------------------------
+    Los tres sitios que se tomaron de referencia (White Desert, Velaa, Tengile
+    MalaMala) coinciden en algo que no es casualidad: **nunca blanco puro ni
+    negro puro**. Usan papel crudo de fondo y una tinta cálida oscura para el
+    texto —Velaa #e8e6df sobre #4b4335, Tengile #e3e1d4 sobre #373f1d—. Es lo
+    que separa una página que parece un documento de una que parece impresa.
+
+    Se agregan como tokens nuevos en vez de retocar `stone`: el panel usa
+    `stone` en cientos de lugares y ahí el blanco puro es correcto, porque es
+    una herramienta de trabajo y no una pieza de marca.
+  */
+  --color-papel: #f7f5f0; /* fondo de sección clara */
+  --color-hueso: #ebe7de; /* un paso más oscuro, para alternar */
+  --color-tinta: #33302b; /* texto principal: marrón muy oscuro, no negro */
+  --color-tinta-suave: #6b645b; /* texto secundario */
 }
 
 @theme inline {
@@ -77,6 +105,8 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Chino: `Inter` no trae caracteres CJK (ver `app/layout.tsx`). */
+  --font-cjk: var(--fuente-cjk), var(--font-inter), ui-sans-serif, sans-serif;
 }
 
 :root {
@@ -263,5 +293,609 @@ body {
     content: ' (' attr(href) ')';
     font-size: 0.75em;
     color: #555555;
+  }
+}
+
+/*
+  Movimiento de la portada pública
+  ================================
+
+  Aparición de los bloques al entrar en pantalla, al estilo de los lodges de lujo
+  (White Desert revela en 1,4 s; Tengile MalaMala en 1,6 s; los dos con una curva
+  exponencial de salida). Acá se usa `cubic-bezier(0.16, 1, 0.3, 1)` —la misma de
+  White Desert—: arranca rápido y frena largo, que es lo que se lee como «caro».
+
+  ⚠️ **Se hace con CSS y CERO JavaScript**, usando animaciones guiadas por scroll
+  (`animation-timeline: view()`). Importa por tres motivos:
+
+  1. **No hay dependencia nueva** (AGENTS.md) ni un `IntersectionObserver` que
+     haya que montar en el cliente: la portada sigue siendo un Server Component
+     entero.
+  2. **No existe el parpadeo de contenido invisible.** El patrón habitual
+     —ocultar con CSS y mostrar cuando JS avisa— deja la página en blanco si el
+     script tarda o falla. Acá, si el navegador no soporta la propiedad, el
+     `@supports` no aplica nada y **el contenido se ve de entrada**, sin animar.
+     Firefox cae en ese caso hoy y la página le funciona igual.
+  3. Corre en el compositor, así que no compite con el scroll.
+
+  `animation-range: entry 5% cover 30%` significa: empezar cuando asoma un 5 % y
+  terminar cuando cubre el 30 % de la ventana. Más corto que eso se siente
+  nervioso; más largo deja texto a medio aparecer mientras ya se está leyendo.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    [data-revelar] {
+      animation: revelar-portada both;
+      animation-timeline: view();
+      animation-range: entry 5% cover 30%;
+    }
+
+    /* Para la imagen ancha: un acercamiento lento mientras pasa por la ventana. */
+    [data-acercar] {
+      animation: acercar-portada both linear;
+      animation-timeline: view();
+      animation-range: entry 0% exit 100%;
+    }
+  }
+
+  /*
+    Ken Burns del video del hero. No va con scroll —el hero no se mueve— sino en
+    bucle largo: 28 s de ida y vuelta, lo bastante lento como para que no se note
+    como animación sino como que la imagen «respira».
+  */
+  .ken-burns {
+    animation: ken-burns 28s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes revelar-portada {
+  from {
+    opacity: 0;
+    transform: translateY(2.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes acercar-portada {
+  from {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes ken-burns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+/*
+  La curva. Se declara aparte porque `animation-timeline` ignora la duración pero
+  NO la función de tiempo: con la lineal por omisión el reveal se siente mecánico.
+*/
+[data-revelar] {
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+  Franja de fotos en movimiento continuo (patrón `marquee` de Tengile MalaMala).
+  Duplicar el contenido en el marcado es parte del truco: se desplaza media
+  anchura y vuelve a cero, y como la segunda mitad es idéntica, el salto no se ve.
+
+  ⚠️ La primera versión iba con miniaturas separadas, esquinas redondeadas y una
+  banda oscura detrás, y se veía como un carrusel de plantilla. Ninguno de los
+  tres sitios de referencia hace eso: usan la foto **a sangre**, sin marco y sin
+  aire entre una y otra, de modo que el conjunto se lee como una cinta
+  fotográfica y no como una galería de miniaturas. Por eso ahora va alta, sin
+  separación, sin bordes redondeados y sin fondo visible.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  .franja-fotos {
+    animation: franja 70s linear infinite;
+  }
+  .franja-fotos:hover {
+    animation-play-state: paused;
+  }
+}
+
+/*
+  Parallax de las imágenes a sangre: el fondo se desplaza más despacio que la
+  página. Es el efecto que da sensación de profundidad en los sitios de lodges.
+  Va con escala fija 1.15 para que el recorrido vertical nunca descubra un borde.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    [data-parallax] {
+      animation: parallax-portada linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+
+    /*
+      Revelado en cortina: la imagen se descubre de abajo hacia arriba mientras
+      entra. Es más caro de leer que un simple fundido y es la firma visual de
+      Velaa y Tengile en sus imágenes grandes.
+    */
+    [data-cortina] {
+      animation: revelar-cortina both cubic-bezier(0.16, 1, 0.3, 1);
+      animation-timeline: view();
+      animation-range: entry 10% cover 38%;
+    }
+  }
+}
+
+@keyframes parallax-portada {
+  from {
+    transform: translateY(-7%) scale(1.15);
+  }
+  to {
+    transform: translateY(7%) scale(1.15);
+  }
+}
+
+@keyframes revelar-cortina {
+  from {
+    clip-path: inset(100% 0 0 0);
+    transform: scale(1.06);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: scale(1);
+  }
+}
+
+@keyframes franja {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/*
+  Encabezado fijo que gana fondo al bajar
+  ---------------------------------------
+  Los tres sitios de referencia dejan la navegación siempre a mano: sobre el
+  hero va transparente, y al entrar en el contenido aparece un fondo para que
+  el texto siga siendo legible. Acá importa de más: el botón «Reservar» deja de
+  quedar a un scroll de distancia.
+
+  Va con `scroll(root)` —la línea de tiempo del documento— y no con `view()`,
+  porque lo que manda es cuánto se bajó, no dónde está el propio encabezado.
+*/
+@supports (animation-timeline: scroll()) {
+  [data-nav-portada] {
+    animation: nav-fondo-portada linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 60vh 85vh;
+  }
+}
+
+@keyframes nav-fondo-portada {
+  from {
+    background-color: rgb(51 48 43 / 0);
+    backdrop-filter: blur(0px);
+  }
+  to {
+    background-color: rgb(51 48 43 / 0.9);
+    backdrop-filter: blur(10px);
+  }
+}
+
+/*
+  Líneas que se dibujan al entrar. Detalle chico y es justamente el punto: en
+  los sitios caros el lujo está en que cada elemento llega, no en que esté.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    [data-linea] {
+      animation: dibujar-linea linear both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 35%;
+      transform-origin: left center;
+    }
+  }
+}
+
+@keyframes dibujar-linea {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/*
+  Entrada del hero, escalonada.
+
+  No puede ir con scroll —el hero ya está en pantalla al cargar—, así que es una
+  animación con retardos. El orden es el de lectura: lugar, título, bajada,
+  buscador. 90 ms entre cada uno: lo justo para que se perciba como una
+  secuencia y no como cuatro cosas apareciendo juntas.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  .hero-entra > * {
+    animation: revelar-portada 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .hero-entra > *:nth-child(1) {
+    animation-delay: 0.15s;
+  }
+  .hero-entra > *:nth-child(2) {
+    animation-delay: 0.24s;
+  }
+  .hero-entra > *:nth-child(3) {
+    animation-delay: 0.33s;
+  }
+  .hero-entra > *:nth-child(4) {
+    animation-delay: 0.42s;
+  }
+  .hero-entra > *:nth-child(5) {
+    animation-delay: 0.51s;
+  }
+}
+
+/*
+  Desplazamiento suave para los anclajes del encabezado («Experiencias»,
+  «Ubicación»). `scroll-padding-top` evita que el encabezado fijo tape el
+  título de la sección a la que se saltó.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  html:has([data-nav-portada]) {
+    scroll-behavior: smooth;
+  }
+}
+
+html:has([data-nav-portada]) {
+  scroll-padding-top: 5rem;
+}
+
+/*
+  Entrada lateral, para listas numeradas.
+
+  Se separa de `revelar-portada` (que sube) porque en una lista larga el
+  desplazamiento vertical compite con el propio scroll y se lee como temblor.
+  El lateral, en cambio, se percibe como que cada fila «entra en su lugar».
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    [data-revelar-lado] {
+      animation: revelar-lado both cubic-bezier(0.16, 1, 0.3, 1);
+      animation-timeline: view();
+      animation-range: entry 8% cover 30%;
+    }
+  }
+}
+
+@keyframes revelar-lado {
+  from {
+    opacity: 0;
+    transform: translateX(-1.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/*
+  Detalles de la portada, segunda pasada (2026-10-15)
+  ===================================================
+
+  Referencia: las páginas de producto de Apple. Lo que se tomó de ahí no es un
+  efecto en particular sino una regla: **el movimiento lo maneja el scroll de
+  quien lee, no un reloj.** Nada arranca solo ni se repite; si la persona se
+  detiene, la página se detiene con ella. Todo sigue las mismas tres reglas que
+  el resto de este archivo:
+
+  1. CSS puro (`animation-timeline`), cero JavaScript y cero dependencias.
+  2. Dentro de `@supports`: sin soporte, el contenido se ve completo y quieto.
+  3. Dentro de `prefers-reduced-motion: no-preference`: quien pidió menos
+     movimiento no ve ninguno de estos efectos.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    /*
+      El hero se aparta. Al bajar, el video se achica un poco y redondea las
+      esquinas —se vuelve una tarjeta sobre el papel— mientras el texto sube y
+      se desvanece. El rango es la primera pantalla: cuando el hero salió de
+      vista, la animación ya terminó.
+    */
+    [data-hero-medio] {
+      animation: hero-se-aparta linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 100svh;
+      transform-origin: center top;
+    }
+    [data-hero-texto] {
+      animation: hero-texto-sube linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 70svh;
+    }
+
+    /* Filete de progreso de lectura, bajo el encabezado. */
+    [data-progreso] {
+      animation: progreso-lectura linear both;
+      animation-timeline: scroll(root block);
+      transform-origin: left center;
+    }
+
+    /*
+      «Volver arriba» aparece pasada la primera pantalla. `visibility` es
+      discreta: cambia a mitad del tramo, así que mientras es invisible
+      tampoco se puede tocar ni enfocar con el teclado.
+    */
+    [data-volver-arriba] {
+      animation: volver-arriba-aparece linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 90svh 120svh;
+    }
+  }
+
+  @supports (animation-timeline: view()) {
+    /*
+      Cifras que cuentan desde cero. `--cifra` está registrada como entero
+      (`@property`), y eso es lo que permite interpolarla: una propiedad
+      personalizada sin registrar salta del valor inicial al final sin pasar
+      por el medio. El número se dibuja con un contador en `::before`.
+    */
+    [data-cifra] {
+      animation: contar-cifra cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 45%;
+      counter-reset: cifra var(--cifra);
+    }
+    [data-cifra]::before {
+      content: counter(cifra) attr(data-sufijo);
+    }
+    /* El texto real queda para el lector de pantalla, fuera de la vista. */
+    [data-cifra] .cifra-texto {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /*
+    Entrada del hero con desenfoque: el texto llega «a foco». Va sólo en el
+    hero —cuatro elementos— porque `filter: blur` en decenas de bloques a la
+    vez se nota en un teléfono modesto.
+  */
+  .hero-entra > * {
+    animation-name: revelar-hero;
+  }
+
+  /* El panel del asistente se abre desde su botón, no aparece de golpe. */
+  .panel-entra {
+    animation: panel-entra 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: bottom right;
+  }
+}
+
+@property --cifra {
+  syntax: '<integer>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@keyframes hero-se-aparta {
+  to {
+    transform: scale(0.92);
+    border-radius: 2rem;
+    filter: brightness(0.85);
+  }
+}
+
+@keyframes hero-texto-sube {
+  to {
+    transform: translateY(-6rem);
+    opacity: 0;
+  }
+}
+
+@keyframes progreso-lectura {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes volver-arriba-aparece {
+  from {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.9);
+    visibility: hidden;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    visibility: visible;
+  }
+}
+
+@keyframes palabra-se-enciende {
+  from {
+    color: rgb(51 48 43 / 0.18);
+  }
+  to {
+    color: inherit;
+  }
+}
+
+@keyframes contar-cifra {
+  from {
+    --cifra: 0;
+  }
+  to {
+    --cifra: var(--hasta);
+  }
+}
+
+@keyframes revelar-hero {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes panel-entra {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/*
+  Escena fija del manifiesto
+  --------------------------
+  La sección define una línea de tiempo con nombre (`--manifiesto`) que va de
+  0 % a 100 % mientras su contenido está clavado en pantalla (rango `contain`).
+  Cada pieza toma un tramo de esa misma línea: las palabras traen el suyo en
+  `style` (calculado por posición en `page.tsx`), y acá se fijan los de la
+  frase que se aparta y la foto que se abre.
+
+  ⚠️ Todo vive dentro del `@supports` y del `no-preference`, INCLUIDA la altura
+  de la sección. Fuera de ahí la sección mide su contenido y nada queda
+  clavado: si la altura se aplicara siempre, un navegador sin soporte
+  mostraría dos pantallas y media de papel vacío.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  @supports (view-timeline: --manifiesto block) and (animation-range: contain 0% contain 10%) {
+    [data-manifiesto] {
+      height: 320svh;
+      view-timeline: --manifiesto block;
+    }
+    [data-manifiesto-fijo] {
+      position: sticky;
+      top: 0;
+      display: flex;
+      height: 100svh;
+      align-items: center;
+      overflow: hidden;
+      padding-block: 0;
+    }
+
+    [data-palabra] {
+      animation: palabra-se-enciende linear both;
+      animation-timeline: --manifiesto;
+    }
+    [data-dato] {
+      animation: dato-aparece cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: --manifiesto;
+    }
+    [data-seguir] {
+      display: flex;
+      animation: seguir-se-va linear both;
+      animation-timeline: --manifiesto;
+      animation-range: contain 0% contain 12%;
+    }
+    /* La frase se achica y se aparta mientras la foto la cubre. */
+    [data-manifiesto-texto] {
+      animation: texto-se-aparta linear both;
+      animation-timeline: --manifiesto;
+      animation-range: contain 54% contain 78%;
+      transform-origin: center top;
+    }
+
+    /*
+      La foto deja el flujo y pasa a cubrir la escena. Arranca escondida bajo
+      el borde inferior, sube como una tarjeta redondeada y termina abierta a
+      pantalla completa. `clip-path` y no `width`/`height`: recorta sin
+      recalcular el layout en cada cuadro, así que corre en el compositor.
+    */
+    [data-manifiesto-foto] {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      max-width: none;
+      margin: 0;
+      aspect-ratio: auto;
+      border-radius: 0;
+      animation: foto-se-abre cubic-bezier(0.65, 0, 0.35, 1) both;
+      animation-timeline: --manifiesto;
+      animation-range: contain 50% contain 92%;
+    }
+    [data-manifiesto-imagen] {
+      animation: imagen-se-asienta linear both;
+      animation-timeline: --manifiesto;
+      animation-range: contain 50% contain 100%;
+    }
+    [data-manifiesto-pie] {
+      animation: dato-aparece cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: --manifiesto;
+      animation-range: contain 86% contain 96%;
+    }
+  }
+}
+
+@keyframes dato-aparece {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes seguir-se-va {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes texto-se-aparta {
+  to {
+    opacity: 0;
+    transform: scale(0.9) translateY(-3rem);
+    filter: blur(6px);
+  }
+}
+
+@keyframes foto-se-abre {
+  from {
+    clip-path: inset(100% 14% 0% 14% round 2rem);
+  }
+  45% {
+    clip-path: inset(38% 14% 10% 14% round 2rem);
+  }
+  to {
+    clip-path: inset(0% 0% 0% 0% round 0rem);
+  }
+}
+
+@keyframes imagen-se-asienta {
+  from {
+    transform: scale(1.25);
+  }
+  to {
+    transform: scale(1);
   }
 }

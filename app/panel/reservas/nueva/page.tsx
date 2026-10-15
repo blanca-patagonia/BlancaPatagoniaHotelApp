@@ -5,7 +5,13 @@ import { disponibilidadPorTipo, unidadesDisponibles } from '@/lib/availability/d
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { hoyISO, sumarDias, diasEntre } from '@/lib/fechas'
 import { parsearBusquedaFechas } from '@/lib/domain/reservas'
-import { FormularioReserva, type OpcionTipo, type OpcionAgencia, type OpcionUnidad } from './formulario'
+import {
+  FormularioReserva,
+  type OpcionTipo,
+  type OpcionAgencia,
+  type OpcionPromocion,
+  type OpcionUnidad,
+} from './formulario'
 import {
   CAMPO,
   Campo,
@@ -46,6 +52,22 @@ export default async function NuevaReservaPage({
   // loguea para no perder la causa, sin banner que distraiga de la búsqueda.
   registrarFalla(eAgencias, 'reservas:nueva_agencias')
   const agencias = (agenciasData ?? []) as OpcionAgencia[]
+
+  // Promociones vigentes hoy: activa y, si tiene ventana de vigencia, hoy cae
+  // adentro. El resto de las condiciones (noches mínimas, anticipación) no se
+  // filtran acá — se evalúan al cotizar, porque dependen de LA RESERVA, no de
+  // la fecha de hoy.
+  const hoy = hoyISO()
+  const { data: promocionesData, error: ePromociones } = await supabase
+    .from('promociones')
+    .select('id, codigo, nombre, tipo, valor')
+    .eq('activo', true)
+    .in('tipo', ['porcentaje', 'monto'])
+    .or(`vigencia_desde.is.null,vigencia_desde.lte.${hoy}`)
+    .or(`vigencia_hasta.is.null,vigencia_hasta.gte.${hoy}`)
+    .order('nombre')
+  registrarFalla(ePromociones, 'reservas:nueva_promociones')
+  const promociones = (promocionesData ?? []) as OpcionPromocion[]
 
   let opciones: OpcionTipo[] = []
   // Unidad puntual por tipo (patrón QloApps: elegir tipo Y habitación en el
@@ -168,6 +190,7 @@ export default async function NuevaReservaPage({
           ) : (
             <FormularioReserva
               agencias={agencias}
+              promociones={promociones}
               opciones={opciones}
               unidadesPorTipo={unidadesPorTipo}
               checkIn={checkIn}

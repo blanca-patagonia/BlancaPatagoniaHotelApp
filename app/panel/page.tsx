@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { ESTADOS_ACTIVOS, ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { ETIQUETAS_ESTADO_HK, ESTADOS_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
 import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
@@ -59,9 +60,9 @@ function FilaMovimiento({ e }: { e: EstadiaDia }) {
       <span className="min-w-0 flex-1">
         <span
           className="block truncate font-medium text-stone-800"
-          title={r?.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : undefined}
+          title={r?.huesped ? nombreCompleto(r.huesped) : undefined}
         >
-          {r?.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : 'Sin huésped'}
+          {r?.huesped ? nombreCompleto(r.huesped) : 'Sin huésped'}
         </span>
         {e.unidad?.nombre && (
           <span className="block truncate text-xs text-stone-600">{e.unidad.nombre}</span>

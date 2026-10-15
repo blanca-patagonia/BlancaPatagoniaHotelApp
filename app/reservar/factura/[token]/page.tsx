@@ -12,8 +12,10 @@ import {
 } from '@/lib/domain/facturacion'
 import { hoyISO, parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { BotonImprimir } from '../../../panel/reservas/[id]/factura/boton-imprimir'
-import { Marco, Tarjeta } from '../../../_publico/ui'
+import { Tarjeta } from '../../../_publico/ui'
+import { Marco } from '../../../_publico/marco'
 
 /**
  * Portal del huésped: ver y descargar su propia factura.
@@ -172,7 +174,7 @@ export default async function FacturaPublicaPage({
           <div>
             <p className="text-xs uppercase tracking-wide text-stone-600">Huésped</p>
             <p className="text-stone-800">
-              {reserva.huesped ? `${reserva.huesped.apellido}, ${reserva.huesped.nombre}` : '—'}
+              {reserva.huesped ? nombreCompleto(reserva.huesped) : '—'}
             </p>
             <p className="text-stone-500">{reserva.huesped?.doc_numero || ''}</p>
           </div>

@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm audit *)"
+      "Bash(npm audit *)",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "Bash(npm run *)",
+      "Bash(python3 -)"
     ]
   }
 }

@@ -4,6 +4,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import {
   ETIQUETAS_COMPROBANTE,
   ETIQUETAS_CONDICION_IVA,
@@ -215,7 +216,7 @@ export default async function FacturaPage({
           <div>
             <p className="text-xs uppercase tracking-wide text-stone-600">Huésped</p>
             <p className="text-stone-800">
-              {reserva.huesped ? `${reserva.huesped.apellido}, ${reserva.huesped.nombre}` : '—'}
+              {reserva.huesped ? nombreCompleto(reserva.huesped) : '—'}
             </p>
             <p className="text-stone-500">{reserva.huesped?.doc_numero || ''}</p>
           </div>

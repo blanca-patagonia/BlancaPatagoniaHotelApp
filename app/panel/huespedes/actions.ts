@@ -1,9 +1,13 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirAcceso } from '@/lib/auth/session'
 import { CONDICIONES_IVA, cuitValido, type CondicionIva } from '@/lib/domain/facturacion'
+import { ESTADOS_ACTIVOS } from '@/lib/domain/reservas'
+import { nombreCompleto } from '@/lib/domain/huespedes'
+import { cortarSiFalla } from '@/lib/acciones'
 
 export interface EstadoHuesped {
   error?: string
@@ -138,7 +142,7 @@ export async function crearHuesped(
 
   revalidatePath('/panel/huespedes')
   return {
-    ok: `Se registró a ${campos.apellido}, ${campos.nombre}.`,
+    ok: `Se registró a ${nombreCompleto(campos)}.`,
     id: (data as { id: string } | null)?.id,
   }
 }
@@ -161,4 +165,91 @@ export async function actualizarHuesped(
 
   revalidatePath(`/panel/huespedes/${id}`)
   return { ok: 'Datos actualizados.' }
+}
+
+/**
+ * Fusiona dos fichas de un mismo huésped real: la que se está mirando
+ * (`conservar`) absorbe el historial de `descartar`, que desaparece.
+ *
+ * El caso típico es el huésped `Externo-xxxxxx` que entra por un canal sin
+ * documento ni email, y vuelve directo con sus datos reales: hasta ahora
+ * quedaban como dos personas separadas, cada una con su propio historial de
+ * reservas y de puntos, y no había forma de unirlas.
+ *
+ * El trabajo pesado —reasignar reservas y acompañantes, sumar los puntos, y
+ * recién al final borrar el duplicado— lo hace `fusionar_huespedes` (migración
+ * 0111) en una sola transacción.
+ */
+export async function fusionarHuespedes(formData: FormData): Promise<void> {
+  await exigirAcceso()
+  const conservar = String(formData.get('conservar_id') ?? '')
+  const descartar = String(formData.get('descartar_id') ?? '')
+  if (!conservar || !descartar) redirect(`/panel/huespedes/${conservar}?error=fusion_datos`)
+
+  const supabase = await crearClienteServidor()
+  const { data, error } = await supabase.rpc('fusionar_huespedes', {
+    p_conservar: conservar,
+    p_descartar: descartar,
+  })
+  if (error) redirect(`/panel/huespedes/${conservar}?error=fusion`)
+
+  const resultado = data as { ok: boolean; motivo?: string } | null
+  if (!resultado?.ok) {
+    redirect(`/panel/huespedes/${conservar}?error=fusion_${resultado?.motivo ?? 'desconocido'}`)
+  }
+
+  revalidatePath(`/panel/huespedes/${conservar}`)
+  revalidatePath('/panel/huespedes')
+  redirect(`/panel/huespedes/${conservar}?ok=fusionado`)
+}
+
+/**
+ * Ejerce el derecho de supresión (Ley 25.326) sobre una ficha: sobrescribe
+ * nombre, documento, contacto y notas. No borra la fila ni toca sus reservas,
+ * pagos o facturas — `huespedes` tiene `on delete restrict` desde `reservas`
+ * (migración 0005) y esos comprobantes son del contador, con su propia
+ * retención fiscal. Es la misma baja lógica que ya usa este proyecto en vez de
+ * un DELETE físico (agencias, proveedores, tarifas — migración 0061).
+ *
+ * Se bloquea si tiene una reserva que todavía ocupa inventario (pendiente,
+ * confirmada, pagada o in_house): recepción necesita el nombre y el contacto
+ * reales para atender esa estadía. Hay que esperar al check-out o cancelarla
+ * primero.
+ */
+export async function anonimizarHuesped(formData: FormData): Promise<void> {
+  await exigirAcceso()
+  const id = String(formData.get('huesped_id') ?? '')
+  if (!id) redirect('/panel/huespedes')
+
+  const supabase = await crearClienteServidor()
+  const { data: activa, error: eActiva } = await supabase
+    .from('reservas')
+    .select('id')
+    .eq('huesped_id', id)
+    .in('estado', ESTADOS_ACTIVOS)
+    .limit(1)
+    .maybeSingle()
+  if (eActiva) cortarSiFalla(eActiva, `/panel/huespedes/${id}`, 'anonimizar_verificar')
+  if (activa) redirect(`/panel/huespedes/${id}?error=anonimizar_activa`)
+
+  const { error } = await supabase
+    .from('huespedes')
+    .update({
+      nombre: 'Anonimizado',
+      apellido: 'Anonimizado',
+      doc_numero: '',
+      email: null,
+      telefono: null,
+      nacionalidad: null,
+      notas: '',
+      acepta_avisos: false,
+      acepta_promociones: false,
+      anonimizado: true,
+    })
+    .eq('id', id)
+  cortarSiFalla(error, `/panel/huespedes/${id}`, 'anonimizar')
+
+  revalidatePath(`/panel/huespedes/${id}`)
+  revalidatePath('/panel/huespedes')
+  redirect(`/panel/huespedes/${id}?ok=anonimizado`)
 }

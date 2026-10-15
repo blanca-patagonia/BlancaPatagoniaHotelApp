@@ -152,9 +152,21 @@ describe('buscarGlobal · autorización por rol', () => {
     expect(resultado.proveedores).toEqual([])
   })
 
-  it('admin consulta los cuatro ámbitos', async () => {
+  it('admin consulta los nueve ámbitos', async () => {
     const { resultado, tablas } = await buscar('admin', 'sur')
-    expect(new Set(tablas)).toEqual(new Set(['huespedes', 'agencias', 'proveedores', 'reservas']))
+    expect(new Set(tablas)).toEqual(
+      new Set([
+        'huespedes',
+        'agencias',
+        'proveedores',
+        'reservas',
+        'unidades',
+        'tipos_unidad',
+        'productos_servicios',
+        'promociones',
+        'perfiles',
+      ]),
+    )
     expect(resultado.proveedores).toHaveLength(1)
   })
 
@@ -277,6 +289,11 @@ describe('buscarGlobal · tope y total', () => {
         resultado.huespedes.length +
         resultado.agencias.length +
         resultado.proveedores.length +
+        resultado.unidades.length +
+        resultado.tipos_unidad.length +
+        resultado.productos.length +
+        resultado.promociones.length +
+        resultado.usuarios.length +
         resultado.secciones.length +
         resultado.glosario.length,
     )

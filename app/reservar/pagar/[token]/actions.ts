@@ -13,11 +13,7 @@
 
 import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { iniciarCobro, falloElCobro } from '@/lib/payments/servicio'
-import { estadoDeCobro } from '@/lib/reservas/cobro'
-import { motivoNoSeCobra } from '@/lib/domain/cobro'
-import { urlDelSitio } from '@/lib/env'
-import { registrarError } from '@/lib/registro'
+import { abrirCobroDelPortal } from '@/lib/payments/portal'
 import type { EstadoReserva } from '@/lib/domain/reservas'
 
 /**
@@ -43,44 +39,16 @@ export async function pagarDesdeElPortal(formData: FormData): Promise<void> {
 
   if (error || !reserva) redirect(`/reservar/pagar/${token}?error=no_encontrada`)
 
-  const cobro = await estadoDeCobro(admin, reserva.id)
-  if (!cobro) redirect(`/reservar/pagar/${token}?error=sin_datos`)
-
-  // La seña sólo tiene sentido mientras no se haya pagado ninguna; después,
-  // lo que queda es saldo. El tipo que llega del formulario se corrige acá en
-  // vez de confiarse: define contra qué se imputa la plata.
-  const tipo = tipoPedido === 'senia' && !cobro.tieneSenia ? 'senia' : 'saldo'
-  const monto = tipo === 'senia' ? Math.min(cobro.senia, cobro.saldo) : cobro.saldo
-
-  const impedimento = motivoNoSeCobra(reserva.estado as EstadoReserva, cobro.saldo)
-  if (impedimento) redirect(`/reservar/pagar/${token}?error=no_cobrable`)
-
-  const base = urlDelSitio().replace(/\/$/, '')
-  // Las tres vuelven a la confirmación a propósito: esa pantalla lee el estado
-  // real de la base. La URL de retorno de una pasarela **no es una prueba de
-  // pago** —se puede abrir a mano sin haber pagado nada— así que decidir con
-  // ella qué mostrar sería mentirle al huésped. Quien confirma es el webhook.
-  const volver = `${base}/reservar/confirmacion/${token}`
-
-  const resultado = await iniciarCobro(admin, {
+  const resultado = await abrirCobroDelPortal(admin, {
     reservaId: reserva.id,
-    tipo,
-    montoUSD: monto,
-    proveedor: medio,
-    descripcion: `Hotel Blanca Patagonia · reserva ${reserva.codigo} · ${tipo === 'senia' ? 'seña' : 'saldo'}`,
-    emailComprador: extraerEmail(reserva.huesped),
-    urls: { exito: volver, error: volver, pendiente: volver },
+    codigo: reserva.codigo,
+    estado: reserva.estado as EstadoReserva,
+    token,
+    medio,
+    tipoPedido: tipoPedido === 'saldo' ? 'saldo' : 'senia',
+    email: extraerEmail(reserva.huesped),
   })
-
-  if (falloElCobro(resultado)) {
-    // Una venta que no se concreta. Va a `errores`: el huésped ve un mensaje
-    // genérico y se va, y sin esto el hotel no se entera de que pasó.
-    await registrarError('cobro_link_portal', {
-      reserva: reserva.codigo,
-      detalle: resultado.error,
-    })
-    redirect(`/reservar/pagar/${token}?error=pasarela`)
-  }
+  if (!resultado.ok) redirect(`/reservar/pagar/${token}?error=${resultado.motivo}`)
 
   redirect(resultado.url)
 }

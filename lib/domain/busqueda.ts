@@ -21,7 +21,17 @@ import type { Rol } from './roles'
  */
 
 /** Qué tipos de cosa sabe buscar el sistema. */
-export const AMBITOS = ['reservas', 'huespedes', 'agencias', 'proveedores'] as const
+export const AMBITOS = [
+  'reservas',
+  'huespedes',
+  'agencias',
+  'proveedores',
+  'unidades',
+  'tipos_unidad',
+  'productos',
+  'promociones',
+  'usuarios',
+] as const
 
 export type Ambito = (typeof AMBITOS)[number]
 
@@ -31,6 +41,11 @@ const AREA_DEL_AMBITO: Record<Ambito, Area> = {
   huespedes: 'huespedes',
   agencias: 'agencias',
   proveedores: 'proveedores',
+  unidades: 'config',
+  tipos_unidad: 'config',
+  productos: 'punto_venta',
+  promociones: 'config',
+  usuarios: 'usuarios',
 }
 
 export const ETIQUETAS_AMBITO: Record<Ambito, string> = {
@@ -38,6 +53,11 @@ export const ETIQUETAS_AMBITO: Record<Ambito, string> = {
   huespedes: 'Huéspedes',
   agencias: 'Agencias y empresas',
   proveedores: 'Proveedores',
+  unidades: 'Habitaciones y cabañas',
+  tipos_unidad: 'Tipos de alojamiento',
+  productos: 'Productos y servicios',
+  promociones: 'Promociones',
+  usuarios: 'Usuarios',
 }
 
 /** Ámbitos que un rol tiene permitido buscar. */

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import {
   ETIQUETAS_ESTADO_RESERVA,
   ESTADOS_RESERVA,
@@ -626,7 +627,7 @@ export default async function ReservasPage({
                         </Link>
                       </td>
                       <td className={`${TD} text-stone-700`}>
-                        {r.huesped ? `${r.huesped.apellido}, ${r.huesped.nombre}` : '—'}
+                        {r.huesped ? nombreCompleto(r.huesped) : '—'}
                         {/* VIP con estrella Y texto accesible: el símbolo solo se
                             pierde para quien usa lector de pantalla. */}
                         {r.huesped?.vip && (

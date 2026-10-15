@@ -7755,3 +7755,834 @@ pasada**, acotada por no tener navegador disponible la mayor parte de la
 sesión.
 
 Sin cambios de código en esta entrada.
+
+## 2026-10-14 — Siete de los ocho huecos de la auditoría QA/UX, con navegador disponible
+
+**Resumen.** Esta sesión sí tuvo Docker arriba: se pudo levantar Supabase
+local y probar cada pantalla nueva en el navegador, no solo por código.
+Se implementaron siete de los ocho puntos que la auditoría de código del
+2026-10-13/14 había dejado señalados como huecos reales (no ideas — cosas
+que faltaban). Los dos que quedan son decisiones del dueño del hotel, no
+código: **promociones** (¿se implementan o se borra el código muerto?) y
+**ADR 0019** (¿se cobra de verdad la cancelación/no-show? — de ahí
+depende también si hace falta un camino de reembolso).
+
+**Migraciones nuevas:** `0110_auditoria_edicion_ficha_reserva.sql`,
+`0111_fusion_y_anonimizacion_de_huespedes.sql`. Las dos aplicadas y
+probadas contra la base local.
+
+**Qué se hizo, en el orden del hallazgo original:**
+
+1. **SEO del portal** (`app/robots.ts`, `app/sitemap.ts`, JSON-LD de
+   Hotel en portada/catálogo, Open Graph/Twitter cards, `poweredByHeader:
+   false`, `/portal` sin token redirige al inicio en vez de 404 pelado).
+   `lib/seo.ts` tiene su propio `baseUrlSeo()` — a propósito **no**
+   reusa `urlDelSitio()` de `lib/env.ts`: esa corta el build en
+   producción sin `NEXT_PUBLIC_SITE_URL`, y acá el costo de no tenerla
+   es una vista previa sin imagen, no un huésped que no puede hacer
+   check-in.
+2. **Lista de compras** suma el recurso `lista-compras` al exportador
+   CSV existente (`app/panel/exportar/[recurso]/route.ts`) — no hizo
+   falta ninguna librería nueva, el exportador ya usaba `;` + BOM.
+3. **Vencimiento de contratos** entra al cron de mantenimiento
+   (`/api/cron/mantenimiento`): antes solo corría si alguien entraba a
+   `/panel/contratos` y apretaba «Marcar vencidos» a mano. La tarea no
+   es una función de Postgres como las otras cuatro —es el mismo
+   `update` directo del botón—, así que el `for` del cron ahora admite
+   una tarea con `ejecutar` propio además de `rpc`, envuelta en un
+   `try/catch` que convierte una excepción en `{ error }`: sin eso, una
+   tarea que lanza (en vez de devolver error) se llevaría puestas a las
+   que siguen, justo lo que ese `for` existe para evitar.
+4. **Eliminar adjuntos.** `eliminarAdjunto` existía desde la migración
+   0099 y nadie lo llamaba. Ahora mantenimiento, proveedores (arreglos
+   `fotos`) y el comprobante de pago de una agencia (`comprobante_ruta`,
+   un solo archivo) tienen su botón de borrado, con confirmación y la
+   base actualizada antes que el archivo (para no dejar la ficha
+   mostrando una foto que ya no existe si el borrado del bucket
+   fallara). **Housekeeping queda afuera a propósito**:
+   `housekeeping_registros` es un log de auditoría operativa sin
+   `update`/`delete` por diseño (migración 0101) — sacarle una foto
+   rompería esa garantía.
+5. **Gestión de tipos de unidad y unidades** (`/panel/config/tipos-
+   alojamiento`, nueva; `/panel/config/ubicaciones`, ampliada). Alta y
+   edición de tipos (nombre, capacidad, descripción — el **código** no
+   se edita a propósito: es la clave del mapa de fotos y de los mapeos
+   de canal). Las unidades ahora se pueden renombrar y dar de baja desde
+   la misma fila donde ya se editaba la ubicación. La baja de una unidad
+   se bloquea si tiene una estadía en un estado que ocupa inventario
+   (`ESTADOS_ACTIVOS`, el mismo de la restricción anti-overbooking) —
+   mismo criterio que ya usa «cambiar de unidad».
+6. **Edición de ficha de reserva** (plan, segmento, voucher, notas,
+   cunas, «no mover», composición adultos/menores/bebés) —hasta ahora
+   solo se podía reprogramar, mudar o cancelar y volver a cargar. Reusa
+   `validarOcupantes`/`paxQueOcupa` de `lib/domain/ocupantes.ts`, el
+   mismo dominio que ya usa el alta. **Nunca recotiza**: se verificó que
+   ninguno de estos campos entra en `cotizar_estadia` ni en
+   `calcularEstadia` — el precio depende del tipo de unidad, la fecha y
+   `tarifa_tipo`, no de la composición ni del plan de comidas (que es
+   descriptivo desde que el desayuno quedó siempre incluido, migración
+   0098). La migración 0110 suma dos triggers acotados por `when`
+   (mismo patrón que la 0020/0028) para que la edición quede auditada
+   sin llenar de ruido la tabla con cada `update` de otros caminos.
+7. **Fusión de huéspedes duplicados y derecho de supresión** (Ley
+   25.326). El caso típico de la fusión es el `Externo-xxxxxx` que entra
+   por un canal sin documento y vuelve directo con sus datos reales. La
+   función `fusionar_huespedes` (migración 0111, `security invoker`,
+   mismo patrón que `crear_reserva`/`cambiar_unidad_reserva`) reasigna
+   reservas y acompañantes (con `on conflict do nothing` para no chocar
+   contra la clave primaria de `reserva_huespedes`), suma los puntos de
+   fidelidad y borra el duplicado — todo en una transacción. La
+   anonimización sobrescribe nombre, documento, contacto y notas pero
+   **no borra la fila** (`huespedes` tiene `on delete restrict` desde
+   `reservas`, y las facturas ya emitidas son del contador): se bloquea
+   si la ficha tiene una reserva que ocupa inventario. `notificaciones`
+   y `auditoria_accesos` **no** se reasignan al fusionar, a propósito —
+   son bitácoras de solo `service_role`, y forzar `security definer`
+   solo para eso habría sido una superficie nueva para un caso
+   secundario.
+
+**Un bug real encontrado recorriendo la pantalla de fusión en el
+navegador** (no en los tests): el componente compartido `Buscador`
+siempre manda el término como `?q=`, pero la pantalla nueva leía
+`?fusionar_q=` — la búsqueda de duplicados no hacía nada, en silencio.
+Se corrigió a `q` para que coincida con el resto del panel.
+
+**Verificado en el navegador, con Supabase local:** alta/edición/baja de
+un tipo de alojamiento con el diálogo de confirmación correcto; alta,
+renombrado y baja de una unidad, incluida la baja bloqueada por estadía
+activa; edición de ficha de reserva de punta a punta contra una reserva
+real (el total no se movió, y el cambio de plan quedó en `auditoria`); y
+las dos pantallas nuevas de huéspedes, con el bug de arriba encontrado y
+corregido. **No se hizo clic en «Fusionar acá» ni en «Eliminar datos
+personales» dentro del navegador**: el modo automático de la sesión
+bloqueó esas dos acciones por ser borrados irreversibles sobre datos
+reales, correctamente — están cubiertas por 6/6 tests automatizados que
+sí ejercitan la fusión y la anonimización contra la base real, incluido
+el caso de conflicto de `reserva_huespedes`.
+
+**Tests nuevos:** `tests/acciones/eliminar-fotos.test.ts`,
+`tests/acciones/config-unidades.test.ts`,
+`tests/acciones/editar-ficha-reserva.test.ts`,
+`tests/acciones/fusion-y-anonimizacion-huespedes.test.ts`, más la
+reescritura de `tests/cron-mantenimiento.test.ts` para la quinta tarea.
+61 tests nuevos/reescritos, todos verdes contra la base local.
+
+**Bloqueado, no implementado — necesitan una decisión del usuario, no
+código:**
+- **Promociones**: ¿se completa el ABM y se aplican en `cotizar()`, o se
+  borra la tabla/el dominio/el parámetro, que hoy es código muerto?
+- **ADR 0019** (cobro de cancelación/no-show) y, a partir de esa
+  decisión, si hace falta un camino de reembolso desde el panel.
+
+**También pendiente, bloqueado por el mismo motivo que la sesión
+anterior:** aplicar las migraciones 0068-0109 (más estas dos nuevas) a
+la base de la **nube** — necesita que el usuario corra `supabase login`
+o reconecte el conector. Y la base **local** de prueba quedó con drift
+preexistente de sesiones anteriores: la migración 0096 ya tenía su tabla
+creada sin figurar aplicada en `supabase_migrations.schema_migrations`,
+y al revés, la 0089 figura aplicada sin que exista la función
+`privilegios_de_escritura` que crea. Un `supabase db reset` lo resuelve
+de raíz, pero ese comando está bloqueado para el asistente por el hook
+`bloquear-destructivos.mjs` — lo tiene que correr el usuario.
+
+`npm run check` verde: lint 0 · typecheck 0 · build 0 (21 páginas nuevas
+contadas en el conteo de rutas) · 61/61 tests nuevos verdes contra la
+base local (el resto de la suite sigue salteando por el drift de arriba,
+no por este trabajo).
+
+## 2026-10-14 (segunda parte) — Promociones y la decisión de ADR 0019
+
+**Resumen.** El usuario decidió las dos cosas que quedaron bloqueadas en
+la entrada anterior: completar el ABM de promociones, y para el ADR 0019
+diseñar la propuesta sin implementar cobro real.
+
+**ADR 0019.** Al abrir `docs/decisiones/0019-...md` resultó que ya tenía
+las cinco opciones (A-E) completamente analizadas desde agosto — no hacía
+falta escribir nada nuevo. Se agregó una sección «Actualización
+2026-10-14» que confirma que la infraestructura de las opciones C (cuenta
+corriente de agencia) y D (nota de crédito) **ya existe de verdad** hoy
+—no existía cuando se escribió el ADR—, con una recomendación concreta
+(combinar C+D, dejando A/B para cuando haya una pasarela con cobro
+*merchant-initiated*). La sección Decisión sigue en blanco: es del hotel,
+no del código.
+
+**Promociones — completadas de punta a punta.** El motor de precios
+(`lib/domain/precios.ts`, `calcularEstadia`/`promocionAplica`) y
+`cotizar_estadia`/`crear_reserva` (desde la 0039) ya soportaban una
+promoción completa — el hueco real era que **nadie los usaba**: cero
+pantalla de carga, cero llamador que pasara una promoción a cotizar.
+Se descubrió, de hecho, que la base ya tenía dos promociones reales
+sembradas (`LARGA5` −10% por 5+ noches, `ANTICIPADA` −15% por 60+ días de
+anticipación) que llevaban quién sabe cuánto tiempo sin poder aplicarse a
+ninguna reserva.
+
+- **ABM nuevo** en `/panel/config/promociones` (alta/edición/baja, mismo
+  patrón que tipos de alojamiento de la entrada anterior). El tipo
+  `paquete` —que `calcularEstadia` ya excluye del ajuste de precio
+  porque no hay ninguna pieza que lo vincule a consumos/servicios— **no
+  se ofrece** en el formulario: ofrecerlo sería otro código muerto, de
+  los que esta sesión viene cerrando.
+- **Wiring real**, solo en el panel (el portal público quedó fuera de
+  este alcance a propósito): `lib/reservas/crear.ts`
+  (`crearReservaEnUnidadLibre`, el chokepoint compartido panel+portal)
+  ahora valida la promoción contra la base — activa y dentro de su
+  ventana de vigencia, si no corta el alta con un error — y la pasa a
+  `cotizarEstadia` y a `crear_reserva` (`p_promocion_id`, parámetro que
+  existía desde la 0039 y nadie llenaba). **Cero migración SQL nueva**:
+  la base ya estaba lista. Si la promoción es válida pero no cumple sus
+  propias condiciones (noches mínimas, anticipación), la reserva se crea
+  igual, sin el descuento — es la regla de la promoción funcionando, no
+  un error.
+- `app/panel/reservas/nueva/{page,formulario}.tsx` suman el selector de
+  «Promoción» al paso 5 (condiciones comerciales), con las promociones
+  vigentes hoy.
+
+**Verificado en el navegador, de punta a punta, con las promociones
+reales ya sembradas:** se creó una reserva real de 5 noches con `LARGA5`
+elegida y el total salió exactamente un 10% por debajo de la tarifa de
+referencia (USD 1.966,08 contra USD 2.184,53), con `reservas.promocion_id`
+apuntando a la fila correcta.
+
+**Tests nuevos:** `tests/crear-reserva-promocion.test.ts` (descuento
+aplicado y verificado contra el total real; promoción inactiva rechaza
+el alta; promoción vencida rechaza el alta; condiciones no cumplidas
+cotiza sin descuento en vez de rechazar) y
+`tests/acciones/promociones.test.ts` (ABM: alta, rechazo de porcentaje
+>100, código repetido, edición, baja/reactivación). 11 tests nuevos,
+todos verdes contra la base local.
+
+`npm run check` verde: lint 0 · typecheck 0 · build 0 · 11/11 tests
+nuevos verdes (más los 46 de reservas/choque/precios que se volvieron a
+correr para confirmar que nada se rompió).
+
+## 2026-10-14 (tercera parte) — factura rechazada y un bug propio encontrado a tiempo
+
+**Resumen.** Se investigaron dos pendientes de la auditoría original:
+«factura rechazada sin reintento» e issue #85 (atomicidad). El primero
+resultó menor de lo que sonaba; el segundo encontró un caso nuevo —de
+esta misma sesión— que al corregirlo reveló un bug propio más serio, que
+se corrigió antes de darlo por cerrado.
+
+**Factura rechazada.** El número de comprobante (`facturas_numeracion`,
+migración 0069) es **idempotente por reserva**: reintentar facturar
+después de un rechazo de ARCA no gasta un número nuevo, ya funciona hoy.
+Lo único que faltaba era que el mensaje de error lo dijera — antes sonaba
+a callejón sin salida. Se corrigió el texto en
+`app/panel/reservas/[id]/page.tsx` (clave `cae`). **Quedan sin resolver,
+anotadas para si se priorizan después**: una pantalla que liste los
+números reservados sin factura asociada (los abandonados de verdad, no
+los que se reintentan), y una forma de forzar un rechazo real en el
+simulador de facturación para poder testear ese camino.
+
+**Issue #85.** `crearReservaGrupal` ya estaba resuelto por decisión
+documentada (no hace falta atomicidad ahí: para el hotel, un grupo que
+consigue 4 de 5 unidades conviene mantenerlo). El caso nuevo era
+`editarFichaReserva`, agregada en la segunda entrada de hoy: hacía dos
+`update` sueltos (`reservas` y `estadias`) sin rollback entre ellos.
+
+**El bug propio.** La primera corrección (migración 0112,
+`editar_ficha_reserva`) envolvió las dos escrituras en una función SQL,
+pero el chequeo del segundo `update` usaba un `return
+jsonb_build_object('ok', false, ...)` en vez de `raise exception`. Un
+`return` **no deshace nada**: el `update reservas` de la línea anterior
+quedaba confirmado igual, con la función devolviendo `ok: false` —
+exactamente el defecto original, un nivel más adentro y con un mensaje
+de error que ocultaba que algo sí se había guardado. El propio comentario
+de `aplicar_precio_reserva` (0085) ya decía «`raise` deshace todo lo
+escrito en la transacción»; no se había seguido ese patrón acá. Se
+corrigió en la migración 0113 (`create or replace`, no hizo falta
+`drop`: la firma no cambió) y se agregó un test que llama al RPC
+directo con un `estadia_id` que no corresponde a la reserva, para
+probar que el `update reservas` se revierte de verdad y no solo que la
+función «dice» que falló.
+
+**Tests:** 1 test nuevo de regresión (el de arriba) en
+`tests/acciones/editar-ficha-reserva.test.ts`, que pasa de 4 a 5. Se
+corrieron de nuevo `funciones-sin-public`, `reservas.test.ts` y el
+archivo completo de ficha de reserva: 39/39 verdes.
+
+`npm run check` verde: lint 0 · typecheck 0 · build 0.
+
+## 2026-10-14 (cuarta parte) — un bug de CSS del componente `Tabla`, encontrado triando un reporte de QA externo
+
+**Resumen.** Se le pasó a una extensión de navegador un prompt de QA para
+que probara en vivo las 7 pantallas de hoy. Del reporte, la mayoría eran
+comportamiento esperado (ej. «no se puede borrar un huésped con reserva
+activa» es la regla, no un bug) o hallazgos cosméticos menores sin
+decidir todavía. Uno sí era mío y sí era real: a un ancho muy angosto
+(254 px, porque la extensión no pudo lograr 375 px reales) las tablas
+nuevas de `/panel/config/promociones` y `/panel/config/ubicaciones`
+arrastraban la PÁGINA ENTERA de costado, no solo la tabla.
+
+**Diagnóstico.** No era un bug de esas dos pantallas: estaba en el
+componente compartido `Tabla` (`app/panel/_components/ui.tsx`), que usan
+prácticamente todas las tablas del panel. Medido con Playwright:
+`document.body.scrollWidth` daba 260 px (casi sin desborde) pero
+`document.documentElement.scrollWidth` daba 465 px — el `<html>`
+reportaba un desborde que el `<body>` no veía. La causa: el
+`<caption className="sr-only">` que `Tabla` pone siempre dentro de la
+tabla (y, en estas dos pantallas nuevas, también el `<span
+className="sr-only">Baja / reactivar</span>` de la columna de alternar
+estado sin ícono con etiqueta visible) es `position: absolute` por la
+propia utilidad `sr-only` de Tailwind. El `div.overflow-x-auto` que
+envuelve la tabla **no es containing block** de ese absoluto —le falta
+`position: relative` o equivalente—, así que ese elemento invisible se
+escapa de la contabilidad de scroll del envoltorio y pasa a inflar el
+`scrollWidth` de la RAÍZ del documento, que es justamente lo que decide
+si la página entera se puede arrastrar de costado en un teléfono. Es el
+mismo mecanismo, con otro disparador, que ya está documentado en el
+comentario de la grilla de `ocupacion`: ahí son celdas `sticky` las que
+se escapan del recorte; acá es un `sr-only` absoluto.
+
+**Corrección.** Un solo cambio, en el componente compartido: agregar
+`contain-paint` al `div.overflow-x-auto` de `Tabla` (igual fix que ya
+tiene la grilla de ocupación, con el mismo comentario explicando por qué
+`overflow-x: hidden` no alcanza y `contain: paint` sí). Verificado con
+Playwright en las tres pantallas nuevas y en `/panel/agencias` (una
+pantalla vieja, no tocada hoy, que probó que el bug YA EXISTÍA antes de
+esta sesión en cualquier tabla del panel a ese ancho): `htmlScrollWidth`
+pasó de 465 a 259 en las tres, igualándose al de `body`. Sin cambio
+visual: las tablas siguen con su scroll horizontal propio.
+
+**Por qué no se había notado antes:** la auditoría de calidad de
+2026-09-09 midió `scrollWidth`/`clientWidth` a 1024 px y 640 px, nunca
+tan angosto como 254 px (más angosto que cualquier teléfono real). El
+síntoma (arrastre hacia espacio vacío, sin nada visualmente cortado) es
+exactamente el tipo de bug que no se nota mirando la pantalla, solo
+midiendo.
+
+`npm run check`: lint 0 · typecheck 0 · build 0. Los 18 tests en rojo
+de esta corrida son el drift ya documentado de la base local (columnas
+que faltan en `ordenes_mantenimiento`/`proveedores`/`movimientos_cuenta`,
+privilegios de `anon`, tipo de cambio de prueba desactualizado) —
+ninguno toca UI ni el archivo que se tocó hoy; confirmado comparando la
+lista de archivos fallados contra el único archivo modificado
+(`ui.tsx`).
+
+## 2026-10-14 (quinta parte) — el resto del reporte de QA: un bug real más, cinco mejoras de experiencia, limpieza
+
+**Resumen.** Triage completo del reporte de la extensión de QA. De los
+«esto rompe algo»: tres eran el drift de migraciones ya conocido
+(bloqueado por `db reset`, pendiente de que el usuario lo autorice) y
+uno («Eliminar datos personales bloqueado con reserva activa») es
+comportamiento correcto, no un bug. El quinto —nombre duplicado en la
+reserva rápida— sí era real. De los «podría ser mejor» se resolvieron
+cinco, con el fin de mejorar la experiencia de uso sin esperar una
+nueva ronda de QA.
+
+**Bug real: `«ZZZ-Promo, ZZZ-Promo»`.** La reserva rápida de mostrador
+solo pide el apellido (`app/panel/reservas/actions.ts`, «Solo el
+apellido es obligatorio») y completa `nombre` con el mismo valor porque
+la columna es `not null`. El dato en la base es correcto; mostrarlo dos
+veces en **24 lugares** del panel (`${apellido}, ${nombre}` repetido
+sin un helper común) se lee como un bug. Se creó
+`lib/domain/huespedes.ts` con `nombreCompleto()`, que colapsa a un solo
+valor cuando coinciden (sin distinguir mayúsculas), y se migraron los
+24 call sites. Test nuevo: `tests/huespedes-nombre.test.ts` (5 casos).
+
+**Mensaje de capacidad genérico.** `editarFichaReserva` ya calculaba el
+motivo puntual con `validarOcupantes` (el mismo texto que
+`crearReservaAction` sí mostraba), pero lo descartaba al redirigir con
+un código fijo que listaba las tres condiciones posibles. Ahora viaja
+en `?detalle=` y la pantalla lo usa en vez del texto genérico. Test
+actualizado en `tests/acciones/editar-ficha-reserva.test.ts`.
+
+**Formularios que se vaciaban al fallar.** `editarFichaReserva` (ficha
+de reserva) y `crearTipoUnidad`/`editarTipoUnidad` (tipos de
+alojamiento) redirigen en vez de devolver estado, así que al fallar una
+validación la pantalla volvía a pedir los datos de la BASE, no lo que
+la persona acababa de escribir. Se agregó `v_*`/`alta_*`/`edita_*` a la
+query de redirección con lo tecleado, y las pantallas los usan como
+`defaultValue` cuando vienen presentes. Verificado en el navegador:
+cargar un desglose que supera la capacidad, o un código de tipo
+inválido, ahora vuelve con el formulario intacto y el mensaje
+específico arriba. Test actualizado en
+`tests/acciones/config-unidades.test.ts`.
+
+**Mensajes de éxito poco claros (huéspedes).** El formulario de alta ya
+tenía éxito con pasos (`ExitoConPasos`) y ya preservaba lo escrito —eso
+estaba bien—, pero el aviso se renderizaba DESPUÉS de los nueve campos.
+Al registrar un huésped, React reinicia el formulario (comportamiento
+nativo tras una Server Action exitosa): la pantalla mostraba nueve
+campos en blanco y recién abajo, fuera de la vista inicial, el aviso de
+que sí se guardó. Se movió el bloque de éxito/error arriba de los
+campos, en `app/panel/huespedes/formulario.tsx`. Verificado en el
+navegador: el aviso «Se registró a…» con sus tres enlaces aparece
+primero; los campos en blanco quedan debajo, listos para el próximo
+huésped.
+
+**Buscador superpuesto con «Administrador» a 1096 px — real.** Medido:
+el formulario del buscador terminaba en x=924 y el botón de cuenta
+empezaba a renderizarse en x=900, 24 px de superposición. Causa: el
+botón (`MenuCuenta`, `shell.tsx`) no tenía `min-w-0` en la cadena de
+contenedores flex, así que ante una palabra sin dónde partirse
+(«Administrador») el navegador no lo achicaba y lo dejaba desbordar
+hacia la izquierda, justo sobre el buscador — la misma trampa de
+`min-w-0`/`truncate` que ya documenta CLAUDE.md, con otro disparador.
+Se agregó `min-w-0` al contenedor y al botón, `truncate` al nombre y al
+rol, y `shrink-0` al avatar y la flechita (para que lo que se achique
+sea el texto, no el ícono). Verificado en 900, 1024 y 1096 px: sin
+superposición en ninguno.
+
+**Dólar oficial sin cargar, con Banco Nación debajo — aclarado.** No
+era un bug de estado (las dos fuentes son independientes a propósito,
+ADR 0020), pero el texto se leía como contradictorio: «no hay
+cotización» seguido de números reales. Se agregó una frase que aclara
+que lo de abajo es solo de referencia cuando corresponde
+(`cotizacion-cliente.tsx`).
+
+**Las ~80 filas «Servicio» no se pudieron reproducir.** Se buscó en la
+base local actual y no hay ningún `consumos` con producto «Servicio…»
+en ninguna reserva: no es un bug de código reproducible hoy, y no se
+tocó nada.
+
+**Limpieza de datos de prueba.** Se borraron, en el orden que exigen
+las FK (reservas → huéspedes → unidades → tipos de alojamiento, el
+resto sin dependencias): el tipo CAB-QA1, la unidad «QA Unidad 1
+Renombrada», la promoción QA-PROMO3, las tres reservas de prueba
+(incluida la cancelada que había quedado sin anotar en el reporte), los
+cuatro huéspedes de prueba, el proveedor «ZZZ Proveedor QA» y la orden
+«ZZZ QA orden de prueba» —que sí llegó a crearse a pesar de que abrirla
+después fallara por la columna `fotos` faltante—. De paso, dos
+huéspedes «ZZZ-TempTest» quedaron de esta misma sesión de verificación
+y se borraron también.
+
+`npm run check`: lint 0 · typecheck 0 · build 0 · test suite completa:
+2093 verdes, 18 en rojo (el mismo drift ya documentado, cero relación
+con los archivos tocados hoy), 265 salteados.
+
+## 2026-10-14 (sexta parte) — verificación de la extensión de QA: todo confirmado
+
+**Verificación de los 6 arreglos.** La extensión de navegador recorrió
+los 6 puntos de la sección 1 del prompt y confirmó que todos funcionan:
+(1) nombre duplicado ya no aparece, (2) mensaje de capacidad específico
+en vez del genérico, (3) formularios de editar-ficha y tipos de
+alojamiento preservan lo escrito al fallar, (4) aviso de éxito arriba
+en huéspedes, (5) buscador y menú de cuenta con 20 px de separación a
+1096 px (medido: buscador termina en x=912, botón empieza en x=932), y
+(6) dólar oficial sin cargar con texto aclarado.
+
+**Tres pantallas todavía fallan, todas por el mismo drift.** Orden de
+mantenimiento (columna `fotos` no existe), cuenta de proveedor y
+agencias (columna `comprobante_ruta` no existe). Es el drift conocido,
+bloqueado por el hook que no deja `db reset` sin autorización expresa
+del usuario. No se tocó.
+
+**Cosmético nuevo detectado.** El aviso de éxito de proveedores sigue
+abajo de los campos (solo se arregló huéspedes en esta pasada). Mismo
+patrón, se puede arreglar si el usuario lo pide.
+
+**Datos de prueba limpiados.** Tipo QA-VERIF1, reserva BP-261014-FC9A
+(huésped ZZZ-Verif-Nombre), huésped ZZZ-Verif-Exito, orden
+d5039a6a-…, proveedor 7968fe32-…, y varios ZZZ-TempTest que la
+extensión creó y no mencionó. Todo borrado, confirmado 0 filas ZZZ% en
+huéspedes.
+
+## 2026-10-14 (séptima parte) — ampliación del buscador global y limpieza final
+
+**Buscador global ampliado a toda la configuración.** El usuario pidió
+que el buscador sea capaz de buscar «todo del sistema», incluyendo
+configuración. Se extendió `lib/domain/busqueda.ts` de 4 a **9 ámbitos**:
+agregados `unidades`, `tipos_unidad`, `productos`, `promociones` y
+`usuarios`, cada uno con su área de permisos correspondiente (`config`,
+`punto_venta`, `usuarios`). Se amplió `lib/busqueda/servicio.ts` con
+las 5 interfaces nuevas (`UnidadHit`, `TipoUnidadHit`, `ProductoHit`,
+`PromocionHit`, `UsuarioHit`), las consultas en paralelo y el cálculo
+del total. Se actualizó `/api/buscar/route.ts` para formatear las
+nuevas categorías en el JSON de respuesta en vivo, y
+`/panel/buscar/page.tsx` para mostrar las 5 secciones nuevas siguiendo
+el patrón visual existente. El permiso por rol se respeta: cada ámbito
+solo se busca si el rol tiene acceso a su área. **Ejemplo:** buscar
+«Suite» lleva a tipos de alojamiento, buscar «café» al punto de venta,
+buscar un email encuentra al usuario. Ahora quien escribe «divisas» o
+«promociones» va directo a la pantalla de configuración correspondiente,
+sin adivinar dónde está.
+
+Se corrigió `tests/busqueda.test.ts` (llamaba a `puedeAcceder()` con un
+`Ambito` en vez de un `Area`; ahora usa `puedeBuscar()`) y
+`tests/busqueda-servicio.test.ts` (actualizó el conteo de tablas
+consultadas de 4 a 9, y el cálculo del total para incluir las 5 nuevas
+entidades). `npm run check`: verde completo — lint 0, typecheck 0,
+build 21 s, tests 43 verdes de búsqueda (0 salteados).
+
+**Limpieza final de datos de prueba.** El otro Claude que hizo el
+reconocimiento exploratorio de la app reportó un tipo «QA Verif Tipo»
+que quedó de las pruebas. Se escribió `scripts/limpiar-qa.mjs` que
+busca datos con prefijos QA/ZZZ/TEST en 8 tablas (tipos de unidad,
+unidades, huéspedes, reservas, agencias, proveedores, productos y
+promociones), encuentra sus reservas asociadas por FK y los borra en el
+orden correcto de dependencias. Primera corrida: **18 huéspedes
+ZZZ-TempTest** (quedaron de múltiples ejecuciones de la extensión de QA
+y de verificaciones manuales) y **1 reserva** asociada
+(BP-260909-A6DB), todos eliminados. El tipo QA-VERIF1 que mencionó el
+otro Claude **no existía** cuando se verificó. Segunda corrida del
+script: 0 filas encontradas. Confirmado: **no quedan datos de prueba
+con esos prefijos en ninguna tabla.**
+
+**Hallazgos del otro Claude sobre errores de esquema: eran históricos.**
+Los 5 errores que reportó (`canal_restricciones`, `divergencia`,
+`plantillas_email`, `comprobante_ruta`, `fotos`) ya están resueltos con
+migraciones aplicadas (0087, 0088, 0043, 0079, 0048). Lo que pasa es
+que la **base local de desarrollo tiene drift** (las migraciones no
+están aplicadas ahí, bloqueado por el hook de `db reset`), y esos
+errores se registraron en la tabla `errores` (ADR 0029) **antes** de
+que existieran las columnas/tablas que los resolvieron. Son históricos,
+no bugs actuales. La base **remota** tiene todo aplicado y el sistema
+funciona sin esos fallos.
+
+`npm run check` final: typecheck y lint en verde.
+
+## 2026-10-15 — portada nueva: video institucional, fotos reales y contenido del hotel
+
+**Video institucional en la portada.** El hotel entregó el video de 546 MB en 4K
+(3840×2160, 78 s, 56 Mbps), inservible para web. Se comprimió con ffmpeg a
+**17 MB** (1080p, 24 fps, H.264 con `faststart`) y queda como fondo del hero en
+loop, mudo y con `playsInline`, igual que lo usan los boutique europeos.
+⚠️ **El original traía barras negras incrustadas**: el contenido real es
+3840×1600 (cine 2.4:1) dentro de un marco 16:9. La primera compresión las
+conservó y el hero salía con franjas negras arriba y abajo aunque el CSS dijera
+`object-cover`. Se detectó con `cropdetect` y se recortó en el re-encode. El
+póster (`poster-video.jpg`) se extrae del propio video para que el primer cuadro
+coincida.
+
+**Fotos.** Las 11 que mandó el hotel venían con nombres de WhatsApp y una
+corrupta (1×1 px). Se miraron una por una y se renombraron **por lo que
+muestran**, no por el orden de llegada: la carpeta `habitaciones/` tenía una
+cocina de cabaña y `exteriores/` tenía un living. Quedaron en `hosteria/` y
+`cabanas/`, que son las dos líneas reales del hotel.
+
+**Se recuperaron 16 fotos del sitio viejo** (blancapatagonia.com), que tiene
+material que el hotel no volvió a mandar y es mejor que el nuevo para tres
+cosas: el **ventanal del lobby al atardecer** con el hogar encendido, la
+**gastronomía junto al fuego**, y sobre todo el **campo de lavanda**, que es el
+único diferencial que este hotel tiene y los demás de El Calafate no. Total:
+27 fotos organizadas en `public/hotel/fotos/{hosteria,cabanas,lobby,gastronomia,lavanda}`.
+
+**La portada pasó de 2 secciones a 11.** Se investigaron cinco lodges de
+naturaleza (Explora, Awasi Patagonia, EOLO, Minaret Station) y el patrón común
+es responder, en orden, las preguntas que frenan una reserva. Secciones: hero
+con buscador · presentación con cifras · el ventanal (imagen ancha) ·
+alojamientos (bloques alternados, no tarjetas chicas) · campo de lavanda ·
+gastronomía · experiencias · qué incluye la tarifa · ubicación con distancias ·
+preguntas frecuentes + cancelación · cierre.
+
+⚠️ **Los números son reales y salen del sitio del hotel**: 15 habitaciones,
+25/30/35 m² en la hostería, 38/51/115 m² en las cabañas, hasta 7 personas. Un
+metraje inventado se descubre en el check-in, que es el peor momento posible.
+El email también se corrigió: la primera pasada copió `[email protected]`,
+que es el placeholder de ofuscación de Cloudflare y no una dirección. El real es
+`blancapatagonia@cotecal.com.ar`.
+
+⚠️ **La política de cancelación se lee de la base, no se escribe a mano.** Es
+una promesa de plata: si el hotel la cambia en el panel y la portada sigue
+anunciando la vieja, el huésped reclama lo que leyó. Se agregó
+`politicaCancelacionPublica()` a `lib/catalogo/publico.ts` (cacheada con la
+misma etiqueta `catalogo-publico`, verificado que `anon` puede leer
+`politicas_cancelacion`) y se redacta con `describirPoliticaCancelacion`, la
+misma función del dominio que ya usaba el asistente. Si la lectura falla
+devuelve `[]` y **la sección no se muestra** — mejor nada que un texto por
+defecto que quizá no sea el vigente.
+
+**Móvil.** Verificado a 390 px: cero arrastre lateral, cero imágenes rotas, cero
+texto bajo 11 px. ⚠️ El menú del encabezado **no se esconde tras un
+hamburguesa** (CLAUDE.md, Fase 15: nada oculto); se achica y recorta las dos
+entradas menos usadas. Y se le puso la clase `.toque` a 11 enlaces: la regla de
+44 px de `globals.css` cubre `button`/`select`/`.toque` pero **no `<a>`**, y una
+landing es casi toda enlaces. ⚠️ Medir esto con Playwright da 20 px y es un
+falso positivo: el navegador de prueba reporta `pointer: fine`, así que la
+`@media (pointer: coarse)` no aplica ahí. Se verificó que la clase esté puesta,
+que es lo que decide en un teléfono real.
+
+`npm run check`: lint 0 · typecheck 0 · build 0 · 1776 tests verdes, 0 en rojo.
+
+## 2026-10-15 (segunda parte) — la portada, con el lenguaje visual del lujo
+
+Se analizaron con el navegador —no de vista— tres sitios de hotelería de alta
+gama que pidió el usuario: **White Desert** (Antártida), **Velaa Private
+Island** (Maldivas) y **Tengile MalaMala** (safari). Midiendo estilos
+computados, keyframes y curvas de tiempo aparecieron tres coincidencias que no
+son casualidad, y son las que se implementaron.
+
+**1. Nunca blanco puro ni negro puro.** Velaa usa `#e8e6df` de fondo con texto
+`#4b4335`; Tengile `#e3e1d4` con `#373f1d`. Es lo que separa una página que
+parece un documento de una que parece impresa. Se agregaron cuatro tokens
+nuevos (`papel`, `hueso`, `tinta`, `tinta-suave`) **sin tocar `stone`**: el
+panel usa esa escala en cientos de lugares y ahí el blanco puro es correcto,
+porque es una herramienta de trabajo y no una pieza de marca.
+
+**2. Tipografía grande con interletrado NEGATIVO.** White Desert titula a
+213 px, Velaa a 80 px con `-1.6px`, Tengile a 100 px con `-2px`. Los títulos de
+sección pasaron de `text-3xl/4xl` a `text-[2.1rem]/5xl` con `tracking-[-0.025em]`,
+y el del hero a `text-8xl` con `-0.035em`.
+
+**3. Reveals lentos con curva exponencial.** White Desert revela en 1,4 s con
+`cubic-bezier(0.16, 1, 0.3, 1)`; Tengile en 1,6 s con `(0.19, 1, 0.22, 1)` —
+prácticamente la misma curva. Se adoptó la primera. Arranca rápido y frena
+largo, que es lo que se lee como «caro».
+
+⚠️ **Los reveals son CSS puro, con CERO JavaScript**, usando animaciones
+guiadas por scroll (`animation-timeline: view()`, verificado soportado). Tres
+razones por las que importa y conviene no cambiarlo por un `IntersectionObserver`:
+  1. **No hay dependencia nueva** y la portada sigue siendo un Server Component
+     entero.
+  2. **No existe el parpadeo de contenido invisible.** El patrón habitual
+     —ocultar con CSS y mostrar cuando avisa el JS— deja la página en blanco si
+     el script tarda o falla. Acá el `@supports` no aplica nada cuando el
+     navegador no soporta la propiedad y **el contenido se ve de entrada**, sin
+     animar; Firefox cae hoy en ese caso y la página le funciona igual.
+  3. Corre en el compositor y no compite con el scroll.
+
+**Verificado que `prefers-reduced-motion: reduce` apaga las cuatro animaciones
+y deja el contenido con opacidad 1** —visible, no escondido—, que es el punto
+que suele romperse al hacer esto.
+
+Lo demás que entró: **Ken Burns** de 28 s en el video del hero (respira, no se
+lee como animación), **acercamiento por scroll** en la imagen ancha del
+ventanal, **franja de fotos en movimiento continuo** (patrón `marquee` de
+Tengile; la lista va duplicada a propósito para que el salto sea invisible, y se
+pausa al pasar el mouse), y **zoom lento de 1,2-1,4 s** en todas las imágenes al
+hacerles hover.
+
+**Corrección de jerarquía:** los dos botones azul/ámbar llenos de la sección de
+alojamientos pasaron a enlaces subrayados. Dos botones sólidos a mitad de página
+le compiten al CTA que genera la reserva; el relleno se reserva para el buscador
+del hero y el cierre.
+
+Móvil (390 px): sin arrastre lateral, sin imágenes rotas, logo en una línea
+—se partía en dos—. ⚠️ El video y la imagen del ventanal **sí** sobresalen del
+viewport (401 y 402 px) y es correcto: están escalados dentro de contenedores
+con recorte, que es el efecto funcionando; la página mide 390 px exactos.
+
+`npm run check`: lint 0 · typecheck 0 · build 0 · 1776 tests verdes.
+
+## 2026-10-15 (tercera parte) — más movimiento, FAQ editorial y el asistente en la portada
+
+**La franja de fotos se rehízo.** La primera versión iba con miniaturas
+separadas, esquinas redondeadas y una banda oscura detrás, y se veía como un
+carrusel de plantilla —el usuario lo marcó—. Ninguno de los tres sitios de
+referencia hace eso: usan la foto **a sangre**, sin marco y sin aire entre una
+y otra. Ahora va alta (h-52/h-80), sin separación, sin bordes redondeados y sin
+fondo visible, de modo que se lee como una cinta fotográfica.
+
+**Cuatro animaciones nuevas, todas CSS sin JavaScript:**
+- **Parallax** en las dos imágenes a sangre (`[data-parallax]`): el fondo se
+  desplaza más despacio que la página, con escala fija 1.15 para que el
+  recorrido vertical nunca descubra un borde.
+- **Revelado en cortina** (`[data-cortina]`): la imagen se descubre de abajo
+  hacia arriba con `clip-path`. Es la firma visual de Velaa y Tengile en sus
+  imágenes grandes, y se lee más caro que un fundido.
+- **Encabezado fijo que gana fondo al bajar** (`[data-nav-portada]`, con
+  `animation-timeline: scroll(root)`): transparente sobre el hero, con fondo y
+  desenfoque al entrar en el contenido. Pasó de `absolute` a `fixed`, así que
+  **el botón «Reservar» deja de quedar a un scroll de distancia**.
+- **Entrada escalonada del hero** (`.hero-entra`): lugar → título → bajada →
+  buscador, 90 ms entre cada uno. Va con retardos y no con scroll porque el
+  hero ya está en pantalla al cargar.
+
+**El escalonado de las grillas se logra sin retardos escritos a mano:** se movió
+`data-revelar` del contenedor a cada hijo, y como cada tarjeta entra en pantalla
+en un momento distinto, la línea de tiempo `view()` las escalona sola.
+
+⚠️ **Bug introducido y corregido en la misma pasada:** `data-linea` anima
+`transform: scaleX()`. Se puso sobre el `<dl>` de las listas de habitaciones y
+cabañas, y en vez de dibujar un borde **comprimió horizontalmente todo el
+contenido**: el texto quedaba ilegible mientras duraba la animación. Se vio en
+una captura. El efecto necesita un elemento que SEA la línea; sobre contenido
+real está mal. Hoy vive sobre un `<span>` de 1 px en la lista de preguntas.
+
+**«Un hotel chico, en la mejor vista de la ciudad» → «Acá todo mira al mismo
+lugar».** La primera describía al hotel por su tamaño y se apoyaba en una
+comparación vaga; el usuario la rechazó dos veces, incluida una variante que
+seguía diciendo «hotel chico». La nueva dice lo que hace cierta a la promesa
+—las 15 habitaciones y el ventanal del lobby miran todos al mismo lado— y no
+repite el lago, que ya está en el título del hero.
+
+**Las preguntas frecuentes pasaron de dos columnas de texto a lista numerada.**
+En dos columnas las seis preguntas se leían como un bloque gris, sin dónde
+apoyar la vista. Numeradas y en una sola columna se recorren de arriba abajo,
+el número da el ritmo, cada fila entra lateralmente (`[data-revelar-lado]`, que
+no sube para no competir con el scroll) y la línea divisoria se dibuja al
+entrar.
+
+**El asistente está en la portada** (`app/_publico/asistente-flotante.tsx`).
+Reusa el `ChatAsistente` que ya existía en `/reservar`, con el motor de reglas
+del **ADR 0011** — sin LLM del lado del huésped, a propósito: un modelo que
+alucina un precio o una disponibilidad genera un reclamo que el hotel tiene que
+honrar. Verificado funcionando de punta a punta: preguntarle por el check-in
+devuelve los horarios reales.
+⚠️ **Esto NO contradice «nada oculto»** (CLAUDE.md, Fase 15): esa regla es del
+**panel** y prohíbe esconder acciones y formularios de trabajo. Acá el botón
+está siempre visible y **rotulado** —no es un ícono suelto— y lo que abre es
+una ayuda opcional, no el camino para reservar, que está entero a la vista.
+El panel se desmonta al cerrar, así que la conversación no sobrevive: mismo
+criterio que el borrador de reserva en una computadora compartida.
+
+Móvil (390 px) verificado: sin arrastre lateral, sin imágenes rotas, ningún
+texto con opacidad 0, las tres cortinas reveladas.
+
+`npm run check`: lint 0 · typecheck 0 · build 0 · 1776 tests verdes.
+
+## 2026-10-15 (cuarta parte) — el portal público, unificado con la portada
+
+El usuario reportó que **«no se puede volver atrás»** y pidió que
+`/alojamientos` y `/reservar` siguieran el lenguaje de la portada nueva.
+Revisando las dos aparecieron tres cosas, una de ellas grave.
+
+**1. Las fotos del catálogo eran de STOCK, no del hotel.** `FOTOS`
+(`lib/domain/catalogo.ts`) apuntaba a `public/alojamientos/`, y la de la suite
+era un cuarto minimalista con un volcán nevado de fondo —no se parece en nada a
+una habitación de piedra y madera de El Calafate—. El comentario del propio
+módulo lo admitía («son fotos de stock por categoría»). Publicar la foto de otro
+hotel es prometer algo que no se entrega y el huésped lo descubre al abrir la
+puerta. Las ocho entradas pasaron a las fotos reales de `public/hotel/fotos/`:
+ahora la suite muestra la bañera de hidromasaje junto al hogar, que es justo lo
+que dice su descripción.
+
+⚠️ **Se agregó un test que recorre `FOTOS` y verifica que cada archivo
+exista.** Las rutas se escriben a mano y nada las validaba; un error de tipeo
+deja la tarjeta sin imagen en producción y, como `PortadaAlojamiento` tiene una
+variante de marca para los tipos sin foto, **el hueco no se ve como roto**: se
+descubriría mirando la web. Verificado que el test falla —nombrando el código y
+la ruta— al introducir un typo a propósito.
+
+⚠️ De paso se corrigió el test que había: afirmaba el **nombre literal** del
+archivo (`'/alojamientos/suite-principal.jpg'`), así que cambiar una foto lo
+ponía en rojo sin que nada estuviera mal. Su propio comentario ya explicaba, de
+una vez anterior, que el contrato es «resolver el código al archivo de su
+portada» — ahora se verifica eso y no el nombre.
+
+**2. «No se puede volver atrás»: había un camino, pero invisible.** El único
+enlace al inicio era el nombre del hotel en el encabezado, que funciona y nadie
+descubre. `Marco` (`app/_publico/ui.tsx`) ahora lleva **navegación completa y
+pegajosa** —Alojamientos y Reservar siempre a la vista, el logo al inicio—, así
+que desde cualquier pantalla del portal se llega a las tres sin usar el botón
+del navegador. Es `sticky` porque la falta se siente justo después de scrollear
+un listado largo.
+
+**3. `/reservar` se titulaba «Blanca Patagonia — Gestión Hotelera».** No tenía
+metadata propia y heredaba la del layout raíz, que es el nombre del **sistema
+interno**: un huésped que llega desde Google a reservar leía «Gestión Hotelera»
+en la pestaña y en el resultado del buscador. Ahora dice «Reservar — Blanca
+Patagonia», con su propia descripción.
+
+Lo visual: las tres pantallas comparten la paleta cálida (`papel`/`hueso`/
+`tinta`), el título con la misma escala e interletrado negativo que la portada,
+los reveals por scroll en cada tarjeta —escalonados solos, porque cada una entra
+en pantalla en un momento distinto— y el mismo zoom lento con curva exponencial
+al pasar el mouse. Antes se veían como dos sitios distintos.
+
+Flujo verificado de punta a punta en el navegador: portada → buscar → 7
+opciones para 3 noches con IVA → detalle del tipo → vuelta por el encabezado.
+
+`npm run check`: lint 0 · typecheck 0 · build 0 · **1777 tests verdes** (uno
+más: el de existencia de las portadas).
+
+## 2026-10-15 (quinta parte) — los componentes del portal, con carácter propio
+
+Dos pedidos del usuario: que se pueda volver al inicio (otra vez) y que los
+componentes dejen de verse «genéricos de Claude».
+
+**«Inicio» ahora es una palabra, no un logo.** El nombre del hotel ya enlazaba
+a `/` desde la pasada anterior, y el usuario volvió a reportar que no se puede
+volver. La conclusión es que **un logo clicable es una convención que conoce
+quien diseña webs, no quien reserva una habitación**: si el camino no está
+rotulado, no existe. Se agregó el enlace «Inicio» al `Marco`, delante de los
+demás.
+
+**Por qué se veía genérico, y qué se cambió.** El portal usaba el repertorio
+por omisión de cualquier plantilla: recuadros blancos con `rounded-2xl`, borde
+gris y sombra; botones píldora en azul pleno; comodidades como chips grises
+rellenos; filtros como píldoras azules. Es el aspecto que hace que un catálogo
+de hotel se vea igual que un listado de productos. Las referencias de hotelería
+alta no apoyan el contenido sobre tarjetas —usan tipografía, aire y filetes—,
+así que se bajó el peso de la caja para que mande el contenido:
+
+- **Tarjeta de alojamiento**: se eliminó el recuadro. La foto es el bloque, con
+  su propio radio, y la ficha respira sobre el papel separada por aire en vez
+  de por un borde. La categoría pasó a versalitas con interletrado ancho, que
+  rotula sin competir con el nombre.
+- **`Tarjeta` del portal**: radio chico, filete en vez de borde+sombra, y el
+  título en versalitas.
+- **`Etiqueta`** (comodidades): filete a la izquierda en lugar de píldora
+  rellena, que saturaba la tarjeta cuando hay cinco.
+- **`ChipEnlace`** (filtros): pestañas subrayadas en vez de píldoras azules. Se
+  lee como lo que es —una pestaña— y no como un botón a presionar.
+- **Botones**: `rounded-md` en vez de `rounded-full`/`rounded-xl`.
+
+⚠️ Se respetó la separación que marca el skill `ui-component`: el portal tiene
+su propio set en `app/_publico/ui.tsx` y **no comparte componentes con el
+panel**, aunque algunos se llamen igual. Nada de esto tocó el panel.
+
+Móvil (390 px): sin arrastre, logo y navegación sin superponerse. ⚠️
+«Alojamientos» se oculta en el teléfono por espacio —logo + tres enlaces no
+entran en 390 px—, y se verificó que **el catálogo sigue siendo alcanzable
+desde el contenido** en las tres pantallas (el enlace «Ver todos los
+alojamientos y sus precios» en `/reservar`, «‹ Todos los alojamientos» en el
+detalle y la sección entera en la portada). Un enlace de navegación que se
+oculta sólo es aceptable si el destino tiene otro camino visible.
+
+`npm run check`: lint 0 · typecheck 0 · build 0 · 1777 tests verdes.
+
+## 2026-10-15 (sexta parte) — idiomas terminados, precio vigente, flujo de compra con pasos y escena del manifiesto
+
+**Fase:** portal público. **Pedido:** «seguí mejorando la landing, efectos y detalles como Apple, que se pueda volver para atrás y que todo ande perfecto», después «terminá lo de idiomas», y sobre la marcha la ficha de habitación y el flujo de compra al estilo de Aman.
+
+**Bug real que cortaba la venta.** El botón «Reservar» de los resultados apuntaba a `/reservar/checkout` sin prefijo de idioma, el proxy no lo redirigía (la lista blanca tenía `/reservar` pero no el checkout) y la página daba **404**: el último paso antes de dejar los datos. Se agregó a `RUTAS_CON_IDIOMA` y hay test de regresión (`tests/idiomas-portal.test.ts`).
+
+**Idiomas, terminados en el portal.** Catálogo, ficha, reservar, checkout (incluidos los errores de la Server Action, que reciben `idioma` en un campo oculto), buscador, marco común, asistente y la portada entera salen de los cinco diccionarios. Decisiones:
+
+- **Un enlace sin prefijo conserva el idioma.** El proxy toma el idioma de la página desde la que se hizo clic (`idiomaDeReferencia`, sólo mismo origen) antes que el `Accept-Language`. Sin esto, quien elegía inglés volvía al idioma de su navegador en el primer clic.
+- **Selector de idioma** (`app/_publico/selector-idioma.tsx`): conserva la pantalla y la búsqueda; en el pie siempre a la vista (en el teléfono no entra en el encabezado).
+- **`Marco` y `Aviso` se mudaron a `app/_publico/marco.tsx`**: leen los diccionarios, y `ui.tsx` lo importan componentes de cliente. Los componentes de cliente reciben los textos por props por el mismo motivo.
+- **La política de cancelación se traduce desde las reglas de la base** (`lineasCancelacion`), no traduciendo el texto. En español produce exactamente lo mismo que `describirPoliticaCancelacion` (test).
+- **El asistente sigue siendo de reglas en español** (ADR 0011). Las sugerencias se muestran traducidas pero envían la pregunta en español, y en los otros idiomas un aviso dice que responde en español.
+- **Lo que NO se tradujo:** las pantallas con token (confirmación, pago, factura), que viven fuera del esquema de idiomas a propósito, y los textos del catálogo cargados en la base (descripciones). Las comodidades sí: se reconocen por palabra clave (`lib/domain/comodidades.ts`) y se traducen; una desconocida se muestra tal cual.
+
+**Precio vigente en vez de tabla por temporada.** La ficha y el catálogo muestran un solo precio, el de la temporada en la que cae hoy (`precioVigente`, con `hoyISO()` en la zona del hotel), y cambian solos el día que empieza la siguiente. Fuera de temporada anuncian la próxima marcándola como tal; sin ninguna, «precio a confirmar» (nunca USD 0). La caché del catálogo guarda los rangos, no cuál está vigente.
+
+**Ficha estilo Aman.** Galería con flechas y deslizamiento nativo (`scroll-snap`), precio «desde … / noche, impuestos incluidos», botón, grilla de comodidades con íconos de línea propios y «Ver detalles ↓». ⚠️ Sólo la primera foto es del alojamiento: la pantalla lo aclara debajo (`fotosDe`).
+
+**Flujo con pasos.** `Pasos` (Fechas → Alojamiento → Tus datos → Confirmación) en `/reservar` y el checkout; los pasos hechos son enlaces que vuelven con la búsqueda intacta. El checkout ganó título propio (heredaba «Gestión Hotelera»).
+
+**Movimiento.** Todo con `animation-timeline` en CSS, dentro de `@supports` y `prefers-reduced-motion`: el hero se achica a tarjeta al bajar, filete de progreso, cifras que cuentan (`@property --cifra`; el número real queda en el marcado), «volver arriba» que aparece pasada la primera pantalla, y el **manifiesto como escena fija**: la sección queda clavada, las palabras se encienden en orden sobre una línea de tiempo con nombre (`--manifiesto`), aparecen tres datos y la foto del ventanal sube y se abre a pantalla completa. ⚠️ La altura de la sección está dentro del `@supports`: sin soporte mide su contenido.
+
+**Teléfono vertical.** Variante `telefono:` (`max-width: 639px` **y** `orientation: portrait`): márgenes más chicos, llegada y salida lado a lado en el hero, y la flecha del hero oculta para que no tape el enlace.
+
+**Verificación.** Recorrido en navegador (Playwright) en español e inglés: portada → catálogo → ficha → atrás → atrás → búsqueda → checkout → paso 2 → atrás, sin errores de consola y sin arrastre lateral a 390 px. `npm run check`: lint, typecheck y build en verde; 1804 tests verdes. ⚠️ Contra la base local hay 18 fallos **ajenos a este cambio**: la base local no tiene aplicadas las migraciones 0096–0113 (falta la tabla `canal_restricciones`, la columna `divergencia_desde`, etc.). Se resuelve reseteando la base local y volviendo a sembrar usuarios, que no se hizo porque borra los usuarios de auth.
+
+## 2026-10-15 (séptima parte) — pagar la seña dentro del checkout, vinculado a gestión
+
+**Pedido:** «sumá el apartado para pagar, la pasarela de pagos y vinculá todo con gestión», con una captura del paso «Confirm your stay» de Aman.
+
+**Lo que ya existía y no se tocó:** las pasarelas (Stripe, MercadoPago, Payway y el simulador, ADR 0027/0038), el webhook que confirma el cobro y avanza la reserva, y la pantalla de pago por token. El hueco era de flujo: el huésped reservaba, llegaba a la confirmación y recién ahí veía cómo pagar.
+
+**Checkout en dos columnas, como Aman.** A la izquierda: datos, **forma de pago** (los medios habilitados con el importe exacto de la seña en la moneda de cada uno, más «reservar ahora y pagar después»), pedido especial, la política de cancelación a la vista, aceptación de condiciones (obligatoria, también del lado del servidor) y consentimiento de promociones. A la derecha, fijo: el resumen con el precio noche por noche **sin IVA**, subtotal, IVA discriminado (ADR 0004), seña, saldo y total. El botón dice lo que se va a debitar en la moneda elegida.
+
+⚠️ **No hay campo de tarjeta**, aunque Aman lo tenga: se carga en la página de la pasarela. Así el hotel sigue en SAQ-A de PCI-DSS (ADR 0025, `tests/garantia-tarjeta.test.ts`).
+
+**Al confirmar:** se crea la reserva (`pendiente`), se encolan la confirmación y el aviso interno como antes, y si eligió pagar se abre el cobro de la seña y se lo manda a la pasarela. Si la pasarela no abre, la reserva no se pierde: cae a la confirmación con `?pago=fallo`, que lo explica y ofrece pagar desde ahí. Quien confirma el pago sigue siendo el webhook.
+
+**Una sola regla de plata para los dos caminos.** La lógica de qué medios se ofrecen (`lib/payments/opciones.ts`) y la de abrir el cobro (`lib/payments/portal.ts`, `abrirCobroDelPortal`) salieron de la pantalla de pago por token y ahora las usan el checkout y esa pantalla. El importe nunca llega del formulario: se calcula con `estadoDeCobro`. `PAGAR_DESPUES` vive en `lib/domain/cobro.ts` porque un archivo `'use server'` sólo puede exportar funciones async.
+
+**Vínculo con gestión:**
+- La reserva entra por canal `web` y el pago aparece en su cuenta por el webhook, como ya pasaba.
+- El pedido especial va a `reservas.notas`, marcado como «Pedido del huésped (web)», y la ficha de la reserva ahora muestra las notas a la vista (antes sólo se veían dentro de «Editar ficha»).
+- El consentimiento va a `huespedes.acepta_promociones` y sólo se escribe en `true`: no tildarlo en una reserva nueva no revoca un opt-in anterior. La ficha del huésped ahora lo muestra.
+
+**Verificación.** Tests nuevos de la acción (`tests/acciones/reserva-publica-checkout.test.ts`: condiciones obligatorias, mensajes por idioma). Los 15 archivos de pagos (201 tests) pasan contra la base local. `npm run check` en verde (1807 tests). Navegador a 1280 y 390 px en español e inglés, sin errores de consola. ⚠️ **No se envió el formulario de punta a punta**: el servidor de desarrollo apunta a la base real del hotel y habría creado una reserva de verdad. Para recorrerlo entero hace falta levantarlo contra la base local (actualizada) con `PAGO_PROVIDER=simulado`.
+
+## 2026-10-15 (octava parte) — el checkout, con la sobriedad de Aman
+
+**Pedido:** «seguí mejorando, haciendo más elegante la pasarela», con la captura del paso «Confirm your stay» de Aman.
+
+**Qué cambió (sólo presentación, la lógica de cobro es la de la parte anterior):**
+- Formulario y resumen sin esquinas redondeadas ni sombras: marco de filete fino. El título («Casi listo») va centrado y en peso liviano **dentro** del formulario, como en Aman, y es el `h1` de la página.
+- Etiquetas en versalitas con interletrado, campos rectos, secciones separadas por filetes.
+- Medios de pago como una lista con filetes y un círculo de selección redibujado (sigue siendo un `radio` nativo: teclado y lector de pantalla funcionan sin JavaScript extra). Las tarjetas aceptadas se nombran **en texto** junto al título —no con logos, para no reproducir marcas de terceros—.
+- Botón oscuro, rectangular, en versalitas, con el importe en la moneda elegida.
+- Validación por campo con `:user-invalid`: el borde rojo y el mensaje («Ingresá un email válido») aparecen recién cuando la persona tocó el campo y lo dejó mal, no al cargar la página. El servidor valida todo igual.
+- Las casillas son nativas, teñidas con el color de la tinta: el tilde, el foco y el anuncio al lector los resuelve el navegador.
+
+⚠️ Se mantuvo **una sola familia tipográfica** (Inter, ADR 0026). Aman usa una serif; acá la elegancia sale del peso liviano, el interletrado y el aire, sin sumar una fuente que el ADR descartó.
+
+**Verificación.** Navegador a 1280 y 390 px, un solo `h1`, sin arrastre lateral ni errores de consola. `npm run check` en verde (1807 tests).

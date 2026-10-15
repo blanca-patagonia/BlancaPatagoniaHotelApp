@@ -324,6 +324,21 @@ export function EstadoUnidad({
  * que la Fase 25 lo rehiciera en tarjetas y dejara de ser una tabla ancha).
  * `contain` corta esa propagación hacia adentro y deja que el scroll vertical
  * siga siendo de la página.
+ *
+ * `contain-paint` (QA 2026-10-14) es el mismo arreglo que ya tiene la grilla
+ * de ocupación, aplicado acá porque el bug es del propio componente: el
+ * `<caption className="sr-only">` de abajo —y cualquier `sr-only` que un
+ * llamador meta en un `<th>`, como la columna de «Baja / reactivar» sin
+ * etiqueta visible— es `position: absolute` por la utilidad de Tailwind. Sin
+ * un ancestro que sea *containing block*, ese absoluto se escapa de este
+ * `overflow-x-auto` y pasa a contar en el `scrollWidth` de `<html>`, no del
+ * contenedor: a 254 px medí `document.documentElement.scrollWidth` en 465 px
+ * aunque `document.body.scrollWidth` daba 260 (casi sin desborde) — la tabla
+ * no se ve rota, es invisible, pero la PÁGINA arrastra de costado hacia
+ * espacio vacío. Mismo mecanismo que el comentario de la grilla de ocupación
+ * ya describe para sus celdas `sticky`; ahí tampoco lo frenaba
+ * `overflow-x: hidden` y sí `contain: paint`, por imponer un recorte de
+ * pintado duro en vez de depender de qué establece containing block.
  */
 export function Tabla({
   children,
@@ -351,7 +366,7 @@ export function Tabla({
           Deslizá la tabla hacia el costado para ver el resto de las columnas.
         </p>
       )}
-      <div className="overflow-x-auto overscroll-x-contain">
+      <div className="contain-paint overflow-x-auto overscroll-x-contain">
         <table className="min-w-full text-sm">
           <caption className="sr-only">{resumen}</caption>
           {children}

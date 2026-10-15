@@ -4,6 +4,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { traerTodo } from '@/lib/paginado'
 import { hoyISO, sumarDias, parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
 import { importe } from '@/lib/domain/moneda'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import {
   listaDeDesayuno,
   resumenDeVentas,
@@ -159,7 +160,7 @@ export default async function ServicioPage({
       return {
         reservaCodigo: e.reserva!.codigo,
         unidad: e.unidad!.nombre,
-        huesped: h ? `${h.apellido}, ${h.nombre}` : 'Sin huésped',
+        huesped: h ? nombreCompleto(h) : 'Sin huésped',
         checkIn: ci,
         checkOut: co,
         huespedes: e.huespedes ?? 1,
@@ -191,7 +192,7 @@ export default async function ServicioPage({
       const h = c.reserva!.huesped
       return {
         reservaCodigo: c.reserva!.codigo,
-        huesped: h ? `${h.apellido}, ${h.nombre}` : 'Sin huésped',
+        huesped: h ? nombreCompleto(h) : 'Sin huésped',
         // Puede no tener unidad todavía: llegó antes del check-in.
         unidad: c.reserva!.estadias?.[0]?.unidad?.nombre ?? null,
         cubiertos: c.cantidad,

@@ -19,7 +19,12 @@ import {
   esMonedaExtranjera,
   formatearLocal,
 } from '@/lib/domain/divisas'
-import { registrarMovimiento, regenerarEnlacePortal, revocarEnlacePortal } from '../actions'
+import {
+  registrarMovimiento,
+  regenerarEnlacePortal,
+  revocarEnlacePortal,
+  eliminarComprobantePagoAgencia,
+} from '../actions'
 import { type CondicionIva } from '@/lib/domain/facturacion'
 import {
   Encabezado,
@@ -36,7 +41,7 @@ import {
 import { Icono } from '../../_components/iconos'
 import { BotonEnvio } from '../../_components/boton-envio'
 import { SubirFoto } from '../../_components/subir-foto'
-import { FotoAdjunta } from '../../_components/foto-adjunta'
+import { FotoAdjuntaEliminable } from '../../_components/foto-adjunta-eliminable'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
 import { registrarFalla } from '@/lib/acciones'
 import { parsearPeriodo, hoyISO, formatoFechaCorta } from '@/lib/fechas'
@@ -94,12 +99,14 @@ const MENSAJES_ERROR: Record<string, string> = {
   activo: 'No se pudo cambiar el estado de la cuenta.',
   enlace: 'No se pudo actualizar el enlace del portal. El anterior sigue vigente.',
   comprobante: 'No se pudo subir el comprobante. Probá de nuevo o registrá el movimiento sin adjunto.',
+  comprobante_eliminar: 'No se pudo eliminar el comprobante. Probá de nuevo.',
 }
 
 const MENSAJES_OK: Record<string, string> = {
   datos: 'Datos actualizados.',
   enlace: 'Enlace nuevo generado. El anterior dejó de funcionar: reenviale el nuevo al socio.',
   enlace_revocado: 'Enlace dado de baja. El socio ya no puede entrar al portal.',
+  comprobante_eliminado: 'Comprobante eliminado.',
 }
 
 export default async function AgenciaDetallePage({
@@ -438,7 +445,12 @@ export default async function AgenciaDetallePage({
                         su portal. */}
                     {m.comprobante_ruta && (
                       <div className="mt-2">
-                        <FotoAdjunta ruta={m.comprobante_ruta} alt={`Comprobante de ${m.concepto || ETIQUETAS_MOVIMIENTO[m.tipo]}`} />
+                        <FotoAdjuntaEliminable
+                          ruta={m.comprobante_ruta}
+                          alt={`Comprobante de ${m.concepto || ETIQUETAS_MOVIMIENTO[m.tipo]}`}
+                          accion={eliminarComprobantePagoAgencia}
+                          camposOcultos={{ agencia_id: id, movimiento_id: m.id }}
+                        />
                       </div>
                     )}
                   </td>

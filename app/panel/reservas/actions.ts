@@ -108,6 +108,7 @@ export interface EstadoNuevaReserva {
     segmento?: string
     voucher?: string
     descuento_pct?: string
+    promocion_id?: string
     checkin_inmediato?: string
   }
 }
@@ -160,6 +161,7 @@ export async function crearReservaAction(
   const segmentoCrudo = String(formData.get('segmento') ?? '')
   const voucher = String(formData.get('voucher') ?? '').trim()
   const descuentoPct = Math.min(100, Math.max(0, Number(formData.get('descuento_pct')) || 0))
+  const promocionId = String(formData.get('promocion_id') ?? '').trim() || null
 
   // Se devuelve tal cual vino para reponer el formulario ante cualquier error.
   const valores = {
@@ -182,6 +184,7 @@ export async function crearReservaAction(
     segmento: segmentoCrudo,
     voucher,
     descuento_pct: String(descuentoPct),
+    promocion_id: promocionId ?? '',
     checkin_inmediato: checkinInmediato ? '1' : '',
   }
 
@@ -301,6 +304,7 @@ export async function crearReservaAction(
     noMover,
     // En la misma transacción que la reserva (migración 0083). Ver abajo.
     agenciaId: agenciaId || null,
+    promocionId,
     comercial: {
       plan,
       garantia,
@@ -1582,6 +1586,142 @@ export async function crearReservaGrupal(
   }
 
   redirect(`/panel/reservas?grupo=${grupoId}`)
+}
+
+/**
+ * Edita la ficha de una reserva: plan, segmento, voucher, notas, cunas, «no
+ * mover» y la composición (adultos/menores/bebés). Hasta ahora, una vez creada,
+ * una reserva solo se podía reprogramar, mudar de unidad o cancelar y volver a
+ * cargar — no había forma de corregir un dato comercial o de ocupación sin
+ * pasar por uno de esos tres caminos, que tocan cosas que acá no cambian
+ * (fechas, unidad, estado).
+ *
+ * ── Por qué NO recotiza ──────────────────────────────────────────────────────
+ *
+ * Ninguno de estos campos entra en `cotizar_estadia` ni en `calcularEstadia`
+ * (`lib/domain/catalogo.ts`): el precio depende del tipo de unidad, la fecha y
+ * `tarifa_tipo`, no de quién se aloja ni de qué plan de comidas eligió. `plan`
+ * es descriptivo desde que el desayuno quedó siempre incluido (migración 0098);
+ * la composición solo importa para la capacidad, no para la tarifa. Por eso esta
+ * acción nunca toca `reservas.total`: si algún día se agrega un campo que sí
+ * afecte el precio, va en reprogramar/mudar —que ya recotizan—, no acá.
+ *
+ * ── Validación de capacidad, reusando el dominio ────────────────────────────
+ *
+ * `validarOcupantes` (`lib/domain/ocupantes.ts`) es la misma regla que ya usa el
+ * alta: los bebés no ocupan plaza, las camas extra amplían el tope. `huespedes`
+ * lo recalcula la función SQL (`greatest(adultos + menores, 1)`, misma
+ * derivación que `crear_reserva`) para que nunca quede desincronizado del
+ * desglose.
+ *
+ * ── Atomicidad y auditoría ───────────────────────────────────────────────────
+ *
+ * `editar_ficha_reserva` (migración 0112, issue #85) escribe `reservas` y
+ * `estadias` en una sola transacción: antes eran dos `update` sueltos y un
+ * fallo en el segundo dejaba la ficha a medio editar sin poder volver atrás.
+ * Las dos escrituras quedan auditadas solas: `reservas_ficha_auditoria` y
+ * `estadias_ficha_auditoria` (migración 0110) reusan el mismo trigger
+ * genérico que ya audita pagos, tarifas y el estado de una reserva.
+ */
+export async function editarFichaReserva(formData: FormData): Promise<void> {
+  await requerirAcceso('reservas')
+  const id = String(formData.get('reserva_id') ?? '')
+  if (!id) redirect('/panel/reservas')
+
+  const plan = String(formData.get('plan') ?? '')
+  const segmento = String(formData.get('segmento') ?? '')
+  const voucher = String(formData.get('voucher') ?? '').trim().slice(0, 200)
+  const notas = String(formData.get('notas') ?? '').trim().slice(0, 2000)
+  const noMover = formData.get('no_mover') === '1'
+
+  /*
+    Lo que la persona tecleó, para repoblar el formulario si una validación
+    corta más abajo (auditoría QA/UX 2026-10-14: antes, cualquier error
+    recargaba la página con los valores VIEJOS de la base, y lo recién
+    escrito se perdía sin aviso). Van los crudos de `formData`, no los ya
+    recortados/coercidos arriba: así un número mal tipeado se ve en el campo
+    tal como se lo escribió, en vez de aparecer vacío.
+  */
+  const camposPrevios = new URLSearchParams({
+    v_plan: plan,
+    v_segmento: segmento,
+    v_voucher: String(formData.get('voucher') ?? ''),
+    v_notas: String(formData.get('notas') ?? ''),
+    v_adultos: String(formData.get('adultos') ?? ''),
+    v_menores: String(formData.get('menores') ?? ''),
+    v_bebes: String(formData.get('bebes') ?? ''),
+    v_cunas: String(formData.get('cunas') ?? ''),
+    v_no_mover: noMover ? '1' : '0',
+  }).toString()
+
+  if (!PLANES.includes(plan as Plan)) {
+    redirect(`/panel/reservas/${id}?error=ficha_plan&${camposPrevios}`)
+  }
+  if (!SEGMENTOS.includes(segmento as Segmento)) {
+    redirect(`/panel/reservas/${id}?error=ficha_segmento&${camposPrevios}`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { data: estadiaData, error: eEstadia } = await supabase
+    .from('estadias')
+    .select('id, camas_extra, tipo:tipos_unidad(capacidad_max)')
+    .eq('reserva_id', id)
+    .limit(1)
+    .single()
+  // Sin la estadía no hay a qué unidad validar la capacidad, ni dónde
+  // guardar: no tiene sentido repoblar un formulario que no se puede volver
+  // a enviar.
+  if (eEstadia || !estadiaData) redirect(`/panel/reservas/${id}?error=ficha_leer`)
+
+  // PostgREST tipa el embed a-uno como arreglo (ver AGENTS.md).
+  const estadia = estadiaData as unknown as {
+    id: string
+    camas_extra: number
+    tipo: { capacidad_max: number }[] | { capacidad_max: number } | null
+  }
+  const capacidadMax = Array.isArray(estadia.tipo) ? estadia.tipo[0]?.capacidad_max : estadia.tipo?.capacidad_max
+
+  const ocupantes: Ocupantes = {
+    adultos: Math.trunc(Number(formData.get('adultos'))),
+    menores: Math.trunc(Number(formData.get('menores'))),
+    bebes: Math.trunc(Number(formData.get('bebes'))),
+    camasExtra: Number(estadia.camas_extra),
+    cunas: Math.trunc(Number(formData.get('cunas'))),
+  }
+  const problemasOcupantes = validarOcupantes(ocupantes, capacidadMax)
+  if (problemasOcupantes.length > 0) {
+    // El motivo puntual (de qué capacidad se pasó, o qué falta) viaja en
+    // `detalle`: es el mismo texto que ya usa `crearReservaAction` al
+    // devolver `{ error }`, y acá se perdía por completo detrás de un
+    // mensaje genérico que listaba las tres condiciones posibles en vez de
+    // decir cuál falló (auditoría QA/UX 2026-10-14).
+    redirect(
+      `/panel/reservas/${id}?error=ficha_ocupantes&detalle=${encodeURIComponent(problemasOcupantes[0])}&${camposPrevios}`,
+    )
+  }
+
+  // Las dos escrituras (reservas + estadias), en una transacción
+  // (migración 0112, issue #85): antes eran dos `update` sueltos, y un
+  // fallo en el segundo dejaba la ficha a medio editar sin poder volver
+  // atrás.
+  const { data: resultado, error: eEditar } = await supabase.rpc('editar_ficha_reserva', {
+    p_reserva_id: id,
+    p_estadia_id: estadia.id,
+    p_plan: plan,
+    p_segmento: segmento,
+    p_voucher: voucher,
+    p_notas: notas,
+    p_adultos: ocupantes.adultos,
+    p_menores: ocupantes.menores,
+    p_bebes: ocupantes.bebes,
+    p_cunas: ocupantes.cunas,
+    p_no_mover: noMover,
+  })
+  cortarSiFalla(eEditar, `/panel/reservas/${id}?${camposPrevios}`, 'ficha_guardar')
+  const r = resultado as { ok: boolean; motivo?: string } | null
+  if (!r?.ok) redirect(`/panel/reservas/${id}?error=ficha_guardar&${camposPrevios}`)
+
+  redirect(`/panel/reservas/${id}?ok=ficha`)
 }
 
 /**

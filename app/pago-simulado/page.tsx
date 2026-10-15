@@ -4,7 +4,8 @@ import { formatearUSD } from '@/lib/domain/moneda'
 import { formatearLocal } from '@/lib/domain/divisas'
 import { MONEDA_BASE, type MonedaCobro } from '@/lib/domain/cobro'
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
-import { Marco, Tarjeta, Mensaje, Titulo, botonPublico } from '../_publico/ui'
+import { Tarjeta, Mensaje, Titulo, botonPublico } from '../_publico/ui'
+import { Marco } from '../_publico/marco'
 import { resolverPagoSimulado } from './actions'
 
 /**

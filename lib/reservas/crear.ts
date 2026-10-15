@@ -2,8 +2,8 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
 import { registrarFalla } from '@/lib/acciones'
-import { diasEntre } from '@/lib/fechas'
-import type { TarifaTipo } from '@/lib/domain/precios'
+import { diasEntre, hoyISO } from '@/lib/fechas'
+import type { TarifaTipo, Promocion } from '@/lib/domain/precios'
 import {
   segmentoDeCanal,
   type EstadoReserva,
@@ -62,6 +62,20 @@ export interface ParamsReserva {
    */
   agenciaId?: string | null
 
+  /**
+   * Promoción elegida, si hay. Va ANTES de cotizar —no solo al insertar—
+   * porque el descuento se calcula sobre el subtotal (`calcularEstadia`,
+   * `lib/domain/precios.ts`). Si el id no corresponde a una promoción
+   * activa y vigente, el alta se corta con un error: aplicar sin avisar
+   * cobraría de más sin que nadie lo note, y no aplicar sin avisar
+   * cobraría de más sin que nadie lo note tampoco — las dos formas de
+   * fallar en silencio que este proyecto evita en todos lados. Que la
+   * promoción no **cumpla sus condiciones** (`min_noches`,
+   * `anticipacion_dias`) es distinto: ahí sí corresponde cotizar sin
+   * descuento, porque es la regla de la promoción funcionando, no un error.
+   */
+  promocionId?: string | null
+
   /** Datos comerciales (paso 6). Todos opcionales, con los valores por omisión de la base. */
   comercial?: {
     plan?: Plan
@@ -118,6 +132,42 @@ export async function crearReservaEnUnidadLibre(
     }
   }
 
+  // 1,5) Promoción, si se eligió una.
+  //
+  // Se valida contra la base real (nunca lo que mande el formulario): activa y
+  // dentro de su ventana de vigencia. Si no cumple, se corta — ver el porqué en
+  // el comentario de `ParamsReserva.promocionId`.
+  let promocion: Promocion | undefined
+  if (p.promocionId) {
+    const hoy = hoyISO()
+    const { data: promoData, error: ePromo } = await client
+      .from('promociones')
+      .select('tipo, valor, condiciones, vigencia_desde, vigencia_hasta')
+      .eq('id', p.promocionId)
+      .eq('activo', true)
+      .maybeSingle()
+    if (ePromo) {
+      registrarFalla(ePromo, 'verificación de promoción al crear una reserva')
+      return { ok: false, error: 'No se pudo verificar la promoción. No se creó nada.' }
+    }
+    const vigente =
+      promoData &&
+      (!promoData.vigencia_desde || promoData.vigencia_desde <= hoy) &&
+      (!promoData.vigencia_hasta || promoData.vigencia_hasta >= hoy)
+    if (!vigente) {
+      return { ok: false, error: 'Esa promoción no está vigente. Elegí otra o sacala.' }
+    }
+    const condiciones = (promoData.condiciones ?? {}) as {
+      min_noches?: number
+      anticipacion_dias?: number
+    }
+    promocion = {
+      tipo: promoData.tipo as Promocion['tipo'],
+      valor: Number(promoData.valor),
+      condiciones,
+    }
+  }
+
   // 2) Cotizar según el canal.
   //
   // El cliente se pasa explícitamente. Antes no se pasaba y `cotizarEstadia`
@@ -130,6 +180,8 @@ export async function crearReservaEnUnidadLibre(
     checkIn: p.checkIn,
     checkOut: p.checkOut,
     tarifaTipo: p.tarifaTipo,
+    promocion,
+    anticipacionDias: diasEntre(hoyISO(), p.checkIn),
     cliente: client,
   })
   if (cot.faltanTarifas) {
@@ -191,6 +243,10 @@ export async function crearReservaEnUnidadLibre(
     // con un `update` aparte y un fallo ahí dejaba la reserva sin agencia: sin
     // saber a quién facturarle ni qué cuenta corriente debitar.
     p_agencia_id: p.agenciaId ?? null,
+
+    // La promoción, ya validada arriba. `crear_reserva` la acepta desde la
+    // 0039 (parámetro #12) — nadie la había usado hasta ahora.
+    p_promocion_id: p.promocionId ?? null,
   })
   if (error) {
     if (error.code === '23P01') {

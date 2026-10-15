@@ -12,7 +12,8 @@ import {
 import { hoyISO } from '@/lib/fechas'
 import { cortarSiFalla } from '@/lib/acciones'
 import { avisarIncidenteMantenimiento } from '@/lib/notificaciones/eventos'
-import { subirAdjunto } from '@/lib/storage'
+import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
+import { registrarAviso } from '@/lib/registro'
 
 export interface EstadoOrden {
   error?: string
@@ -311,4 +312,46 @@ export async function agregarFotoOrden(formData: FormData): Promise<void> {
 
   revalidatePath(`/panel/mantenimiento/${ordenId}`)
   redirect(`/panel/mantenimiento/${ordenId}?ok=foto`)
+}
+
+/**
+ * Quita una foto de una orden de mantenimiento: del arreglo `fotos` y del
+ * bucket. Una foto equivocada o con datos personales de un huésped (una
+ * persona de fondo, un documento sobre la mesa) quedaba para siempre —nadie
+ * llamaba a `eliminarAdjunto`, que ya existía desde la migración 0099—.
+ *
+ * Se borra de la base PRIMERO: si `eliminarAdjunto` fallara después, la peor
+ * consecuencia es un archivo huérfano en el bucket (invisible, no se sirve sin
+ * su ruta en `fotos`). Al revés —borrar el archivo y que el `update` fallara—
+ * dejaría la ficha mostrando una foto que ya no existe.
+ */
+export async function eliminarFotoOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
+
+  const ordenId = String(formData.get('orden_id') ?? '')
+  const ruta = String(formData.get('ruta') ?? '')
+  if (!ordenId || !ruta) redirect(`/panel/mantenimiento/${ordenId}?error=foto_eliminar`)
+
+  const supabase = await crearClienteServidor()
+  const { data: actual, error: errorLectura } = await supabase
+    .from('ordenes_mantenimiento')
+    .select('fotos')
+    .eq('id', ordenId)
+    .single()
+  if (errorLectura) {
+    cortarSiFalla(errorLectura, `/panel/mantenimiento/${ordenId}`, 'foto_leer')
+  }
+
+  const fotos = (((actual as { fotos: string[] } | null)?.fotos) ?? []).filter((f) => f !== ruta)
+  const { error } = await supabase
+    .from('ordenes_mantenimiento')
+    .update({ fotos })
+    .eq('id', ordenId)
+  cortarSiFalla(error, `/panel/mantenimiento/${ordenId}`, 'foto_eliminar')
+
+  await eliminarAdjunto(ruta)
+  await registrarAviso('adjunto_eliminado', { modulo: 'mantenimiento', orden_id: ordenId, ruta })
+
+  revalidatePath(`/panel/mantenimiento/${ordenId}`)
+  redirect(`/panel/mantenimiento/${ordenId}?ok=foto_eliminada`)
 }

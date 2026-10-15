@@ -2,6 +2,15 @@
 
 import { useState } from 'react'
 import { CAMPO_PUBLICO, botonPublico } from './ui'
+import { fechaCortaEn, rutaConIdioma, type Idioma } from '@/lib/i18n/idiomas'
+import type { Diccionario } from '@/lib/i18n/diccionarios/es'
+
+/*
+  Los textos llegan por props y no se importan acá: este es un componente de
+  cliente, e importar `@/lib/i18n` mandaría los cinco diccionarios al
+  navegador para usar uno solo.
+*/
+type Textos = Diccionario['buscador']
 
 /*
   Buscador de estadía — barra prominente y persistente.
@@ -53,21 +62,23 @@ interface Props {
   variante?: 'hero' | 'barra'
   /** Se preserva al reenviar el formulario desde la ficha de un alojamiento. */
   tipo?: string
+  idioma: Idioma
+  t: Textos
 }
 
 /** «3 sep — 6 sep · 2 huéspedes», o una invitación si todavía no se eligió. */
-function resumen(checkIn: string, checkOut: string, huespedes: number): string {
-  const personas = `${huespedes} ${huespedes === 1 ? 'huésped' : 'huéspedes'}`
-  if (!checkIn || !checkOut) return `Elegí las fechas · ${personas}`
-
-  // Se arma sin `new Date()` para no correr el día por zona horaria: las fechas
-  // viajan como `YYYY-MM-DD` y acá solo se leen sus partes (ver lib/fechas.ts).
-  const corta = (iso: string) => {
-    const [, mes, dia] = iso.split('-')
-    const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-    return `${Number(dia)} ${MESES[Number(mes) - 1] ?? ''}`.trim()
-  }
-  return `${corta(checkIn)} — ${corta(checkOut)} · ${personas}`
+function resumen(
+  checkIn: string,
+  checkOut: string,
+  huespedes: number,
+  idioma: Idioma,
+  t: Textos,
+): string {
+  const personas = huespedes === 1 ? t.huesped : t.huespedesN.replace('{n}', String(huespedes))
+  if (!checkIn || !checkOut) return `${t.elegiFechas} · ${personas}`
+  // `fechaCortaEn` formatea en UTC: las fechas viajan como `YYYY-MM-DD` y no
+  // se pueden correr de día por la zona del navegador (ver lib/fechas.ts).
+  return `${fechaCortaEn(checkIn, idioma)} — ${fechaCortaEn(checkOut, idioma)} · ${personas}`
 }
 
 export function BuscadorEstadia({
@@ -78,6 +89,8 @@ export function BuscadorEstadia({
   salidaPorDefecto,
   variante = 'barra',
   tipo,
+  idioma,
+  t,
 }: Props) {
   const [abierto, setAbierto] = useState(false)
   const esHero = variante === 'hero'
@@ -87,7 +100,7 @@ export function BuscadorEstadia({
       {/* Etiqueta visible en los tres campos: el `placeholder` desaparece al
           escribir y deja al huésped sin saber qué está cargando (Fase 15). */}
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-stone-700">Llegada</span>
+        <span className="text-sm font-medium text-stone-700">{t.llegada}</span>
         <input
           type="date"
           name="check_in"
@@ -97,7 +110,7 @@ export function BuscadorEstadia({
         />
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-stone-700">Salida</span>
+        <span className="text-sm font-medium text-stone-700">{t.salida}</span>
         <input
           type="date"
           name="check_out"
@@ -107,7 +120,7 @@ export function BuscadorEstadia({
         />
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-stone-700">Huéspedes</span>
+        <span className="text-sm font-medium text-stone-700">{t.huespedes}</span>
         <input
           type="number"
           name="huespedes"
@@ -126,24 +139,24 @@ export function BuscadorEstadia({
   const formulario = (
     <form
       method="get"
-      action="/reservar"
+      action={rutaConIdioma('/reservar', idioma)}
       className={
         esHero
-          ? 'grid gap-x-4 gap-y-4 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end'
+          ? 'grid gap-x-4 gap-y-4 telefono:grid-cols-2 telefono:gap-x-3 telefono:gap-y-3 telefono:[&>*:nth-child(n+3)]:col-span-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end'
           : 'grid gap-x-3 gap-y-4 sm:grid-cols-[1fr_1fr_7rem_auto] sm:items-end'
       }
     >
       {tipo && <input type="hidden" name="tipo" value={tipo} />}
       {campos}
       <button type="submit" className={botonPublico('primario', 'w-full sm:w-auto')}>
-        Buscar
+        {t.buscar}
       </button>
     </form>
   )
 
   if (esHero) {
     return (
-      <div className="w-full rounded-2xl border border-stone-200 bg-white p-5 shadow-lg sm:p-6">
+      <div className="w-full rounded-2xl border border-stone-200 bg-white p-5 shadow-lg telefono:p-4 sm:p-6">
         {formulario}
       </div>
     )
@@ -152,7 +165,7 @@ export function BuscadorEstadia({
   return (
     /* `sticky` y no `fixed`: no tapa contenido al final de la página ni pelea
        con el teclado del teléfono cuando se enfoca un campo. */
-    <div className="sticky top-0 z-30 -mx-5 mb-6 border-b border-stone-200 bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+    <div id="buscador" className="sticky top-0 z-30 -mx-5 mb-6 scroll-mt-20 border-b border-stone-200 bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6">
       {/* Móvil: resumen legible + botón rotulado. Nunca un ícono solo. */}
       <button
         type="button"
@@ -163,10 +176,10 @@ export function BuscadorEstadia({
       >
         <span className="min-w-0">
           <span className="block truncate font-medium text-stone-800">
-            {resumen(checkIn, checkOut, huespedes)}
+            {resumen(checkIn, checkOut, huespedes, idioma, t)}
           </span>
           <span className="block text-sm text-stone-500">
-            {abierto ? 'Tocá para cerrar' : 'Tocá para cambiar la búsqueda'}
+            {abierto ? t.tocaParaCerrar : t.tocaParaCambiar}
           </span>
         </span>
         <span aria-hidden="true" className="shrink-0 text-stone-400">

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarAccesoHuesped } from '@/lib/auditoria/accesos'
+import { nombreCompleto } from '@/lib/domain/huespedes'
 import { registrarFalla } from '@/lib/acciones'
 import {
   transicionesPosibles,
@@ -11,6 +12,8 @@ import {
   ETIQUETAS_PLAN,
   ETIQUETAS_SEGMENTO,
   noShowEsCobrable,
+  PLANES,
+  SEGMENTOS,
   type EstadoReserva,
   type Garantia,
   type Plan,
@@ -34,6 +37,7 @@ import {
   emitirFactura,
   reprogramarReserva,
   cambiarUnidadReserva,
+  editarFichaReserva,
   fijarOrigenDelPago,
   verificarTarjetaGarantia,
   generarLinkDePago,
@@ -132,7 +136,8 @@ const MENSAJES_ERROR: Record<string, string> = {
   anulada: MENSAJES_NO_FACTURABLE.anulada,
   ya_facturada: MENSAJES_NO_FACTURABLE.ya_facturada,
   cuit: 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped o de la agencia.',
-  cae: 'El proveedor de facturación rechazó el comprobante. Revisá los importes.',
+  cae:
+    'El proveedor de facturación rechazó el comprobante. Revisá los importes y volvé a facturar: el número de comprobante ya reservado es el mismo —no se gasta uno nuevo— así que reintentar es seguro.',
   // Escrituras que la base puede rechazar. Antes fallaban en silencio: la
   // pantalla recargaba igual y no había forma de saber que no se había guardado.
   estado: 'No se pudo guardar el estado nuevo. La reserva quedó como estaba.',
@@ -200,6 +205,13 @@ const MENSAJES_ERROR: Record<string, string> = {
     'No hay una pasarela configurada para verificar tarjetas. Avisá antes de confiar en esta garantía.',
   tarjeta:
     'No se pudo guardar el resultado de la verificación. La garantía quedó como estaba: revisala antes del check-in.',
+  // Edición de ficha: plan, segmento, voucher, notas, cunas, no mover, composición.
+  ficha_plan: 'Elegí un plan válido.',
+  ficha_segmento: 'Elegí un segmento válido.',
+  ficha_leer: 'No se pudo leer la estadía para editar la ficha. No se cambió nada.',
+  ficha_ocupantes:
+    'Revisá la composición: tiene que haber al menos un adulto, entrar en la capacidad de la unidad, y no puede haber cunas sin bebés.',
+  ficha_guardar: 'No se pudieron guardar los cambios. La ficha quedó entera como estaba.',
 }
 
 const ACCION_ESTADO: Record<EstadoReserva, { verbo: string; color: string }> = {
@@ -296,19 +308,44 @@ export default async function DetalleReservaPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{
     error?: string
+    detalle?: string
     ok?: string
     nuevo_check_in?: string
     nuevo_check_out?: string
+    v_plan?: string
+    v_segmento?: string
+    v_voucher?: string
+    v_notas?: string
+    v_adultos?: string
+    v_menores?: string
+    v_bebes?: string
+    v_cunas?: string
+    v_no_mover?: string
   }>
 }) {
   await requerirAcceso('reservas')
   const { id } = await params
   const {
     error: errorParam,
+    detalle: detalleParam,
     ok: okParam,
     nuevo_check_in: nuevoCheckIn,
     nuevo_check_out: nuevoCheckOut,
+    v_plan: vPlan,
+    v_segmento: vSegmento,
+    v_voucher: vVoucher,
+    v_notas: vNotas,
+    v_adultos: vAdultos,
+    v_menores: vMenores,
+    v_bebes: vBebes,
+    v_cunas: vCunas,
+    v_no_mover: vNoMover,
   } = await searchParams
+  // Lo que se tecleó la última vez que «Editar ficha» rechazó el envío
+  // (auditoría QA/UX 2026-10-14): si vino en la URL, gana sobre el valor
+  // guardado en la base. Solo aparece cuando `editarFichaReserva` redirigió
+  // con un error — un envío exitoso no deja estos parámetros.
+  const huboIntentoDeFicha = vPlan !== undefined
   const supabase = await crearClienteServidor()
 
   const { data, error: eReserva } = await supabase
@@ -561,11 +598,7 @@ export default async function DetalleReservaPage({
 
       <Encabezado
         titulo={reserva.codigo}
-        descripcion={
-          reserva.huesped
-            ? `${reserva.huesped.apellido}, ${reserva.huesped.nombre}`
-            : 'Sin huésped asociado'
-        }
+        descripcion={reserva.huesped ? nombreCompleto(reserva.huesped) : 'Sin huésped asociado'}
         icono="reservas"
         acciones={
           <Etiqueta tono={TONO_ESTADO[reserva.estado]}>
@@ -576,7 +609,16 @@ export default async function DetalleReservaPage({
 
       {errorParam && (
         <Mensaje tono="error">
-          {MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
+          {/*
+            `ficha_ocupantes` es la única clave con un `detalle` propio: lo
+            manda `editarFichaReserva` con el motivo puntual que calculó
+            `validarOcupantes` (de qué capacidad se pasó, o qué falta),
+            porque el texto fijo de MENSAJES_ERROR lista las tres
+            condiciones posibles en vez de decir cuál falló.
+          */}
+          {errorParam === 'ficha_ocupantes' && detalleParam
+            ? detalleParam
+            : MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la operación.'}
         </Mensaje>
       )}
 
@@ -604,6 +646,8 @@ export default async function DetalleReservaPage({
         </Mensaje>
       )}
 
+      {okParam === 'ficha' && <Mensaje tono="ok">Ficha actualizada.</Mensaje>}
+
       {/*
         Dos columnas en escritorio, con TODO a la vista al mismo tiempo: nada de
         pestañas ni bloques plegados. A la izquierda la reserva y qué hacer con
@@ -626,7 +670,7 @@ export default async function DetalleReservaPage({
           <dl className="flex flex-col gap-3">
             <Dato
               etiqueta="Nombre"
-              valor={reserva.huesped ? `${reserva.huesped.apellido}, ${reserva.huesped.nombre}` : '—'}
+              valor={reserva.huesped ? nombreCompleto(reserva.huesped) : '—'}
             />
             <Dato etiqueta="Email" valor={reserva.huesped?.email || '—'} />
             <Dato etiqueta="Documento" valor={reserva.huesped?.doc_numero || '—'} />
@@ -686,6 +730,17 @@ export default async function DetalleReservaPage({
                 <dd className="mt-0.5">
                   <Etiqueta tono="alerta">No mover de habitación</Etiqueta>
                 </dd>
+              </div>
+            )}
+
+            {/* Las notas a la vista y no sólo dentro de «Editar ficha»: ahí
+                llega el pedido especial que el huésped escribe al reservar
+                desde la web —una cuna, la hora de llegada—, y recepción tiene
+                que leerlo sin abrir ningún formulario. */}
+            {reserva.notas && (
+              <div>
+                <dt className="text-xs tracking-wide text-stone-600 uppercase">Notas</dt>
+                <dd className="mt-0.5 whitespace-pre-line text-stone-800">{reserva.notas}</dd>
               </div>
             )}
 
@@ -1032,6 +1087,141 @@ export default async function DetalleReservaPage({
           <p className="mt-2 text-xs text-stone-600">
             Dentro del mismo tipo el precio no cambia. La unidad que se libera queda sucia solo si
             el huésped ya había hecho el check-in.
+          </p>
+        </div>
+      )}
+
+      {/*
+        Editar ficha: plan, segmento, voucher, notas, cunas, «no mover» y la
+        composición. Hasta ahora, una vez creada, una reserva solo se podía
+        reprogramar, mudar de unidad o cancelar y volver a cargar — no había
+        forma de corregir uno de estos datos sin pasar por uno de esos tres
+        caminos, que tocan cosas que acá no cambian (fechas, unidad, estado).
+
+        Mismo criterio que «Cambiar de unidad»: si la reserva ya no admite
+        mudanza (cancelada, no-show, con el huésped afuera), tampoco tiene
+        sentido seguir editando cunas o composición.
+
+        Nunca recotiza: ninguno de estos campos entra en el cálculo del precio
+        (ver el comentario de `editarFichaReserva`), así que `reserva.total` no
+        se toca.
+      */}
+      {puedeMudarse && estadia && (
+        <div className="rounded-xl border border-stone-200 bg-white p-5">
+          <h2 className="mb-1 text-sm font-medium text-stone-700">Editar ficha</h2>
+          <p className="mb-3 text-xs text-stone-600">
+            Plan, segmento, voucher, notas y la composición de la habitación. No cambia el precio
+            ni el estado de la reserva — eso es «Reprogramar» y los botones de estado, arriba.
+          </p>
+          <form action={editarFichaReserva} className="flex flex-col gap-3">
+            <input type="hidden" name="reserva_id" value={reserva.id} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Plan</span>
+                <select
+                  name="plan"
+                  defaultValue={huboIntentoDeFicha ? vPlan : reserva.plan}
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                >
+                  {PLANES.map((p) => (
+                    <option key={p} value={p}>
+                      {ETIQUETAS_PLAN[p]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Segmento</span>
+                <select
+                  name="segmento"
+                  defaultValue={huboIntentoDeFicha ? vSegmento : reserva.segmento}
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                >
+                  {SEGMENTOS.map((s) => (
+                    <option key={s} value={s}>
+                      {ETIQUETAS_SEGMENTO[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="col-span-2 flex flex-col gap-1 text-xs sm:col-span-1">
+                <span className="text-stone-500">Voucher</span>
+                <input
+                  name="voucher"
+                  defaultValue={huboIntentoDeFicha ? vVoucher : reserva.voucher}
+                  placeholder="Nº del canal o agencia"
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Adultos</span>
+                <input
+                  name="adultos"
+                  type="number"
+                  min={1}
+                  defaultValue={huboIntentoDeFicha ? vAdultos : ocupantes.adultos}
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Menores</span>
+                <input
+                  name="menores"
+                  type="number"
+                  min={0}
+                  defaultValue={huboIntentoDeFicha ? vMenores : ocupantes.menores}
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Bebés</span>
+                <input
+                  name="bebes"
+                  type="number"
+                  min={0}
+                  defaultValue={huboIntentoDeFicha ? vBebes : ocupantes.bebes}
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-stone-500">Cunas</span>
+                <input
+                  name="cunas"
+                  type="number"
+                  min={0}
+                  defaultValue={huboIntentoDeFicha ? vCunas : ocupantes.cunas}
+                  className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="col-span-2 flex items-center gap-2 self-end pb-1.5 text-xs sm:col-span-1">
+                <input
+                  type="checkbox"
+                  name="no_mover"
+                  value="1"
+                  defaultChecked={huboIntentoDeFicha ? vNoMover === '1' : estadia.no_mover}
+                  className="size-4 rounded border-stone-300"
+                />
+                <span className="text-stone-700">No mover de habitación</span>
+              </label>
+            </div>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-stone-500">Notas</span>
+              <textarea
+                name="notas"
+                defaultValue={huboIntentoDeFicha ? vNotas : reserva.notas}
+                rows={2}
+                className="w-full rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <div>
+              <BotonEnvio extra="w-full sm:w-auto" cargando="Guardando…">
+                Guardar ficha
+              </BotonEnvio>
+            </div>
+          </form>
+          <p className="mt-2 text-xs text-stone-600">
+            Entran {estadia.unidad?.tipo?.capacidad_max ?? '—'} persona(s) en esta unidad (los
+            bebés en cuna no cuentan).
           </p>
         </div>
       )}

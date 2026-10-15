@@ -2,20 +2,12 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { estadoDeCobro } from '@/lib/reservas/cobro'
-import { proveedoresHabilitados, nombreClave } from '@/lib/payments'
-import { cotizacionVigente } from '@/lib/divisas/servicio'
-import {
-  MEDIOS_DE_COBRO,
-  MONEDA_BASE,
-  calcularCobro,
-  motivoNoSeCobra,
-  type MedioDeCobro,
-  type MonedaCobro,
-} from '@/lib/domain/cobro'
-import { formatearLocal } from '@/lib/domain/divisas'
+import { opcionesDePago, type OpcionDePago } from '@/lib/payments/opciones'
+import { motivoNoSeCobra } from '@/lib/domain/cobro'
 import { formatearUSD } from '@/lib/domain/moneda'
 import type { EstadoReserva } from '@/lib/domain/reservas'
-import { Marco, Tarjeta, Mensaje, Aviso, Titulo, botonPublico } from '../../../_publico/ui'
+import { Tarjeta, Mensaje, Titulo, botonPublico } from '../../../_publico/ui'
+import { Marco, Aviso } from '../../../_publico/marco'
 import { pagarDesdeElPortal } from './actions'
 
 /**
@@ -146,82 +138,6 @@ export default async function PagarPage({
 
 /* ─────────────────────────────────────────────────────── opciones ──────── */
 
-interface OpcionDePago {
-  medio: MedioDeCobro
-  /** Lo que se va a debitar, en la moneda del medio. */
-  importe: string
-  /** Sólo cuando la moneda no es la base: cómo se llegó a ese número. */
-  equivalencia: string | null
-}
-
-/**
- * Los medios que de verdad se pueden ofrecer ahora mismo.
- *
- * Es la intersección de tres cosas, y las tres pueden faltar:
- *  1. el catálogo (`MEDIOS_DE_COBRO`),
- *  2. lo que el hotel contrató (`PAGO_PROVIDER`),
- *  3. que haya **cotización vigente** si el medio cobra en otra moneda.
- *
- * El punto 3 es el que se olvida: sin cotización no se puede convertir, y
- * ofrecer el medio igual terminaría en un error después de que el huésped ya
- * eligió. Es mejor no mostrarlo.
- */
-async function opcionesDePago(montoUSD: number): Promise<OpcionDePago[]> {
-  const habilitados = new Set(proveedoresHabilitados().map(nombreClave))
-  const salida: OpcionDePago[] = []
-
-  for (const medio of MEDIOS_DE_COBRO) {
-    if (!habilitados.has(medio.id)) continue
-
-    const cotizacion = await cotizacionDe(medio.moneda)
-    const cobro = calcularCobro(montoUSD, medio.moneda, cotizacion)
-    if (!cobro) continue
-
-    salida.push({
-      medio,
-      importe:
-        cobro.moneda === MONEDA_BASE
-          ? formatearUSD(cobro.montoCobrado)
-          : formatearLocal(cobro.montoCobrado, cobro.moneda),
-      equivalencia:
-        cobro.moneda === MONEDA_BASE
-          ? null
-          : `${formatearUSD(cobro.monto)} al cambio de ${formatearLocal(cobro.cotizacion, cobro.moneda)} por dólar`,
-    })
-  }
-
-  /*
-    El simulador. No está en `MEDIOS_DE_COBRO` porque no es un medio de pago que
-    se le ofrezca a nadie: es la herramienta con la que se recorre el circuito
-    completo sin pasarela contratada. Se muestra con su nombre y su advertencia
-    —nunca disfrazado de medio real— y sólo aparece si alguien lo habilitó a
-    propósito en `PAGO_PROVIDER`.
-  */
-  if (habilitados.has('simulado')) {
-    salida.push({
-      medio: {
-        id: 'tarjeta',
-        moneda: MONEDA_BASE,
-        titulo: 'Pago simulado (demostración)',
-        detalle: 'No mueve dinero. Sirve para probar el circuito completo de cobro.',
-        formas: ['Aprobar', 'Rechazar', 'Dejar pendiente'],
-      },
-      importe: formatearUSD(montoUSD),
-      equivalencia: null,
-    })
-  }
-
-  return salida
-}
-
-/** La cotización vigente de una moneda, o `null` si es la base o no hay. */
-async function cotizacionDe(moneda: MonedaCobro): Promise<number | null> {
-  if (moneda === MONEDA_BASE) return null
-  const vigente = await cotizacionVigente(moneda)
-  // `venta` es la que se cobra: cuántas unidades cuesta comprar un dólar.
-  return vigente?.venta ?? null
-}
-
 /* ──────────────────────────────────────────────────────── piezas ───────── */
 
 function OpcionDePago({
@@ -233,9 +149,8 @@ function OpcionDePago({
   token: string
   tipo: 'senia' | 'saldo'
 }) {
-  // El id del simulador viaja como `simulado`, que es el nombre con el que se lo
-  // elige en `PAGO_PROVIDER`; su `medio` (`tarjeta`) es sólo cómo se guarda.
-  const valorMedio = opcion.medio.titulo.startsWith('Pago simulado') ? 'simulado' : opcion.medio.id
+  // `valor` es el nombre con el que se elige la pasarela (ver `OpcionDePago`).
+  const valorMedio = opcion.valor
 
   return (
     <form action={pagarDesdeElPortal}>

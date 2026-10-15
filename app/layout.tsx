@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono, Noto_Sans_SC } from "next/font/google";
+import { headers } from "next/headers";
+import { baseUrlSeo } from "@/lib/seo";
+import {
+  ETIQUETA_BCP47,
+  IDIOMA_POR_OMISION,
+  esIdioma,
+  type Idioma,
+} from "@/lib/i18n/idiomas";
 import "./globals.css";
 
 /**
@@ -34,23 +42,85 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/**
+ * Tipografía para chino.
+ *
+ * ⚠️ `Inter` se carga con `subsets: ["latin"]` y **no trae ni un carácter
+ * chino**. Sin esta familia, el portal en 中文 cae a la fuente que tenga el
+ * sistema operativo: en Windows sale en SimSun, con un gris y un ritmo
+ * distintos del resto del sitio, y en algún Linux sin fuentes CJK se ven
+ * cuadraditos. Es el tipo de detalle que no se nota revisando desde una Mac
+ * —macOS sí trae PingFang— y que arruina la página para el único idioma donde
+ * no podemos leer lo que está mal.
+ *
+ * Se declara como variable aparte y se aplica sólo cuando el idioma es `zh`,
+ * para no sumarle a los otros cuatro el peso de un juego de caracteres que no
+ * usan.
+ */
+const notoSC = Noto_Sans_SC({
+  variable: "--fuente-cjk",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
+  // Base para las URLs relativas de `openGraph.images` y del `canonical`:
+  // sin esto, cada página pública tendría que armar la URL absoluta a mano.
+  metadataBase: new URL(baseUrlSeo()),
   title: "Blanca Patagonia — Gestión Hotelera",
   description:
     "Sistema integral de gestión y reservas del Hotel Blanca Patagonia, El Calafate.",
+  // Valores por omisión para toda página que no los pise con los suyos
+  // propios (el panel, por ejemplo, no comparte enlaces y no los necesita).
+  openGraph: {
+    siteName: "Blanca Patagonia",
+    locale: "es_AR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
-export default function RootLayout({
+/**
+ * El `lang` del `<html>` sale de la cabecera que pone el proxy.
+ *
+ * No es decorativo: un lector de pantalla elige con `lang` cómo pronunciar —un
+ * texto chino leído con reglas del español es ruido— y los buscadores lo usan
+ * para saber a qué audiencia mostrar la página. Tiene que ser el idioma que se
+ * está viendo, no el del proyecto.
+ *
+ * Por qué viene por cabecera y no de `params`: este layout está **por encima**
+ * del segmento `[idioma]`, así que no lo recibe. La alternativa de Next
+ * (`next/root-params`) exige mover el layout raíz dentro de `app/[idioma]/`, y
+ * eso obligaría al panel —que no se traduce— a vivir bajo un prefijo de idioma.
+ *
+ * Sin cabecera es español: el panel, el login y las pantallas con token no
+ * pasan por el ruteo de idiomas y son en español.
+ */
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const idioma = (await headers()).get("x-idioma");
+  const etiqueta = esIdioma(idioma ?? undefined) ? idioma : IDIOMA_POR_OMISION;
+
   return (
     <html
-      lang="es"
-      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
+      lang={ETIQUETA_BCP47[etiqueta as Idioma]}
+      className={`${inter.variable} ${geistMono.variable} ${
+        etiqueta === "zh" ? notoSC.variable : ""
+      } h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body
+        className={`min-h-full flex flex-col ${
+          etiqueta === "zh" ? "font-cjk" : "font-sans"
+        }`}
+      >
+        {children}
+      </body>
     </html>
   );
 }

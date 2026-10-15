@@ -24,6 +24,12 @@ const SECCIONES: Seccion[] = [
     icono: 'reservas',
   },
   {
+    titulo: 'Promociones',
+    descripcion: 'Descuentos por porcentaje o monto fijo, con noches mínimas y anticipación.',
+    href: '/panel/config/promociones',
+    icono: 'divisas',
+  },
+  {
     titulo: 'Temporadas',
     descripcion: 'Fechas de cada temporada. Sin cobertura completa, una reserva puede salir en cero.',
     href: '/panel/config/temporadas',
@@ -54,8 +60,14 @@ const SECCIONES: Seccion[] = [
     icono: 'contratos',
   },
   {
+    titulo: 'Tipos de alojamiento',
+    descripcion: 'Alta y edición de las categorías comerciales: nombre, capacidad y descripción.',
+    href: '/panel/config/tipos-alojamiento',
+    icono: 'reservas',
+  },
+  {
     titulo: 'Ubicación de las unidades',
-    descripcion: 'Bloque, piso y orden de recorrido, para housekeeping y la grilla de ocupación.',
+    descripcion: 'Alta, nombre, bloque, piso y orden de recorrido de cada habitación o cabaña.',
     href: '/panel/config/ubicaciones',
     icono: 'ocupacion',
   },

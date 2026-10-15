@@ -5,9 +5,14 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { saldoCuenta, type TipoMovimiento, type Movimiento } from '@/lib/domain/cuentas'
-import { registrarMovimientoProveedor, marcarComprobantePagado, agregarFotoProveedor } from '../actions'
+import {
+  registrarMovimientoProveedor,
+  marcarComprobantePagado,
+  agregarFotoProveedor,
+  eliminarFotoProveedor,
+} from '../actions'
 import { SubirFoto } from '../../_components/subir-foto'
-import { FotoAdjunta } from '../../_components/foto-adjunta'
+import { FotoAdjuntaEliminable } from '../../_components/foto-adjunta-eliminable'
 import {
   ETIQUETAS_ESTADO_COMPROBANTE,
   clasificarTramo,
@@ -81,11 +86,13 @@ const MENSAJES_ERROR: Record<string, string> = {
   foto_subida: 'No se pudo subir el archivo. Probá de nuevo.',
   foto_leer: 'No se pudo leer el proveedor para adjuntar la foto. No se guardó nada.',
   foto_guardar: 'La foto se subió pero no se pudo asociar al proveedor. Probá de nuevo.',
+  foto_eliminar: 'No se pudo eliminar la foto. Probá de nuevo.',
 }
 
 const MENSAJES_OK: Record<string, string> = {
   datos: 'Datos actualizados.',
   foto: 'Foto agregada.',
+  foto_eliminada: 'Foto eliminada.',
 }
 
 export default async function ProveedorDetallePage({
@@ -357,7 +364,13 @@ export default async function ProveedorDetallePage({
         ) : (
           <div className="flex flex-wrap gap-3 p-5">
             {proveedor.fotos.map((ruta) => (
-              <FotoAdjunta key={ruta} ruta={ruta} alt={`Documento de ${proveedor.nombre}`} />
+              <FotoAdjuntaEliminable
+                key={ruta}
+                ruta={ruta}
+                alt={`Documento de ${proveedor.nombre}`}
+                accion={eliminarFotoProveedor}
+                camposOcultos={{ proveedor_id: proveedor.id }}
+              />
             ))}
           </div>
         )}

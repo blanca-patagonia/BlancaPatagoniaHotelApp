@@ -9,7 +9,8 @@ import { TIPOS_CUENTA, movimientoEnMoneda, type TipoCuenta } from '@/lib/domain/
 import { esMonedaExtranjera } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla } from '@/lib/acciones'
-import { subirAdjunto } from '@/lib/storage'
+import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
+import { registrarAviso } from '@/lib/registro'
 
 export interface EstadoAgencia {
   error?: string
@@ -117,6 +118,45 @@ export async function registrarMovimiento(formData: FormData): Promise<void> {
   })
   cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'movimiento')
   redirect(`/panel/agencias/${agenciaId}`)
+}
+
+/**
+ * Quita el comprobante adjunto a un movimiento de cuenta corriente: del
+ * bucket y de `comprobante_ruta` (migración 0103). No borra el movimiento en
+ * sí —el monto, la moneda y el concepto quedan igual—, sólo el archivo. El
+ * `update` ya queda registrado solo por `movimientos_cuenta_auditoria`
+ * (migración 0061): no hace falta auditoría aparte para esta escritura.
+ */
+export async function eliminarComprobantePagoAgencia(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const agenciaId = String(formData.get('agencia_id') ?? '')
+  const movimientoId = String(formData.get('movimiento_id') ?? '')
+  const ruta = String(formData.get('ruta') ?? '')
+  if (!agenciaId || !movimientoId || !ruta) {
+    redirect(`/panel/agencias/${agenciaId}?error=comprobante_eliminar`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('movimientos_cuenta')
+    .update({ comprobante_ruta: null })
+    .eq('id', movimientoId)
+    // Doble candado: que el comprobante que se borra sea el que de verdad está
+    // en esta fila, no uno vencido por una pestaña vieja abierta en otro lado.
+    .eq('comprobante_ruta', ruta)
+  cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'comprobante_eliminar')
+
+  await eliminarAdjunto(ruta)
+  await registrarAviso('adjunto_eliminado', {
+    modulo: 'agencias',
+    agencia_id: agenciaId,
+    movimiento_id: movimientoId,
+    ruta,
+  })
+
+  revalidatePath(`/panel/agencias/${agenciaId}`)
+  redirect(`/panel/agencias/${agenciaId}?ok=comprobante_eliminado`)
 }
 
 /**
