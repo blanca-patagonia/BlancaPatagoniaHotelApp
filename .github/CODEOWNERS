@@ -1,0 +1,8 @@
+# Quién revisa qué. Con el ruleset activo, se exige la revisión de estos dueños.
+*                       @octi35 @santimoran19
+
+# La base es la garantía central del sistema: migraciones y RLS siempre se revisan.
+/supabase/              @octi35 @santimoran19
+/.github/               @octi35
+/SECURITY.md            @octi35
+/docs/decisiones/       @octi35 @santimoran19
