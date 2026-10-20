@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState, type ReactNode, type DragEvent } from 'react'
-import { cambiarUnidadReserva } from '../reservas/actions'
+import { cambiarUnidadReserva } from '../reservas/cambios.actions'
 import { BotonEnvio } from '../_components/boton-envio'
 import { Icono } from '../_components/iconos'
 import { botonClases, CAMPO } from '../_components/ui'

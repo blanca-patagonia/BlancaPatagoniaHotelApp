@@ -35,22 +35,25 @@ vi.mock('@/lib/housekeeping/estado', () => ({ fijarEstadoUnidad: vi.fn(async () 
 function redireccion(url: string) {
   return Object.assign(new Error('NEXT_REDIRECT'), { digest: `NEXT_REDIRECT;replace;${url};307;` })
 }
-const cambiarEstadoReserva = vi.fn(async (_fd: FormData): Promise<void> => {
+const cambiarEstadoReserva = vi.fn<(fd: FormData) => Promise<void>>(async () => {
   throw redireccion('/panel/reservas/r1')
 })
-const crearReservaAction = vi.fn(async (_p: unknown, _fd: FormData): Promise<{ error?: string }> => {
+const crearReservaAction = vi.fn<(p: unknown, fd: FormData) => Promise<{ error?: string }>>(async () => {
   throw redireccion('/panel/reservas/nueva-id')
 })
 const reservasVacias = async () => undefined
-vi.mock('@/app/(front-gestion)/panel/reservas/actions', () => ({
-  cambiarEstadoReserva,
-  crearReservaAction,
+vi.mock('@/app/(front-gestion)/panel/reservas/actions', () => ({ cambiarEstadoReserva, crearReservaAction }))
+vi.mock('@/app/(front-gestion)/panel/reservas/cambios.actions', () => ({
   cambiarUnidadReserva: reservasVacias,
   reprogramarReserva: reservasVacias,
+}))
+vi.mock('@/app/(front-gestion)/panel/reservas/factura.actions', () => ({
   emitirFactura: reservasVacias,
   emitirNotaCredito: reservasVacias,
 }))
-const actualizarHuesped = vi.fn(async (_p: unknown, _fd: FormData) => ({ ok: 'Datos actualizados.' }))
+const actualizarHuesped = vi.fn<(p: unknown, fd: FormData) => Promise<{ ok: string }>>(
+  async () => ({ ok: 'Datos actualizados.' }),
+)
 vi.mock('@/app/(front-gestion)/panel/huespedes/actions', () => ({
   crearHuesped: vi.fn(async () => ({ ok: 'Se registró.' })),
   actualizarHuesped,
@@ -83,7 +86,9 @@ vi.mock('@/lib/supabase/server', () => ({
     }),
   }),
 }))
-const encolar = vi.fn(async (_c: unknown, _p: Record<string, unknown>) => ({ ok: true }))
+const encolar = vi.fn<(c: unknown, p: Record<string, unknown>) => Promise<{ ok: boolean; motivo?: string }>>(
+  async () => ({ ok: true }),
+)
 vi.mock('@/lib/notificaciones', () => ({ encolar }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 

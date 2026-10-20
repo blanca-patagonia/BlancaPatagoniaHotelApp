@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { importarResenasCanal, type EstadoImportacionResenas } from './actions'
+import { importarResenasCanal, type EstadoImportacionResenas } from './resenas.actions'
 import { Mensaje, botonClases } from '../_components/ui'
 import { CampoArchivo } from '../_components/campo-archivo'
 

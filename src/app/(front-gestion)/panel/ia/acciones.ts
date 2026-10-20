@@ -21,14 +21,9 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { cargarConsumo } from '@/lib/reservas/consumos'
 import { fijarEstadoUnidad } from '@/lib/housekeeping/estado'
-import {
-  cambiarEstadoReserva,
-  cambiarUnidadReserva,
-  crearReservaAction,
-  emitirFactura,
-  emitirNotaCredito,
-  reprogramarReserva,
-} from '../reservas/actions'
+import { cambiarEstadoReserva, crearReservaAction } from '../reservas/actions'
+import { cambiarUnidadReserva, reprogramarReserva } from '../reservas/cambios.actions'
+import { emitirFactura, emitirNotaCredito } from '../reservas/factura.actions'
 import { actualizarHuesped, crearHuesped } from '../huespedes/actions'
 import { MENSAJES_FICHA_RESERVA } from '../reservas/[id]/mensajes'
 import { MENSAJES_FACTURA } from '../reservas/[id]/factura/mensajes'

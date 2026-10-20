@@ -34,13 +34,13 @@ vi.mock('@/lib/supabase/server', async () => {
 
 describe.skipIf(!hayDB)('Server Actions · editar ficha de reserva', () => {
   let ctx: Contexto
-  let editarFichaReserva: typeof import('@/app/(front-gestion)/panel/reservas/actions')['editarFichaReserva']
+  let editarFichaReserva: typeof import('@/app/(front-gestion)/panel/reservas/cambios.actions')['editarFichaReserva']
   let tipoId: string
   let unidadId: string
 
   beforeAll(async () => {
     ctx = nuevoContexto()
-    const acciones = await import('@/app/(front-gestion)/panel/reservas/actions')
+    const acciones = await import('@/app/(front-gestion)/panel/reservas/cambios.actions')
     editarFichaReserva = acciones.editarFichaReserva
 
     const { data: tipo } = await ctx.db

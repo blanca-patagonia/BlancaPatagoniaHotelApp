@@ -19,7 +19,7 @@ import {
   guardarMapeoCanal,
   guardarRestriccionCanal,
   publicarAhora,
-} from '../actions'
+} from '../publicacion.actions'
 
 /** Vista «publicacion» de la pantalla de canales. Los datos los carga `_datos.ts`. */
 export function VistaPublicacion({ d }: { d: DatosCanales }) {

@@ -4,7 +4,7 @@ import { formatoFechaCorta } from '@/lib/fechas'
 import { BotonEnvio } from '../../_components/boton-envio'
 import { CAMPO, Campo, EstadoVacio, Etiqueta, Tarjeta } from '../../_components/ui'
 import { ImportarResenas } from '../importar-resenas'
-import { cargarResena, vincularResena, responderResena } from '../actions'
+import { cargarResena, vincularResena, responderResena } from '../resenas.actions'
 
 /** Vista «resenas» de la pantalla de canales. Los datos los carga `_datos.ts`. */
 export function VistaResenas({ d }: { d: DatosCanales }) {

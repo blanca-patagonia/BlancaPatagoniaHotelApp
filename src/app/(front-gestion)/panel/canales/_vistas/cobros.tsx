@@ -16,7 +16,7 @@ import {
   Tabla,
   Tarjeta,
 } from '../../_components/ui'
-import { fijarModalidadCobro, registrarTransferenciaCanal } from '../actions'
+import { fijarModalidadCobro, registrarTransferenciaCanal } from '../cobros.actions'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
 import {
   ETIQUETAS_MODALIDAD,

@@ -19,7 +19,7 @@ import {
   Tarjeta,
   botonClases,
 } from '../../_components/ui'
-import { conciliarCargo, registrarFacturaComision } from '../actions'
+import { conciliarCargo, registrarFacturaComision } from '../cobros.actions'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
 import {
   ESTADOS_CONCILIACION,

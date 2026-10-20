@@ -2,7 +2,7 @@ import type { DatosCanales } from '../_datos'
 import { fechaHotel, formatoFechaCorta } from '@/lib/fechas'
 import { BotonEnvio } from '../../_components/boton-envio'
 import { CAMPO, Campo, EstadoVacio, Etiqueta, Tarjeta } from '../../_components/ui'
-import { cargarMensaje, marcarMensajeAtendido } from '../actions'
+import { cargarMensaje, marcarMensajeAtendido } from '../mensajes.actions'
 
 /** Vista «mensajes» de la pantalla de canales. Los datos los carga `_datos.ts`. */
 export function VistaMensajes({ d }: { d: DatosCanales }) {
