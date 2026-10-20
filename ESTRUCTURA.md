@@ -43,7 +43,9 @@ BLANCA/
 │   └── instrumentation.ts    ← BACK  · captura de errores del servidor
 │
 ├── supabase/                 ← BASE DE DATOS · migraciones SQL numeradas
+├── supabase-tests/           ← Base local SÓLO para tests (puerto 55321, ADR 0042)
 ├── tests/                    ← PRUEBAS · separadas por tipo
+├── e2e/                      ← Recorrido de punta a punta en un navegador (Playwright)
 ├── public/                   ← Archivos estáticos (fotos, video, service worker)
 ├── scripts/                  ← Utilidades de consola
 ├── docs/                     ← DOCUMENTACIÓN (tesis, arquitectura, manuales, ADRs)
@@ -88,7 +90,7 @@ Así se separa front de back a la vista sin romper ningún enlace.
 | **Front de gestión** | `src/app/(front-gestion)/` | Panel interno (28 módulos) y pantallas de login | Staff del hotel, según su rol |
 | **Back HTTP** | `src/app/(back-api)/` | Endpoints `/api/...`, webhooks de pagos y correo, tareas programadas, callback de Google | Pasarelas de pago, Vercel Cron, el propio front |
 | **Back lógico** | `src/lib/` | Reglas de negocio, acceso a datos, pagos, facturación, correo, canales | Todo lo anterior |
-| **Base de datos** | `supabase/` | 117 migraciones SQL: tablas, RLS por rol, funciones atómicas | El back |
+| **Base de datos** | `supabase/` | 119 migraciones SQL: tablas, RLS por rol, funciones atómicas | El back |
 
 Las **Server Actions** (`actions.ts`) son la frontera entre los dos mundos:
 viven al lado de la pantalla que las usa, pero **corren en el servidor**. Son el
@@ -291,6 +293,7 @@ ve cada rol y las funciones que escriben varias tablas de una sola vez.
 ```
 tests/
 ├── dominio/          ← reglas puras (~1500 pruebas, corren en cualquier máquina)
+├── componentes/      ← componentes de React renderizados en jsdom (Testing Library)
 ├── servicios/        ← webhooks, cron y pasarelas con dependencias simuladas
 ├── acciones/         ← Server Actions
 ├── base-de-datos/    ← RLS, funciones SQL, anti-overbooking (necesitan base local)
@@ -299,7 +302,9 @@ tests/
 ```
 
 Cada tipo se corre solo: `npm run test:dominio`, `test:servicios`,
-`test:acciones`, `test:db`, `test:contratos`. Todo junto: `npm test`. Detalle,
+`test:acciones`, `test:db`, `test:contratos`, `test:componentes`. Todo junto:
+`npm test`; **todo sin saltear nada, contra la base aislada: `npm run test:aislado`**.
+El recorrido de todas las pantallas está en `e2e/` (`npm run e2e`). Detalle,
 y cómo correr los que necesitan base: [`tests/README.md`](tests/README.md).
 
 ## 11. El resto del repositorio

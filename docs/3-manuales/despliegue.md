@@ -259,6 +259,22 @@ Verificar que se aplicaron todas:
 npx supabase migration list --linked
 ```
 
+⚠️ **Eso dice qué se ANOTÓ, no qué se aplicó.** El 2026-10-20 la base local
+tenía anotada la 0087 sin su tabla, y otras doce aplicadas sin anotar. Antes de
+abrir el sistema al hotel, comparar el esquema real contra el de las
+migraciones (ADR 0042):
+
+```bash
+ESQUEMA_DB_URL='postgresql://postgres:<contraseña>@db.<ref>.supabase.co:5432/postgres' \
+  npm run esquema:comparar
+```
+
+Tiene que decir «✓ El esquema coincide». Si dice «FALTA», hay migraciones sin
+aplicar; si dice «SOBRA», hay objetos que no vienen de ninguna. ⚠️ En
+particular, confirmar que la **0119** quedó aplicada: sin ella, en una base
+nueva el rol público (`anon`, con la clave que viaja en el navegador) puede
+ejecutar funciones como `crear_reserva` o `registrar_acceso_huesped`.
+
 **2. Los datos fiscales del hotel.** La migración 0082 crea la tabla y **no la
 siembra a propósito**: un CUIT inventado haría creer que ya está configurado.
 Cargarlos desde `/panel/config` antes de emitir la primera factura.

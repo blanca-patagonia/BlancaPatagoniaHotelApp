@@ -305,7 +305,7 @@ Tarifario 2025/2026 (Anexo A).
      reservas 199 ms, los tres sin ningún error de consola — más el tamaño
      del bundle (~1.6 MB) y los planes de consulta con `EXPLAIN ANALYZE`.
      Son números de referencia en desarrollo, no un build de producción.
-- **Hay 40 ADRs, numerados hasta el 0041.** El último es el **0041** (el asistente de IA **propone** acciones —aviso, orden de mantenimiento, objeto perdido, consumo— y una persona las **confirma**; al confirmar se llama a la MISMA Server Action del módulo, sin lógica de escritura propia. Las herramientas del asistente **no leen datos personales de huéspedes**: salen a Google, lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`). (El 0034 quedó retirado: era la
+- **Hay 41 ADRs, numerados hasta el 0042.** El último es el **0042** (cómo se verifica el sistema: base de tests AISLADA en `supabase-tests/` con `npm run test:aislado` —los tests nunca van contra la base de trabajo—, `npm run esquema:comparar` antes de cualquier deploy, tests de interfaz en `tests/componentes/` y el recorrido e2e con `npm run e2e`). El anterior, el **0041** (el asistente de IA **propone** acciones —aviso, orden de mantenimiento, objeto perdido, consumo— y una persona las **confirma**; al confirmar se llama a la MISMA Server Action del módulo, sin lógica de escritura propia. Las herramientas del asistente **no leen datos personales de huéspedes**: salen a Google, lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`). (El 0034 quedó retirado: era la
   WhatsApp por Cloud API de Meta, descartada antes de escribirse como
   archivo — ver más abajo, "la pieza de WhatsApp... NO entró con esta
   pasada"). El último es el **0040** (inventario físico real de

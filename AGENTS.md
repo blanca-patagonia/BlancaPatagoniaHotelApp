@@ -1,6 +1,6 @@
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
@@ -35,6 +35,10 @@ reservas (`src/app/(front-publico)/reservar`, `src/app/(front-publico)/[idioma]/
 | Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **0 saltean** con base local y las 4 variables |
 | Build | `npm run build` | verificado, 21 s |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
+| **Tests completos, sin saltear nada** | **`npm run test:aislado`** (base propia en el puerto 55321: la levanta, la deja en cero, siembra y corre todo) | verificado 2026-10-20: 2.700+ tests, 0 salteados |
+| Tests de interfaz | `npm run test:componentes` (jsdom + Testing Library) | verificado |
+| Recorrido de todas las pantallas | `npm run e2e` (Playwright; con la app corriendo) | verificado, 1,2 min |
+| ¿La base tiene el esquema del repo? | `npm run esquema:comparar` (o `ESQUEMA_DB_URL=… npm run esquema:comparar` para la nube) | verificado |
 | Base local **(solo para tests)** | `npx supabase start` · `npx supabase db reset` | necesita Docker |
 | Salud del sistema | `GET /api/salud` | 200 si la base responde, 503 si no |
 
@@ -118,6 +122,11 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   de los fronts, y los cruces entre `(front-publico)` y `(front-gestion)` tienen que estar
   declarados con su motivo.
 - Los que tocan Postgres van bajo `describe.skipIf(!hayDB)` (`tests/apoyo/db.ts`).
+- **Los tests van contra la base AISLADA, nunca contra la de trabajo** (`npm run test:aislado`).
+  La base local de `supabase/` (54321) es la que usa `npm run dev`: la suite borra reservas y
+  huéspedes para limpiar. `tests/apoyo/db.ts` corta si la URL de los tests es la de `.env.local`
+  (salida de escape `PERMITIR_BASE_DE_TRABAJO=1`). La aislada es `supabase-tests/`, con
+  `migrations/` y `seed.sql` enlazados a los de `supabase/` (una sola fuente).
 - **Trampa:** `npm test` sale verde con **unos 600 tests salteados** si no hay base local — entre ellos
   el anti-overbooking. En CI `EXIGIR_DB=1` los vuelve obligatorios (`tests/apoyo/db.ts:22`).
 - **Segunda trampa, la que `EXIGIR_DB` NO cubre:** esa guarda mira `hayDB`, no `hayAnon`
@@ -303,6 +312,15 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   sondeaba y leía el código de error, y tiene dos falsos negativos invisibles: una **vista**
   responde `55000` y una tabla con **trigger BEFORE INSERT** responde lo que lance el trigger —
   en los dos casos el error no es de permiso y se lee como si la barrera hubiera actuado.
+- **Los privilegios por omisión de Supabase le dan EXECUTE a `anon` DIRECTO, no por PUBLIC** (0119).
+  Es la otra mitad de la trampa de abajo. `pg_default_acl` de `postgres` trae `anon=X` para
+  funciones, así que **toda función nueva nace ejecutable por `anon`** aunque su migración haga
+  `revoke ... from public; grant ... to authenticated, service_role`. En una base nueva —la de
+  producción lo será— `anon` podía ejecutar `crear_reserva`, `fusionar_huespedes` y la DEFINER
+  `registrar_acceso_huesped`. La 0119 lo revoca y cambia el default; el test
+  `funciones-sin-public` ahora pregunta `has_function_privilege('anon')` con una allowlist de
+  seis. ⚠️ No se vio antes porque la base local de desarrollo se había armado distinto: **una base
+  armada desde cero no es igual a una migrada de a poco**. `npm run esquema:comparar` lo detecta.
 - **`revoke execute ... from anon` NO cierra una función: Postgres se la concede a PUBLIC.**
   Al crear una función, el EXECUTE va a `PUBLIC` por omisión, y `anon` / `authenticated` son
   miembros de PUBLIC. Un `revoke` dirigido a `anon` no quita nada —nunca tuvo grant propio— y

@@ -9000,3 +9000,33 @@ Pedido del usuario: «ampliar la capacidad de la IA de buscar y agregar informac
 3. **La base local estaba a medio migrar**: faltaban 0087, 0088, 0097, 0100, 0103, 0116 y 0117 (por eso «Canales» y «Plantillas» fallaban en local). Se aplicaron una por una, cada una en su transacción; son todas aditivas. ⚠️ No quedaron anotadas en `supabase_migrations.schema_migrations`, igual que la 0118 y que varias de la 0096 a la 0117 que ya estaban aplicadas sin registro: en local, un `migration up` intentaría repetirlas. La base hosted hay que revisarla igual antes del deploy.
 
 **Verificación:** typecheck y lint sin errores; 2058 tests pasan (los de base, salteados salvo `ia-consultas` y `busqueda-consultas`, que son de solo lectura y se corrieron contra la base local).
+
+## 2026-10-20 (segunda parte) — análisis del proyecto entero y sus mejoras
+
+Pedido del usuario: «analizá el proyecto entero y decime qué mejorar», y después «mejorá todo eso, no pares hasta terminar todas las fases». ADR 0042.
+
+**Fase 1 — el trabajo, en git.** Todo `src/` (el código entero desde el paso a la estructura por capas), las migraciones 0110–0118, los tests nuevos y la reorganización de `docs/` estaban sin registrar en git: el último commit era del 7 de octubre. Tres commits en `pulido/integral-2026-10`. El push lo tiene que hacer el usuario (el control de permisos de la sesión no lo dejó).
+
+**Fase 2 — base de tests aislada.** `supabase-tests/` (puerto 55321) con `npm run test:aislado`. Primera corrida: **2.663 tests, cero salteados**: los ~630 de base de datos no corrían nunca en desarrollo. Guarda nueva en `tests/apoyo/db.ts` contra correr la suite sobre la base que usa la app.
+
+**Fase 3 — la base de trabajo, en orden.** Comparando su esquema contra una base armada desde cero aparecieron seis migraciones más sin aplicar (0089, 0098, 0102, 0104, 0114, 0115; sin la 0114 reprogramar una reserva fallaba en local). Aplicadas, y anotadas las 118 en el registro. Queda un resto que no viene de ninguna migración (`notificaciones.id_externo`, de la rama de WhatsApp descartada): no se tocó. El chequeo quedó como `npm run esquema:comparar`, que sirve también para la base de la nube.
+
+**Hallazgo de seguridad — migración 0119.** En una base NUEVA los privilegios por omisión de la plataforma le dan EXECUTE a `anon` directamente (no por PUBLIC): `anon` podía ejecutar `crear_reserva`, `fusionar_huespedes`, `aplicar_precio_reserva` y dos DEFINER, `registrar_acceso_huesped` (podía llenar de filas falsas la auditoría de accesos) y `privilegios_de_escritura`. Exposición real baja (las de escritura son invoker y RLS frena), pero contradice lo que cada migración declara. La 0119 revoca, cambia el default y cierra además los restos de la 0089 sobre tablas (TRUNCATE ignora RLS) y secuencias. Test nuevo con allowlist de seis funciones. Verificado: el portal sigue cotizando sin sesión.
+
+**Fase 4 — archivos grandes.**
+- `reservas/actions.ts` 2.156 → 796 líneas + `cobros`, `consumos`, `factura` y `cambios.actions.ts`.
+- `canales/actions.ts` 1.138 → 295 + `mensajes`, `resenas`, `cobros` y `publicacion.actions.ts`; las nuevas usan `requerirAcceso('canales')` (canónico) en vez del helper local.
+- La ficha de reserva 1.779 → 1.142 + `seccion-cuenta.tsx` (pagos, garantía, consumos, cobro en línea).
+- Los nombres terminan en `actions.ts` para que el contrato de autorización los siga revisando.
+
+**Fase 5 — tests de interfaz.** Testing Library + jsdom (dependencias nuevas, sólo de desarrollo). 10 tests: la tarjeta del asistente manda lo que la persona corrigió y no lo que propuso la IA (verificado rompiéndolo a propósito), avisa lo irreversible, «Descartar» no ejecuta; el botón de envío bloquea el doble clic y pide confirmación.
+
+**Fase 6 — recorrido e2e.** Playwright (`npm run e2e`, 1,2 min): todas las pantallas del panel, una ficha de cada listado, el «no encontrado» y el portal sin sesión. Workflow `e2e.yml` manual hasta verlo andar en GitHub.
+
+**Fase 7 — lo que la IA no supo responder.** `ia_sin_respuesta` (nivel aviso, se ve en `/panel/errores`) con la pregunta enmascarada y sin el usuario: para elegir las próximas herramientas con datos.
+
+**Fase 8 — trinquete de la capa de datos.** Contrato nuevo: los lugares de `src/app` que crean un cliente de la base no pueden pasar de 268. Se cuentan llamadas y no archivos: partir un archivo no lo sube.
+
+**Fase 9 — dependencias.** Next 16.4.2, supabase-js 2.118, zod 4.6.7 (dentro de los rangos). `npm audit` de producción: 0. Apareció una alerta alta en `braces`, sin versión corregida, que entra sólo por el linter: el corte del CI pasó a `--omit=dev` y lo de desarrollo queda informativo.
+
+**Lo que NO se puede hacer desde el código** (queda para el usuario o el hotel): el push de la rama, rotar las claves de Gemini y Groq, activar la facturación de la IA, el deploy y la verificación de la base de la nube (`npm run esquema:comparar` con su URL), el cobro de la política de cancelación (ADR 0019), el channel manager, la tarifa rack de cabañas y el tarifario 2026/2027.

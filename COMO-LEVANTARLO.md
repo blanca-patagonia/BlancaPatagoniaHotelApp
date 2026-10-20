@@ -75,19 +75,28 @@ escriben con `service_role`, que saltea RLS, y borran filas de `reservas`,
 `huespedes`, `tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso
 destruye datos del hotel.
 
-Por eso hay que levantar una base local para testear:
+**Tampoco contra la base local con la que trabajás** (la de `npm run dev`, si la
+usás): los tests borran lo que cargaste a mano. Para eso hay una base aparte,
+sólo para tests (ADR 0042), y un comando que hace todo:
 
 ```bash
-npx supabase start          # la primera vez baja imágenes: tarda unos minutos
-npx supabase db reset       # aplica las 67 migraciones y el catálogo
-npm run seed:usuarios       # OJO: db reset borra los usuarios de auth
-
-# y recién ahí, con las variables apuntando a LOCAL:
-npm test
+npm run test:aislado        # levanta la base de tests (puerto 55321), la deja en cero,
+                            # siembra el admin y corre TODO, sin saltear nada
+npm run test:aislado:parar  # la apaga cuando terminás (ocupa memoria de Docker)
 ```
 
-`tests/apoyo/db.ts` tiene una guarda que corta si las variables apuntan a una base que no
-es local, así que el accidente no puede pasar en silencio.
+La primera vez baja las imágenes de Supabase y tarda unos minutos.
+
+`tests/apoyo/db.ts` corta si las variables apuntan a una base que no es local, o
+a la misma que usa la app según tu `.env.local`, así que el accidente no puede
+pasar en silencio.
+
+Otros dos chequeos:
+
+```bash
+npm run e2e                 # con la app corriendo: recorre TODAS las pantallas en un navegador
+npm run esquema:comparar    # ¿tu base tiene exactamente el esquema de las migraciones?
+```
 
 Sin base local, `npm test` **saltea** los tests de integración en vez de fallar
 —entre ellos el anti-overbooking, que es la garantía central del sistema—. En CI
@@ -99,7 +108,8 @@ eso no puede pasar: `EXIGIR_DB=1` convierte la ausencia de base en error.
 npm run check      # lint + typecheck + tests + build
 ```
 
-Con base local tienen que dar **1555 tests en verde, cero salteados**.
+Para la suite completa, `npm run test:aislado`: tienen que dar **más de 2.700
+tests en verde, cero salteados** (2026-10-20).
 
 ⚠️ **Leé la salida, no el código de salida.** Si no existe `.env.local`, varios
 archivos de test fallan por falta de variables y el comando **igual devuelve 0**.
