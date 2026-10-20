@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 /**
  * Acceso compartido a la base para los tests de integración.
@@ -52,6 +54,37 @@ if (hayDB && !esLocal && process.env.PERMITIR_DB_REMOTA !== '1') {
       '  y exportá SUPABASE_URL=http://127.0.0.1:54321 antes de correr los tests.\n\n' +
       '  Si de verdad querés correrlos contra una base remota descartable:\n' +
       '    PERMITIR_DB_REMOTA=1 npm test\n',
+  )
+}
+
+/*
+  Tampoco contra la base de TRABAJO, aunque sea local.
+
+  La base local de `supabase/` (54321) es la que usa `npm run dev`, con los datos
+  que se cargan a mano mientras se prueba el sistema. Ser local no la vuelve
+  descartable: correr la suite ahí borraba esas reservas y huéspedes. Se
+  compara con la URL que usa la app (`.env.local`); en el CI ese archivo no
+  existe y la guarda no actúa. Los tests van contra `supabase-tests/` (55321):
+  `npm run test:aislado` la levanta, la resetea y corre todo.
+*/
+function urlDeLaApp(): string | null {
+  try {
+    const texto = readFileSync(join(process.cwd(), '.env.local'), 'utf8')
+    return /^NEXT_PUBLIC_SUPABASE_URL\s*=\s*"?([^"\s]+)"?/m.exec(texto)?.[1] ?? null
+  } catch {
+    return null
+  }
+}
+const sinBarra = (u: string) => u.replace(/\/+$/, '')
+const urlApp = urlDeLaApp()
+
+if (hayDB && urlApp && sinBarra(urlApp) === sinBarra(url ?? '') && process.env.PERMITIR_BASE_DE_TRABAJO !== '1') {
+  throw new Error(
+    `Los tests apuntan a la MISMA base que usa la app (${url}).\n\n` +
+      '  La suite borra reservas, huéspedes y tarifas para limpiar: perderías los\n' +
+      '  datos que cargaste a mano. Corré los tests contra la base aislada:\n' +
+      '    npm run test:aislado\n\n' +
+      '  Si de verdad querés usar la base de trabajo: PERMITIR_BASE_DE_TRABAJO=1\n',
   )
 }
 

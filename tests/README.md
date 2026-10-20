@@ -7,6 +7,7 @@ cualquier máquina y otros exigen una base de datos local.
 | Carpeta | Qué prueba | Necesita | Comando |
 |---|---|---|---|
 | `dominio/` | Reglas de negocio puras de `src/lib/domain/` (precios, IVA, cancelación, disponibilidad, permisos…) | Nada | `npm run test:dominio` |
+| `componentes/` | Componentes de React renderizados en jsdom (Testing Library): la tarjeta del asistente, el botón de envío | Nada (`// @vitest-environment jsdom` en el archivo) | `npm run test:componentes` |
 | `servicios/` | Lógica de servidor con sus dependencias simuladas: webhooks, cron, pasarelas, proveedores externos | Nada | `npm run test:servicios` |
 | `acciones/` | Server Actions (lo que guardan los formularios) | Base local para la mayoría | `npm run test:acciones` |
 | `base-de-datos/` | RLS por rol, funciones atómicas, anti-overbooking, permisos de `anon` | **Base local** (Docker) | `npm run test:db` |

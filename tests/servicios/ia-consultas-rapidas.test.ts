@@ -21,7 +21,9 @@ class IaNoDisponible extends Error {
     super(m)
   }
 }
-const chat = vi.fn(async (_m: unknown[], _h: unknown[]) => ({ contenido: '- Todo tranquilo', llamadas: [] }))
+const chat = vi.fn<(m: unknown[], h: unknown[]) => Promise<{ contenido: string; llamadas: never[] }>>(
+  async () => ({ contenido: '- Todo tranquilo', llamadas: [] }),
+)
 vi.mock('@/lib/ia/proveedor', () => ({
   iaActiva: () => true,
   IaNoDisponible,

@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     // Todas las pruebas viven en `tests/` (ver `tests/README.md`).
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     // Los tests de integración comparten la misma Postgres local: se ejecutan en
     // serie para evitar contención entre archivos.
     fileParallelism: false,

@@ -1,0 +1,74 @@
+name: E2E (recorrido del panel)
+
+# Recorre todas las pantallas del panel en un navegador real (`e2e/`).
+#
+# Se dispara a mano mientras no se haya visto andar en GitHub: se agregó el
+# 2026-10-20 sin poder probarlo en el runner. Cuando pase en verde un par de
+# veces, sumar `pull_request:` acá abajo para que corra en cada PR.
+#
+# Usa `next dev` y no `next start`: en producción los simuladores fallan a
+# propósito al arrancar (ADR 0018) y el CI no tiene credenciales reales.
+on:
+  workflow_dispatch:
+
+jobs:
+  recorrido:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Levantar Supabase local
+        run: npx supabase start
+
+      - name: Exportar credenciales de la base
+        run: |
+          estado=$(npx supabase status -o env)
+          api=$(echo "$estado" | grep '^API_URL=' | cut -d= -f2- | tr -d '"')
+          key=$(echo "$estado" | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '"')
+          anon=$(echo "$estado" | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          {
+            echo "SUPABASE_URL=$api"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$key"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$api"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon"
+          } >> "$GITHUB_ENV"
+
+      - name: Crear el usuario administrador
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf "$SUPABASE_URL/auth/v1/health" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" > /dev/null && break
+            sleep 2
+          done
+          node scripts/seed-usuarios.mjs
+
+      - name: Navegador de Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Levantar la app
+        run: |
+          npm run dev > dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/login > /dev/null && exit 0
+            sleep 3
+          done
+          cat dev.log
+          exit 1
+
+      - name: Recorrido
+        run: npm run e2e
+
+      - name: Registro de la app (si algo falló)
+        if: failure()
+        run: tail -200 dev.log || true
+
+      - name: Apagar Supabase
+        if: always()
+        run: npx supabase stop

@@ -54,3 +54,7 @@ next-env.d.ts
 # versión comprimida (`public/hotel/videos/blanca-hero.mp4`); el master se
 # guarda fuera del repositorio.
 public/hotel/videos/*.mov
+
+# Resultados de Playwright (e2e/)
+/test-results/
+/playwright-report/

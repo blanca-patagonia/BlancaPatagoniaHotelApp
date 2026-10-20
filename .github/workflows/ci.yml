@@ -147,8 +147,19 @@ jobs:
       # `--audit-level=high` y no `moderate`: con el umbral en moderate el paso se
       # pone rojo por cosas que no se pueden arreglar hoy, y un CI que falla
       # siempre deja de leerse. Las moderadas quedan visibles en la salida.
-      - name: Vulnerabilidades de dependencias (npm audit)
-        run: npm audit --audit-level=high
+      #
+      # ⚠️ Desde el 2026-10-20 el corte mira sólo PRODUCCIÓN (`--omit=dev`). Ese
+      # día apareció una alerta alta en `braces` (DoS con patrones anidados) sin
+      # versión corregida, que entra únicamente por el linter
+      # (eslint-config-next → fast-glob → micromatch). No llega al hotel: es una
+      # herramienta de desarrollo que procesa patrones escritos por nosotros. Con
+      # el corte sobre todo el árbol, el CI quedaba rojo por algo que nadie
+      # puede arreglar. Lo de desarrollo se sigue mostrando, sin cortar.
+      - name: Vulnerabilidades de dependencias de producción (npm audit)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Vulnerabilidades de herramientas de desarrollo (informativo)
+        run: npm audit --audit-level=high || echo "::warning::npm audit encontró vulnerabilidades en dependencias de desarrollo (ver arriba)."
 
       - name: Typecheck (TypeScript)
         run: npm run typecheck
