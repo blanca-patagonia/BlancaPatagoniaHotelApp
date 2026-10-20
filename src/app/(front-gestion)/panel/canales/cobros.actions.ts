@@ -1,5 +1,6 @@
 'use server'
 
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
@@ -347,7 +348,7 @@ async function avisarSiHayDiferencia(
   */
   if (Math.abs(devengado - d.facturado) < 0.01) return
 
-  await avisarDiscrepanciaFactura(client, {
+  await avisarDiscrepanciaFactura(crearClienteAdmin(), {
     // La clave es el período: una sola alerta por mes, aunque la factura se
     // cargue de nuevo tras corregirla.
     cargoId: `booking:${d.periodo}`,

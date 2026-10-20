@@ -1,5 +1,5 @@
 import 'server-only'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 import { registrarFalla } from '@/lib/acciones'
 import { leerSaldoReserva } from '@/lib/reservas/saldo'
 import { seniaSugerida } from '@/lib/domain/pagos'
@@ -85,7 +85,7 @@ function destinoDe(r: FilaReserva): DestinoHuesped {
  * ese caso NO se manda el aviso —uno con un saldo equivocado es peor que
  * ninguno— y queda en el registro.
  */
-async function saldoDe(client: SupabaseClient, reservaId: string, total: number): Promise<number | null> {
+async function saldoDe(client: ClienteServicio, reservaId: string, total: number): Promise<number | null> {
   const r = await leerSaldoReserva(client, reservaId, total)
   if ('error' in r) {
     registrarFalla({ message: r.error }, `recordatorios: leer el saldo de la reserva ${reservaId}`)
@@ -103,7 +103,7 @@ async function saldoDe(client: SupabaseClient, reservaId: string, total: number)
  * de llegada saldrían para el día equivocado.
  */
 export async function correrRecordatorios(
-  client: SupabaseClient,
+  client: ClienteServicio,
   hoy: string = hoyISO(),
 ): Promise<ResumenRecordatorios> {
   const v = ventanasDeAviso(hoy)
@@ -150,7 +150,7 @@ export async function correrRecordatorios(
  * El `discriminante` es la fecha de llegada: sin él, una reserva reprogramada no
  * volvería a recibir aviso nunca, porque la clave ya estaría usada.
  */
-async function recordarLlegadas(client: SupabaseClient, manana: string): Promise<number> {
+async function recordarLlegadas(client: ClienteServicio, manana: string): Promise<number> {
   const { data, error } = await client
     .from('estadias')
     .select(`check_in, reserva:reservas!inner(${CAMPOS})`)
@@ -190,7 +190,7 @@ async function recordarLlegadas(client: SupabaseClient, manana: string): Promise
 }
 
 /** Recordatorio de saldo a quienes llegan en una semana y todavía deben. */
-async function recordarSaldos(client: SupabaseClient, enUnaSemana: string): Promise<number> {
+async function recordarSaldos(client: ClienteServicio, enUnaSemana: string): Promise<number> {
   const { data, error } = await client
     .from('estadias')
     .select(`check_in, reserva:reservas!inner(${CAMPOS})`)
@@ -225,7 +225,7 @@ async function recordarSaldos(client: SupabaseClient, enUnaSemana: string): Prom
 }
 
 /** Aviso de check-out a quienes salen mañana, con el saldo si queda. */
-async function recordarSalidas(client: SupabaseClient, manana: string): Promise<number> {
+async function recordarSalidas(client: ClienteServicio, manana: string): Promise<number> {
   const { data, error } = await client
     .from('estadias')
     .select(`check_out, reserva:reservas!inner(${CAMPOS})`)
@@ -259,7 +259,7 @@ async function recordarSalidas(client: SupabaseClient, manana: string): Promise<
  * libera sola y hasta ahora eso pasaba **en silencio**. El huésped creía tener la
  * habitación y se enteraba al llegar.
  */
-async function avisarLasQueVencen(client: SupabaseClient, creadaAntesDe: string): Promise<number> {
+async function avisarLasQueVencen(client: ClienteServicio, creadaAntesDe: string): Promise<number> {
   const { data, error } = await client
     .from('reservas')
     .select(`${CAMPOS}, estadia:estadias(check_in, check_out)`)
@@ -298,7 +298,7 @@ async function avisarLasQueVencen(client: SupabaseClient, creadaAntesDe: string)
  * lo bloquea sin `acepta_promociones`— y además exige un puntaje alto. Pedirle
  * una reseña pública a quien puntuó bajo es pedirle que publique su queja.
  */
-async function pedirResenas(client: SupabaseClient, salidaHaceDias: string): Promise<number> {
+async function pedirResenas(client: ClienteServicio, salidaHaceDias: string): Promise<number> {
   const { data, error } = await client
     .from('estadias')
     .select(`check_out, reserva:reservas!inner(${CAMPOS})`)

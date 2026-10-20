@@ -1,5 +1,5 @@
 import 'server-only'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { formatoFechaCorta } from '@/lib/fechas'
 import { HORA_CHECK_IN, HORA_CHECK_OUT } from '@/lib/domain/hotel'
@@ -42,7 +42,7 @@ import { encolar, type ResultadoEncolado } from './index'
  * mañana o el de lo que bajó de un canal.
  */
 export function avisarNuevaReserva(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: {
     reservaId: string
     codigo: string
@@ -70,7 +70,7 @@ export function avisarNuevaReserva(
 
 /** Se acreditó un pago. La entidad es el pago, no la reserva: hay varios por reserva. */
 export function avisarPagoInterno(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: {
     pagoId: string
     reservaId: string
@@ -105,7 +105,7 @@ export function avisarPagoInterno(
  * falta: el cron corre seguido y la cartelera no es un log.
  */
 export function avisarErrorSincronizacion(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: { canal: string; detalle: string; dia: string },
 ): Promise<ResultadoEncolado> {
   return encolar(client, {
@@ -128,7 +128,7 @@ export function avisarErrorSincronizacion(
  * en la pantalla de canales, que es a donde manda a ir.
  */
 export function avisarCanalPorRevisar(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: { canal: string; cantidad: number; dia: string; conflictos?: number },
 ): Promise<ResultadoEncolado> {
   return encolar(client, {
@@ -158,7 +158,7 @@ export function avisarCanalPorRevisar(
  * un solo aviso. La cartelera no es un log.
  */
 export function avisarReservasModificadas(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: { canal: string; cantidad: number; dia: string },
 ): Promise<ResultadoEncolado> {
   return encolar(client, {
@@ -171,7 +171,7 @@ export function avisarReservasModificadas(
 
 /** Lo facturado por el canal no coincide con lo devengado. */
 export function avisarDiscrepanciaFactura(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: {
     cargoId: string
     canal: string
@@ -200,7 +200,7 @@ export function avisarDiscrepanciaFactura(
  * sin él sólo se avisaría la primera vez en la vida de esa unidad.
  */
 export function avisarHabitacionLista(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: { unidadId: string; unidad: string; dia: string; paraQuien?: string },
 ): Promise<ResultadoEncolado> {
   return encolar(client, {
@@ -217,7 +217,7 @@ export function avisarHabitacionLista(
 
 /** Se abrió una orden de mantenimiento urgente. */
 export function avisarIncidenteMantenimiento(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: { ordenId: string; unidad: string; titulo: string; prioridad: string },
 ): Promise<ResultadoEncolado> {
   return encolar(client, {
@@ -246,7 +246,7 @@ export interface DestinoHuesped {
 
 /** La seña llegó: la reserva pasó a confirmada. */
 export function avisarReservaConfirmada(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { checkIn: string; checkOut: string; saldo: number },
 ): Promise<ResultadoEncolado> {
@@ -271,7 +271,7 @@ export function avisarReservaConfirmada(
 
 /** Se acreditó un pago suyo. La entidad es el pago: puede haber varios. */
 export function avisarPagoRecibido(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { pagoId: string; importe: number; saldo: number },
 ): Promise<ResultadoEncolado> {
@@ -299,7 +299,7 @@ export function avisarPagoRecibido(
  * pudo ser otra cosa es peor que no decir nada.
  */
 export function avisarPagoRechazado(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { pagoId: string; importe: number; enlace: string },
 ): Promise<ResultadoEncolado> {
@@ -326,7 +326,7 @@ export function avisarPagoRechazado(
  * son dos avisos, y tienen que serlo.
  */
 export function avisarReservaReprogramada(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { checkIn: string; checkOut: string; total: number },
 ): Promise<ResultadoEncolado> {
@@ -359,7 +359,7 @@ export function avisarReservaReprogramada(
  * desactualizada el día que cambie.
  */
 export function avisarReservaCancelada(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { checkIn: string; checkOut: string; detalle: string },
 ): Promise<ResultadoEncolado> {
@@ -382,7 +382,7 @@ export function avisarReservaCancelada(
 
 /** No se presentó. */
 export function avisarNoShow(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { checkIn: string; detalle: string },
 ): Promise<ResultadoEncolado> {
@@ -410,7 +410,7 @@ export function avisarNoShow(
  * huésped creía tener la habitación y se enteraba al llegar.
  */
 export function avisarReservaPorVencer(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { checkIn: string; sena: number; enlace: string },
 ): Promise<ResultadoEncolado> {
@@ -433,7 +433,7 @@ export function avisarReservaPorVencer(
 
 /** Queda saldo y la llegada está cerca. El discriminante es la llegada. */
 export function avisarSaldoPendiente(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { checkIn: string; saldo: number; enlace: string },
 ): Promise<ResultadoEncolado> {
@@ -463,7 +463,7 @@ export function avisarSaldoPendiente(
  * le están cobrando algo.
  */
 export function avisarCheckoutProximo(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { checkOut: string; saldo: number },
 ): Promise<ResultadoEncolado> {
@@ -497,7 +497,7 @@ export function avisarCheckoutProximo(
  * hotel—, y es la que decide si hace falta opt-in.
  */
 export function avisarSolicitudResena(
-  client: SupabaseClient,
+  client: ClienteServicio,
   h: DestinoHuesped,
   d: { enlace: string },
 ): Promise<ResultadoEncolado> {

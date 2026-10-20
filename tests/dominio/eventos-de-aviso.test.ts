@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 import * as eventos from '@/lib/notificaciones/eventos'
 import {
   PLANTILLAS,
@@ -43,7 +43,7 @@ interface Encolado {
  * Devuelve preferencias que aceptan todo, para que el consentimiento no corte el
  * encolado del evento comercial y el test llegue a mirar sus variables.
  */
-function clienteFalso(): { client: SupabaseClient; encolados: Encolado[] } {
+function clienteFalso(): { client: ClienteServicio; encolados: Encolado[] } {
   const encolados: Encolado[] = []
 
   const client = {
@@ -67,7 +67,7 @@ function clienteFalso(): { client: SupabaseClient; encolados: Encolado[] } {
         },
       }
     },
-  } as unknown as SupabaseClient
+  } as unknown as ClienteServicio
 
   return { client, encolados }
 }
@@ -89,7 +89,7 @@ const ENLACE = 'https://blancapatagonia.test/x/abc'
  * La clave del mapa es el evento, así que el test de cobertura de más abajo
  * puede comparar contra `EVENTOS_EMAIL` y nombrar el que falte.
  */
-const LLAMADAS: Partial<Record<EventoEmail, (c: SupabaseClient) => Promise<unknown>>> = {
+const LLAMADAS: Partial<Record<EventoEmail, (c: ClienteServicio) => Promise<unknown>>> = {
   interno_nueva_reserva: (c) =>
     eventos.avisarNuevaReserva(c, {
       reservaId: HUESPED.reservaId,

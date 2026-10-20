@@ -55,7 +55,10 @@ export async function consultaRapida(
 ): Promise<{ texto?: string; error?: string }> {
   const sesion = await requerirAcceso('ia')
   if (!iaActiva()) return { error: 'El asistente de IA no está configurado.' }
-  const pedidos = DATOS[tipo]
+  // Es una Server Action: `tipo` llega del cliente y puede ser cualquier cosa.
+  // `Object.hasOwn` y no `DATOS[tipo]` a secas: con 'constructor' devolvía la
+  // función heredada de Object y la acción terminaba en un 500.
+  const pedidos = Object.hasOwn(DATOS, tipo) ? DATOS[tipo] : undefined
   if (!pedidos) return { error: 'Consulta desconocida.' }
   if (!(await permitirIntentoDe('ia_consulta', sesion.userId))) {
     return { error: 'Hiciste muchas consultas seguidas al asistente. Esperá unos minutos.' }

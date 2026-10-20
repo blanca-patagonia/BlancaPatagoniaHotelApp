@@ -1,4 +1,5 @@
 import 'server-only'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
@@ -76,7 +77,11 @@ export interface ResultadoEncolado {
  * recordatorio no justifica abortar un check-out.
  */
 export async function encolar(
-  client: SupabaseClient,
+  /**
+   * Con `service_role` (`crearClienteAdmin()`): `notificaciones` no acepta
+   * escrituras del cliente del usuario (0075). El tipo lo exige.
+   */
+  client: ClienteServicio,
   p: PedidoDeNotificacion,
 ): Promise<ResultadoEncolado> {
   /*

@@ -1,10 +1,10 @@
 'use server'
 
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { requerirAcceso } from '@/lib/auth/session'
-import { puedeAcceder } from '@/lib/domain/permisos'
 import {
-  AREA_DE_PROPUESTA,
   describirPropuesta,
+  puedeConfirmar,
   destinoDeRedireccion,
   interpretarDestino,
   validarPropuesta,
@@ -90,7 +90,7 @@ export async function ejecutarPropuesta(valor: unknown): Promise<EstadoPropuesta
   const sesion = await requerirAcceso('ia')
   const propuesta = validarPropuesta(valor)
   if (!propuesta) return { error: 'La acción no tiene un formato válido. Pedísela de nuevo al asistente.' }
-  if (!puedeAcceder(sesion.rol, AREA_DE_PROPUESTA[propuesta.tipo])) {
+  if (!puedeConfirmar(sesion.rol, propuesta.tipo)) {
     return { error: 'Tu rol no puede hacer esta acción.' }
   }
 
@@ -389,7 +389,7 @@ async function enviarMensaje(p: Extract<Propuesta, { tipo: 'mensaje_huesped' }>)
   if (!r?.huesped) return { error: 'La reserva no tiene huésped asignado.' }
   if (!r.huesped.email) return { error: 'El huésped no tiene email cargado: completalo en su ficha.' }
 
-  const resultado = await encolar(supabase, {
+  const resultado = await encolar(crearClienteAdmin(), {
     evento: 'mensaje_del_hotel',
     entidadId: r.id,
     // Cada mensaje es distinto: sin esto, el segundo mensaje a la misma reserva

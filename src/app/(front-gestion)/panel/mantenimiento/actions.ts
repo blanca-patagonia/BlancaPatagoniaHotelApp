@@ -1,5 +1,6 @@
 'use server'
 
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
@@ -58,7 +59,7 @@ export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promis
       unidad: { nombre: string } | { nombre: string }[] | null
     }
     const unidad = Array.isArray(orden.unidad) ? orden.unidad[0] : orden.unidad
-    await avisarIncidenteMantenimiento(supabase, {
+    await avisarIncidenteMantenimiento(crearClienteAdmin(), {
       ordenId: orden.id,
       // Una orden puede no tener unidad (algo del edificio, no de una habitación).
       unidad: unidad?.nombre ?? 'Sin unidad asignada',

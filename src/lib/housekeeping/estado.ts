@@ -1,4 +1,5 @@
 import 'server-only'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { avisarHabitacionLista } from '@/lib/notificaciones/eventos'
@@ -84,7 +85,7 @@ async function avisarUnidadLista(
     reserva: { huesped: { nombre: string; apellido: string } | null } | null
   } | null)?.reserva?.huesped
 
-  await avisarHabitacionLista(client, {
+  await avisarHabitacionLista(crearClienteAdmin(), {
     unidadId,
     unidad: unidad.nombre,
     dia: hoy,

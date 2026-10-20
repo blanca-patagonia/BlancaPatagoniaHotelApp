@@ -7,6 +7,7 @@
  * (2026-10-20) para que el dinero se lea en un solo lugar.
  */
 
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { type EstadoReserva } from '@/lib/domain/reservas'
@@ -149,7 +150,7 @@ export async function registrarPago(formData: FormData): Promise<void> {
     No corta el flujo: el cobro ya está hecho, y no poder anotar un correo no
     puede volverse un error en la cara de quien está cobrando.
   */
-  await avisarCobroAprobado(supabase, {
+  await avisarCobroAprobado(crearClienteAdmin(), {
     reservaId,
     pagoId: externalId ?? reservaId,
     importe: montoUSD,

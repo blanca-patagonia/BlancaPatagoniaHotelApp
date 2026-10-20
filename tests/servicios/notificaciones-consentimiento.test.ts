@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 
 /**
  * El consentimiento del huésped se verifica fallando CERRADO.
@@ -24,7 +24,7 @@ function clienteQueFalla() {
     maybeSingle: async () => ({ data: null, error: { message: 'connection reset' } }),
     insert,
   }
-  return { cliente: { from: () => cadena } as unknown as SupabaseClient, insert }
+  return { cliente: { from: () => cadena } as unknown as ClienteServicio, insert }
 }
 
 describe('encolar: consentimiento', () => {

@@ -19,7 +19,7 @@
  * proveedor de IA valida como nombre de función, y varios rechazan acentos.
  */
 
-import { puedeAcceder, type Area } from './permisos'
+import { esDireccion, puedeAcceder, type Area } from './permisos'
 import type { Rol } from './roles'
 
 export interface DefinicionHerramienta {
@@ -30,6 +30,8 @@ export interface DefinicionHerramienta {
    * housekeeping no le llega ni la existencia de la facturación.
    */
   area: Area
+  /** Más estrecha que el área: sólo admin y gerencia (ver `SOLO_DIRECCION`). */
+  soloDireccion?: boolean
   descripcion: string
   /** JSON Schema de los parámetros, formato "function calling" de OpenAI. */
   parametros: {
@@ -342,6 +344,7 @@ export const HERRAMIENTAS_IA: DefinicionHerramienta[] = [
   {
     nombre: 'proponer_nota_credito',
     area: 'reservas',
+    soloDireccion: true,
     descripcion:
       'Prepara una nota de crédito (con CAE) sobre la factura de una reserva, para anularla total o parcialmente.',
     parametros: {
@@ -540,7 +543,7 @@ export const HERRAMIENTAS_IA: DefinicionHerramienta[] = [
  * cliente del usuario, así que RLS sigue aplicando.
  */
 export function herramientasPara(rol: Rol): DefinicionHerramienta[] {
-  return HERRAMIENTAS_IA.filter((h) => puedeAcceder(rol, h.area))
+  return HERRAMIENTAS_IA.filter((h) => puedeAcceder(rol, h.area) && (!h.soloDireccion || esDireccion(rol)))
 }
 
 /* ────────────────────────────── herramientas relevantes por consulta ── */

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 import { hayDB, clienteDePrueba, clienteAnonimo, hayAnon, sufijoUnico } from '../apoyo/db'
 import { encolar, despachar } from '@/lib/notificaciones'
 import { MAX_INTENTOS } from '@/lib/domain/notificaciones'
@@ -35,7 +35,7 @@ const VARIABLES = {
 }
 
 describe.skipIf(!hayDB)('bandeja de salida', () => {
-  let db: SupabaseClient
+  let db: ClienteServicio
   const sufijo = sufijoUnico()
   let huespedId = ''
   let huespedMudo = ''
@@ -276,7 +276,7 @@ describe.skipIf(!hayAnon)('borde público de la bandeja', () => {
  * el destino y ahí no hay rebote posible.
  */
 describe.skipIf(!hayDB)('avisos internos a la cartelera', () => {
-  let db: SupabaseClient
+  let db: ClienteServicio
   const sufijo = sufijoUnico()
 
   beforeAll(() => {

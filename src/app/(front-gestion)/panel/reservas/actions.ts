@@ -12,6 +12,7 @@
  *  · `cambios.actions.ts`  editar la ficha, cambiar fechas, mudar de unidad
  */
 
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { deLista } from '@/lib/domain/listas'
 import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
@@ -406,7 +407,7 @@ async function avisarDelFinal(
   })
 
   if (nuevo === 'no_show') {
-    await avisarNoShow(client, destino, {
+    await avisarNoShow(crearClienteAdmin(), destino, {
       checkIn: estadia.check_in,
       // El no-show se cobra siempre al 100 %: no depende de la anticipación.
       detalle: textoDeNoShow(cargo?.monto ?? Number(r.total)),
@@ -414,7 +415,7 @@ async function avisarDelFinal(
     return
   }
 
-  await avisarReservaCancelada(client, destino, {
+  await avisarReservaCancelada(crearClienteAdmin(), destino, {
     checkIn: estadia.check_in,
     checkOut: estadia.check_out,
     detalle: textoDeCancelacion(cargo),
@@ -531,7 +532,7 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
       if (nivelNuevo !== nivelPrevio && huespedFid?.email) {
         // Se encola: el aviso de fidelidad no puede demorar ni hacer fallar un
         // check-out. `huespedId` deja que la bandeja consulte el consentimiento.
-        await encolar(supabase, {
+        await encolar(crearClienteAdmin(), {
           evento: 'cambio_nivel_fidelidad',
           entidadId: id,
           destinatario: huespedFid.email,
@@ -560,7 +561,7 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
     if (encuesta?.token && huesped?.email) {
       // La encuesta respeta el horario permitido: es un mensaje que inicia el
       // hotel, y un check-out de las 23:00 no justifica escribirle a esa hora.
-      await encolar(supabase, {
+      await encolar(crearClienteAdmin(), {
         evento: 'encuesta_postcheckout',
         entidadId: id,
         destinatario: huesped.email,
@@ -774,7 +775,7 @@ export async function enviarRecordatoriosLlegada(): Promise<void> {
       mandando uno solo, que es lo que hacía falta: antes no tenía idempotencia
       ninguna y dos clics eran dos correos.
     */
-    const res = await encolar(supabase, {
+    const res = await encolar(crearClienteAdmin(), {
       evento: 'recordatorio_checkin',
       entidadId: r.id,
       discriminante: manana,

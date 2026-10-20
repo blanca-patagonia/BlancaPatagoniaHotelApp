@@ -9,7 +9,9 @@ import {
   interpretarDestino,
   describirPropuesta,
   validarPropuesta,
+  puedeConfirmar,
 } from '@/lib/domain/ia-acciones'
+import { herramientasPara } from '@/lib/domain/ia-herramientas'
 import { AREAS, rutaDeArea } from '@/lib/domain/permisos'
 
 const UUID_A = '11111111-1111-4111-8111-111111111111'
@@ -280,5 +282,27 @@ describe('cerrar lo abierto: orden de mantenimiento y objeto perdido', () => {
     expect(validarPropuesta({ tipo: 'objeto_devuelto', objetoId: ID, descripcion: '  ' })).toBeNull()
     expect(AREA_DE_PROPUESTA.objeto_devuelto).toBe('objetos_perdidos')
     expect(AREA_DE_PROPUESTA.estado_orden).toBe('mantenimiento')
+  })
+})
+
+describe('acciones sólo de la dirección (auditoría de seguridad 2026-10-20)', () => {
+  it('la nota de crédito la confirman admin y gerencia, no recepción', () => {
+    expect(puedeConfirmar('admin', 'nota_credito')).toBe(true)
+    expect(puedeConfirmar('gerencia', 'nota_credito')).toBe(true)
+    expect(puedeConfirmar('recepcion', 'nota_credito')).toBe(false)
+    expect(puedeConfirmar('housekeeping', 'nota_credito')).toBe(false)
+  })
+
+  it('el resto sigue la matriz de áreas: recepción factura y cancela', () => {
+    expect(puedeConfirmar('recepcion', 'factura')).toBe(true)
+    expect(puedeConfirmar('recepcion', 'estado_reserva')).toBe(true)
+    expect(puedeConfirmar('housekeeping', 'factura')).toBe(false)
+  })
+
+  it('a recepción ni siquiera se le ofrece la herramienta', () => {
+    const nombres = (rol: 'recepcion' | 'gerencia') => herramientasPara(rol).map((h) => h.nombre)
+    expect(nombres('recepcion')).not.toContain('proponer_nota_credito')
+    expect(nombres('recepcion')).toContain('proponer_factura')
+    expect(nombres('gerencia')).toContain('proponer_nota_credito')
   })
 })

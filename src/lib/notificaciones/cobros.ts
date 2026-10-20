@@ -1,5 +1,5 @@
 import 'server-only'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 import { leerSaldoReserva } from '@/lib/reservas/saldo'
 import { registrarFalla } from '@/lib/acciones'
 import { ETIQUETAS_MEDIO, type MedioPago } from '@/lib/domain/pagos'
@@ -45,7 +45,7 @@ interface Contexto {
  * es mejor no mandar nada que mandar un correo con fechas en blanco.
  */
 async function contextoDelCobro(
-  client: SupabaseClient,
+  client: ClienteServicio,
   reservaId: string,
 ): Promise<Contexto | null> {
   const { data: reserva, error } = await client
@@ -119,7 +119,7 @@ async function contextoDelCobro(
  * aclarando que falta la seña, el otro cuando la seña llegó.
  */
 export async function avisarCobroAprobado(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: {
     reservaId: string
     pagoId: string
@@ -166,7 +166,7 @@ export async function avisarCobroAprobado(
  * quien puede reintentar.
  */
 export async function avisarCobroRechazado(
-  client: SupabaseClient,
+  client: ClienteServicio,
   d: { reservaId: string; pagoId: string; importe: number; enlace: string },
 ): Promise<void> {
   const ctx = await contextoDelCobro(client, d.reservaId)

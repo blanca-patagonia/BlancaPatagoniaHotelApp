@@ -90,6 +90,7 @@ const encolar = vi.fn<(c: unknown, p: Record<string, unknown>) => Promise<{ ok: 
   async () => ({ ok: true }),
 )
 vi.mock('@/lib/notificaciones', () => ({ encolar }))
+vi.mock('@/lib/supabase/admin', () => ({ crearClienteAdmin: () => ({}) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 const { ejecutarPropuesta } = await import('@/app/(front-gestion)/panel/ia/acciones')
@@ -355,5 +356,19 @@ describe('ejecutarPropuesta: cerrar lo abierto en mantenimiento y objetos perdid
     })
     const r = await ejecutarPropuesta({ tipo: 'estado_orden', ordenId: UUID_A, titulo: 'Ducha', estado: 'resuelta' })
     expect(r.error).toBe('No se pudo cambiar el estado de la orden.')
+  })
+})
+
+describe('ejecutarPropuesta: la nota de crédito es sólo de la dirección', () => {
+  it('recepción no la confirma aunque tenga el área de reservas', async () => {
+    rol = 'recepcion'
+    const r = await ejecutarPropuesta({
+      tipo: 'nota_credito',
+      reservaId: UUID_A,
+      codigoReserva: 'BP-1',
+      monto: 50,
+      motivo: 'Descuento acordado',
+    })
+    expect(r).toEqual({ error: 'Tu rol no puede hacer esta acción.' })
   })
 })

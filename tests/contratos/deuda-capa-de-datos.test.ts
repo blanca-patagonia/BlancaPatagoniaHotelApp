@@ -23,7 +23,9 @@ import { join } from 'node:path'
  *   · si sacaste accesos de otro lado, BAJÁ `TOPE` a lo que dé ahora.
  * Nunca lo subas: un trinquete que se sube cuando molesta no sirve.
  */
-const TOPE = 268
+// 2026-10-20: subió de 268 a 278 UNA vez, a propósito: los avisos se encolaban con el
+// cliente del usuario y fallaban (permission denied); el arreglo pasa crearClienteAdmin().
+const TOPE = 278
 
 const APP = join(process.cwd(), 'src', 'app')
 

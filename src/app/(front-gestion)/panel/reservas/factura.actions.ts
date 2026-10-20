@@ -9,7 +9,7 @@
 import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
-import { requerirAcceso } from '@/lib/auth/session'
+import { requerirAcceso, requerirRol } from '@/lib/auth/session'
 import { hoyISO } from '@/lib/fechas'
 import {
   tipoComprobante,
@@ -405,7 +405,14 @@ export async function emitirFactura(formData: FormData): Promise<void> {
  * en pantalla en vez de mostrar un error de Postgres.
  */
 export async function emitirNotaCredito(formData: FormData): Promise<void> {
-  const sesion = await requerirAcceso('reservas')
+  /*
+    Más estrecha que el área `reservas`, a propósito: la nota de crédito la
+    emiten admin y gerencia (RLS de `notas_credito`, 0076, y la guarda de
+    `siguiente_numero_nota_credito`, 0120). Con `requerirAcceso('reservas')`
+    recepción llegaba hasta pedir el CAE y recién ahí la base rechazaba el
+    insert: con ARCA real quedaba una nota autorizada que no existe en el sistema.
+  */
+  const sesion = await requerirRol('admin', 'gerencia')
   const reservaId = String(formData.get('reserva_id') ?? '')
   if (!reservaId) redirect('/panel/reservas')
 

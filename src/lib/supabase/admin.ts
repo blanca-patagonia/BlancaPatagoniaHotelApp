@@ -1,5 +1,5 @@
 import 'server-only'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { fetchConCorte } from './fetch-con-corte'
 import { envServidor } from '@/lib/env'
 
@@ -12,7 +12,24 @@ import { envServidor } from '@/lib/env'
  * acceso total a la base de datos. El import de `server-only` hace fallar el
  * build si alguien lo intenta.
  */
-export function crearClienteAdmin() {
+/**
+ * Un cliente con `service_role`, MARCADO en el tipo.
+ *
+ * Hay escrituras que sólo puede hacer el sistema —la bandeja de avisos
+ * (`notificaciones`), igual que `errores` y `auditoria`— y la base las niega al
+ * cliente del usuario. Pasarle a esas funciones el cliente de la sesión no daba
+ * error de compilación: fallaba en tiempo de ejecución con «permission denied»,
+ * y como `encolar` no corta, el aviso simplemente no salía. Así estuvieron el
+ * correo de cancelación, los avisos de cobro, el «habitación lista» de
+ * housekeeping y el mensaje al huésped del asistente (2026-10-20).
+ *
+ * Con la marca, una función que exige `ClienteServicio` no acepta el cliente del
+ * usuario: el error aparece al compilar. Sigue siendo un `SupabaseClient` para
+ * todo lo demás.
+ */
+export type ClienteServicio = SupabaseClient & { readonly __servicio: true }
+
+export function crearClienteAdmin(): ClienteServicio {
   // Se validan acá y no con `!`: si falta la clave, el error dice cuál falta
   // en vez de fallar más adelante como un problema de red.
   const env = envServidor()
@@ -29,5 +46,5 @@ export function crearClienteAdmin() {
       // Sin corte, una base colgada retenía la función hasta su límite.
       global: { fetch: fetchConCorte(20_000) },
     },
-  )
+  ) as ClienteServicio
 }

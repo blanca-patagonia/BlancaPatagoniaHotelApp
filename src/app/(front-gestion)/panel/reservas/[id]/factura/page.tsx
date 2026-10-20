@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { mensajeDe } from '@/lib/listados'
 import { notFound } from 'next/navigation'
 import { requerirAcceso } from '@/lib/auth/session'
+import { esDireccion } from '@/lib/domain/permisos'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
@@ -102,7 +103,9 @@ export default async function FacturaPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ error?: string; ok?: string }>
 }) {
-  await requerirAcceso('reservas')
+  const sesion = await requerirAcceso('reservas')
+  // La nota de crédito la emite sólo la dirección (ver `emitirNotaCredito`).
+  const puedeAcreditar = esDireccion(sesion.rol)
   const { id } = await params
   const sp = await searchParams
   const supabase = await crearClienteServidor()
@@ -470,7 +473,12 @@ export default async function FacturaPage({
             </p>
           )}
 
-          {porAcreditar > 0 ? (
+          {porAcreditar > 0 && !puedeAcreditar ? (
+            <p className="mt-3 border-t border-stone-100 pt-2 text-xs text-stone-600 print:hidden">
+              Quedan {formatearUSD(porAcreditar)} sin acreditar. La nota de crédito la emite
+              administración o gerencia.
+            </p>
+          ) : porAcreditar > 0 ? (
             <form
               action={emitirNotaCredito}
               className="mt-4 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-4 print:hidden"

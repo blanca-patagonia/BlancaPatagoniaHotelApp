@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { ClienteServicio } from '@/lib/supabase/admin'
 
 /**
  * Acceso compartido a la base para los tests de integración.
@@ -113,11 +114,14 @@ if (process.env.EXIGIR_DB === '1' && !hayDB) {
 */
 const URL_SIN_BASE = 'http://placeholder.invalid'
 
-/** Cliente con `service_role` para preparar y limpiar datos de prueba. */
-export function clienteDePrueba(): SupabaseClient {
+/**
+ * Cliente con `service_role` para preparar y limpiar datos de prueba. Lleva la
+ * marca `ClienteServicio`, igual que `crearClienteAdmin()`: es el mismo rol.
+ */
+export function clienteDePrueba(): ClienteServicio {
   return createClient(url ?? URL_SIN_BASE, serviceKey ?? 'sin-clave', {
     auth: { persistSession: false, autoRefreshToken: false },
-  })
+  }) as ClienteServicio
 }
 
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

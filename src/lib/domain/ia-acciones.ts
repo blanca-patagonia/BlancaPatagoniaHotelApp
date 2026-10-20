@@ -22,7 +22,8 @@
  * Lógica pura: valida y describe. La ejecución vive en `panel/ia/acciones.ts`.
  */
 
-import type { Area } from './permisos'
+import { esDireccion, puedeAcceder, type Area } from './permisos'
+import type { Rol } from './roles'
 import { formatearUSD } from './moneda'
 
 export const PRIORIDADES_ORDEN = ['baja', 'media', 'alta'] as const
@@ -180,6 +181,19 @@ export const AREA_DE_PROPUESTA: Record<TipoPropuesta, Area> = {
   huesped_nuevo: 'huespedes',
   huesped_editar: 'huespedes',
   mensaje_huesped: 'reservas',
+}
+
+/**
+ * Acciones más estrechas que su área: las confirma sólo la dirección (admin y
+ * gerencia). La nota de crédito la emiten ellos según RLS (0076) y la guarda de
+ * la numeración (0120); recepción, que tiene el área `reservas`, llegaba a pedir
+ * el CAE antes de que la base la rechazara.
+ */
+export const SOLO_DIRECCION: ReadonlySet<TipoPropuesta> = new Set(['nota_credito'])
+
+/** ¿Este rol puede confirmar una propuesta de este tipo? */
+export function puedeConfirmar(rol: Rol, tipo: TipoPropuesta): boolean {
+  return puedeAcceder(rol, AREA_DE_PROPUESTA[tipo]) && (!SOLO_DIRECCION.has(tipo) || esDireccion(rol))
 }
 
 /** Un campo que la persona completa en la tarjeta (nunca pasa por la IA). */

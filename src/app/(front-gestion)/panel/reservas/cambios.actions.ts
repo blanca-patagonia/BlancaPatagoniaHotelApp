@@ -6,6 +6,7 @@
  * con `aplicar_precio_reserva` (0085/0114) y nunca escriben `total` a mano.
  */
 
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import type { TarifaTipo } from '@/lib/domain/precios'
@@ -272,7 +273,7 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
     telefono: string | null
   } | null
   await avisarReservaReprogramada(
-    supabase,
+    crearClienteAdmin(),
     {
       reservaId: id,
       huespedId: reserva.huesped_id as string | null,
