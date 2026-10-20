@@ -3,7 +3,7 @@ import { estaOculta } from '@/lib/domain/permisos'
 import { HERRAMIENTAS_IA, herramientasPara, herramientasRelevantes } from '@/lib/domain/ia-herramientas'
 import { pantallaDeRuta, preguntasSugeridas, promptSistemaIA, fechaEnPalabras } from '@/lib/domain/ia-prompt'
 import { partirRespuesta } from '@/lib/domain/ia-respuesta'
-import { resumirDia, enmascararDatosPersonales, normalizarCodigoReserva, movimientosPorDia } from '@/lib/domain/ia-datos'
+import { resumirDia, enmascararDatosPersonales, normalizarCodigoReserva, movimientosPorDia, respuestaSinDato } from '@/lib/domain/ia-datos'
 
 describe('catálogo de herramientas del asistente de IA', () => {
   it('cada herramienta tiene nombre y descripción', () => {
@@ -292,5 +292,30 @@ describe('herramientasRelevantes (menos tokens por consulta)', () => {
   it('respeta el tope', () => {
     const todo = 'ocupacion factura saldo hoy semana limpia aviso rota cargale check mudar fecha nota de credito reservá una'
     expect(nombres('admin', todo).length).toBeLessThanOrEqual(12)
+  })
+})
+
+describe('respuestaSinDato (medir lo que el asistente no pudo responder)', () => {
+  it('reconoce cuando dice que no tiene la herramienta o el acceso', () => {
+    for (const t of [
+      'No tengo una herramienta para consultar los sueldos.',
+      'Eso no lo tengo disponible: consultalo con administración.',
+      'No tengo acceso a los datos de facturación con tu rol.',
+      'No pude consultar el sistema en este momento.',
+      'Esa herramienta no está disponible para tu rol.',
+    ]) {
+      expect(respuestaSinDato(t), t).toBe(true)
+    }
+  })
+
+  it('no marca respuestas normales, aunque digan «no»', () => {
+    for (const t of [
+      'No hay reservas con saldo pendiente.',
+      'Hoy no llega nadie y quedan 47 unidades libres.',
+      'La reserva BP-1 no tiene factura todavía.',
+      'No encontré ninguna reserva a nombre de Pérez.',
+    ]) {
+      expect(respuestaSinDato(t), t).toBe(false)
+    }
   })
 })

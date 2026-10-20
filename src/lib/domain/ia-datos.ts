@@ -132,3 +132,30 @@ export function movimientosPorDia(estadias: readonly EstadiaDelDia[], desde: str
   }
   return resultado
 }
+
+/* ─────────────────────────────────────── lo que el asistente no supo ── */
+
+/**
+ * Frases con las que el asistente dice que NO pudo responder: no tiene la
+ * herramienta, no tiene acceso o el dato no está a su alcance.
+ *
+ * Sirve para medir (`ia_sin_respuesta` en `/panel/errores`): las próximas
+ * herramientas se eligen por lo que la gente de verdad preguntó y no se pudo
+ * contestar, no a ciegas. Es una heurística sobre texto y se acepta que se le
+ * escape alguna; lo que no puede es marcar como «sin respuesta» una respuesta
+ * normal, por eso las frases son específicas.
+ */
+const SIN_RESPUESTA = [
+  /no (tengo|cuento con) (una |ninguna |esa )?herramienta/,
+  /no (lo |la )?tengo disponible/,
+  /no tengo (acceso|forma de (ver|consultar|saber))/,
+  /no (puedo|pude) (consultar|acceder|ver|obtener|saber)/,
+  /no est[aá] disponible para tu rol/,
+  /no (se pudo|pude) consultar/,
+  /(fuera|m[aá]s all[aá]) de (lo que puedo|mi alcance)/,
+]
+
+export function respuestaSinDato(texto: string): boolean {
+  const t = texto.toLowerCase()
+  return SIN_RESPUESTA.some((r) => r.test(t))
+}

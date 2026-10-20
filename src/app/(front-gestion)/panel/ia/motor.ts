@@ -1,11 +1,11 @@
 import 'server-only'
 import { herramientasPara, herramientasRelevantes } from '@/lib/domain/ia-herramientas'
 import { pantallaDeRuta, promptSistemaIA } from '@/lib/domain/ia-prompt'
-import { enmascararDatosPersonales } from '@/lib/domain/ia-datos'
+import { enmascararDatosPersonales, respuestaSinDato } from '@/lib/domain/ia-datos'
 import { ETIQUETAS_ROL, type Rol } from '@/lib/domain/roles'
 import { hoyISO } from '@/lib/fechas'
 import { IaNoDisponible, obtenerProveedorIa, type MensajeIa } from '@/lib/ia/proveedor'
-import { registrarError, registrarInfo } from '@/lib/registro'
+import { registrarAviso, registrarError, registrarInfo } from '@/lib/registro'
 import { ejecutarHerramienta, propuestaDe } from './herramientas'
 import type { Propuesta } from '@/lib/domain/ia-acciones'
 
@@ -98,8 +98,8 @@ export async function conversar(p: {
 
   /*
     Al modelo se le mandan sólo las herramientas que tienen que ver con la
-    conversación (`herramientasRelevantes`, sobre los últimos mensajes): las 27
-    juntas pesan unos 3.700 tokens por llamada y agotaban el cupo por minuto del
+    conversación (`herramientasRelevantes`, sobre los últimos mensajes): las más de
+    cuarenta juntas pesan más de 5.000 tokens por llamada y agotaban el cupo por minuto del
     plan gratuito. Permitidas, en cambio, son todas las del rol: si el modelo
     pide una que no se le mandó pero el rol puede usar, se ejecuta igual.
   */
@@ -116,12 +116,27 @@ export async function conversar(p: {
   )
   let llamadasHechas = 0
 
+  /*
+    Lo que el asistente no pudo responder queda registrado (`ia_sin_respuesta`,
+    nivel aviso: se ve en /panel/errores). Con eso se decide qué herramienta
+    sumar después. La pregunta va enmascarada y recortada, y sin el usuario: lo
+    que interesa es QUÉ se preguntó, no quién.
+  */
+  const anotarSinRespuesta = (motivo: string) =>
+    registrarAviso('ia_sin_respuesta', {
+      motivo,
+      rol: sesion.rol,
+      pantalla: pantallaDeRuta(p.pantalla),
+      pregunta: enmascararDatosPersonales(entrada.at(-1)?.contenido ?? '').slice(0, 200),
+    })
+
   try {
     const proveedor = obtenerProveedorIa()
 
     const inicio = Date.now()
     for (let vuelta = 0; vuelta <= MAX_VUELTAS_HERRAMIENTA; vuelta++) {
       if (vuelta > 0 && Date.now() - inicio > PRESUPUESTO_MS) {
+        await anotarSinRespuesta('demasiado_lenta')
         return {
           error: 'La consulta tardó demasiado. Probá con una pregunta más puntual.',
           propuestas,
@@ -131,6 +146,7 @@ export async function conversar(p: {
       const respuesta = await proveedor.chat(conversacion, herramientas)
 
       if (respuesta.llamadas.length === 0) {
+        if (respuestaSinDato(respuesta.contenido ?? '')) await anotarSinRespuesta('sin_herramienta')
         return {
           respuesta:
             respuesta.contenido?.trim() ||
@@ -193,6 +209,7 @@ export async function conversar(p: {
       }
     }
 
+    await anotarSinRespuesta('demasiados_pasos')
     return {
       error:
         'El asistente necesitó demasiados pasos para esta consulta. Probá con una pregunta más puntual.',

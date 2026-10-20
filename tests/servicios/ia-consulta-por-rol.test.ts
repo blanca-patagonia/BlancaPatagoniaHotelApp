@@ -13,7 +13,8 @@ let rol = 'housekeeping'
 vi.mock('@/lib/auth/session', () => ({
   obtenerSesion: async () => ({ userId: 'u1', email: 'a@b.c', nombre: 'A', rol }),
 }))
-vi.mock('@/lib/registro', () => ({ registrarError: vi.fn(), registrarInfo: vi.fn() }))
+const registrarAviso = vi.fn()
+vi.mock('@/lib/registro', () => ({ registrarError: vi.fn(), registrarInfo: vi.fn(), registrarAviso }))
 
 let permitido = true
 vi.mock('@/lib/limites', () => ({ permitirIntentoDe: async () => permitido }))
@@ -55,6 +56,7 @@ beforeEach(() => {
   ofrecidas = []
   guion = []
   ejecutarHerramienta.mockClear()
+  registrarAviso.mockClear()
 })
 
 describe('consulta del asistente por rol', () => {
@@ -111,5 +113,25 @@ describe('consulta del asistente por rol', () => {
     const r = await preguntar()
     expect(r.status).toBe(429)
     expect(ofrecidas).toEqual([])
+  })
+})
+
+describe('lo que el asistente no pudo responder', () => {
+  it('queda anotado como ia_sin_respuesta, con la pregunta enmascarada y sin el usuario', async () => {
+    rol = 'recepcion'
+    guion = [{ contenido: 'No tengo una herramienta para ver los sueldos del personal.', llamadas: [] }]
+    await preguntar('¿Cuánto cobra el empleado con DNI 30.123.456?')
+    expect(registrarAviso).toHaveBeenCalledTimes(1)
+    const [evento, datos] = registrarAviso.mock.calls[0]
+    expect(evento).toBe('ia_sin_respuesta')
+    expect(datos).toMatchObject({ motivo: 'sin_herramienta', rol: 'recepcion' })
+    expect(String(datos.pregunta)).not.toMatch(/30\.123\.456/)
+    expect(datos).not.toHaveProperty('usuarioId')
+  })
+
+  it('una respuesta normal no se anota', async () => {
+    guion = [{ contenido: 'Hoy llegan 3 reservas.', llamadas: [] }]
+    await preguntar('¿Quién llega hoy?')
+    expect(registrarAviso).not.toHaveBeenCalled()
   })
 })
