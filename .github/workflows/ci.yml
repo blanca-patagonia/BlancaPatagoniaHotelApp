@@ -35,7 +35,8 @@ jobs:
           # 22 es la LTS vigente. Con 20 el runner podía traer una versión
           # anterior a la 20.12, que es desde donde existe
           # `--env-file-if-exists`, y eso hacía fallar el paso del seed.
-          node-version: 22
+          # La versión vive en `.nvmrc`, la misma que usa `nvm use` en local.
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Versiones (para diagnosticar)

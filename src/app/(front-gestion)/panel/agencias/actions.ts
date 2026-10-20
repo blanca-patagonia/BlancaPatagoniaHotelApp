@@ -1,0 +1,327 @@
+'use server'
+
+import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
+import { crearClienteServidor } from '@/lib/supabase/server'
+import { requerirRol } from '@/lib/auth/session'
+import { puedeAvanzar, type EtapaComercial } from '@/lib/domain/comercial'
+import { TIPOS_CUENTA, movimientoEnMoneda, type TipoCuenta } from '@/lib/domain/cuentas'
+import { esMonedaExtranjera } from '@/lib/domain/divisas'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
+import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
+import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
+import { registrarAviso } from '@/lib/registro'
+
+export interface EstadoAgencia {
+  error?: string
+  ok?: string
+  /** Id de la cuenta recién creada, para ofrecer el enlace a su ficha. */
+  id?: string
+}
+
+export async function crearAgencia(
+  _prev: EstadoAgencia,
+  formData: FormData,
+): Promise<EstadoAgencia> {
+  await requerirRol('admin', 'gerencia')
+
+  const nombre = String(formData.get('nombre') ?? '').trim()
+  const tipo = String(formData.get('tipo') ?? 'agencia')
+  const cuit = String(formData.get('cuit') ?? '').trim()
+  const email = String(formData.get('email') ?? '').trim()
+  const descuento = Math.min(100, Math.max(0, Number(formData.get('descuento_pct') ?? 0) || 0))
+
+  if (!nombre) return { error: 'Ingresá el nombre.' }
+  if (!(TIPOS_CUENTA as readonly string[]).includes(tipo)) return { error: 'Tipo inválido.' }
+
+  const supabase = await crearClienteServidor()
+  const { data, error } = await supabase
+    .from('agencias')
+    .insert({ nombre, tipo, cuit: cuit || null, email: email || null, descuento_pct: descuento })
+    .select('id')
+    .single()
+  if (error) return { error: mensajeDeFalla(error, 'agencias:crear', 'No se pudo crear la agencia') }
+  revalidatePath('/panel/agencias')
+  return { ok: `Se registró ${nombre}.`, id: (data as { id: string } | null)?.id }
+}
+
+/**
+ * Registra un cargo o un pago en la cuenta corriente de una agencia.
+ *
+ * No tenía ninguna verificación (auditoría · Fase 3): era la única de este
+ * archivo sin guarda, y la que mueve plata. Se le aplica la MISMA regla que a
+ * sus hermanas —admin/gerencia— y no la del área `agencias`, que en
+ * `lib/domain/permisos.ts` también alcanza a recepción: esa matriz gobierna
+ * quién *ve* la sección, mientras que escribir sobre una cuenta corriente es
+ * competencia de gerencia.
+ *
+ * ── La moneda (auditoría 2026-09, P1-3) ─────────────────────────────────────
+ *
+ * El importe se ingresa **en la moneda del comprobante** y se guarda en las dos:
+ * `monto` en USD, que es lo único que suma `saldoCuenta`, y `monto_origen` con
+ * el número que la agencia tiene en el papel.
+ *
+ * Antes esta acción no mandaba `moneda`, así que la columna caía en su default
+ * `'USD'` para todas las filas. Una agencia argentina a la que se le carga un
+ * cargo de ARS 185.000 quedaba debiendo USD 185.000.
+ */
+export async function registrarMovimiento(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const agenciaId = String(formData.get('agencia_id') ?? '')
+  const tipo = String(formData.get('tipo') ?? '')
+  const montoIngresado = Number(formData.get('monto') ?? 0)
+  const moneda = String(formData.get('moneda') ?? 'USD')
+  const concepto = String(formData.get('concepto') ?? '').trim()
+  // Sólo un pago se imputa a una reserva puntual (ver el aviso de vencidos).
+  const reservaId = tipo === 'pago' ? String(formData.get('reserva_id') ?? '').trim() : ''
+  if (!agenciaId || !['cargo', 'pago'].includes(tipo) || !(montoIngresado > 0)) {
+    redirect(`/panel/agencias/${agenciaId}?error=movimiento_datos`)
+  }
+  if (moneda !== 'USD' && !esMonedaExtranjera(moneda)) {
+    redirect(`/panel/agencias/${agenciaId}?error=moneda`)
+  }
+
+  // `venta` es la que se aplica: cuántas unidades de la moneda cuesta comprar un
+  // dólar (ADR 0020). Usar la de compra le regalaría el spread a la agencia.
+  const vigente = moneda === 'USD' ? null : await cotizacionVigente(moneda)
+  const mov = movimientoEnMoneda(montoIngresado, moneda, vigente?.venta ?? null)
+  // Sin cotización no se inventa una: el saldo de un socio real se movería con un
+  // tipo de cambio que nadie puede justificar después.
+  if (!mov) redirect(`/panel/agencias/${agenciaId}?error=sin_cotizacion`)
+
+  /*
+    Comprobante opcional (ADR 0037, migración 0103).
+
+    Se sube ANTES de insertar el movimiento, y si falla se corta acá: es
+    preferible que el usuario reintente a que el movimiento quede registrado
+    sin el archivo que la pantalla le dijo que estaba adjuntando.
+  */
+  let comprobanteRuta: string | null = null
+  const archivo = formData.get('comprobante')
+  if (archivo instanceof File && archivo.size > 0) {
+    const subido = await subirAdjunto(`agencias/${agenciaId}`, archivo)
+    if ('error' in subido) redirect(`/panel/agencias/${agenciaId}?error=comprobante`)
+    comprobanteRuta = subido.ruta
+  }
+
+  const supabase = await crearClienteServidor()
+
+  // La reserva tiene que ser DE esta agencia: el id viene del formulario.
+  if (reservaId) {
+    const { data: propia, error: eReserva } = await supabase
+      .from('reservas')
+      .select('id')
+      .eq('id', reservaId)
+      .eq('agencia_id', agenciaId)
+      .maybeSingle()
+    cortarSiFalla(eReserva, `/panel/agencias/${agenciaId}`, 'movimiento')
+    if (!propia) redirect(`/panel/agencias/${agenciaId}?error=reserva_ajena`)
+  }
+
+  // Un movimiento de cuenta corriente que no se registra y no avisa descuadra el
+  // saldo de la agencia sin que nadie lo note.
+  const { error } = await supabase.from('movimientos_cuenta').insert({
+    agencia_id: agenciaId,
+    reserva_id: reservaId || null,
+    tipo,
+    monto: mov.monto,
+    moneda: mov.moneda,
+    monto_origen: mov.montoOrigen,
+    cotizacion: mov.cotizacion,
+    concepto,
+    comprobante_ruta: comprobanteRuta,
+  })
+  cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'movimiento')
+  redirect(`/panel/agencias/${agenciaId}`)
+}
+
+/**
+ * Quita el comprobante adjunto a un movimiento de cuenta corriente: del
+ * bucket y de `comprobante_ruta` (migración 0103). No borra el movimiento en
+ * sí —el monto, la moneda y el concepto quedan igual—, sólo el archivo. El
+ * `update` ya queda registrado solo por `movimientos_cuenta_auditoria`
+ * (migración 0061): no hace falta auditoría aparte para esta escritura.
+ */
+export async function eliminarComprobantePagoAgencia(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const agenciaId = String(formData.get('agencia_id') ?? '')
+  const movimientoId = String(formData.get('movimiento_id') ?? '')
+  const ruta = String(formData.get('ruta') ?? '')
+  if (!agenciaId || !movimientoId || !ruta) {
+    redirect(`/panel/agencias/${agenciaId}?error=comprobante_eliminar`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { data: limpiadas, error } = await supabase
+    .from('movimientos_cuenta')
+    .update({ comprobante_ruta: null })
+    .eq('id', movimientoId)
+    .eq('agencia_id', agenciaId)
+    // Doble candado: que el comprobante que se borra sea el que de verdad está
+    // en esta fila, no uno vencido por una pestaña vieja abierta en otro lado.
+    .eq('comprobante_ruta', ruta)
+    .select('id')
+  cortarSiFalla(error, `/panel/agencias/${agenciaId}`, 'comprobante_eliminar')
+  /*
+    Si el `update` no tocó ninguna fila, esa ruta no era el comprobante de este
+    movimiento: no se borra nada del bucket. Antes se borraba igual, y con una
+    ruta cualquiera se podía eliminar un archivo ajeno (el borrado va con
+    `service_role`).
+  */
+  if (!limpiadas || limpiadas.length === 0) {
+    redirect(`/panel/agencias/${agenciaId}?error=comprobante_eliminar`)
+  }
+
+  await eliminarAdjunto(ruta)
+  await registrarAviso('adjunto_eliminado', {
+    modulo: 'agencias',
+    agencia_id: agenciaId,
+    movimiento_id: movimientoId,
+    ruta,
+  })
+
+  revalidatePath(`/panel/agencias/${agenciaId}`)
+  redirect(`/panel/agencias/${agenciaId}?ok=comprobante_eliminado`)
+}
+
+/**
+ * Mueve una agencia de etapa en el embudo comercial.
+ *
+ * La transición se valida contra el dominio puro (`puedeAvanzar`), que es el
+ * mismo que testea Vitest: no se puede saltear de «contacto» a «activa».
+ */
+export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  const nueva = String(formData.get('etapa') ?? '') as EtapaComercial
+  if (!id) redirect('/panel/agencias')
+
+  const supabase = await crearClienteServidor()
+  const { data: agencia, error: eAgencia } = await supabase
+    .from('agencias')
+    .select('etapa')
+    .eq('id', id)
+    .single()
+
+  if (eAgencia) redirect('/panel/agencias?error=etapa_lectura')
+  if (!agencia) redirect('/panel/agencias')
+  if (!puedeAvanzar(agencia.etapa as EtapaComercial, nueva)) {
+    redirect('/panel/agencias?error=etapa')
+  }
+
+  const { error } = await supabase.from('agencias').update({ etapa: nueva }).eq('id', id)
+  cortarSiFalla(error, '/panel/agencias', 'etapa_guardar')
+  revalidatePath('/panel/agencias')
+  redirect('/panel/agencias?ok=etapa')
+}
+
+/** Actualiza los datos de la agencia (incluida su condición frente al IVA). */
+export async function actualizarAgencia(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  const descuento = Number(formData.get('descuento_pct'))
+  if (!id) redirect('/panel/agencias')
+
+  const tipo = String(formData.get('tipo') ?? '')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('agencias')
+    .update({
+      nombre: String(formData.get('nombre') ?? '').trim(),
+      // Se valida contra el catálogo del dominio: un valor inesperado en el
+      // formulario no debe poder escribir cualquier texto en esta columna.
+      ...(TIPOS_CUENTA.includes(tipo as TipoCuenta) ? { tipo } : {}),
+      cuit: String(formData.get('cuit') ?? '').trim() || null,
+      email: String(formData.get('email') ?? '').trim() || null,
+      telefono: String(formData.get('telefono') ?? '').trim() || null,
+      condicion_iva: String(formData.get('condicion_iva') ?? 'responsable_inscripto'),
+      descuento_pct: Number.isFinite(descuento) ? Math.min(100, Math.max(0, descuento)) : 0,
+    })
+    .eq('id', id)
+  cortarSiFalla(error, `/panel/agencias/${id}`, 'datos')
+
+  revalidatePath(`/panel/agencias/${id}`)
+  redirect(`/panel/agencias/${id}?ok=datos`)
+}
+
+/**
+ * Activa o desactiva la cuenta. No se borra: los movimientos y las reservas
+ * históricas siguen apuntando a ella.
+ */
+export async function alternarActivoAgencia(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  const activo = String(formData.get('activo') ?? '') === 'true'
+  if (id) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase.from('agencias').update({ activo: !activo }).eq('id', id)
+    cortarSiFalla(error, `/panel/agencias/${id}`, 'activo')
+  }
+  revalidatePath('/panel/agencias')
+  redirect(`/panel/agencias/${id}`)
+}
+
+/**
+ * Regenera el enlace del portal de una agencia.
+ *
+ * Es la salida cuando un enlace se filtró: un reenvío de correo, el historial de
+ * un navegador compartido, alguien que dejó la empresa. Antes no había ninguna
+ * —el token se generaba al crear la agencia y servía para siempre—.
+ *
+ * El token viejo se marca revocado **en la misma sentencia** en que nace el
+ * nuevo. Si fueran dos pasos, entre uno y otro habría un instante con los dos
+ * enlaces vivos, que es justo lo contrario de lo que se quiere.
+ */
+export async function regenerarEnlacePortal(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  if (!id) redirect('/panel/agencias')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('agencias')
+    .update({
+      token: crypto.randomUUID(),
+      // Se deja constancia de cuándo se rotó. La columna se llama «revocado» por
+      // el enlace anterior, que es lo que deja de servir en este instante.
+      token_revocado_en: null,
+    })
+    .eq('id', id)
+
+  cortarSiFalla(error, `/panel/agencias/${id}`, 'enlace')
+
+  revalidatePath(`/panel/agencias/${id}`)
+  redirect(`/panel/agencias/${id}?ok=enlace`)
+}
+
+/**
+ * Da de baja el enlace del portal sin generar otro.
+ *
+ * Distinto de regenerar: acá el socio queda **sin acceso** hasta que alguien le
+ * genere uno nuevo. Es lo que corresponde cuando se corta la relación pero la
+ * cuenta sigue abierta por saldos pendientes.
+ */
+export async function revocarEnlacePortal(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('agencia_id') ?? '')
+  if (!id) redirect('/panel/agencias')
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('agencias')
+    .update({ token_revocado_en: new Date().toISOString() })
+    .eq('id', id)
+
+  cortarSiFalla(error, `/panel/agencias/${id}`, 'enlace')
+
+  revalidatePath(`/panel/agencias/${id}`)
+  redirect(`/panel/agencias/${id}?ok=enlace_revocado`)
+}

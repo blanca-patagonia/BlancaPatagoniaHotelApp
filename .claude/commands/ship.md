@@ -48,9 +48,9 @@ feat(reservas): permitir reprogramar una estadía confirmada
 Por qué: recepción necesitaba mover una reserva sin cancelarla y volver a
 cargarla, que hacía perder la seña.
 
-- lib/domain/mudanzas.ts: regla de si corresponde cobrar diferencia
-- app/panel/reservas/actions.ts: acción con verificación de rol
-- tests/mudanzas.test.ts: cubre el borde de tarifa distinta
+- src/lib/domain/mudanzas.ts: regla de si corresponde cobrar diferencia
+- src/app/(front-gestion)/panel/reservas/actions.ts: acción con verificación de rol
+- tests/dominio/mudanzas.test.ts: cubre el borde de tarifa distinta
 ```
 
 **Descripción del PR**, tres bloques:

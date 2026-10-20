@@ -11,7 +11,7 @@ description: Crear o modificar una pantalla o componente del panel o del portal 
 
 ## Componentes disponibles
 
-Todo sale de [app/panel/_components/ui.tsx](../../../app/panel/_components/ui.tsx). **No inventes
+Todo sale de [app/panel/_components/ui.tsx](<../../../src/app/(front-gestion)/panel/_components/ui.tsx>). **No inventes
 componentes que ya existen ni escribas Tailwind suelto donde hay uno.**
 
 | Componente | Para qué |
@@ -29,7 +29,7 @@ componentes que ya existen ni escribas Tailwind suelto donde hay uno.**
 | `PieDeFormulario` | Botonera del formulario |
 | `Etiqueta`, `Chip` | Estados y marcas |
 
-`BotonEnvio` vive aparte, en `app/panel/_components/boton-envio.tsx`. Iconos en `iconos.tsx`.
+`BotonEnvio` vive aparte, en `src/app/(front-gestion)/panel/_components/boton-envio.tsx`. Iconos en `iconos.tsx`.
 
 Paleta propia (ADR 0009): `lago`, `calafate`, `stone`. Tonos: `neutro · lago · exito · alerta ·
 peligro · calafate`. Variantes de botón: `primario · secundario · fantasma · peligro`.
@@ -73,7 +73,7 @@ peligro · calafate`. Variantes de botón: `primario · secundario · fantasma �
 
 ## Portal público
 
-`app/reservar` y `app/alojamientos` usan `app/_publico/ui.tsx`, que es **otro** conjunto de
+`src/app/(front-publico)/reservar` y `src/app/(front-publico)/[idioma]/alojamientos` usan `src/app/(front-publico)/_publico/ui.tsx`, que es **otro** conjunto de
 componentes. No mezcles: si trabajás en el portal, mirá primero qué hay ahí.
 
 ## Verificar

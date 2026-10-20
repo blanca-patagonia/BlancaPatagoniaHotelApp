@@ -62,14 +62,14 @@ describe('googleHabilitado · el botón sale de lo que dice GoTrue, no de una va
     process.env.AUTH_GOOGLE_HABILITADO = '1'
     vi.stubGlobal('fetch', gotrueResponde({ google: false, email: true }))
 
-    const { googleHabilitado } = await import('@/app/login/actions')
+    const { googleHabilitado } = await import('@/app/(front-gestion)/login/actions')
     expect(await googleHabilitado()).toBe(false)
   })
 
   it('ofrece el botón cuando GoTrue informa el proveedor habilitado', async () => {
     vi.stubGlobal('fetch', gotrueResponde({ google: true, email: true }))
 
-    const { googleHabilitado } = await import('@/app/login/actions')
+    const { googleHabilitado } = await import('@/app/(front-gestion)/login/actions')
     expect(await googleHabilitado()).toBe(true)
   })
 
@@ -78,7 +78,7 @@ describe('googleHabilitado · el botón sale de lo que dice GoTrue, no de una va
     delete process.env.AUTH_GOOGLE_HABILITADO
     vi.stubGlobal('fetch', gotrueResponde({ google: true }))
 
-    const { googleHabilitado } = await import('@/app/login/actions')
+    const { googleHabilitado } = await import('@/app/(front-gestion)/login/actions')
     expect(await googleHabilitado()).toBe(true)
   })
 
@@ -89,7 +89,7 @@ describe('googleHabilitado · el botón sale de lo que dice GoTrue, no de una va
     const espia = gotrueResponde({ google: true })
     vi.stubGlobal('fetch', espia)
 
-    const { googleHabilitado } = await import('@/app/login/actions')
+    const { googleHabilitado } = await import('@/app/(front-gestion)/login/actions')
     expect(await googleHabilitado()).toBe(false)
     // Y ni siquiera pregunta: el apagado explícito corta antes.
     expect(espia).not.toHaveBeenCalled()
@@ -105,7 +105,7 @@ describe('googleHabilitado · el botón sale de lo que dice GoTrue, no de una va
       }) as unknown as typeof fetch,
     )
 
-    const { googleHabilitado } = await import('@/app/login/actions')
+    const { googleHabilitado } = await import('@/app/(front-gestion)/login/actions')
     expect(await googleHabilitado()).toBe(false)
   })
 
@@ -115,7 +115,7 @@ describe('googleHabilitado · el botón sale de lo que dice GoTrue, no de una va
       vi.fn(async () => ({ ok: false, json: async () => ({}) })) as unknown as typeof fetch,
     )
 
-    const { googleHabilitado } = await import('@/app/login/actions')
+    const { googleHabilitado } = await import('@/app/(front-gestion)/login/actions')
     expect(await googleHabilitado()).toBe(false)
   })
 })

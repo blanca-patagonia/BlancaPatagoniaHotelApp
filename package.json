@@ -2,6 +2,9 @@
   "name": "blanca-patagonia",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,6 +13,11 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:dominio": "vitest run tests/dominio",
+    "test:servicios": "vitest run tests/servicios",
+    "test:acciones": "vitest run tests/acciones",
+    "test:contratos": "vitest run tests/contratos",
+    "test:db": "vitest run tests/base-de-datos",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "setup": "npm ci && node --env-file-if-exists=.env.local scripts/setup.mjs",
     "seed:usuarios": "node --env-file-if-exists=.env.local scripts/seed-usuarios.mjs"
@@ -17,7 +25,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.108.1",
-    "next": "^16.3.5",
+    "next": "^16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.5.1"
@@ -28,7 +36,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "^16.3.5",
+    "eslint-config-next": "^16.3.8",
     "supabase": "^2.116.0",
     "tailwindcss": "^4",
     "typescript": "^5",

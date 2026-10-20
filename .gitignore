@@ -47,3 +47,10 @@ next-env.d.ts
 
 # Artefactos de la verificación con navegador (Playwright MCP).
 .playwright-mcp/
+
+# Videos originales (masters de edición). Pesan cientos de MB —el institucional
+# en .mov ronda los 550 MB— y GitHub rechaza todo archivo de más de 100 MB, así
+# que un commit que los incluya hace fallar el push entero. El sitio usa la
+# versión comprimida (`public/hotel/videos/blanca-hero.mp4`); el master se
+# guarda fuera del repositorio.
+public/hotel/videos/*.mov

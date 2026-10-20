@@ -1,0 +1,271 @@
+import Link from 'next/link'
+import { mensajeDe } from '@/lib/listados'
+import { requerirAcceso } from '@/lib/auth/session'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
+import { ROLES, ETIQUETAS_ROL, type Rol } from '@/lib/domain/roles'
+import {
+  BarraHerramientas,
+  Buscador,
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  FILA,
+  Kpi,
+  COL_SECUNDARIA,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+  Pagina,
+  Mensaje,
+} from '../_components/ui'
+import { Icono } from '../_components/iconos'
+import { BotonEnvio } from '../_components/boton-envio'
+import { cambiarRolUsuario, alternarActivoUsuario } from './actions'
+import { fechaHotel } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
+
+interface Perfil {
+  id: string
+  nombre: string
+  rol: Rol
+  activo: boolean
+}
+
+/** Último acceso en formato corto; distingue a quien nunca entró. */
+function ultimoAcceso(iso: string | undefined): string {
+  if (!iso) return 'nunca'
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (dias === 0) return 'hoy'
+  if (dias === 1) return 'ayer'
+  if (dias < 30) return `hace ${dias} días`
+  return fechaHotel(iso)
+}
+
+/**
+ * Motivos con que las acciones de esta pantalla pueden volver por `?error=`.
+ * Acá escribe el cliente admin, que saltea RLS: un fallo no es falta de permisos
+ * sino una falla real, y hay que decirlo.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  rol: 'No se pudo cambiar el rol. El usuario sigue con el que tenía.',
+  activo: 'No se pudo cambiar el estado del usuario. Quedó como estaba.',
+  propio: 'No podés cambiar tu propio rol ni desactivarte: pedíselo a otro administrador.',
+}
+
+export default async function UsuariosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; error?: string }>
+}) {
+  const sesion = await requerirAcceso('usuarios')
+  const { q, error: errorParam } = await searchParams
+  const admin = crearClienteAdmin()
+
+  const [{ data: perfilesData, error: ePerfiles }, { data: authData, error: eAuth }] =
+    await Promise.all([
+      admin.from('perfiles').select('id, nombre, rol, activo').order('creado_en'),
+      admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    ])
+  registrarFalla(ePerfiles, 'usuarios:perfiles')
+  registrarFalla(eAuth, 'usuarios:auth_listUsers')
+  // Es el módulo más sensible del sistema (alta/baja/rol de staff): sin esto,
+  // una lectura fallida se ve exactamente igual que "0 usuarios cargados".
+  const huboErrorDeLectura = Boolean(ePerfiles || eAuth)
+
+  const perfiles = (perfilesData ?? []) as Perfil[]
+  const usuariosAuth = authData?.users ?? []
+  const emailPorId = new Map(usuariosAuth.map((u) => [u.id, u.email ?? '']))
+  const accesoPorId = new Map(usuariosAuth.map((u) => [u.id, u.last_sign_in_at ?? undefined]))
+
+  // El listado es chico (staff del hotel): se filtra en memoria sin ir a la base.
+  const termino = (q ?? '').trim().toLowerCase()
+  const visibles = termino
+    ? perfiles.filter(
+        (p) =>
+          p.nombre.toLowerCase().includes(termino) ||
+          (emailPorId.get(p.id) ?? '').toLowerCase().includes(termino),
+      )
+    : perfiles
+
+  const activos = perfiles.filter((p) => p.activo).length
+
+  return (
+    <Pagina>
+      <Encabezado
+        titulo="Usuarios"
+        descripcion="Staff del hotel y su nivel de acceso al sistema."
+        icono="usuarios"
+        acciones={
+          /* La acción principal del módulo, visible desde el primer vistazo. */
+          <Link href="/panel/usuarios/nuevo" className={botonClases('primario')}>
+            <Icono nombre="mas" tam={16} />
+            Nuevo usuario
+          </Link>
+        }
+      />
+
+      {errorParam && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {mensajeDe(MENSAJES_ERROR, errorParam, 'No se pudo completar la operación.')}
+          </Mensaje>
+        </div>
+      )}
+
+      {huboErrorDeLectura && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            No se pudieron leer todos los datos de usuarios. La lista de abajo puede estar
+            incompleta — no significa que no haya más staff cargado.
+          </Mensaje>
+        </div>
+      )}
+
+      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Kpi titulo="Usuarios" valor={String(perfiles.length)} detalle="dados de alta" icono="usuarios" />
+        <Kpi titulo="Activos" valor={String(activos)} detalle="pueden ingresar" icono="ok" tono="exito" />
+        <Kpi
+          titulo="Inactivos"
+          valor={String(perfiles.length - activos)}
+          detalle="acceso suspendido"
+          icono="alerta"
+          tono="neutro"
+        />
+        <Kpi
+          titulo="Administradores"
+          valor={String(perfiles.filter((p) => p.rol === 'admin').length)}
+          detalle="acceso total"
+          icono="config"
+          tono="calafate"
+        />
+      </div>
+
+      <BarraHerramientas>
+        <Buscador
+          accion="/panel/usuarios"
+          valor={q}
+          etiqueta="Buscar usuarios"
+          placeholder="Nombre o email…"
+        />
+        {q && (
+          <Link href="/panel/usuarios" className={botonClases('fantasma')}>
+            Limpiar
+          </Link>
+        )}
+      </BarraHerramientas>
+
+      <Tarjeta className="overflow-hidden">
+        {visibles.length === 0 ? (
+          <EstadoVacio
+            titulo="Ningún usuario coincide con la búsqueda"
+            descripcion="Se busca por nombre o por email."
+            icono="usuarios"
+          />
+        ) : (
+          <Tabla resumen="Usuarios del staff con su email, rol, último acceso y estado">
+            <thead>
+              <tr>
+                <th className={TH}>Nombre</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Email</th>
+                <th className={`${TH} ${COL_SECUNDARIA}`}>Último acceso</th>
+                <th className={TH}>Rol</th>
+                <th className={TH}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibles.map((p) => {
+                const esYo = p.id === sesion.userId
+                return (
+                  <tr key={p.id} className={FILA}>
+                    <td className={`${TD} font-medium text-stone-800`}>
+                      {p.nombre}
+                      {esYo && <span className="ml-2 text-xs text-stone-600">(vos)</span>}
+                      {/* El email identifica al usuario tanto como el nombre:
+                          si se oculta la columna, se pliega debajo. */}
+                      <span className="block truncate text-xs font-normal text-stone-500 sm:hidden">
+                        {emailPorId.get(p.id)}
+                      </span>
+                    </td>
+                    <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
+                      {emailPorId.get(p.id)}
+                    </td>
+                    <td className={`${TD} ${COL_SECUNDARIA} text-stone-500`}>
+                      {ultimoAcceso(accesoPorId.get(p.id))}
+                    </td>
+                    <td className={TD}>
+                      <form action={cambiarRolUsuario} className="flex items-center gap-2">
+                        <input type="hidden" name="user_id" value={p.id} />
+                        {/*
+                          `<label>` visible y no `aria-label` a secas (Fase 15):
+                          por tabulación, sin haber leído antes la fila con el
+                          nombre, un lector de pantalla solo decía "combobox".
+                        */}
+                        <label className="flex items-center gap-1 text-xs text-stone-500">
+                          <span>Rol</span>
+                          <select
+                            name="rol"
+                            defaultValue={p.rol}
+                            disabled={esYo}
+                            aria-label={`Rol de ${p.nombre}`}
+                            className="rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-800 focus:border-lago-500 focus:outline-none disabled:bg-stone-100"
+                          >
+                            {ROLES.map((r) => (
+                              <option key={r} value={r}>
+                                {ETIQUETAS_ROL[r]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {!esYo && (
+                          <BotonEnvio variante="secundario" cargando="…" extra="px-2 py-1 text-xs">
+                            Guardar
+                          </BotonEnvio>
+                        )}
+                      </form>
+                    </td>
+                    <td className={TD}>
+                      {esYo ? (
+                        <Etiqueta tono="exito">Activo</Etiqueta>
+                      ) : (
+                        /* El estado se MUESTRA con una etiqueta y se cambia con un
+                           botón que dice lo que hace. Antes la píldora «Activo»
+                           parecía un indicador y era el botón que desactivaba al
+                           usuario, sin confirmación. */
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Etiqueta tono={p.activo ? 'exito' : 'neutro'}>
+                            {p.activo ? 'Activo' : 'Inactivo'}
+                          </Etiqueta>
+                          <form action={alternarActivoUsuario}>
+                            <input type="hidden" name="user_id" value={p.id} />
+                            <input
+                              type="hidden"
+                              name="estado_destino"
+                              value={p.activo ? 'inactivo' : 'activo'}
+                            />
+                            <BotonEnvio
+                              variante={p.activo ? 'peligro' : 'secundario'}
+                              cargando={p.activo ? 'Desactivando…' : 'Activando…'}
+                              confirmar={
+                                p.activo
+                                  ? `¿Desactivar a ${p.nombre}? No va a poder entrar al panel hasta que lo actives de nuevo.`
+                                  : undefined
+                              }
+                            >
+                              {p.activo ? 'Desactivar' : 'Activar'}
+                            </BotonEnvio>
+                          </form>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </Tabla>
+        )}
+      </Tarjeta>
+    </Pagina>
+  )
+}

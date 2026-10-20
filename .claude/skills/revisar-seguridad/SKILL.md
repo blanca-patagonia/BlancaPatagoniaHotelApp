@@ -19,7 +19,7 @@ rg -n "'use server'" -g '*.ts' -g '*.tsx' app lib
 Por cada una: ¿verifica el rol **por sí misma** con `requerirAcceso(area)`? Que la página lo haya
 hecho no protege nada.
 
-**Caso real del repo:** `app/panel/huespedes/actions.ts:26` define un `exigirAcceso` local que solo
+**Caso real del repo:** `src/app/(front-gestion)/panel/huespedes/actions.ts:26` define un `exigirAcceso` local que solo
 comprueba que exista sesión, sin mirar el rol. Cualquier usuario autenticado —incluido housekeeping—
 puede crear y editar huéspedes.
 
@@ -55,7 +55,7 @@ internet es staff**. La clave `anon` viaja al navegador por diseño: verificalo 
 rg -n "from '@/lib/supabase/admin'" -g '*.ts' -g '*.tsx' app lib
 ```
 
-`lib/supabase/admin.ts` usa `service_role`: ignora todas las políticas. Cada uso debe estar en el
+`src/lib/supabase/admin.ts` usa `service_role`: ignora todas las políticas. Cada uso debe estar en el
 servidor y **nunca** recibir un identificador del usuario sin filtrar antes por alcance.
 
 ## 5. IDOR
@@ -74,7 +74,7 @@ rg -n "\.or\(|\.filter\(|\.textSearch\(" -g '*.ts' -g '*.tsx' app lib
 
 ## 7. Tokens públicos
 
-`app/portal/[token]`, `app/firmar/[token]`, `app/encuesta/[token]` son superficie sin login. Por cada
+`src/app/(front-publico)/portal/[token]`, `src/app/(front-publico)/firmar/[token]`, `src/app/(front-publico)/encuesta/[token]` son superficie sin login. Por cada
 uno: ¿el token se genera con `crypto` y suficiente entropía (nunca `Math.random()`)? ¿caduca? ¿se
 revoca al usarse? ¿el error distingue "no existe" de "expirado" (enumeración)? ¿la página filtra
 más datos de los necesarios?
@@ -95,7 +95,7 @@ Revisá también el historial de git, no solo el árbol actual.
 
 ## 10. Límite de tasa
 
-`lib/domain/limites.ts` + migración `0029`. ¿Cubre login, reservas, encuestas **y** los endpoints de
+`src/lib/domain/limites.ts` + migración `0029`. ¿Cubre login, reservas, encuestas **y** los endpoints de
 token? ¿O solo el login? Ojo: un contador en memoria no funciona en serverless — cada request puede
 caer en otra instancia.
 

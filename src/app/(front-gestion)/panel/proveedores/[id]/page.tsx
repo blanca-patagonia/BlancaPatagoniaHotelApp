@@ -1,0 +1,413 @@
+import { registrarFalla } from '@/lib/acciones'
+import Link from 'next/link'
+import { mensajeDe } from '@/lib/listados'
+import { headers } from 'next/headers'
+import { notFound } from 'next/navigation'
+import { requerirAcceso } from '@/lib/auth/session'
+import { crearClienteServidor } from '@/lib/supabase/server'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
+import { saldoCuenta, type TipoMovimiento, type Movimiento } from '@/lib/domain/cuentas'
+import {
+  registrarMovimientoProveedor,
+  marcarComprobantePagado,
+  agregarFotoProveedor,
+  eliminarFotoProveedor,
+} from '../actions'
+import { SubirFoto } from '../../_components/subir-foto'
+import { FotoAdjuntaEliminable } from '../../_components/foto-adjunta-eliminable'
+import {
+  ETIQUETAS_ESTADO_COMPROBANTE,
+  clasificarTramo,
+  ETIQUETAS_TRAMO,
+  type EstadoComprobante,
+} from '@/lib/domain/antiguedad'
+import {
+  MONEDAS_EXTRANJERAS,
+  esMonedaExtranjera,
+  formatearLocal,
+} from '@/lib/domain/divisas'
+import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import {
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  FILA,
+  Mensaje,
+  Pagina,
+  TD,
+  TH,
+  Tabla,
+  Tarjeta,
+  botonClases,
+} from '../../_components/ui'
+import { Icono } from '../../_components/iconos'
+import { BotonEnvio } from '../../_components/boton-envio'
+import { formatearUSD, importe } from '@/lib/domain/moneda'
+
+interface Proveedor {
+  id: string
+  nombre: string
+  rubro: string | null
+  cuit: string | null
+  email: string | null
+  telefono: string | null
+  activo: boolean
+  fotos: string[]
+}
+interface MovRow {
+  id: string
+  tipo: TipoMovimiento
+  /** SIEMPRE en USD (migración 0078). Es lo que entra al saldo y al aging. */
+  monto: number | string
+  moneda: string
+  /** Importe de la factura del proveedor en `moneda`. Nulo si fue en USD. */
+  monto_origen: number | string | null
+  concepto: string
+  fecha: string
+  estado: EstadoComprobante
+  vencimiento: string | null
+  comprobante: string | null
+}
+
+/**
+ * Mensajes de las acciones de esta ficha.
+ *
+ * Esta pantalla no recibía `searchParams`, así que el `?ok=datos` que las
+ * acciones ya mandaban al guardar nunca se vio, y los fallos de escritura
+ * tampoco.
+ */
+const MENSAJES_ERROR: Record<string, string> = {
+  movimiento: 'No se pudo registrar el movimiento. Lo que el hotel debe quedó sin cambios.',
+  ya_saldado: 'Ese comprobante ya estaba saldado (quizás desde otra pestaña). No se registró otro pago.',
+  moneda: 'Esa moneda no está entre las que el sistema sabe convertir.',
+  sin_cotizacion:
+    'No hay cotización disponible para esa moneda, así que la deuda en dólares sería inventada. Cargá una a mano en Configuración o registrá el comprobante en USD.',
+  pagado: 'No se pudo marcar el comprobante como pagado. Sigue figurando como pendiente.',
+  datos: 'No se pudieron guardar los datos del proveedor.',
+  activo: 'No se pudo cambiar el estado del proveedor.',
+  foto_falta: 'Elegí un archivo antes de subir.',
+  foto_subida: 'No se pudo subir el archivo. Probá de nuevo.',
+  foto_leer: 'No se pudo leer el proveedor para adjuntar la foto. No se guardó nada.',
+  foto_guardar: 'La foto se subió pero no se pudo asociar al proveedor. Probá de nuevo.',
+  foto_eliminar: 'No se pudo eliminar la foto. Probá de nuevo.',
+}
+
+const MENSAJES_OK: Record<string, string> = {
+  datos: 'Datos actualizados.',
+  foto: 'Foto agregada.',
+  foto_eliminada: 'Foto eliminada.',
+}
+
+export default async function ProveedorDetallePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ ok?: string; error?: string }>
+}) {
+  await requerirAcceso('proveedores')
+  const { id } = await params
+  const { ok: okParam, error: errorParam } = await searchParams
+  const supabase = await crearClienteServidor()
+
+  /*
+    El token va por `crearClienteAdmin`; el resto, por el cliente del usuario.
+    Desde la migración 0060 `proveedores.token` no es legible con una sesión de
+    staff: es la credencial de `/portal/<token>`, que expone la cuenta corriente
+    del socio y permite firmar contratos en su nombre.
+  */
+  const lecturas = await Promise.all([
+    supabase
+      .from('proveedores')
+      .select('id, nombre, rubro, cuit, email, telefono, activo, fotos')
+      .eq('id', id)
+      .maybeSingle(),
+    supabase
+      .from('movimientos_proveedor')
+      .select(
+        'id, tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento, comprobante',
+      )
+      .eq('proveedor_id', id)
+      .order('fecha', { ascending: false })
+      .order('creado_en', { ascending: false }),
+    crearClienteAdmin().from('proveedores').select('token').eq('id', id).maybeSingle(),
+  ])
+  const [{ data: provData }, { data: movsData }, { data: tokenData }] = lecturas
+  /*
+    Nunca descartar el error de una lectura (regla de la auditoría QA/UX): un
+    saldo o una lista vacía por una lectura fallida se ven igual que un dato
+    real. Se registra y la pantalla lo avisa arriba.
+  */
+  lecturas.forEach((l, i) => registrarFalla(l.error, `proveedor_ficha:lectura_${i}`))
+  const huboFallaLectura = lecturas.some((l) => l.error)
+  if (!provData) notFound()
+  const proveedor = provData as Proveedor
+  // Accesorio a la ficha: si la lectura privilegiada falla, la pantalla sigue.
+  const tokenPortal = (tokenData as { token: string } | null)?.token ?? null
+  const cabeceras = await headers()
+  const origen = `${cabeceras.get('x-forwarded-proto') ?? 'http'}://${cabeceras.get('host') ?? 'localhost:3000'}`
+  const movs = (movsData ?? []) as MovRow[]
+  const saldo = saldoCuenta(movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento))
+  const hoy = hoyISO()
+
+  return (
+    <Pagina>
+      <Link
+        href="/panel/proveedores"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-stone-500 transition hover:text-stone-800"
+      >
+        ‹ Volver a proveedores
+      </Link>
+
+      {errorParam && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            {mensajeDe(MENSAJES_ERROR, errorParam, 'No se pudo completar la operación.')}
+          </Mensaje>
+        </div>
+      )}
+      {okParam && MENSAJES_OK[okParam] && (
+        <div className="mb-4">
+          <Mensaje tono="ok">{MENSAJES_OK[okParam]}</Mensaje>
+        </div>
+      )}
+
+      {huboFallaLectura && (
+        <Mensaje tono="error">
+          No se pudo leer parte de la información de esta pantalla: los importes y listados de
+          abajo pueden estar incompletos. Recargá en un momento antes de decidir algo con ellos.
+        </Mensaje>
+      )}
+
+      <Encabezado
+        titulo={proveedor.nombre}
+        descripcion={`${proveedor.rubro ? `${proveedor.rubro} · ` : ''}${proveedor.cuit ? `CUIT ${proveedor.cuit} · ` : ''}${proveedor.email || 'sin email'}`}
+        icono="proveedores"
+        acciones={
+          <Link
+            href={`/panel/proveedores/${proveedor.id}/editar`}
+            className={botonClases('secundario')}
+          >
+            <Icono nombre="config" tam={16} />
+            Editar datos
+          </Link>
+        }
+      />
+      {!proveedor.activo && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            Este proveedor está dado de baja: no aparece al cargar gastos nuevos.
+          </Mensaje>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-stone-600">Saldo a pagar</p>
+          <p className={`text-2xl font-semibold ${saldo > 0 ? 'text-red-600' : 'text-stone-900'}`}>
+            {formatearUSD(saldo)}
+          </p>
+        </div>
+        <form action={registrarMovimientoProveedor} className="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="proveedor_id" value={proveedor.id} />
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Tipo</span>
+            <select name="tipo" className="rounded-md border border-stone-300 px-2 py-1.5 text-sm">
+              <option value="cargo">Factura</option>
+              <option value="pago">Pago</option>
+            </select>
+          </label>
+          {/*
+            Moneda del comprobante.
+
+            Es el caso más frecuente del hallazgo P1-3: el proveedor local
+            factura en pesos. Quien carga escribe «185000» porque es lo que dice
+            el papel, y sin este campo eso entraba como USD 185.000 a la deuda del
+            hotel. El saldo de arriba sigue estando en dólares.
+          */}
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Moneda</span>
+            <select
+              name="moneda"
+              defaultValue="USD"
+              className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+            >
+              <option value="USD">USD</option>
+              {MONEDAS_EXTRANJERAS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Monto</span>
+            <input name="monto" type="number" step="0.01" min="0" className="w-28 rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">Concepto</span>
+            <input name="concepto" className="w-40 rounded-md border border-stone-300 px-2 py-1.5 text-sm" />
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-stone-500">N.º comprobante</span>
+            <input
+              name="comprobante"
+              placeholder="0001-00001234"
+              className="w-32 rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            {/* Solo aplica a las facturas: es lo que alimenta el aging report. */}
+            <span className="text-stone-500">Vence (solo facturas)</span>
+            <input
+              name="vencimiento"
+              type="date"
+              className="rounded-md border border-stone-300 px-2 py-1.5 text-sm"
+            />
+          </label>
+          {/* Mueve dinero: el botón se bloquea mientras viaja al servidor para
+              que un segundo clic no duplique el comprobante. */}
+          <BotonEnvio cargando="Registrando…">Registrar</BotonEnvio>
+        </form>
+      </div>
+
+
+      {/* Edición de los datos: sin esto había que tocar la base a mano. */}
+      {/* Enlace del portal: el socio ve sus contratos y su cuenta sin cuenta de usuario. */}
+      <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+        <h2 className="font-display text-base font-semibold text-stone-900">Portal del socio</h2>
+        <p className="mt-1 text-sm text-stone-500">
+          Enlace personal para que consulte sus contratos y su cuenta corriente. Quien lo tenga
+          accede: mandalo solo al contacto de la empresa.
+        </p>
+        <code className="mt-3 block rounded-lg bg-stone-50 px-3 py-2 font-mono text-xs break-all text-stone-700 ring-1 ring-stone-200">
+          {origen}/portal/{tokenPortal}
+        </code>
+        <a
+          href={`/portal/${tokenPortal}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={botonClases('secundario', 'mt-3')}
+        >
+          Abrir el portal
+        </a>
+      </section>
+
+      <Tarjeta titulo="Movimientos" className="mt-6 overflow-hidden">
+        {movs.length === 0 ? (
+          <EstadoVacio titulo="Sin movimientos" icono="proveedores" />
+        ) : (
+          <Tabla resumen="Movimientos de la cuenta del proveedor, con facturas y pagos">
+            <thead>
+              <tr>
+                <th className={TH}>Fecha</th>
+                <th className={TH}>Concepto</th>
+                <th className={TH}>Vencimiento</th>
+                <th className={TH}>Estado</th>
+                <th className={`${TH} text-right`}>Factura</th>
+                <th className={`${TH} text-right`}>Pago</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movs.map((m) => (
+                <tr key={m.id} className={FILA}>
+                  <td className={`${TD} text-stone-500`}>{m.fecha}</td>
+                  <td className={`${TD} text-stone-700`}>
+                    {m.concepto || (m.tipo === 'cargo' ? 'Factura' : 'Pago')}
+                    {m.comprobante && (
+                      <span className="ml-1.5 text-xs text-stone-600">{m.comprobante}</span>
+                    )}
+                    {/* El número que figura en el papel, cuando no fue en dólares:
+                        es contra ése que se concilia la factura del proveedor. */}
+                    {m.monto_origen !== null && esMonedaExtranjera(m.moneda) && (
+                      <span className="block text-xs text-stone-500">
+                        {formatearLocal(Number(m.monto_origen), m.moneda)} en el comprobante
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${TD} text-stone-500`}>
+                    {m.vencimiento ? (
+                      <>
+                        {formatoFechaCorta(m.vencimiento)}
+                        {m.estado !== 'pagado' && (
+                          <span className="ml-1.5 text-xs text-stone-600">
+                            {ETIQUETAS_TRAMO[clasificarTramo(m.vencimiento, hoy)]}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className={TD}>
+                    {m.tipo === 'pago' ? (
+                      <Etiqueta tono="exito">Registrado</Etiqueta>
+                    ) : m.estado === 'pagado' ? (
+                      <Etiqueta tono="exito">Pagado</Etiqueta>
+                    ) : (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Etiqueta tono={m.estado === 'vencido' ? 'peligro' : 'alerta'}>
+                          {ETIQUETAS_ESTADO_COMPROBANTE[m.estado]}
+                        </Etiqueta>
+                        <form action={marcarComprobantePagado}>
+                          <input type="hidden" name="movimiento_id" value={m.id} />
+                          <input type="hidden" name="proveedor_id" value={proveedor.id} />
+                          <BotonEnvio
+                            variante="secundario"
+                            cargando="Saldando…"
+                            confirmar={`¿Saldar este comprobante? Se registra un pago por ${formatearUSD(Number(m.monto))} al proveedor.`}
+                          >
+                            Saldar
+                          </BotonEnvio>
+                        </form>
+                      </span>
+                    )}
+                  </td>
+                  <td className={`${TD} tabular text-right text-stone-800`}>
+                    {m.tipo === 'cargo' ? importe(Number(m.monto)) : ''}
+                  </td>
+                  <td className={`${TD} tabular text-right text-emerald-700`}>
+                    {m.tipo === 'pago' ? importe(Number(m.monto)) : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        )}
+      </Tarjeta>
+
+      <Tarjeta
+        titulo="Documentación"
+        descripcion="Habilitación, seguro o cualquier otro documento del proveedor, guardado como foto o PDF."
+        className="mt-6"
+      >
+        {proveedor.fotos.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-stone-500">Todavía no hay documentos adjuntos.</p>
+        ) : (
+          <div className="flex flex-wrap gap-3 p-5">
+            {proveedor.fotos.map((ruta) => (
+              <FotoAdjuntaEliminable
+                key={ruta}
+                ruta={ruta}
+                alt={`Documento de ${proveedor.nombre}`}
+                accion={eliminarFotoProveedor}
+                camposOcultos={{ proveedor_id: proveedor.id }}
+              />
+            ))}
+          </div>
+        )}
+
+        <form
+          action={agregarFotoProveedor}
+          className="flex flex-col gap-3 border-t border-stone-100 p-5 sm:flex-row sm:items-end"
+        >
+          <input type="hidden" name="proveedor_id" value={proveedor.id} />
+          <div className="flex-1">
+            <SubirFoto nombre="foto" etiqueta="Agregar un documento" requerido />
+          </div>
+          <BotonEnvio cargando="Subiendo…" extra="w-full sm:w-auto">Subir</BotonEnvio>
+        </form>
+      </Tarjeta>
+    </Pagina>
+  )
+}

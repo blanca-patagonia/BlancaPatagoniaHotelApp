@@ -26,7 +26,7 @@ Respondé primero:
 | Archivo | Qué cambia | Por qué |
 |---|---|---|
 
-Respetá el orden de adentro hacia afuera: migración → `lib/domain` → test → Server Action → pantalla.
+Respetá el orden de adentro hacia afuera: migración → `src/lib/domain` → test → Server Action → pantalla.
 
 **Riesgos.** Concretos, no genéricos:
 - ¿Qué se puede romper que hoy anda?

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { clienteDePrueba, sufijoUnico } from '../db'
+import { clienteDePrueba, sufijoUnico } from '../apoyo/db'
 
 /**
  * Andamiaje para probar las **Server Actions**.

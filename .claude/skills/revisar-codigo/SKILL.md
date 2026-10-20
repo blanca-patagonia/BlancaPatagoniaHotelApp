@@ -51,10 +51,10 @@ git diff main...HEAD
 
 ## 4. Mantenibilidad
 
-- ¿La lógica de negocio quedó en `app/` en vez de `lib/domain/`? Es la deuda estructural del repo.
-- ¿`lib/domain/` importó algo de framework? Rompe la pureza y la testabilidad.
-- ¿Se copió el literal `['admin','gerencia']` en vez de usar `lib/domain/permisos.ts`? Ya hay 19.
-- ¿Duplicación de algo que ya existe en `lib/listados.ts`, `lib/csv.ts`, `lib/fechas.ts` o `ui.tsx`?
+- ¿La lógica de negocio quedó en `src/app/` en vez de `src/lib/domain/`? Es la deuda estructural del repo.
+- ¿`src/lib/domain/` importó algo de framework? Rompe la pureza y la testabilidad.
+- ¿Se copió el literal `['admin','gerencia']` en vez de usar `src/lib/domain/permisos.ts`? Ya hay 19.
+- ¿Duplicación de algo que ya existe en `src/lib/listados.ts`, `src/lib/csv.ts`, `src/lib/fechas.ts` o `ui.tsx`?
 - Archivos de más de 400 líneas o funciones de más de 80: pedí que se parta.
 
 ## 5. Estilo

@@ -27,11 +27,11 @@ plata:
 
 - `describe` con el nombre de la función. `it` con una frase **en español** que describe la regla de
   negocio: "cobra el total dentro de los 7 días", no "returns total".
-- Modelo canónico: `tests/cancelacion.test.ts`. Leelo antes de escribir.
-- **Dominio puro** (`lib/domain/**`): sin base, sin mocks, fixtures como `const` arriba del `describe`.
+- Modelo canónico: `tests/dominio/cancelacion.test.ts`. Leelo antes de escribir.
+- **Dominio puro** (`src/lib/domain/**`): sin base, sin mocks, fixtures como `const` arriba del `describe`.
   Si necesitás mockear para testear dominio, el dominio está contaminado: reportalo.
 - **Integración** (Server Actions, RLS, RPC): van bajo `describe.skipIf(!hayDB)` y usan los helpers
-  de `tests/db.ts` — `clienteDePrueba()` (service_role), `clienteAnonimo()` (rol `anon`),
+  de `tests/apoyo/db.ts` — `clienteDePrueba()` (service_role), `clienteAnonimo()` (rol `anon`),
   `sufijoUnico()`, `periodo()`.
 - Usá `clienteAnonimo()` cuando el test verifique **qué NO debe ver un desconocido**. Es el único
   modo de probar RLS de verdad.

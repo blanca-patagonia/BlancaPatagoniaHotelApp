@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { hayDB } from '../db'
+import { hayDB } from '../apoyo/db'
 import {
   nuevoContexto,
   crearHuespedDePrueba,
@@ -27,12 +27,12 @@ vi.mock('@/lib/auth/session', async () => {
   }
 })
 vi.mock('@/lib/supabase/server', async () => {
-  const { clienteDePrueba } = await import('../db')
+  const { clienteDePrueba } = await import('../apoyo/db')
   return { crearClienteServidor: async () => clienteDePrueba() }
 })
 
 describe.skipIf(!hayDB)('Server Actions · cambio de unidad', () => {
-  type Acciones = typeof import('@/app/panel/reservas/actions')
+  type Acciones = typeof import('@/app/(front-gestion)/panel/reservas/actions')
   let ctx: Contexto
   let cambiarUnidad: Acciones['cambiarUnidadReserva']
   /** Dos unidades del MISMO tipo: así la mudanza no dispara la recotización. */
@@ -41,7 +41,7 @@ describe.skipIf(!hayDB)('Server Actions · cambio de unidad', () => {
 
   beforeAll(async () => {
     ctx = nuevoContexto()
-    cambiarUnidad = (await import('@/app/panel/reservas/actions')).cambiarUnidadReserva
+    cambiarUnidad = (await import('@/app/(front-gestion)/panel/reservas/actions')).cambiarUnidadReserva
 
     const { data } = await ctx.db
       .from('unidades')

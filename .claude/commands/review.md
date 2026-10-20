@@ -30,7 +30,7 @@ El detalle completo del checklist está en el skill de revisión del proyecto
 
 1. `const { data } = await supabase...` sin mirar `{ error }` — la escritura falla en silencio.
 2. Server Action sin `requerirAcceso(area)` — son endpoints HTTP públicos.
-3. Literal `['admin','gerencia']` en vez de `lib/domain/permisos.ts` — ya hay 19 casos.
+3. Literal `['admin','gerencia']` en vez de `src/lib/domain/permisos.ts` — ya hay 19 casos.
 
 ## Salida
 

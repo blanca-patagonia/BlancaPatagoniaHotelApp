@@ -20,19 +20,19 @@ export async function crearProveedor(prev: EstadoProveedor, formData: FormData) 
 }
 ```
 
-`requerirAcceso(area)` está en [lib/auth/session.ts:50](../../../lib/auth/session.ts) y consulta la
-matriz de `lib/domain/permisos.ts`. `requerirSesion()` solo comprueba que haya sesión: **no alcanza**
+`requerirAcceso(area)` está en [lib/auth/session.ts:50](../../../src/lib/auth/session.ts) y consulta la
+matriz de `src/lib/domain/permisos.ts`. `requerirSesion()` solo comprueba que haya sesión: **no alcanza**
 para autorizar.
 
 **Errores reales del repo, no los repitas:**
-- `app/panel/huespedes/actions.ts:26` define un `exigirAcceso` local que no mira el rol. Es el outlier
+- `src/app/(front-gestion)/panel/huespedes/actions.ts:26` define un `exigirAcceso` local que no mira el rol. Es el outlier
   entre 36 usos correctos. No lo copies.
 - Hay 19 lugares con el literal `['admin','gerencia'].includes(...)`. Usá `puedeAcceder` de
-  `lib/domain/permisos.ts` en su lugar.
+  `src/lib/domain/permisos.ts` en su lugar.
 
 ## 2. Leer y validar la entrada
 
-El patrón del repo separa lectura de validación (ver `app/panel/huespedes/actions.ts:33-65`):
+El patrón del repo separa lectura de validación (ver `src/app/(front-gestion)/panel/huespedes/actions.ts:33-65`):
 
 ```ts
 function leerCampos(formData: FormData) {
@@ -71,7 +71,7 @@ registrarFalla(error, 'revertir reserva tras fallo de pago')
 ```
 
 `destructurar { data }` sin mirar `{ error }` es el bug clásico de este stack: la escritura falla,
-la pantalla recarga y el usuario cree que guardó. Para eso existe [lib/acciones.ts](../../../lib/acciones.ts).
+la pantalla recarga y el usuario cree que guardó. Para eso existe [lib/acciones.ts](../../../src/lib/acciones.ts).
 
 ## 4. Revalidar
 
@@ -85,7 +85,7 @@ Sin esto la pantalla muestra datos viejos. No redirijas en silencio tras guardar
 
 ## 5. Route handlers y webhooks
 
-Van en `app/api/**/route.ts`. Para webhooks mirá `app/api/webhooks/pagos/[proveedor]/route.ts`:
+Van en `src/app/(back-api)/api/**/route.ts`. Para webhooks mirá `src/app/(back-api)/api/webhooks/pagos/[proveedor]/route.ts`:
 verificá la firma **antes** de parsear el cuerpo, leé el cuerpo crudo, y sé idempotente — los
 proveedores reintentan siempre.
 

@@ -7,10 +7,10 @@ tools: Read, Grep, Glob, Bash
 Sos auditor de accesibilidad en Blanca Patagonia, un PMS hotelero. Trabajás sobre dos frentes muy
 distintos y el criterio no es el mismo para los dos.
 
-- **El panel interno** (`app/panel`) lo usa el personal **todos los días, muchas horas**: recepción
+- **El panel interno** (`src/app/(front-gestion)/panel`) lo usa el personal **todos los días, muchas horas**: recepción
   en una computadora del mostrador, housekeeping en un teléfono, de pie y con una sola mano. Acá una
   barrera no es un problema ocasional: es fricción repetida cientos de veces por semana.
-- **El portal público** (`app/reservar`, `app/alojamientos`) lo usa cualquiera, sin entrenamiento y
+- **El portal público** (`src/app/(front-publico)/reservar`, `src/app/(front-publico)/[idioma]/alojamientos`) lo usa cualquiera, sin entrenamiento y
   una sola vez. Acá una barrera es directamente una reserva perdida.
 
 ## El estándar y el principio del proyecto

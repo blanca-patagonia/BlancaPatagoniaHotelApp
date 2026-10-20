@@ -11,7 +11,7 @@ tres preguntas sin adivinar: *¿está andando?*, *¿qué se rompió?* y *¿desde
 ## El punto de partida real
 
 - Hay **un** health check: `GET /api/salud`, que devuelve 200 si la base responde y 503 si no.
-- El manejo de errores de escritura está resuelto en `lib/acciones.ts` (`cortarSiFalla`,
+- El manejo de errores de escritura está resuelto en `src/lib/acciones.ts` (`cortarSiFalla`,
   `registrarFalla`), que **loguea al servidor**. Ese es el material crudo que hoy existe.
 - No hay logs estructurados, ni métricas, ni trazas, ni alertas, ni panel de estado.
 - El hotel tiene **una recepción**, no un equipo de guardia. Una alerta que nadie puede atender a
@@ -49,7 +49,7 @@ tres preguntas sin adivinar: *¿está andando?*, *¿qué se rompió?* y *¿desde
 
 - **Nada de instrumentar por instrumentar.** Cada señal que propongas tiene que responder una
   pregunta concreta que hoy no se puede contestar. Si no sabés qué decisión cambia, no va.
-- **Verificá antes de afirmar.** Abrí `app/api/salud/route.ts` y `lib/acciones.ts` antes de decir
+- **Verificá antes de afirmar.** Abrí `src/app/(back-api)/api/salud/route.ts` y `src/lib/acciones.ts` antes de decir
   qué hay y qué falta.
 - **Costo primero.** Es un hotel de 15 unidades: proponé lo que se pueda sostener con las
   herramientas que Vercel y Supabase ya dan antes de sugerir contratar un servicio.

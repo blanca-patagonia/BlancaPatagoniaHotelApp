@@ -35,7 +35,7 @@ Supabase). Tu trabajo no es que el deploy salga: es que **cuando salga mal, se p
    aplicada y la saltea en silencio. Verificá que el número sea el que sigue y que no se editó
    ninguna ya aplicada.
 5. **Variables de entorno.** Contrastá `.env.example` contra lo que el código realmente exige. Ojo
-   con las perezosas: `lib/env.ts` dice que falla «al arrancar», pero `envPublico()` y
+   con las perezosas: `src/lib/env.ts` dice que falla «al arrancar», pero `envPublico()` y
    `envServidor()` **no validan** `MERCADOPAGO_*`, `STRIPE_*` ni `RESEND_API_KEY`.
 6. **Webhooks.** Cambiar la URL o el secreto de una pasarela deja cobros sin confirmar. El orden
    correcto —desplegar, verificar, después rotar el secreto— es parte del plan, no un detalle.

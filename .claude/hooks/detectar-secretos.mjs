@@ -42,7 +42,7 @@ for (const { patron, nombre } of PATRONES) {
     bloquear({
       que: `parece haber un secreto en el contenido a escribir (${nombre}).`,
       detalle: `Archivo: ${ruta || 'desconocido'}\nUn secreto commiteado queda en el historial de git para siempre.`,
-      comoSeguir: 'Movelo a .env.local y leelo con process.env (ver lib/env.ts).',
+      comoSeguir: 'Movelo a .env.local y leelo con process.env (ver src/lib/env.ts).',
     })
   }
 }
