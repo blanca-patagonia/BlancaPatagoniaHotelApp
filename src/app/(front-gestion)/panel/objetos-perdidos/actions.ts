@@ -5,10 +5,13 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirAcceso } from '@/lib/auth/session'
 import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoObjeto {
   error?: string
   ok?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 /**
@@ -20,11 +23,11 @@ export async function crearObjeto(_prev: EstadoObjeto, formData: FormData): Prom
   await requerirAcceso('objetos_perdidos')
   const descripcion = String(formData.get('descripcion') ?? '').trim()
   const ubicacion = String(formData.get('ubicacion') ?? '').trim()
-  if (!descripcion) return { error: 'Describí el objeto encontrado.' }
+  if (!descripcion) return falloConValores('Describí el objeto encontrado.', formData)
 
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('objetos_perdidos').insert({ descripcion, ubicacion })
-  if (error) return { error: mensajeDeFalla(error, 'objetos_perdidos:registrar', 'No se pudo registrar el objeto') }
+  if (error) return falloConValores(mensajeDeFalla(error, 'objetos_perdidos:registrar', 'No se pudo registrar el objeto'), formData)
   revalidatePath('/panel/objetos-perdidos')
   return { ok: 'Objeto registrado.' }
 }

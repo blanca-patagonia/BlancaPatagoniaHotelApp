@@ -7,10 +7,13 @@ import { requerirRol } from '@/lib/auth/session'
 import { esRolValido } from '@/lib/domain/roles'
 import { LARGO_MINIMO_PASSWORD } from '@/lib/domain/cuenta'
 import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoUsuario {
   error?: string
   ok?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 // Más estrecho que el área `usuarios` a propósito: dar de alta, cambiar roles y
@@ -30,11 +33,11 @@ export async function crearUsuario(
   const rol = String(formData.get('rol') ?? '')
   const password = String(formData.get('password') ?? '')
 
-  if (!email || !password || !nombre) return { error: 'Completá nombre, email y contraseña.' }
+  if (!email || !password || !nombre) return falloConValores('Completá nombre, email y contraseña.', formData)
   if (password.length < LARGO_MINIMO_PASSWORD) {
-    return { error: `La contraseña debe tener al menos ${LARGO_MINIMO_PASSWORD} caracteres.` }
+    return falloConValores(`La contraseña debe tener al menos ${LARGO_MINIMO_PASSWORD} caracteres.`, formData)
   }
-  if (!esRolValido(rol)) return { error: 'Elegí un rol válido.' }
+  if (!esRolValido(rol)) return falloConValores('Elegí un rol válido.', formData)
 
   const admin = crearClienteAdmin()
   const { data, error } = await admin.auth.admin.createUser({
@@ -47,10 +50,8 @@ export async function crearUsuario(
     // Auth responde en inglés («A user with this email address has already
     // been registered»): se traduce el caso que tiene arreglo y el resto va al log.
     const yaExiste = /already (been )?registered|already exists/i.test(error?.message ?? '')
-    if (yaExiste) return { error: 'Ya hay un usuario con ese email.' }
-    return {
-      error: mensajeDeFalla(error ?? { message: 'sin usuario' }, 'usuarios:crear', 'No se pudo crear el usuario'),
-    }
+    if (yaExiste) return falloConValores('Ya hay un usuario con ese email.', formData)
+    return falloConValores(mensajeDeFalla(error ?? { message: 'sin usuario' }, 'usuarios:crear', 'No se pudo crear el usuario'), formData)
   }
 
   const { error: eRol } = await admin
@@ -58,9 +59,8 @@ export async function crearUsuario(
     .update({ rol, nombre, activo: true })
     .eq('id', data.user.id)
   if (eRol) {
-    return {
-      error: mensajeDeFalla(eRol, 'usuarios:asignar_rol', 'El usuario se creó, pero no se pudo asignar el rol: asignáselo desde la lista'),
-    }
+    // El usuario YA existe: no se repone lo escrito, para que nadie lo reenvíe.
+    return { error: mensajeDeFalla(eRol, 'usuarios:asignar_rol', 'El usuario se creó, pero no se pudo asignar el rol: asignáselo desde la lista') }
   }
 
   revalidatePath('/panel/usuarios')

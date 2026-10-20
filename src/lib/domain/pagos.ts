@@ -6,6 +6,8 @@
  * descuentan de lo pagado.
  */
 
+import { cuentaConsolidada, type Consumo } from './consumos'
+
 export const MEDIOS_PAGO = ['efectivo', 'transferencia', 'tarjeta', 'mercadopago', 'stripe', 'payway'] as const
 export type MedioPago = (typeof MEDIOS_PAGO)[number]
 
@@ -127,6 +129,22 @@ export function resumenPagos(total: number, pagos: Pago[]): ResumenPagos {
     saldada: total > 0 && pagado >= total - 0.001,
     tieneSenia,
   }
+}
+
+/**
+ * Resumen de pagos contra la cuenta CONSOLIDADA: alojamiento más consumos.
+ *
+ * Es la cuenta que usan `saldarSiCorresponde`, `estadoDeCobro` y el aviso de
+ * saldo. El listado, el CSV y la ficha medían contra el alojamiento solo, así
+ * que a un huésped con consumos sin pagar lo mostraban con menos deuda de la
+ * que tenía.
+ */
+export function resumenDeCuenta(
+  alojamiento: number,
+  consumos: Consumo[],
+  pagos: Pago[],
+): ResumenPagos {
+  return resumenPagos(cuentaConsolidada(alojamiento, consumos).total, pagos)
 }
 
 /** Seña sugerida = primera noche (aprox. total / noches). */

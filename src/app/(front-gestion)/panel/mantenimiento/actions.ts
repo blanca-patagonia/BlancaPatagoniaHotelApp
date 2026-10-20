@@ -15,10 +15,13 @@ import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
 import { avisarIncidenteMantenimiento } from '@/lib/notificaciones/eventos'
 import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
 import { registrarAviso } from '@/lib/registro'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoOrden {
   error?: string
   ok?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 const PRIORIDADES = ['baja', 'media', 'alta']
@@ -30,8 +33,8 @@ export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promis
   const descripcion = String(formData.get('descripcion') ?? '').trim()
   const prioridad = String(formData.get('prioridad') ?? 'media')
   const unidadId = String(formData.get('unidad_id') ?? '')
-  if (!titulo) return { error: 'Ingresá un título.' }
-  if (!PRIORIDADES.includes(prioridad)) return { error: 'Prioridad inválida.' }
+  if (!titulo) return falloConValores('Ingresá un título.', formData)
+  if (!PRIORIDADES.includes(prioridad)) return falloConValores('Prioridad inválida.', formData)
 
   const supabase = await crearClienteServidor()
   const { data: creada, error } = await supabase
@@ -39,7 +42,7 @@ export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promis
     .insert({ titulo, descripcion, prioridad, unidad_id: unidadId || null })
     .select('id, unidad:unidades(nombre)')
     .single()
-  if (error) return { error: mensajeDeFalla(error, 'mantenimiento:crear', 'No se pudo crear la orden') }
+  if (error) return falloConValores(mensajeDeFalla(error, 'mantenimiento:crear', 'No se pudo crear la orden'), formData)
 
   /*
     Sólo lo urgente sale a la cartelera.
@@ -303,10 +306,13 @@ export async function agregarFotoOrden(formData: FormData): Promise<void> {
     .from('ordenes_mantenimiento')
     .select('fotos')
     .eq('id', ordenId)
-    .single()
+    .maybeSingle()
   if (errorLectura) {
     cortarSiFalla(errorLectura, `/panel/mantenimiento/${ordenId}`, 'foto_leer')
   }
+  // No existe (o no se ve): no es una falla del sistema, y seguir escribiría
+  // sobre cero filas como si hubiera salido bien.
+  if (!actual) redirect(`/panel/mantenimiento/${ordenId}?error=foto_leer`)
 
   const fotos = [...(((actual as { fotos: string[] } | null)?.fotos) ?? []), subida.ruta]
   const { error } = await supabase
@@ -342,10 +348,13 @@ export async function eliminarFotoOrden(formData: FormData): Promise<void> {
     .from('ordenes_mantenimiento')
     .select('fotos')
     .eq('id', ordenId)
-    .single()
+    .maybeSingle()
   if (errorLectura) {
     cortarSiFalla(errorLectura, `/panel/mantenimiento/${ordenId}`, 'foto_leer')
   }
+  // No existe (o no se ve): no es una falla del sistema, y seguir escribiría
+  // sobre cero filas como si hubiera salido bien.
+  if (!actual) redirect(`/panel/mantenimiento/${ordenId}?error=foto_leer`)
 
   const previas = ((actual as { fotos: string[] } | null)?.fotos) ?? []
   /*

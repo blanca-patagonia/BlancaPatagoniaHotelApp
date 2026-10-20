@@ -53,20 +53,26 @@ export async function register() {
     construye sin ellas) y no hay ningún huésped del otro lado todavía.
   */
   if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build') {
-    const [{ urlDelSitio }, email, firma, facturacion, divisas, canales] = await Promise.all([
+    const [{ urlDelSitio }, email, firma, facturacion, divisas, canales, cifrado] = await Promise.all([
       import('@/lib/env'),
       import('@/lib/email'),
       import('@/lib/firma'),
       import('@/lib/facturacion'),
       import('@/lib/divisas'),
       import('@/lib/canales'),
+      import('@/lib/seguridad/cifrado'),
     ])
     urlDelSitio()
     email.obtenerProveedorEmail()
+    // Con `resend`, la clave y el remitente: sin ellos el primer correo falla.
+    email.verificarCredencialesDeEmail()
     firma.obtenerProveedorFirma()
     facturacion.obtenerProveedorFacturacion()
     divisas.obtenerProveedorCotizacion()
     canales.obtenerProveedorCanal()
+    // La clave de los tokens OAuth (ADR 0036): si falta, el hotel autoriza a
+    // Mercado Pago y el token se pierde en el callback.
+    cifrado.verificarClaveDeCifrado()
   }
 }
 

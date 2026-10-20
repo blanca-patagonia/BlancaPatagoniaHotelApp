@@ -90,7 +90,19 @@ const encolar = vi.fn<(c: unknown, p: Record<string, unknown>) => Promise<{ ok: 
   async () => ({ ok: true }),
 )
 vi.mock('@/lib/notificaciones', () => ({ encolar }))
-vi.mock('@/lib/supabase/admin', () => ({ crearClienteAdmin: () => ({}) }))
+const insertAdmin = vi.fn<(tabla: string, fila: Record<string, unknown>) => void>()
+vi.mock('@/lib/supabase/admin', () => ({
+  crearClienteAdmin: () => ({
+    from: (tabla: string) => ({
+      insert: async (fila: Record<string, unknown>) => {
+        insertAdmin(tabla, fila)
+        return { error: null }
+      },
+    }),
+  }),
+}))
+const permitirIntentoDe = vi.fn<(accion: string, clave: string) => Promise<boolean>>(async () => true)
+vi.mock('@/lib/limites', () => ({ permitirIntentoDe }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 const { ejecutarPropuesta } = await import('@/app/(front-gestion)/panel/ia/acciones')
@@ -324,6 +336,40 @@ describe('ejecutarPropuesta: mensaje al huésped', () => {
       mensaje: 'Te esperamos el viernes.',
     })
     expect(r).toEqual({ error: 'El huésped pidió no recibir avisos.' })
+  })
+
+  it('cuenta por persona: pasado el límite no se encola nada', async () => {
+    encolar.mockClear()
+    permitirIntentoDe.mockResolvedValueOnce(false)
+    const r = await ejecutarPropuesta({
+      tipo: 'mensaje_huesped',
+      reservaId: UUID_A,
+      codigoReserva: 'BP-1',
+      mensaje: 'Pagá acá: https://ejemplo.invalid',
+    })
+    expect(permitirIntentoDe).toHaveBeenLastCalledWith('ia_mensaje_huesped', 'u1')
+    expect(r.error).toMatch(/muchos mensajes/)
+    expect(encolar).not.toHaveBeenCalled()
+  })
+
+  it('deja constancia en auditoría de quién mandó qué a qué reserva (sin el email)', async () => {
+    insertAdmin.mockClear()
+    await ejecutarPropuesta({
+      tipo: 'mensaje_huesped',
+      reservaId: UUID_A,
+      codigoReserva: 'BP-1',
+      mensaje: 'Te esperamos el viernes.',
+    })
+    const [tabla, fila] = insertAdmin.mock.calls.at(-1)!
+    expect(tabla).toBe('auditoria')
+    expect(fila).toMatchObject({
+      tabla: 'notificaciones',
+      registro_id: UUID_A,
+      usuario_id: 'u1',
+      rol: 'admin',
+      datos_nuevos: { codigo: 'BP-1', mensaje: 'Te esperamos el viernes.' },
+    })
+    expect(JSON.stringify(fila)).not.toContain('ana@mail.com')
   })
 })
 

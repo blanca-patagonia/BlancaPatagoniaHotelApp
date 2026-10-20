@@ -16,12 +16,13 @@ const ESTADO_INICIAL: EstadoAviso = {}
  */
 export function FormularioAviso() {
   const [estado, accion, pendiente] = useActionState(publicarAviso, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="flex flex-col gap-3">
       <Campo etiqueta="Aviso para el equipo" ayuda="Lo ve todo el personal en su tablón.">
         <textarea
-          name="mensaje"
+          name="mensaje" defaultValue={v.mensaje ?? ''}
           rows={3}
           required
           placeholder="Mañana llega un grupo de 12 a las 14:00…"

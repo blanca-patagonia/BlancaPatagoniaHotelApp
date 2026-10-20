@@ -146,5 +146,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 
 | Módulo | Qué decide |
 |---|---|
+| `formularios.ts` | `falloConValores()`: devolver lo escrito cuando una acción falla (sin campos sensibles) |
 | `limites.ts` | Límites de intentos de las entradas públicas |
 | `listas.ts` | `deLista()`: validar un valor contra una lista blanca |

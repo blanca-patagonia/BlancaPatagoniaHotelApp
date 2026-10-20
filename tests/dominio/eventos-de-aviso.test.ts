@@ -94,7 +94,6 @@ const LLAMADAS: Partial<Record<EventoEmail, (c: ClienteServicio) => Promise<unkn
     eventos.avisarNuevaReserva(c, {
       reservaId: HUESPED.reservaId,
       codigo: HUESPED.codigo,
-      huesped: 'Ana Pérez',
       checkIn: '2027-03-10',
       checkOut: '2027-03-13',
       total: 300,
@@ -105,7 +104,6 @@ const LLAMADAS: Partial<Record<EventoEmail, (c: ClienteServicio) => Promise<unkn
       pagoId: 'pago-1',
       reservaId: HUESPED.reservaId,
       codigo: HUESPED.codigo,
-      huesped: 'Ana Pérez',
       importe: 120,
       medio: 'MercadoPago',
       saldo: 180,

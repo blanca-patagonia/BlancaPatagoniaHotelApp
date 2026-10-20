@@ -2,6 +2,7 @@ import 'server-only'
 import { headers } from 'next/headers'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { LIMITES, type AccionLimitada } from '@/lib/domain/limites'
+import { registrarFalla } from '@/lib/acciones'
 
 /**
  * Aplicación del límite de intentos (capa de acceso).
@@ -90,7 +91,12 @@ export async function permitirIntento(accion: AccionLimitada): Promise<boolean> 
       p_maximo: maximo,
       p_minutos: minutos,
     })
-    if (error) return true
+    if (error) {
+      // Deja pasar (ver arriba), pero no en silencio: mientras falle, el
+      // límite no protege nada y alguien tiene que enterarse.
+      registrarFalla(error, `limites:${accion}`)
+      return true
+    }
     return data !== false
   } catch {
     return true
@@ -121,7 +127,12 @@ export async function permitirIntentoDe(accion: AccionLimitada, clave: string): 
       p_maximo: maximo,
       p_minutos: minutos,
     })
-    if (error) return true
+    if (error) {
+      // Deja pasar (ver arriba), pero no en silencio: mientras falle, el
+      // límite no protege nada y alguien tiene que enterarse.
+      registrarFalla(error, `limites:${accion}`)
+      return true
+    }
     return data !== false
   } catch {
     return true

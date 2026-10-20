@@ -30,14 +30,14 @@ vi.mock('@/lib/supabase/server', async () => {
 
 describe.skipIf(!hayDB)('Server Actions · promociones', () => {
   let ctx: Contexto
-  type Acciones = typeof import('@/app/(front-gestion)/panel/config/actions')
+  type Acciones = typeof import('@/app/(front-gestion)/panel/config/promociones.actions')
   let crearPromocion: Acciones['crearPromocion']
   let editarPromocion: Acciones['editarPromocion']
   let alternarActivoPromocion: Acciones['alternarActivoPromocion']
 
   beforeAll(async () => {
     ctx = nuevoContexto()
-    const acciones = await import('@/app/(front-gestion)/panel/config/actions')
+    const acciones = await import('@/app/(front-gestion)/panel/config/promociones.actions')
     crearPromocion = acciones.crearPromocion
     editarPromocion = acciones.editarPromocion
     alternarActivoPromocion = acciones.alternarActivoPromocion

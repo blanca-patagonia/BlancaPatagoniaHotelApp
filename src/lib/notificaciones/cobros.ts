@@ -34,7 +34,6 @@ interface Contexto {
   destino: DestinoHuesped
   checkIn: string
   checkOut: string
-  huespedCompleto: string
   saldo: number
 }
 
@@ -99,13 +98,13 @@ async function contextoDelCobro(
       huespedId: r.huesped_id,
       email: r.huesped?.email ?? null,
       telefono: r.huesped?.telefono ?? null,
-      // El nombre de pila para saludar; el completo, para la cartelera interna.
+      // El nombre de pila para saludar. La cartelera interna no lleva nombre
+      // (la lee el asistente de IA: ver los avisos internos en `plantillas.ts`).
       nombre: nombre || apellido,
       codigo: r.codigo,
     },
     checkIn: estadia.check_in,
     checkOut: estadia.check_out,
-    huespedCompleto: `${nombre} ${apellido}`.trim() || 'Sin nombre',
     saldo: resumen.saldo,
   }
 }
@@ -150,7 +149,6 @@ export async function avisarCobroAprobado(
     pagoId: d.pagoId,
     reservaId: d.reservaId,
     codigo: ctx.destino.codigo,
-    huesped: ctx.huespedCompleto,
     importe: d.importe,
     medio: ETIQUETAS_MEDIO[d.medio as MedioPago] ?? d.medio,
     saldo: ctx.saldo,

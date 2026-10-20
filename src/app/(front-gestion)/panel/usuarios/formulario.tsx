@@ -25,15 +25,16 @@ const ESTADO_INICIAL: EstadoUsuario = {}
  */
 export function FormularioUsuario() {
   const [estado, accion, pendiente] = useActionState(crearUsuario, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       <Campo etiqueta="Nombre y apellido" requerido>
-        <input name="nombre" required className={CAMPO} />
+        <input name="nombre" defaultValue={v.nombre ?? ''} required className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Email" requerido ayuda="Con este email va a iniciar sesión.">
-        <input name="email" type="email" required className={CAMPO} />
+        <input name="email" defaultValue={v.email ?? ''} type="email" required className={CAMPO} />
       </Campo>
 
       <Campo
@@ -45,7 +46,12 @@ export function FormularioUsuario() {
       </Campo>
 
       <Campo etiqueta="Rol" ayuda="Define qué secciones del panel puede ver y usar.">
-        <select name="rol" defaultValue="recepcion" className={CAMPO}>
+        <select
+          name="rol"
+          key={`rol-${v.rol ?? 'recepcion'}`}
+          defaultValue={v.rol ?? 'recepcion'}
+          className={CAMPO}
+        >
           {ROLES.map((r) => (
             <option key={r} value={r}>
               {ETIQUETAS_ROL[r]}

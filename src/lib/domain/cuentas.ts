@@ -13,7 +13,7 @@
  * `cotizacion`, y la migración 0078 tiene los `check` que lo obligan.
  */
 
-import { sumarDias } from '@/lib/fechas'
+import { sumarDias, parsearPeriodo } from '@/lib/fechas'
 
 export const TIPOS_CUENTA = ['agencia', 'empresa'] as const
 export type TipoCuenta = (typeof TIPOS_CUENTA)[number]
@@ -141,4 +141,33 @@ export interface PagoAgenciaReserva {
 export function pagoAgenciaVencido(r: PagoAgenciaReserva, hoy: string): boolean {
   if (!(r.totalReserva > 0)) return false
   return hoy >= vencimientoPagoAgencia(r.checkIn) && redondear(r.totalPagado) < redondear(r.totalReserva)
+}
+
+/**
+ * Lo pagado por cada reserva en la cuenta corriente de una agencia: la suma de
+ * los movimientos de tipo `pago` vinculados a esa reserva puntual.
+ *
+ * No es el saldo general de la cuenta: una agencia puede estar al día con una
+ * reserva y atrasada con otra. Estaba copiado en la ficha de la agencia, en el
+ * portal del socio y en la ficha de la reserva; tres copias de una regla de
+ * plata terminan divergiendo, como pasó con `saldarSiCorresponde`.
+ */
+export function pagadoPorReserva(
+  movimientos: { tipo: TipoMovimiento; monto: number | string; reserva_id: string | null }[],
+): Map<string, number> {
+  const pagado = new Map<string, number>()
+  for (const m of movimientos) {
+    if (m.tipo !== 'pago' || !m.reserva_id) continue
+    pagado.set(m.reserva_id, redondear((pagado.get(m.reserva_id) ?? 0) + Number(m.monto)))
+  }
+  return pagado
+}
+
+/**
+ * El check-in más temprano de las estadías de una reserva (rangos `[desde,hasta)`
+ * de Postgres). `null` si no tiene estadías: sin fecha no hay vencimiento.
+ */
+export function primerCheckIn(periodos: string[]): string | null {
+  const desdes = periodos.map((p) => parsearPeriodo(p).desde).sort()
+  return desdes[0] ?? null
 }

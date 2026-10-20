@@ -74,14 +74,45 @@ export interface RespuestaIa {
   llamadas: LlamadaHerramienta[]
 }
 
+export interface OpcionesChatIa {
+  /**
+   * Instante (epoch en ms) a partir del cual no se espera más: vale para TODA
+   * la cadena —reintento y respaldos incluidos—, no para cada llamada. Sin él
+   * se usa `PLAZO_POR_OMISION_MS` desde que se llamó.
+   */
+  hasta?: number
+}
+
 export interface IaProvider {
   nombre: string
   /** `herramientas`: las que el rol de quien pregunta puede usar (`herramientasPara`). */
-  chat(mensajes: MensajeIa[], herramientas: DefinicionHerramienta[]): Promise<RespuestaIa>
+  chat(mensajes: MensajeIa[], herramientas: DefinicionHerramienta[], opciones?: OpcionesChatIa): Promise<RespuestaIa>
 }
 
-/** Cuánto se espera a la respuesta antes de darla por caída. */
+/** Cuánto se espera, como mucho, a la respuesta de UNA llamada antes de darla por caída. */
 const TIEMPO_LIMITE_MS = 30_000
+
+/**
+ * Plazo de toda la cadena cuando quien llama no fija uno.
+ *
+ * Antes cada eslabón tenía sus 30 s propios: con reintento y dos respaldos, una
+ * sola llamada podía tardar más de dos minutos y pasar el `maxDuration` de la
+ * función. La plataforma la cortaba con un error genérico y en inglés.
+ */
+const PLAZO_POR_OMISION_MS = 90_000
+
+/**
+ * Por debajo de esto no se empieza una llamada: una respuesta del modelo con
+ * herramientas rara vez llega en menos, y empezarla sólo gasta cupo.
+ */
+const TIEMPO_MINIMO_MS = 5_000
+
+/** Cuánto esperar en esta llamada: lo que queda del plazo, sin pasar el tope por llamada. */
+export function esperaDeLlamada(hasta: number, ahora = Date.now()): number | null {
+  const restante = hasta - ahora
+  if (restante < TIEMPO_MINIMO_MS) return null
+  return Math.min(TIEMPO_LIMITE_MS, restante)
+}
 
 /**
  * Respuestas que significan «ahora no, probá en un rato»: cupo agotado (429) o
@@ -118,8 +149,9 @@ export class IaNoDisponible extends Error {
      * `cupo`: se agotó la cuota del plan (429) — se resuelve esperando a que se
      * renueve, o con un plan pago / un modelo de respaldo con cuota propia.
      * `saturado`: el proveedor está con mucha demanda (5xx) — pasa solo.
+     * `tiempo`: se terminó el plazo de la consulta antes de tener respuesta.
      */
-    readonly motivo: 'cupo' | 'saturado' = 'saturado',
+    readonly motivo: 'cupo' | 'saturado' | 'tiempo' = 'saturado',
   ) {
     super(mensaje)
   }
@@ -193,19 +225,33 @@ class ProveedorIaCompatibleOpenAI implements IaProvider {
   private async alSiguiente(
     mensajes: MensajeIa[],
     herramientas: DefinicionHerramienta[],
+    hasta: number,
     motivo: string,
   ): Promise<RespuestaIa> {
     await registrarInfo('ia_respaldo_usado', { desde: this.modelo, hacia: this.siguiente!.modelo, motivo })
-    return this.siguiente!.chat(mensajes, herramientas)
+    return this.siguiente!.chat(mensajes, herramientas, { hasta })
   }
 
   async chat(
     mensajes: MensajeIa[],
     herramientas: DefinicionHerramienta[],
-    intento = 1,
+    opciones: OpcionesChatIa = {},
   ): Promise<RespuestaIa> {
+    return this.pedir(mensajes, herramientas, opciones.hasta ?? Date.now() + PLAZO_POR_OMISION_MS, 1)
+  }
+
+  private async pedir(
+    mensajes: MensajeIa[],
+    herramientas: DefinicionHerramienta[],
+    hasta: number,
+    intento: number,
+  ): Promise<RespuestaIa> {
+    const espera = esperaDeLlamada(hasta)
+    if (espera === null) {
+      throw new IaNoDisponible('Se terminó el plazo de la consulta antes de que el proveedor respondiera.', 'tiempo')
+    }
     const controlador = new AbortController()
-    const corte = setTimeout(() => controlador.abort(), TIEMPO_LIMITE_MS)
+    const corte = setTimeout(() => controlador.abort(), espera)
 
     let r: Response
     try {
@@ -230,7 +276,7 @@ class ProveedorIaCompatibleOpenAI implements IaProvider {
     } catch (e) {
       // Sin respuesta (tiempo agotado o red caída): el siguiente eslabón, si hay.
       const motivo = e instanceof Error && e.name === 'AbortError' ? 'sin respuesta a tiempo' : 'error de red'
-      if (this.siguiente) return this.alSiguiente(mensajes, herramientas, motivo)
+      if (this.siguiente) return this.alSiguiente(mensajes, herramientas, hasta, motivo)
       throw new IaNoDisponible(`El proveedor de IA no respondió (${motivo}).`, 'saturado')
     } finally {
       clearTimeout(corte)
@@ -240,9 +286,10 @@ class ProveedorIaCompatibleOpenAI implements IaProvider {
       const cuerpo = await r.text().catch(() => '')
       const transitorio = ESTADOS_TRANSITORIOS.has(r.status)
       // Saturación o cupo: un reintento corto suele alcanzar.
-      if (transitorio && intento === 1) {
+      // Sin plazo para la pausa y otra llamada, se pasa directo al siguiente eslabón.
+      if (transitorio && intento === 1 && esperaDeLlamada(hasta, Date.now() + PAUSA_REINTENTO_MS) !== null) {
         await new Promise((listo) => setTimeout(listo, PAUSA_REINTENTO_MS))
-        return this.chat(mensajes, herramientas, 2)
+        return this.pedir(mensajes, herramientas, hasta, 2)
       }
       /*
         Cualquier otra falla también pasa al siguiente eslabón —una clave
@@ -253,7 +300,7 @@ class ProveedorIaCompatibleOpenAI implements IaProvider {
       if (this.siguiente) {
         // Con el detalle del proveedor (sin claves): «404» solo no dice si es el
         // modelo, la URL o la cuenta.
-        return this.alSiguiente(mensajes, herramientas, `respondió ${r.status}: ${sinClaves(cuerpo).slice(0, 200)}`)
+        return this.alSiguiente(mensajes, herramientas, hasta, `respondió ${r.status}: ${sinClaves(cuerpo).slice(0, 200)}`)
       }
       if (transitorio) {
         throw new IaNoDisponible(

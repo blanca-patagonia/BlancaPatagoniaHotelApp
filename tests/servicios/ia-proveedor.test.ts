@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { HERRAMIENTAS_IA } from '@/lib/domain/ia-herramientas'
 
 vi.mock('@/lib/registro', () => ({ registrarInfo: vi.fn(), registrarErrorSync: vi.fn() }))
-import { AVISO_CORTADA, IaNoDisponible, iaActiva, obtenerProveedorIa, pareceClave, sinClaves } from '@/lib/ia/proveedor'
+import { AVISO_CORTADA, IaNoDisponible, esperaDeLlamada, iaActiva, obtenerProveedorIa, pareceClave, sinClaves } from '@/lib/ia/proveedor'
 
 const VARS = [
   'IA_PROVIDER',
@@ -436,5 +436,71 @@ describe('sinClaves (lo que se registra nunca lleva una clave)', () => {
 
   it('no toca nombres de modelo', () => {
     expect(sinClaves('model openai/gpt-oss-120b not found')).toBe('model openai/gpt-oss-120b not found')
+  })
+})
+
+describe('plazo de la consulta (la cadena entera no pasa el maxDuration)', () => {
+  beforeEach(() => {
+    process.env.IA_PROVIDER = 'openai_compatible'
+    process.env.IA_API_KEY = VALOR_DE_PRUEBA
+    process.env.IA_BASE_URL = 'https://ejemplo.test/v1'
+    process.env.IA_MODELO = 'modelo-1'
+    process.env.IA_RESPALDO_BASE_URL = 'https://respaldo.test/v1'
+    process.env.IA_RESPALDO_API_KEY = VALOR_DE_PRUEBA
+    process.env.IA_RESPALDO_MODELO = 'modelo-2'
+  })
+  afterEach(() => {
+    limpiarEnv()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  it('cada llamada espera lo que queda del plazo, con tope de 30 s', () => {
+    expect(esperaDeLlamada(100_000, 0)).toBe(30_000)
+    expect(esperaDeLlamada(12_000, 0)).toBe(12_000)
+    // Con menos de 5 s no vale la pena empezar.
+    expect(esperaDeLlamada(4_000, 0)).toBeNull()
+  })
+
+  it('con el plazo vencido no llama al proveedor y avisa que fue por tiempo', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await obtenerProveedorIa()
+      .chat([{ rol: 'user', contenido: 'hola' }], [], { hasta: Date.now() - 1 })
+      .catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(IaNoDisponible)
+    expect((error as IaNoDisponible).motivo).toBe('tiempo')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('el respaldo sólo recibe lo que dejó el principal: la cadena no pasa el plazo', async () => {
+    vi.useFakeTimers()
+    // Un proveedor que no contesta nunca: sólo termina cuando lo cortan.
+    const fetchMock = vi.fn(
+      (_url: string, opciones: { signal: AbortSignal }) =>
+        new Promise((_, rechazar) => {
+          opciones.signal.addEventListener('abort', () => {
+            const e = new Error('cortado')
+            e.name = 'AbortError'
+            rechazar(e)
+          })
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const inicio = Date.now()
+    const promesa = obtenerProveedorIa()
+      .chat([{ rol: 'user', contenido: 'hola' }], [], { hasta: inicio + 40_000 })
+      .catch((e: unknown) => e)
+
+    await vi.advanceTimersByTimeAsync(40_000)
+    const error = await promesa
+
+    expect(error).toBeInstanceOf(IaNoDisponible)
+    // Principal 30 s + respaldo con los 10 s restantes, no otros 30.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(Date.now() - inicio).toBeLessThanOrEqual(40_000)
   })
 })

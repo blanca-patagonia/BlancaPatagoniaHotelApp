@@ -5,10 +5,13 @@ import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirAcceso } from '@/lib/auth/session'
 import { cortarSiFalla } from '@/lib/acciones'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoAviso {
   error?: string
   ok?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 /**
@@ -20,11 +23,11 @@ export async function publicarAviso(_prev: EstadoAviso, formData: FormData): Pro
   // Antes solo comprobaba que hubiera sesión, sin mirar el rol.
   const sesion = await requerirAcceso('avisos')
   const mensaje = String(formData.get('mensaje') ?? '').trim()
-  if (!mensaje) return { error: 'Escribí un mensaje.' }
+  if (!mensaje) return falloConValores('Escribí un mensaje.', formData)
 
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('avisos').insert({ mensaje, autor_id: sesion.userId })
-  if (error) return { error: 'No se pudo publicar el aviso.' }
+  if (error) return falloConValores('No se pudo publicar el aviso.', formData)
   revalidatePath('/panel/avisos')
   // Sin este mensaje, al vaciarse el campo no hay forma de distinguir «se
   // publicó» de «no pasó nada».

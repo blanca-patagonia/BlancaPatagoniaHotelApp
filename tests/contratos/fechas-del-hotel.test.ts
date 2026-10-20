@@ -12,10 +12,14 @@ import { join, relative } from 'node:path'
  * `fechaDelHotel()` de `lib/fechas.ts`.
  *
  * Se detecta por el nombre: en este esquema las columnas `timestamptz` terminan
- * en `_en` (`creado_en`, `emitida_en`, `corrida_en`…), y las `date` no.
+ * en `_en` (`creado_en`, `emitida_en`, `corrida_en`…), y las `date` no. Cuando
+ * el valor ya pasó a un objeto de la app el nombre va en camelCase (`venceEn`,
+ * `creadoEn`) y es el mismo instante: el patrón cubre las dos formas. La
+ * versión que sólo miraba `_en` dejó pasar `l.venceEn.slice(0, 10)` en la
+ * cuenta de la reserva.
  */
 const SRC = join(process.cwd(), 'src')
-const PATRON = /\b\w+_en\??\.slice\(\s*0\s*,\s*10\s*\)/
+const PATRON = /\b\w+(?:_en|En)\??\.slice\(\s*0\s*,\s*10\s*\)/
 
 function archivos(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
@@ -25,7 +29,7 @@ function archivos(dir: string): string[] {
 }
 
 describe('contrato: los timestamps se cortan en el día del hotel', () => {
-  it('ningún `<algo>_en.slice(0, 10)` en src/', () => {
+  it('ningún `<algo>_en.slice(0, 10)` ni `<algo>En.slice(0, 10)` en src/', () => {
     const encontrados = archivos(SRC).flatMap((f) =>
       readFileSync(f, 'utf8')
         .split('\n')

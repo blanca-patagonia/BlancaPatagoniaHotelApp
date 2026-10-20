@@ -46,7 +46,6 @@ export function avisarNuevaReserva(
   d: {
     reservaId: string
     codigo: string
-    huesped: string
     checkIn: string
     checkOut: string
     total: number
@@ -59,7 +58,6 @@ export function avisarNuevaReserva(
     reservaId: d.reservaId,
     variables: {
       codigo: d.codigo,
-      huesped: d.huesped,
       check_in: formatoFechaCorta(d.checkIn),
       check_out: formatoFechaCorta(d.checkOut),
       total: formatearUSD(d.total),
@@ -75,7 +73,6 @@ export function avisarPagoInterno(
     pagoId: string
     reservaId: string
     codigo: string
-    huesped: string
     importe: number
     medio: string
     saldo: number
@@ -87,7 +84,6 @@ export function avisarPagoInterno(
     reservaId: d.reservaId,
     variables: {
       codigo: d.codigo,
-      huesped: d.huesped,
       importe: formatearUSD(d.importe),
       medio: d.medio,
       saldo: formatearUSD(d.saldo),

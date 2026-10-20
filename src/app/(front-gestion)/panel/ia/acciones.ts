@@ -13,6 +13,8 @@ import {
 } from '@/lib/domain/ia-acciones'
 import { registrarAviso, registrarInfo } from '@/lib/registro'
 import { registrarFalla } from '@/lib/acciones'
+import { permitirIntentoDe } from '@/lib/limites'
+import type { Rol } from '@/lib/domain/roles'
 import { encolar } from '@/lib/notificaciones'
 import { publicarAviso } from '../avisos/actions'
 import { cambiarEstadoOrden, crearOrden } from '../mantenimiento/actions'
@@ -110,7 +112,7 @@ export async function ejecutarPropuesta(valor: unknown): Promise<EstadoPropuesta
       : describirPropuesta(propuesta).detalle.join(' · ').slice(0, 300),
     ...idsDe(propuesta),
   }
-  const resultado = await ejecutar(propuesta)
+  const resultado = await ejecutar(propuesta, sesion)
   if (resultado.error) {
     await registrarAviso('ia_accion_fallida', { ...constancia, error: resultado.error })
   } else {
@@ -148,7 +150,13 @@ function idsDe(p: Propuesta): Record<string, string | number> {
   }
 }
 
-async function ejecutar(propuesta: Propuesta): Promise<EstadoPropuesta> {
+/** Quién confirmó la propuesta: lo que se registra junto con lo que se hizo. */
+interface Autor {
+  userId: string
+  rol: Rol
+}
+
+async function ejecutar(propuesta: Propuesta, autor: Autor): Promise<EstadoPropuesta> {
   switch (propuesta.tipo) {
     case 'aviso':
       return publicarAviso({}, formulario({ mensaje: propuesta.mensaje }))
@@ -283,7 +291,7 @@ async function ejecutar(propuesta: Propuesta): Promise<EstadoPropuesta> {
     case 'huesped_editar':
       return editarHuesped(propuesta)
     case 'mensaje_huesped':
-      return enviarMensaje(propuesta)
+      return enviarMensaje(propuesta, autor)
     case 'consumo': {
       // La misma regla de la ficha (`cargarConsumo`), pero devolviendo el
       // resultado: con el `redirect` de `agregarConsumo` la persona salía del
@@ -370,7 +378,16 @@ async function editarHuesped(p: Extract<Propuesta, { tipo: 'huesped_editar' }>):
  * la IA redactó el mensaje sin conocerlos. La bandeja respeta el consentimiento
  * (`acepta_avisos`) y deja el envío registrado en «Avisos enviados».
  */
-async function enviarMensaje(p: Extract<Propuesta, { tipo: 'mensaje_huesped' }>): Promise<EstadoPropuesta> {
+async function enviarMensaje(
+  p: Extract<Propuesta, { tipo: 'mensaje_huesped' }>,
+  autor: Autor,
+): Promise<EstadoPropuesta> {
+  // Antes de leer nada: un bucle de mensajes desde una sesión robada se corta
+  // acá, por persona (todo el hotel sale por la misma IP).
+  if (!(await permitirIntentoDe('ia_mensaje_huesped', autor.userId))) {
+    return { error: 'Mandaste muchos mensajes en poco tiempo. Esperá un rato y probá de nuevo.' }
+  }
+
   const supabase = await crearClienteServidor()
   const { data, error } = await supabase
     .from('reservas')
@@ -389,7 +406,8 @@ async function enviarMensaje(p: Extract<Propuesta, { tipo: 'mensaje_huesped' }>)
   if (!r?.huesped) return { error: 'La reserva no tiene huésped asignado.' }
   if (!r.huesped.email) return { error: 'El huésped no tiene email cargado: completalo en su ficha.' }
 
-  const resultado = await encolar(crearClienteAdmin(), {
+  const admin = crearClienteAdmin()
+  const resultado = await encolar(admin, {
     evento: 'mensaje_del_hotel',
     entidadId: r.id,
     // Cada mensaje es distinto: sin esto, el segundo mensaje a la misma reserva
@@ -406,6 +424,25 @@ async function enviarMensaje(p: Extract<Propuesta, { tipo: 'mensaje_huesped' }>)
     },
   })
   if (!resultado.ok) return { error: resultado.motivo ?? 'No se pudo poner el mensaje en la bandeja.' }
+
+  /*
+    Constancia en `auditoria`: quién mandó qué texto a qué reserva. La bandeja
+    guarda el envío pero no a la persona (encola `service_role`), y la
+    constancia de `ejecutarPropuesta` es `info`, que no se persiste. Sin esto,
+    ante «a este huésped le llegó un correo raro del hotel» no habría a quién
+    preguntarle. Sin el email: alcanza con la reserva. Escritura accesoria: el
+    mensaje ya está en la bandeja, no se corta por esto.
+  */
+  const { error: eAuditoria } = await admin.from('auditoria').insert({
+    tabla: 'notificaciones',
+    registro_id: r.id,
+    accion: 'INSERT',
+    usuario_id: autor.userId,
+    rol: autor.rol,
+    datos_nuevos: { evento: 'mensaje_del_hotel', origen: 'asistente_ia', codigo: r.codigo, mensaje: p.mensaje },
+  })
+  registrarFalla(eAuditoria, 'ia:mensaje_huesped_auditoria')
+
   return {
     ok: 'Mensaje en la bandeja: sale en los próximos minutos.',
     enlace: '/panel/notificaciones',

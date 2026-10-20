@@ -3,6 +3,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import type { ReglaCancelacion } from '@/lib/domain/cancelacion'
 import { disponibilidadPorTipo } from '@/lib/availability/disponibilidad'
 import { hoyISO, parsearPeriodo } from '@/lib/fechas'
+import { registrarFalla } from '@/lib/acciones'
 import { conIva } from '@/lib/domain/catalogo'
 import {
   detectarIntencion,
@@ -42,7 +43,11 @@ export interface AsistenteProvider {
 async function cargarDatosHotel(): Promise<DatosHotel> {
   const supabase = await crearClienteServidor()
 
-  const [{ data: politica }, { data: tarifas }, { data: temporadasData }] = await Promise.all([
+  const [
+    { data: politica, error: ePolitica },
+    { data: tarifas, error: eTarifas },
+    { data: temporadasData, error: eTemporadas },
+  ] = await Promise.all([
     supabase.from('politicas_cancelacion').select('reglas').eq('codigo', 'estandar').maybeSingle(),
     // El rango de precios sale del tarifario real, no de un texto fijo.
     supabase.from('tarifas').select('precio_rack, iva_pct').eq('vigente', true),
@@ -52,6 +57,13 @@ async function cargarDatosHotel(): Promise<DatosHotel> {
       .select('nombre, orden, rangos:temporada_rangos(rango)')
       .order('orden'),
   ])
+
+  // Una lectura fallida deja el dato vacío, y con datos vacíos las respuestas
+  // ya son neutras («consultá la política al confirmar», «decime tus fechas»):
+  // no le afirman nada falso al huésped. Lo que faltaba era enterarse.
+  registrarFalla(ePolitica, 'asistente_publico:politica_cancelacion')
+  registrarFalla(eTarifas, 'asistente_publico:tarifas')
+  registrarFalla(eTemporadas, 'asistente_publico:temporadas')
 
   // Con IVA: `precio_rack` se guarda SIN IVA (ADR 0004) y el checkout lo suma.
   // El texto que arma el asistente dice «(con IVA)», así que volcar la columna

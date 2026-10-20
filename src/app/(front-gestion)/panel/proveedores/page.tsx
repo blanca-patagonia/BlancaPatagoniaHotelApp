@@ -38,6 +38,7 @@ import { Icono } from '../_components/iconos'
 import { BotonEnvio } from '../_components/boton-envio'
 import { vencerComprobantes } from './actions'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
+import { traerTodo } from '@/lib/paginado'
 
 interface Proveedor {
   id: string
@@ -82,32 +83,43 @@ export default async function ProveedoresPage({
   const termino = terminoBusqueda(q)
   if (termino) consulta = consulta.or(busquedaProveedores(termino))
 
-  const lecturas = await Promise.all([
+  type MovDeuda = ComprobanteDeuda & {
+    proveedor_id: string
+    concepto: string
+    comprobante: string | null
+  }
+  const [lecturaProv, movsLectura, lecturaSaldos] = await Promise.all([
     consulta,
     // Para el aging alcanza con la deuda VIVA: los pagos y lo ya saldado no
-    // aportan al informe y son la mayor parte del historial.
-    supabase
-      .from('movimientos_proveedor')
-      .select('proveedor_id, tipo, monto, estado, vencimiento, concepto, comprobante')
-      .eq('tipo', 'cargo')
-      .in('estado', ['pendiente', 'vencido']),
+    // aportan al informe y son la mayor parte del historial. Va por
+    // `traerTodo` porque los totales del aging se suman sobre estas filas:
+    // pasadas las mil, PostgREST cortaría sin aviso y el «adeudado» saldría
+    // menor que lo real.
+    traerTodo<MovDeuda>((desde, hasta) =>
+      supabase
+        .from('movimientos_proveedor')
+        .select('proveedor_id, tipo, monto, estado, vencimiento, concepto, comprobante')
+        .eq('tipo', 'cargo')
+        .in('estado', ['pendiente', 'vencido'])
+        .order('id')
+        .range(desde, hasta) as never,
+    ),
     // El saldo por proveedor lo agrega la base.
     supabase.from('saldos_proveedores').select('proveedor_id, saldo'),
   ])
-  const [{ data: provData }, { data: movsData }, { data: saldosData }] = lecturas
+  const { data: provData } = lecturaProv
+  const { data: saldosData } = lecturaSaldos
   /*
     Nunca descartar el error de una lectura (regla de la auditoría QA/UX): un
     saldo o una lista vacía por una lectura fallida se ven igual que un dato
     real. Se registra y la pantalla lo avisa arriba.
   */
-  lecturas.forEach((l, i) => registrarFalla(l.error, `proveedores:lectura_${i}`))
-  const huboFallaLectura = lecturas.some((l) => l.error)
+  registrarFalla(lecturaProv.error, 'proveedores:listado')
+  registrarFalla(lecturaSaldos.error, 'proveedores:saldos')
+  if (movsLectura.error) registrarFalla({ message: movsLectura.error }, 'proveedores:deuda_viva')
+  const huboFallaLectura = Boolean(lecturaProv.error || lecturaSaldos.error || movsLectura.truncado)
   const proveedores = (provData ?? []) as Proveedor[]
-  const movs = (movsData ?? []) as (ComprobanteDeuda & {
-    proveedor_id: string
-    concepto: string
-    comprobante: string | null
-  })[]
+  const movs = movsLectura.filas
 
   // Reporte de antigüedad de saldos: cuánto se debe y desde hace cuánto.
   const hoy = hoyISO()

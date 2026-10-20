@@ -39,6 +39,14 @@ import {
   Pagina,
 } from './_components/ui'
 
+/**
+ * Las consultas rápidas de IA (`ia/rapidas.ts`) son Server Actions de esta
+ * página y heredan su límite. La cadena de proveedores tiene un plazo propio de
+ * 90 s (`lib/ia/proveedor.ts`): sin declarar esto, la plataforma cortaba antes
+ * con su límite por omisión y un error genérico en inglés.
+ */
+export const maxDuration = 120
+
 interface EstadiaDia {
   periodo: string
   unidad: { nombre: string } | null
@@ -224,17 +232,19 @@ export default async function DashboardPage() {
     expirar y los avisos dejan de salir. Sólo lo ve la dirección, que es quien
     puede resolverlo (y la única que lee esa tabla).
   */
-  let atrasados: ReturnType<typeof cronsAtrasados> = []
-  // Sólo en producción: en desarrollo los crons no corren nunca y la alerta
-  // estaría siempre encendida, que es la forma de enseñar a ignorarla.
-  if (process.env.NODE_ENV === 'production' && esDireccion(sesion.rol)) {
+  // Arranca ya y se espera después del `Promise.all` de abajo: era un viaje
+  // a la base suelto, antes de todos los demás.
+  const atrasadosPendientes = (async (): Promise<ReturnType<typeof cronsAtrasados>> => {
+    // Sólo en producción: en desarrollo los crons no corren nunca y la alerta
+    // estaría siempre encendida, que es la forma de enseñar a ignorarla.
+    if (process.env.NODE_ENV !== 'production' || !esDireccion(sesion.rol)) return []
     const { data: corridas, error: eCorridas } = await supabase
       .from('cron_corridas')
       .select('nombre, ultima_ok')
     registrarFalla(eCorridas, 'dashboard:cron_corridas')
     // Si no se pudo leer, no se inventa una alarma: queda en el registro.
-    if (!eCorridas) atrasados = cronsAtrasados(corridas ?? [], new Date())
-  }
+    return eCorridas ? [] : cronsAtrasados(corridas ?? [], new Date())
+  })()
 
   const [
     { data: unidades, error: eUnidades },
@@ -313,6 +323,7 @@ export default async function DashboardPage() {
     contarConsumosSinFacturar(supabase, hoy),
     contarSaldosPendientes(supabase, hoy),
   ])
+  const atrasados = await atrasadosPendientes
 
   /*
    * Ninguna de las 12 lecturas de arriba revisaba su `error`: si una fallaba,

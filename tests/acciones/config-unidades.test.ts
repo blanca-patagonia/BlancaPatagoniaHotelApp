@@ -21,7 +21,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
   updateTag: () => {},
-  // `lib/catalogo/publico.ts` (importado por `config/actions.ts` para
+  // `lib/catalogo/publico.ts` (importado por las acciones de `config/` para
   // `ETIQUETA_CATALOGO`) envuelve sus funciones con esto al cargar el módulo.
   unstable_cache: (fn: unknown) => fn,
 }))
@@ -36,7 +36,8 @@ vi.mock('@/lib/supabase/server', async () => {
 
 describe.skipIf(!hayDB)('Server Actions · tipos de unidad y unidades', () => {
   let ctx: Contexto
-  type Acciones = typeof import('@/app/(front-gestion)/panel/config/actions')
+  type Acciones = typeof import('@/app/(front-gestion)/panel/config/tipos-unidad.actions') &
+    typeof import('@/app/(front-gestion)/panel/config/unidades.actions')
   let crearTipoUnidad: Acciones['crearTipoUnidad']
   let editarTipoUnidad: Acciones['editarTipoUnidad']
   let alternarActivoTipoUnidad: Acciones['alternarActivoTipoUnidad']
@@ -45,7 +46,10 @@ describe.skipIf(!hayDB)('Server Actions · tipos de unidad y unidades', () => {
 
   beforeAll(async () => {
     ctx = nuevoContexto()
-    const acciones = await import('@/app/(front-gestion)/panel/config/actions')
+    const acciones = {
+      ...(await import('@/app/(front-gestion)/panel/config/tipos-unidad.actions')),
+      ...(await import('@/app/(front-gestion)/panel/config/unidades.actions')),
+    }
     crearTipoUnidad = acciones.crearTipoUnidad
     editarTipoUnidad = acciones.editarTipoUnidad
     alternarActivoTipoUnidad = acciones.alternarActivoTipoUnidad

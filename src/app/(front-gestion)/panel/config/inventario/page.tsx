@@ -6,7 +6,7 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { llevaStock, faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
 import { registrarFalla } from '@/lib/acciones'
-import { crearProducto } from '../actions'
+import { crearProducto } from '../productos.actions'
 import { FilaProducto } from '../fila-producto'
 import {
   CAMPO,
@@ -82,6 +82,11 @@ export default async function InventarioPage({
       />
 
       {sp.error && <Mensaje tono="error">{mensajeDe(MENSAJES_ERROR, sp.error, 'No se pudo completar la operación.')}</Mensaje>}
+      {(eProductos) && (
+        <Mensaje tono="error">
+          No se pudo leer el catálogo: los productos y el stock de abajo pueden estar incompletos. Recargá antes de cargar o corregir algo.
+        </Mensaje>
+      )}
       {sp.ok === 'producto' && <Mensaje tono="ok">Producto agregado al catálogo.</Mensaje>}
       {sp.ok === 'producto_eliminado' && <Mensaje tono="ok">Producto eliminado del catálogo.</Mensaje>}
       {eProductos && (

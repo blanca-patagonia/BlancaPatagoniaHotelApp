@@ -47,10 +47,15 @@ export async function preguntarAlAsistente(pregunta: string): Promise<RespuestaA
     const ip = ipDeCabeceras(await headers())
 
     // El conteo lo hace la base, que tiene el índice; la decisión, la app.
-    const { data: recientes } = await admin.rpc('consultas_recientes_de_ip', {
+    const { data: recientes, error: eRecientes } = await admin.rpc('consultas_recientes_de_ip', {
       p_ip: ip,
       p_minutos: 1,
     })
+    // Si el conteo falla se registra la consulta igual (`recientes` no es un
+    // número), como en el resto de los límites (`lib/limites.ts`): un contador
+    // roto no le corta nada a un huésped. Pero tiene que quedar a la vista,
+    // porque mientras dure el tope no actúa.
+    registrarFalla(eRecientes, 'asistente_publico:conteo_de_consultas')
 
     if (typeof recientes !== 'number' || recientes < MAX_POR_MINUTO) {
       const { error } = await admin.from('consultas_bot').insert({ pregunta: texto, ip })

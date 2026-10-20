@@ -20,7 +20,7 @@ import {
   type EstadoReserva,
   type Canal,
 } from '@/lib/domain/reservas'
-import { resumenPagos, type EstadoPago, type TipoPago } from '@/lib/domain/pagos'
+import { resumenDeCuenta, type EstadoPago, type TipoPago } from '@/lib/domain/pagos'
 import {
   ORDEN_CHIPS,
   VISTAS,
@@ -80,6 +80,8 @@ interface Row {
     bebes: number
   }[]
   pagos: { tipo: TipoPago; monto: number | string; estado: EstadoPago }[]
+  /** Para el saldo contra la cuenta consolidada (alojamiento + consumos). */
+  consumos: { cantidad: number; precio_unitario: number | string }[] | null
 }
 
 interface Params {
@@ -236,8 +238,9 @@ export default async function ReservasPage({
   // dice: sumar el total real exigiría traer todas las filas, que es justo lo que
   // la paginación evita (y `max_rows` cortaría en 1000 sin avisar).
   const saldos = reservas.map((r) =>
-    resumenPagos(
+    resumenDeCuenta(
       Number(r.total),
+      (r.consumos ?? []).map((c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) })),
       (r.pagos ?? []).map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado })),
     ),
   )

@@ -19,6 +19,7 @@ import {
   TIPOS_COMPROBANTE_ARCA,
   type ComprobanteLeido,
 } from '@/lib/domain/comprobante-qr'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 const DESTINO = '/panel/proveedores/comprobantes'
 
@@ -41,6 +42,8 @@ export interface EstadoComprobante {
   avisos?: string[]
   /** Resumen legible de lo que se cargó, para confirmarlo en pantalla. */
   resumen?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 /**
@@ -100,20 +103,17 @@ export async function cargarComprobanteAMano(
   const moneda = String(formData.get('moneda') ?? 'ARS')
   const cae = String(formData.get('cae') ?? '').trim()
 
-  if (!/^\d{11}$/.test(cuit)) return { error: 'El CUIT del emisor tiene que tener 11 dígitos.' }
-  if (!TIPOS_COMPROBANTE_ARCA[tipoCodigo]) return { error: 'Elegí el tipo de comprobante.' }
-  if (!Number.isInteger(puntoVenta) || puntoVenta < 0) return { error: 'Punto de venta inválido.' }
-  if (!Number.isInteger(numero) || numero <= 0) return { error: 'Número de comprobante inválido.' }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { error: 'Elegí la fecha del comprobante.' }
-  if (!Number.isFinite(total) || total < 0) return { error: 'El importe no es válido.' }
+  if (!/^\d{11}$/.test(cuit)) return falloConValores('El CUIT del emisor tiene que tener 11 dígitos.', formData)
+  if (!TIPOS_COMPROBANTE_ARCA[tipoCodigo]) return falloConValores('Elegí el tipo de comprobante.', formData)
+  if (!Number.isInteger(puntoVenta) || puntoVenta < 0) return falloConValores('Punto de venta inválido.', formData)
+  if (!Number.isInteger(numero) || numero <= 0) return falloConValores('Número de comprobante inválido.', formData)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return falloConValores('Elegí la fecha del comprobante.', formData)
+  if (!Number.isFinite(total) || total < 0) return falloConValores('El importe no es válido.', formData)
   if (moneda !== 'USD' && moneda !== 'ARS' && !esMonedaExtranjera(moneda)) {
-    return { error: 'Esa moneda no está entre las que el sistema sabe convertir.' }
+    return falloConValores('Esa moneda no está entre las que el sistema sabe convertir.', formData)
   }
   if (!cae) {
-    return {
-      error:
-        'Falta el CAE. Si el comprobante no tiene —un ticket o un remito—, cargalo como gasto directo en la cuenta del proveedor.',
-    }
+    return falloConValores('Falta el CAE. Si el comprobante no tiene —un ticket o un remito—, cargalo como gasto directo en la cuenta del proveedor.', formData)
   }
 
   const comprobante: ComprobanteLeido = {
@@ -131,13 +131,15 @@ export async function cargarComprobanteAMano(
     nroDocReceptor: null,
   }
 
-  return await guardar(comprobante, {
+  const resultado = await guardar(comprobante, {
     origen: 'manual',
     proveedorId: String(formData.get('proveedor_id') ?? '').trim() || null,
     razonSocial: String(formData.get('razon_social') ?? '').trim().slice(0, 120) || null,
     cargadoPor: sesion.userId,
     cuitDelHotel: null,
   })
+  // Si no se guardó (duplicado, fallo de base), se repone lo escrito.
+  return resultado.error && !resultado.ok ? falloConValores(resultado.error, formData) : resultado
 }
 
 /** El guardado, compartido por los dos caminos de carga. */

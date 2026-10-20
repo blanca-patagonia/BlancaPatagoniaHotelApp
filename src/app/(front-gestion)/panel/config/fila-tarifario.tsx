@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { ETIQUETAS_CATEGORIA, type CategoriaUnidad } from '@/lib/domain/unidades'
-import { actualizarTarifasDeFila, type EstadoTarifasFila } from './actions'
+import { actualizarTarifasDeFila, type EstadoTarifasFila } from './tarifas.actions'
 import { BotonEnvio } from '../_components/boton-envio'
 import { TD, botonClases } from '../_components/ui'
 import { formatearUSD } from '@/lib/domain/moneda'

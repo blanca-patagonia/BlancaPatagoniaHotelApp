@@ -14,13 +14,16 @@ import {
   type TipoContrato,
 } from '@/lib/domain/contratos'
 import { obtenerProveedorFirma } from '@/lib/firma'
-import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
+import { cortarSiFalla, mensajeDeFalla, registrarFalla } from '@/lib/acciones'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoContratoForm {
   error?: string
   ok?: string
   /** Id del borrador recién creado, para ofrecer el enlace directo. */
   id?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 /** Los contratos los gestionan solo admin y gerencia (RLS lo repite en la base). */
@@ -45,13 +48,13 @@ export async function crearContrato(
   const [tipoCrudo, entidadId] = String(formData.get('entidad') ?? '').split(':')
   const tipo = tipoCrudo as TipoContrato
 
-  if (!titulo) return { error: 'Ingresá un título para el contrato.' }
+  if (!titulo) return falloConValores('Ingresá un título para el contrato.', formData)
   if (!TIPOS_CONTRATO.includes(tipo) || !entidadId) {
-    return { error: 'Elegí con quién se firma el contrato.' }
+    return falloConValores('Elegí con quién se firma el contrato.', formData)
   }
-  if (!contenido) return { error: 'Escribí el texto del contrato.' }
+  if (!contenido) return falloConValores('Escribí el texto del contrato.', formData)
   if (vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde) {
-    return { error: 'La vigencia no puede terminar antes de empezar.' }
+    return falloConValores('La vigencia no puede terminar antes de empezar.', formData)
   }
 
   const supabase = await crearClienteServidor()
@@ -68,7 +71,7 @@ export async function crearContrato(
     })
     .select('id')
     .single()
-  if (error) return { error: mensajeDeFalla(error, 'contratos:crear', 'No se pudo crear el contrato') }
+  if (error) return falloConValores(mensajeDeFalla(error, 'contratos:crear', 'No se pudo crear el contrato'), formData)
 
   revalidatePath('/panel/contratos')
   return {
@@ -94,7 +97,7 @@ export async function enviarAFirmar(formData: FormData): Promise<void> {
     .from('contratos')
     .select('id, titulo, estado')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   // Sin esto, una lectura que falla se confunde con "el contrato no existe"
   // y manda al listado sin ningún aviso — quien lo mandó a firmar no se
@@ -149,7 +152,7 @@ export async function cambiarEstadoContrato(formData: FormData): Promise<void> {
     .from('contratos')
     .select('estado')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (eContrato) redirect(`/panel/contratos/${id}?error=lectura_contrato`)
   if (!contrato) redirect('/panel/contratos')
@@ -194,7 +197,7 @@ export async function editarContrato(formData: FormData): Promise<void> {
     .from('contratos')
     .select('estado')
     .eq('id', id)
-    .single()
+    .maybeSingle()
   if (eContrato) redirect(`${destino}?error=lectura_contrato`)
   if (!contrato) redirect('/panel/contratos')
   if (contrato.estado !== 'borrador') redirect(`${destino}?error=no_editable`)
@@ -244,8 +247,8 @@ export async function verificarIntegridad(formData: FormData): Promise<void> {
   if (!id) redirect('/panel/contratos')
 
   const supabase = await crearClienteServidor()
-  const [{ data: contrato }, { data: firma }] = await Promise.all([
-    supabase.from('contratos').select('contenido').eq('id', id).single(),
+  const [{ data: contrato, error: eContrato }, { data: firma, error: eFirma }] = await Promise.all([
+    supabase.from('contratos').select('contenido').eq('id', id).maybeSingle(),
     supabase
       .from('firmas')
       .select('hash_documento')
@@ -254,6 +257,12 @@ export async function verificarIntegridad(formData: FormData): Promise<void> {
       .maybeSingle(),
   ])
 
+  // Sin esto, una lectura fallida se leía como «no tiene firma»: otra
+  // afirmación sobre el contrato que nadie había verificado.
+  if (eContrato || eFirma) {
+    registrarFalla(eContrato ?? eFirma, 'contratos:verificar_integridad')
+    redirect(`/panel/contratos/${id}?error=lectura_contrato`)
+  }
   if (!contrato || !firma?.hash_documento) {
     redirect(`/panel/contratos/${id}?error=sin_firma`)
   }

@@ -3,7 +3,7 @@ import { esDireccion } from '@/lib/domain/permisos'
 import { mensajeDe } from '@/lib/listados'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { guardarUbicacionUnidad, alternarActivoUnidad } from '../actions'
+import { guardarUbicacionUnidad, alternarActivoUnidad } from '../unidades.actions'
 import { Icono } from '../../_components/iconos'
 import { registrarFalla } from '@/lib/acciones'
 import { CAMPO, Campo, Etiqueta, Encabezado, FILA, Mensaje, TD, TH, Tabla, Tarjeta, Pagina, botonClases } from '../../_components/ui'
@@ -85,6 +85,11 @@ export default async function UbicacionesPage({
       />
 
       {sp.error && <Mensaje tono="error">{mensajeDe(MENSAJES_ERROR, sp.error, 'No se pudo completar la operación.')}</Mensaje>}
+      {(error) && (
+        <Mensaje tono="error">
+          No se pudieron leer las unidades: la lista de abajo puede estar incompleta o vacía sin que eso signifique que no haya unidades cargadas. Recargá antes de crear una nueva.
+        </Mensaje>
+      )}
       {sp.ok === 'ubicacion' && (
         <Mensaje tono="ok">Ubicación guardada. La grilla ya la usa para filtrar y ordenar.</Mensaje>
       )}

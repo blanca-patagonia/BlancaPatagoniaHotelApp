@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { crearUnidad, type EstadoAltaUnidad } from '../../actions'
+import { crearUnidad, type EstadoAltaUnidad } from '../../unidades.actions'
 import { CAMPO, Campo, Mensaje } from '../../../_components/ui'
 import { BotonEnvio } from '../../../_components/boton-envio'
 
@@ -34,6 +34,7 @@ export function FormularioUnidad({ tipos }: { tipos: { id: string; nombre: strin
       </Campo>
       <Campo etiqueta="Tipo de alojamiento" requerido>
         <select
+          key={v?.tipo_unidad_id ?? ''}
           name="tipo_unidad_id"
           required
           defaultValue={v?.tipo_unidad_id ?? ''}

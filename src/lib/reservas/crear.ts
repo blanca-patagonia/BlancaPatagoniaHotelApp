@@ -1,7 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
-import { registrarFalla } from '@/lib/acciones'
+import { mensajeDeFalla, registrarFalla } from '@/lib/acciones'
 import { diasEntre, hoyISO } from '@/lib/fechas'
 import type { TarifaTipo, Promocion } from '@/lib/domain/precios'
 import {
@@ -255,7 +255,7 @@ export async function crearReservaEnUnidadLibre(
     if (error.code === '23P01') {
       return { ok: false, error: 'La unidad ya no está disponible para esas fechas.' }
     }
-    return { ok: false, error: `No se pudo crear la reserva: ${error.message}` }
+    return { ok: false, error: mensajeDeFalla(error, 'reservas:crear', 'No se pudo crear la reserva') }
   }
   return {
     ok: true,

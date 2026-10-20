@@ -332,7 +332,6 @@ export async function crearReservaPublica(
   await avisarNuevaReserva(admin, {
     reservaId: nueva.id,
     codigo: nueva.codigo,
-    huesped: `${nombre} ${apellido}`.trim() || email,
     checkIn,
     checkOut,
     total: Number(nueva.total),

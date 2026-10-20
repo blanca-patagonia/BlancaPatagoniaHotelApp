@@ -48,6 +48,9 @@ export default async function InformeCanalesPage({
   if (rentabilidad.error) {
     registrarErrorSync('reportes_canales_lectura', { fuente: 'resumen_canal_mes', motivo: rentabilidad.error })
   }
+  if (reservasRes.error) {
+    registrarErrorSync('reportes_canales_lectura', { fuente: 'reservas', motivo: reservasRes.error })
+  }
 
   /*
     La vista ya viene agregada por canal, así que NO se pasa por

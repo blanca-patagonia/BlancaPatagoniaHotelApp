@@ -4,7 +4,7 @@ import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { datosFiscales } from '@/lib/facturacion/emisor'
 import { CONDICIONES_IVA, ETIQUETAS_CONDICION_IVA, formatearCuit } from '@/lib/domain/facturacion'
-import { guardarDatosFiscales } from '../actions'
+import { guardarDatosFiscales } from '../fiscal.actions'
 import { CAMPO, Campo, Encabezado, Mensaje, Pagina, Tarjeta } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
 

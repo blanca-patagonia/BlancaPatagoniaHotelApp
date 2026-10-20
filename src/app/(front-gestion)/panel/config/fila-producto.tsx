@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react'
 import { llevaStock, stockBajo } from '@/lib/domain/inventario'
 import { CATEGORIAS_PRODUCTO, ETIQUETAS_CATEGORIA_PRODUCTO } from '@/lib/domain/consumos'
 import { importe } from '@/lib/domain/moneda'
-import { editarProducto, reponerStock, alternarProducto, eliminarProducto, type EstadoProducto } from './actions'
+import { editarProducto, reponerStock, alternarProducto, eliminarProducto, type EstadoProducto } from './productos.actions'
 import { BotonEnvio } from '../_components/boton-envio'
 import { CAMPO, Campo, Etiqueta, FILA, TD, botonClases } from '../_components/ui'
 

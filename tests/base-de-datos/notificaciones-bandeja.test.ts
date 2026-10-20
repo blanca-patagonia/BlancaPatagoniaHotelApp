@@ -294,7 +294,6 @@ describe.skipIf(!hayDB)('avisos internos a la cartelera', () => {
       entidadId: `r-${sufijo}-alta`,
       variables: {
         codigo: `BP-${sufijo}`,
-        huesped: 'Ana Pérez',
         check_in: '10/03/2027',
         check_out: '13/03/2027',
         total: 'USD 300',
@@ -367,7 +366,10 @@ describe.skipIf(!hayDB)('avisos internos a la cartelera', () => {
     // Sin autor: no lo escribió nadie. Poner ahí a quien disparó la acción sería
     // atribuirle un texto que no escribió.
     expect(publicados[0].autor_id).toBeNull()
-    expect(publicados[0].mensaje).toContain('Ana Pérez')
+    // El código identifica la reserva; el nombre del huésped NO va: la cartelera
+    // la lee el asistente de IA y sale a un tercero (ver `plantillas.ts`).
+    expect(publicados[0].mensaje).toContain(`BP-${sufijo}`)
+    expect(publicados[0].mensaje).not.toContain('{{huesped}}')
   })
 
   it('la base acepta los cinco estados del pedido y rechaza los inventados', async () => {

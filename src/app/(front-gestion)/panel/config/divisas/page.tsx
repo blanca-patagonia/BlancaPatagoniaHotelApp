@@ -12,7 +12,7 @@ import {
 } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { obtenerDolarBlueInformativo } from '@/lib/divisas'
-import { cargarCotizacion } from '../actions'
+import { cargarCotizacion } from '../cotizacion.actions'
 import { CAMPO, Campo, Encabezado, Etiqueta, FILA, Mensaje, TD, TH, Tabla, Tarjeta, Pagina } from '../../_components/ui'
 import { BotonEnvio } from '../../_components/boton-envio'
 

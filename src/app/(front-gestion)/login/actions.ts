@@ -7,9 +7,12 @@ import { mensajeLimite } from '@/lib/domain/limites'
 import { LARGO_MINIMO_PASSWORD } from '@/lib/domain/cuenta'
 import { envPublico, urlDelSitio } from '@/lib/env'
 import { registrarError } from '@/lib/registro'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoLogin {
   error?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 export async function iniciarSesion(
@@ -20,7 +23,7 @@ export async function iniciarSesion(
   const password = String(formData.get('password') ?? '')
 
   if (!email || !password) {
-    return { error: 'Ingresá tu email y contraseña.' }
+    return falloConValores('Ingresá tu email y contraseña.', formData)
   }
 
   /*
@@ -32,7 +35,7 @@ export async function iniciarSesion(
     una vía de medir si el email existe por la diferencia de tiempo.
   */
   if (!(await permitirIntento('login'))) {
-    return { error: mensajeLimite('login') }
+    return falloConValores(mensajeLimite('login'), formData)
   }
 
   const supabase = await crearClienteServidor()
@@ -41,7 +44,7 @@ export async function iniciarSesion(
   if (error) {
     // Mensaje único a propósito: distinguir «no existe» de «contraseña
     // incorrecta» le confirmaría a un atacante qué cuentas existen.
-    return { error: 'Email o contraseña incorrectos.' }
+    return falloConValores('Email o contraseña incorrectos.', formData)
   }
 
   redirect('/panel')
@@ -56,6 +59,8 @@ export async function cerrarSesion(): Promise<void> {
 export interface EstadoRecuperar {
   error?: string
   ok?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 /**
@@ -85,12 +90,12 @@ export async function pedirRecuperacion(
   formData: FormData,
 ): Promise<EstadoRecuperar> {
   const email = String(formData.get('email') ?? '').trim()
-  if (!email) return { error: 'Ingresá tu email.' }
+  if (!email) return falloConValores('Ingresá tu email.', formData)
 
   // Antes de tocar nada: el límite protege contra la enumeración por tiempos y
   // contra usar esto como ametralladora de correos.
   if (!(await permitirIntento('recuperar_password'))) {
-    return { error: mensajeLimite('recuperar_password') }
+    return falloConValores(mensajeLimite('recuperar_password'), formData)
   }
 
   const supabase = await crearClienteServidor()

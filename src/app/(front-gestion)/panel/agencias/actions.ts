@@ -11,12 +11,15 @@ import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
 import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
 import { registrarAviso } from '@/lib/registro'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoAgencia {
   error?: string
   ok?: string
   /** Id de la cuenta recién creada, para ofrecer el enlace a su ficha. */
   id?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 export async function crearAgencia(
@@ -31,8 +34,8 @@ export async function crearAgencia(
   const email = String(formData.get('email') ?? '').trim()
   const descuento = Math.min(100, Math.max(0, Number(formData.get('descuento_pct') ?? 0) || 0))
 
-  if (!nombre) return { error: 'Ingresá el nombre.' }
-  if (!(TIPOS_CUENTA as readonly string[]).includes(tipo)) return { error: 'Tipo inválido.' }
+  if (!nombre) return falloConValores('Ingresá el nombre.', formData)
+  if (!(TIPOS_CUENTA as readonly string[]).includes(tipo)) return falloConValores('Tipo inválido.', formData)
 
   const supabase = await crearClienteServidor()
   const { data, error } = await supabase
@@ -40,7 +43,7 @@ export async function crearAgencia(
     .insert({ nombre, tipo, cuit: cuit || null, email: email || null, descuento_pct: descuento })
     .select('id')
     .single()
-  if (error) return { error: mensajeDeFalla(error, 'agencias:crear', 'No se pudo crear la agencia') }
+  if (error) return falloConValores(mensajeDeFalla(error, 'agencias:crear', 'No se pudo crear la agencia'), formData)
   revalidatePath('/panel/agencias')
   return { ok: `Se registró ${nombre}.`, id: (data as { id: string } | null)?.id }
 }
@@ -204,7 +207,7 @@ export async function cambiarEtapaAgencia(formData: FormData): Promise<void> {
     .from('agencias')
     .select('etapa')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (eAgencia) redirect('/panel/agencias?error=etapa_lectura')
   if (!agencia) redirect('/panel/agencias')

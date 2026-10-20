@@ -61,11 +61,17 @@ export interface FiltrosReservas {
  * huésped. Se traen sólo los tres campos que `resumenPagos` necesita, no la fila
  * completa: `nota` es texto libre y no tiene por qué viajar a un listado.
  *
+ * `consumos(...)` va por lo mismo: el saldo se mide contra la cuenta
+ * CONSOLIDADA (alojamiento + consumos, `resumenDeCuenta`), igual que en
+ * `saldarSiCorresponde` y en el cobro. Sin ellos, el listado y el CSV mostraban
+ * menos deuda de la que el huésped tenía. Viaja embebido y no en una consulta
+ * aparte para que el listado siga siendo un solo viaje a la base.
+ *
  * `estadias` ahora trae también `check_in`/`check_out` (columnas generadas de la
  * migración 0037) porque son las que filtran las vistas por fecha.
  */
 export const SELECT_RESERVAS =
-  'id, codigo, estado, total, total_neto, iva, canal, plan, garantia, segmento, creada_en, grupo_id, agencia_id, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, vip), estadias!inner(periodo, check_in, check_out, huespedes, adultos, menores, bebes), pagos(tipo, monto, estado)'
+  'id, codigo, estado, total, total_neto, iva, canal, plan, garantia, segmento, creada_en, grupo_id, agencia_id, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, vip), estadias!inner(periodo, check_in, check_out, huespedes, adultos, menores, bebes), pagos(tipo, monto, estado), consumos(cantidad, precio_unitario)'
 
 /** Tope de ids de huésped que se inyectan en el filtro `in` de la búsqueda. */
 const MAX_HUESPEDES_BUSQUEDA = 200

@@ -25,6 +25,7 @@ export function CargarAMano({
   monedas: readonly string[]
 }) {
   const [estado, accion, pendiente] = useActionState(cargarComprobanteAMano, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   const tipos = Object.entries(TIPOS_COMPROBANTE_ARCA)
 
@@ -32,7 +33,7 @@ export function CargarAMano({
     <form action={accion} className="grid gap-3 p-5 sm:grid-cols-3">
       <Campo etiqueta="CUIT del emisor" requerido>
         <input
-          name="cuit_emisor"
+          name="cuit_emisor" defaultValue={v.cuit_emisor ?? ''}
           required
           inputMode="numeric"
           placeholder="30712345678"
@@ -41,7 +42,12 @@ export function CargarAMano({
       </Campo>
 
       <Campo etiqueta="Tipo" requerido>
-        <select name="tipo_codigo" defaultValue="1" className={CAMPO}>
+        <select
+          name="tipo_codigo"
+          key={`tipo_codigo-${v.tipo_codigo ?? '1'}`}
+          defaultValue={v.tipo_codigo ?? '1'}
+          className={CAMPO}
+        >
           {tipos.map(([codigo, t]) => (
             <option key={codigo} value={codigo}>
               {t.nombre}
@@ -51,7 +57,7 @@ export function CargarAMano({
       </Campo>
 
       <Campo etiqueta="Razón social">
-        <input name="razon_social" maxLength={120} className={CAMPO} />
+        <input name="razon_social" defaultValue={v.razon_social ?? ''} maxLength={120} className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Punto de venta" requerido>
@@ -60,21 +66,26 @@ export function CargarAMano({
           type="number"
           min="0"
           required
-          defaultValue={1}
+          defaultValue={v.punto_venta ?? 1}
           className={CAMPO}
         />
       </Campo>
 
       <Campo etiqueta="Número" requerido>
-        <input name="numero" type="number" min="1" required className={CAMPO} />
+        <input name="numero" defaultValue={v.numero ?? ''} type="number" min="1" required className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Fecha" requerido>
-        <input name="fecha" type="date" required className={CAMPO} />
+        <input name="fecha" defaultValue={v.fecha ?? ''} type="date" required className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Moneda">
-        <select name="moneda" defaultValue="ARS" className={CAMPO}>
+        <select
+          name="moneda"
+          key={`moneda-${v.moneda ?? 'ARS'}`}
+          defaultValue={v.moneda ?? 'ARS'}
+          className={CAMPO}
+        >
           {monedas.map((m) => (
             <option key={m} value={m}>
               {m}
@@ -84,16 +95,21 @@ export function CargarAMano({
       </Campo>
 
       <Campo etiqueta="Total" requerido>
-        <input name="total" type="number" step="0.01" min="0" required className={CAMPO} />
+        <input name="total" defaultValue={v.total ?? ''} type="number" step="0.01" min="0" required className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="CAE" requerido ayuda="Los 14 dígitos que figuran al pie del comprobante.">
-        <input name="cae" required maxLength={20} className={CAMPO} />
+        <input name="cae" defaultValue={v.cae ?? ''} required maxLength={20} className={CAMPO} />
       </Campo>
 
       <div className="sm:col-span-2">
         <Campo etiqueta="Proveedor" ayuda="Opcional: se puede vincular después.">
-          <select name="proveedor_id" defaultValue="" className={CAMPO}>
+          <select
+          name="proveedor_id"
+          key={`proveedor_id-${v.proveedor_id ?? ''}`}
+          defaultValue={v.proveedor_id ?? ''}
+          className={CAMPO}
+        >
             <option value="">Sin vincular</option>
             {proveedores.map((p) => (
               <option key={p.id} value={p.id}>

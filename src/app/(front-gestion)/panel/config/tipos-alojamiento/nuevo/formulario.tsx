@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import { CATEGORIAS_UNIDAD, ETIQUETAS_CATEGORIA } from '@/lib/domain/unidades'
-import { crearTipoUnidad, type EstadoAltaTipo } from '../../actions'
+import { crearTipoUnidad, type EstadoAltaTipo } from '../../tipos-unidad.actions'
 import { CAMPO, Campo, Mensaje } from '../../../_components/ui'
 import { BotonEnvio } from '../../../_components/boton-envio'
 
@@ -46,7 +46,7 @@ export function FormularioTipo() {
         />
       </Campo>
       <Campo etiqueta="Categoría" requerido>
-        <select name="categoria" required defaultValue={v?.categoria ?? ''} className={CAMPO}>
+        <select key={v?.categoria ?? ''} name="categoria" required defaultValue={v?.categoria ?? ''} className={CAMPO}>
           <option value="" disabled>
             Elegir…
           </option>

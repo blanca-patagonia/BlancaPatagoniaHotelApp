@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import { aplicarPorcentajeTarifario, type EstadoPorcentajeTarifario } from './actions'
+import { aplicarPorcentajeTarifario, type EstadoPorcentajeTarifario } from './tarifas.actions'
 import { CAMPO, Campo } from '../_components/ui'
 import { BotonEnvio } from '../_components/boton-envio'
 import { useConfirmar } from '../_components/confirmar'

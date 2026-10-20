@@ -10,12 +10,15 @@ import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla, registrarFalla, mensajeDeFalla } from '@/lib/acciones'
 import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
 import { registrarAviso } from '@/lib/registro'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoProveedor {
   error?: string
   ok?: string
   /** Id del proveedor recién creado, para ofrecer el enlace a su cuenta. */
   id?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 async function exigirGestion() {
@@ -32,7 +35,7 @@ export async function crearProveedor(
   const cuit = String(formData.get('cuit') ?? '').trim()
   const email = String(formData.get('email') ?? '').trim()
   const telefono = String(formData.get('telefono') ?? '').trim()
-  if (!nombre) return { error: 'Ingresá el nombre.' }
+  if (!nombre) return falloConValores('Ingresá el nombre.', formData)
 
   const supabase = await crearClienteServidor()
   const { data, error } = await supabase
@@ -46,7 +49,7 @@ export async function crearProveedor(
     })
     .select('id')
     .single()
-  if (error) return { error: mensajeDeFalla(error, 'proveedores:crear', 'No se pudo crear el proveedor') }
+  if (error) return falloConValores(mensajeDeFalla(error, 'proveedores:crear', 'No se pudo crear el proveedor'), formData)
   revalidatePath('/panel/proveedores')
   return { ok: `Se registró ${nombre}.`, id: (data as { id: string } | null)?.id }
 }
@@ -262,10 +265,13 @@ export async function agregarFotoProveedor(formData: FormData): Promise<void> {
     .from('proveedores')
     .select('fotos')
     .eq('id', proveedorId)
-    .single()
+    .maybeSingle()
   if (errorLectura) {
     cortarSiFalla(errorLectura, `/panel/proveedores/${proveedorId}`, 'foto_leer')
   }
+  // No existe (o no se ve): no es una falla del sistema, y seguir escribiría
+  // sobre cero filas como si hubiera salido bien.
+  if (!actual) redirect(`/panel/proveedores/${proveedorId}?error=foto_leer`)
 
   const fotos = [...(((actual as { fotos: string[] } | null)?.fotos) ?? []), subida.ruta]
   const { error } = await supabase
@@ -296,10 +302,13 @@ export async function eliminarFotoProveedor(formData: FormData): Promise<void> {
     .from('proveedores')
     .select('fotos')
     .eq('id', proveedorId)
-    .single()
+    .maybeSingle()
   if (errorLectura) {
     cortarSiFalla(errorLectura, `/panel/proveedores/${proveedorId}`, 'foto_leer')
   }
+  // No existe (o no se ve): no es una falla del sistema, y seguir escribiría
+  // sobre cero filas como si hubiera salido bien.
+  if (!actual) redirect(`/panel/proveedores/${proveedorId}?error=foto_leer`)
 
   const previas = ((actual as { fotos: string[] } | null)?.fotos) ?? []
   /*

@@ -8,6 +8,7 @@ const ESTADO_INICIAL: EstadoLogin = {}
 
 export function FormularioLogin() {
   const [estado, accion, pendiente] = useActionState(iniciarSesion, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="flex flex-col gap-4">
@@ -15,7 +16,7 @@ export function FormularioLogin() {
         <span className="font-medium text-stone-700">Email</span>
         <input
           type="email"
-          name="email"
+          name="email" defaultValue={v.email ?? ''}
           autoComplete="email"
           required
           className="rounded-lg border border-stone-300 px-3 py-2.5 text-stone-900 outline-none transition focus:border-lago-600 focus:ring-2 focus:ring-lago-600/20"

@@ -835,4 +835,370 @@ describe.skipIf(!hayRoles)('auditoría RLS · escritura por rol', () => {
       }
     })
   })
+
+  /*
+    ── 6. Cuentas corrientes, comprobantes, contratos y catálogo (2026-10-20) ────
+
+    Segunda pasada sobre las tablas con política de escritura y sin caso
+    dirigido. Se eligieron las nueve de más consecuencia: plata (`notas_credito`,
+    `movimientos_cuenta`, `movimientos_proveedor`, `movimientos_externos`),
+    acuerdos firmados (`contratos`, `firmas`), el padrón de proveedores, el
+    calendario de temporadas —de donde sale el precio de cada noche— y los
+    acompañantes de una reserva (`reserva_huespedes`, datos personales).
+
+    Dos reglas de esta sección que el resto del archivo no tenía:
+
+    1. **Cada fila se siembra acá**, con `service_role`, y se borra en el
+       `afterAll`. Nada de `if (contar(tabla) === 0)`: ésa es la trampa que dejó
+       sin auditar `notas_credito` en la matriz de lectura (ver AGENTS.md).
+    2. **Un `insert` negado tiene que fallar con 42501**, no con cualquier error.
+       Si la fila fuera inválida (falta una columna, rompe un `check`), el
+       intento fallaría por eso y el caso pasaría en verde sin haber probado
+       ninguna política. Por eso cada tabla tiene además su caso positivo con
+       la misma fila: demuestra que la fila es válida para quien sí puede.
+  */
+  describe('cuentas corrientes, comprobantes, contratos y catálogo', () => {
+    const admin = () => clienteDePrueba()
+    const s = `${sufijo}-6`
+
+    let huespedId: string
+    let acompananteId: string
+    let reservaPropiaId: string
+    let facturaId: string
+    let notaCreditoId: string
+    let agenciaId: string
+    let movimientoCuentaId: string
+    let proveedorId: string
+    let movimientoProveedorId: string
+    let contratoId: string
+    let firmaId: string
+    let movimientoExternoId: string
+    let temporadaId: string
+
+    /** Inserta con `service_role` y devuelve el id; explota si no pudo (no hay siembra muda). */
+    async function sembrar(tabla: string, fila: Record<string, unknown>): Promise<string> {
+      const { data, error } = await admin().from(tabla).insert(fila).select('id').single<{ id: string }>()
+      if (error) throw new Error(`No se pudo sembrar ${tabla}: ${error.message}`)
+      return data.id
+    }
+
+    beforeAll(async () => {
+      huespedId = await sembrar('huespedes', { nombre: 'Auditoría', apellido: `Titular-${s}` })
+      acompananteId = await sembrar('huespedes', { nombre: 'Auditoría', apellido: `Acompañante-${s}` })
+      reservaPropiaId = await sembrar('reservas', { huesped_id: huespedId, estado: 'checkout', total: 100 })
+      facturaId = await sembrar('facturas', {
+        reserva_id: reservaPropiaId,
+        numero: `AUDIT-ESC6-${s}`,
+        total: 100,
+      })
+      notaCreditoId = await sembrar('notas_credito', {
+        factura_id: facturaId,
+        tipo_comprobante: 'B',
+        total: 1,
+        motivo: `auditoría escritura ${s}`,
+      })
+
+      agenciaId = await sembrar('agencias', { nombre: `Agencia ${s}`, tipo: 'agencia' })
+      movimientoCuentaId = await sembrar('movimientos_cuenta', {
+        agencia_id: agenciaId,
+        tipo: 'cargo',
+        monto: 10,
+        concepto: `cargo de prueba ${s}`,
+      })
+
+      proveedorId = await sembrar('proveedores', { nombre: `Proveedor ${s}` })
+      movimientoProveedorId = await sembrar('movimientos_proveedor', {
+        proveedor_id: proveedorId,
+        tipo: 'cargo',
+        monto: 10,
+      })
+
+      contratoId = await sembrar('contratos', {
+        tipo: 'empleado',
+        entidad_id: usuarios.admin.id,
+        titulo: `Contrato ${s}`,
+        contenido: 'Fila de la auditoría de escritura. Se borra en el afterAll.',
+      })
+      firmaId = await sembrar('firmas', { contrato_id: contratoId, firmante_nombre: `Firmante ${s}` })
+
+      movimientoExternoId = await sembrar('movimientos_externos', {
+        origen: 'banco',
+        external_id: `auditoria-escritura-${s}`,
+        fecha: '2026-01-02',
+        monto: -1,
+        moneda: 'ARS',
+      })
+
+      // Una temporada propia y no una del catálogo: si el caso de borrado
+      // encontrara un agujero, se llevaría en cascada las tarifas reales.
+      temporadaId = await sembrar('temporadas', { codigo: `audit-${s}`, nombre: `Auditoría ${s}` })
+    }, 60_000)
+
+    afterAll(async () => {
+      const a = admin()
+      // Hijos primero. Se borra por la clave de la siembra, así un intento que
+      // haya pasado (un agujero) también se limpia y no contamina la próxima corrida.
+      await a.from('notas_credito').delete().eq('factura_id', facturaId)
+      await a.from('facturas').delete().eq('id', facturaId)
+      await a.from('reserva_huespedes').delete().eq('reserva_id', reservaPropiaId)
+      await a.from('reservas').delete().eq('id', reservaPropiaId)
+      await a.from('huespedes').delete().in('id', [huespedId, acompananteId])
+      await a.from('movimientos_cuenta').delete().eq('agencia_id', agenciaId)
+      await a.from('agencias').delete().eq('id', agenciaId)
+      await a.from('movimientos_proveedor').delete().eq('proveedor_id', proveedorId)
+      await a.from('proveedores').delete().eq('id', proveedorId)
+      await a.from('firmas').delete().eq('contrato_id', contratoId)
+      await a.from('contratos').delete().like('titulo', `%${s}%`)
+      await a.from('movimientos_externos').delete().like('external_id', `%${s}%`)
+      await a.from('temporadas').delete().like('codigo', `%${s}%`)
+    })
+
+    /** El `insert` falla POR PERMISO (42501) y la tabla no creció. */
+    async function insertNegado(
+      quien: UsuarioDePrueba,
+      tabla: string,
+      fila: Record<string, unknown>,
+    ): Promise<void> {
+      const { count: antes } = await admin().from(tabla).select('*', { count: 'exact', head: true })
+      const { error } = await quien.cliente.from(tabla).insert(fila)
+      expect(error?.code, `${quien.rol} insertó en ${tabla}, o falló por otra cosa: ${error?.message}`).toBe(
+        '42501',
+      )
+      const { count: despues } = await admin().from(tabla).select('*', { count: 'exact', head: true })
+      expect(despues, `${quien.rol} agregó una fila a ${tabla}`).toBe(antes)
+    }
+
+    /**
+     * El `insert` entra: prueba que la fila del caso negativo es válida.
+     *
+     * Sin `.select()` a propósito: `reserva_huespedes` no tiene columna `id` (su
+     * clave es el par), y pedir la fila de vuelta exigiría además el `select`.
+     * Lo que se inserta acá lo limpia el `afterAll` por la clave de la siembra.
+     */
+    async function insertPermitido(
+      quien: UsuarioDePrueba,
+      tabla: string,
+      fila: Record<string, unknown>,
+    ): Promise<void> {
+      const { error } = await quien.cliente.from(tabla).insert(fila)
+      expect(error, `${quien.rol} no pudo hacer lo que le corresponde en ${tabla}`).toBeNull()
+    }
+
+    /** El `delete` no borró nada. Igual que el `update`, uno negado por RLS no da error. */
+    async function noPuedeBorrar(quien: UsuarioDePrueba, tabla: string, id: string): Promise<void> {
+      await quien.cliente.from(tabla).delete().eq('id', id)
+      const { count, error } = await admin()
+        .from(tabla)
+        .select('*', { count: 'exact', head: true })
+        .eq('id', id)
+      if (error) throw new Error(`No se pudo verificar ${tabla}: ${error.message}`)
+      expect(count, `${quien.rol} borró una fila de ${tabla}`).toBe(1)
+    }
+
+    // ── notas_credito (0076): emite la dirección, y nadie la corrige ni la borra ──
+
+    const notaDePrueba = () => ({
+      factura_id: facturaId,
+      tipo_comprobante: 'B',
+      total: 1,
+      motivo: `intento ${s}`,
+    })
+
+    for (const rol of ['recepcion', 'housekeeping'] as const) {
+      it(`${rol} NO puede emitir una nota de crédito`, async () => {
+        // Una nota de crédito devuelve plata y baja lo facturado: es de la dirección.
+        await insertNegado(usuarios[rol], 'notas_credito', notaDePrueba())
+      })
+    }
+
+    it('gerencia SÍ puede emitir una nota de crédito', async () => {
+      await insertPermitido(usuarios.gerencia, 'notas_credito', notaDePrueba())
+    })
+
+    it('ni admin puede corregir una nota de crédito ya emitida', async () => {
+      // Inmutable como `facturas`: con CAE ya está informada a ARCA.
+      await noPuedeActualizar(usuarios.admin, 'notas_credito', notaCreditoId, { total: 0.5 })
+    })
+
+    it('ni admin puede borrar una nota de crédito', async () => {
+      // Borrarla dejaría un hueco en la correlatividad fiscal.
+      await noPuedeBorrar(usuarios.admin, 'notas_credito', notaCreditoId)
+    })
+
+    // ── movimientos_cuenta (0012): la cuenta corriente de una agencia ──────────
+
+    const pagoDeAgencia = () => ({
+      agencia_id: agenciaId,
+      tipo: 'pago',
+      monto: 5,
+      concepto: `pago de prueba ${s}`,
+    })
+
+    it('housekeeping NO puede registrar un pago en la cuenta de una agencia', async () => {
+      await insertNegado(usuarios.housekeeping, 'movimientos_cuenta', pagoDeAgencia())
+    })
+
+    it('gerencia SÍ puede registrar un pago en la cuenta de una agencia', async () => {
+      await insertPermitido(usuarios.gerencia, 'movimientos_cuenta', pagoDeAgencia())
+    })
+
+    /*
+      HALLAZGO (2026-10-20), cerrado por la 0124: la política «movimientos:
+      recepcion+ gestiona» (0012) le dejaba a recepción insertar, modificar y
+      BORRAR movimientos de la cuenta corriente de una agencia por PostgREST,
+      aunque la aplicación exige `requerirRol('admin', 'gerencia')`. Estos dos
+      casos fallaban antes de la 0124.
+    */
+    it('recepcion NO puede registrar un pago de agencia', async () => {
+      try {
+        await insertNegado(usuarios.recepcion, 'movimientos_cuenta', pagoDeAgencia())
+      } finally {
+        await admin().from('movimientos_cuenta').delete().eq('concepto', `pago de prueba ${s}`)
+      }
+    })
+
+    it('recepcion NO puede borrar un cargo de agencia', async () => {
+      const id = await sembrar('movimientos_cuenta', {
+        agencia_id: agenciaId,
+        tipo: 'cargo',
+        monto: 10,
+        concepto: `cargo a borrar ${s}`,
+      })
+      try {
+        await noPuedeBorrar(usuarios.recepcion, 'movimientos_cuenta', id)
+      } finally {
+        await admin().from('movimientos_cuenta').delete().eq('id', id)
+      }
+    })
+
+    it('housekeeping NO puede bajar el importe de un cargo de agencia', async () => {
+      await noPuedeActualizar(usuarios.housekeeping, 'movimientos_cuenta', movimientoCuentaId, { monto: 1 })
+    })
+
+    // ── proveedores y movimientos_proveedor (0016): cuentas por pagar ──────────
+
+    for (const rol of ['recepcion', 'housekeeping'] as const) {
+      it(`${rol} NO puede cargar una deuda con un proveedor`, async () => {
+        await insertNegado(usuarios[rol], 'movimientos_proveedor', {
+          proveedor_id: proveedorId,
+          tipo: 'pago',
+          monto: 5,
+        })
+      })
+    }
+
+    it('gerencia SÍ puede registrar un pago a un proveedor', async () => {
+      await insertPermitido(usuarios.gerencia, 'movimientos_proveedor', {
+        proveedor_id: proveedorId,
+        tipo: 'pago',
+        monto: 5,
+      })
+    })
+
+    it('recepcion NO puede modificar un movimiento de proveedor', async () => {
+      await noPuedeActualizar(usuarios.recepcion, 'movimientos_proveedor', movimientoProveedorId, { monto: 1 })
+    })
+
+    it('recepcion NO puede dar de alta un proveedor', async () => {
+      // Un proveedor nuevo es a quién se le puede pagar.
+      await insertNegado(usuarios.recepcion, 'proveedores', { nombre: `Intruso ${s}` })
+    })
+
+    it('recepcion NO puede renombrar un proveedor', async () => {
+      await noPuedeActualizar(usuarios.recepcion, 'proveedores', proveedorId, { nombre: `Renombrado ${s}` })
+    })
+
+    it('ni admin puede borrar un proveedor (la baja es lógica, 0061)', async () => {
+      await noPuedeBorrar(usuarios.admin, 'proveedores', proveedorId)
+    })
+
+    // ── movimientos_externos (0077): el extracto del banco ───────────────────
+
+    it('recepcion NO puede marcar como ignorado un movimiento del banco', async () => {
+      // Ignorar un movimiento lo saca del cuadre sin conciliarlo.
+      await noPuedeActualizar(usuarios.recepcion, 'movimientos_externos', movimientoExternoId, {
+        estado: 'ignorado',
+      })
+    })
+
+    it('ni gerencia puede cargar un movimiento del banco a mano', async () => {
+      // El alta es del importador (service_role): una fila cargada a mano no
+      // tendría archivo de origen y desaparecería del cuadre sin rastro.
+      await insertNegado(usuarios.gerencia, 'movimientos_externos', {
+        origen: 'banco',
+        external_id: `a-mano-${s}`,
+        fecha: '2026-01-02',
+        monto: 1,
+      })
+    })
+
+    it('ni admin puede borrar un movimiento del banco', async () => {
+      await noPuedeBorrar(usuarios.admin, 'movimientos_externos', movimientoExternoId)
+    })
+
+    // ── contratos y firmas (0018) ────────────────────────────────────────────
+
+    const contratoDePrueba = () => ({
+      tipo: 'empleado',
+      entidad_id: usuarios.admin.id,
+      titulo: `Contrato intento ${s}`,
+      contenido: 'Intento de la auditoría de escritura.',
+    })
+
+    for (const rol of ['recepcion', 'housekeeping'] as const) {
+      it(`${rol} NO puede crear un contrato`, async () => {
+        await insertNegado(usuarios[rol], 'contratos', contratoDePrueba())
+      })
+    }
+
+    it('gerencia SÍ puede crear un contrato', async () => {
+      await insertPermitido(usuarios.gerencia, 'contratos', contratoDePrueba())
+    })
+
+    it('recepcion NO puede cambiar el texto de un contrato', async () => {
+      // Cambiar el contenido de un contrato ya firmado es cambiar lo que se firmó.
+      await noPuedeActualizar(usuarios.recepcion, 'contratos', contratoId, { titulo: `Alterado ${s}` })
+    })
+
+    it('recepcion NO puede agregar una firma a un contrato', async () => {
+      await insertNegado(usuarios.recepcion, 'firmas', {
+        contrato_id: contratoId,
+        firmante_nombre: `Firma falsa ${s}`,
+      })
+    })
+
+    it('recepcion NO puede cambiar el nombre de quien firmó', async () => {
+      await noPuedeActualizar(usuarios.recepcion, 'firmas', firmaId, { firmante_nombre: `Otro ${s}` })
+    })
+
+    // ── temporadas (0003): de dónde sale el precio de cada noche ──────────────
+
+    it('recepcion NO puede crear una temporada', async () => {
+      await insertNegado(usuarios.recepcion, 'temporadas', { codigo: `intrusa-${s}`, nombre: `Intrusa ${s}` })
+    })
+
+    it('recepcion NO puede renombrar una temporada', async () => {
+      await noPuedeActualizar(usuarios.recepcion, 'temporadas', temporadaId, { nombre: `Alterada ${s}` })
+    })
+
+    it('housekeeping NO puede borrar una temporada', async () => {
+      await noPuedeBorrar(usuarios.housekeeping, 'temporadas', temporadaId)
+    })
+
+    // ── reserva_huespedes (0005): los acompañantes, datos personales ──────────
+
+    it('housekeeping NO puede agregar un acompañante a una reserva', async () => {
+      await insertNegado(usuarios.housekeeping, 'reserva_huespedes', {
+        reserva_id: reservaPropiaId,
+        huesped_id: acompananteId,
+      })
+    })
+
+    it('recepcion SÍ puede agregar un acompañante a una reserva', async () => {
+      await insertPermitido(usuarios.recepcion, 'reserva_huespedes', {
+        reserva_id: reservaPropiaId,
+        huesped_id: acompananteId,
+      })
+    })
+  })
 })

@@ -27,6 +27,7 @@ import {
   formatearLocal,
 } from '@/lib/domain/divisas'
 import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import { traerTodo } from '@/lib/paginado'
 import {
   Encabezado,
   EstadoVacio,
@@ -116,37 +117,50 @@ export default async function ProveedorDetallePage({
     staff: es la credencial de `/portal/<token>`, que expone la cuenta corriente
     del socio y permite firmar contratos en su nombre.
   */
-  const lecturas = await Promise.all([
-    supabase
-      .from('proveedores')
-      .select('id, nombre, rubro, cuit, email, telefono, activo, fotos')
-      .eq('id', id)
-      .maybeSingle(),
-    supabase
-      .from('movimientos_proveedor')
-      .select(
-        'id, tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento, comprobante',
-      )
-      .eq('proveedor_id', id)
-      .order('fecha', { ascending: false })
-      .order('creado_en', { ascending: false }),
-    crearClienteAdmin().from('proveedores').select('token').eq('id', id).maybeSingle(),
+  /*
+    Los movimientos van por `traerTodo`: el saldo suma el historial entero y
+    PostgREST corta en 1000 filas sin avisar. Un proveedor con años de
+    facturas mostraba un saldo equivocado sin que nada lo delatara.
+  */
+  const [lecturas, movsLectura] = await Promise.all([
+    Promise.all([
+      supabase
+        .from('proveedores')
+        .select('id, nombre, rubro, cuit, email, telefono, activo, fotos')
+        .eq('id', id)
+        .maybeSingle(),
+      crearClienteAdmin().from('proveedores').select('token').eq('id', id).maybeSingle(),
+    ]),
+    traerTodo<MovRow>((desde, hasta) =>
+      supabase
+        .from('movimientos_proveedor')
+        .select(
+          'id, tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento, comprobante',
+        )
+        .eq('proveedor_id', id)
+        .order('fecha', { ascending: false })
+        .order('creado_en', { ascending: false })
+        .order('id')
+        .range(desde, hasta) as never,
+    ),
   ])
-  const [{ data: provData }, { data: movsData }, { data: tokenData }] = lecturas
+  const [{ data: provData }, { data: tokenData }] = lecturas
   /*
     Nunca descartar el error de una lectura (regla de la auditoría QA/UX): un
     saldo o una lista vacía por una lectura fallida se ven igual que un dato
     real. Se registra y la pantalla lo avisa arriba.
   */
   lecturas.forEach((l, i) => registrarFalla(l.error, `proveedor_ficha:lectura_${i}`))
-  const huboFallaLectura = lecturas.some((l) => l.error)
+  if (movsLectura.error) registrarFalla({ message: movsLectura.error }, 'proveedor_ficha:movimientos')
+  const huboFallaLectura =
+    lecturas.some((l) => l.error) || Boolean(movsLectura.error || movsLectura.truncado)
   if (!provData) notFound()
   const proveedor = provData as Proveedor
   // Accesorio a la ficha: si la lectura privilegiada falla, la pantalla sigue.
   const tokenPortal = (tokenData as { token: string } | null)?.token ?? null
   const cabeceras = await headers()
   const origen = `${cabeceras.get('x-forwarded-proto') ?? 'http'}://${cabeceras.get('host') ?? 'localhost:3000'}`
-  const movs = (movsData ?? []) as MovRow[]
+  const movs = movsLectura.filas
   const saldo = saldoCuenta(movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento))
   const hoy = hoyISO()
 

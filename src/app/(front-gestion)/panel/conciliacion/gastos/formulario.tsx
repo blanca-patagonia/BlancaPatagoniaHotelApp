@@ -18,11 +18,18 @@ const ESTADO_INICIAL: EstadoGasto = {}
 
 export function FormularioGasto() {
   const [estado, accion, pendiente] = useActionState(crearGasto, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       <Campo etiqueta="Categoría" requerido>
-        <select name="categoria" required defaultValue="" className={CAMPO}>
+        <select
+          name="categoria"
+          required
+          key={`categoria-${v.categoria ?? ''}`}
+          defaultValue={v.categoria ?? ''}
+          className={CAMPO}
+        >
           <option value="" disabled>
             Elegí una categoría
           </option>
@@ -35,12 +42,12 @@ export function FormularioGasto() {
       </Campo>
 
       <Campo etiqueta="Fecha" requerido>
-        <input type="date" name="fecha" required defaultValue={hoyISO()} className={CAMPO} />
+        <input type="date" name="fecha" required defaultValue={v.fecha ?? hoyISO()} className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Descripción" requerido anchoCompleto>
         <input
-          name="descripcion"
+          name="descripcion" defaultValue={v.descripcion ?? ''}
           required
           className={CAMPO}
           placeholder="Sueldo de septiembre, factura de luz, arreglo de la bomba de agua…"
@@ -48,7 +55,7 @@ export function FormularioGasto() {
       </Campo>
 
       <Campo etiqueta="Monto (USD)" requerido>
-        <input name="monto" type="number" min={0.01} step="0.01" required className={CAMPO} />
+        <input name="monto" defaultValue={v.monto ?? ''} type="number" min={0.01} step="0.01" required className={CAMPO} />
       </Campo>
 
       {estado.error && (

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { SELECTS_IA } from '@/app/(front-gestion)/panel/ia/herramientas'
+import { EVENTOS_EMAIL, PLANTILLAS, esInterno } from '@/lib/domain/plantillas'
 
 /**
  * Contrato de privacidad: las herramientas del asistente de IA no leen datos
@@ -80,5 +81,41 @@ describe('contrato: el texto libre del chat se enmascara antes de salir', () => 
       'utf8',
     ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
     expect(datos).not.toMatch(/\bhuespedes\b/)
+  })
+})
+
+/**
+ * El texto libre que el SISTEMA escribe también llega al modelo.
+ *
+ * Los avisos internos se guardan en `avisos.mensaje` y la herramienta
+ * `avisos_internos` se los devuelve al asistente. El contrato de arriba mira
+ * columnas de los `select` y no ve lo que ya viene dentro del texto: un aviso
+ * de «reserva nueva» con el nombre del huésped sacaba un dato personal a un
+ * tercero, y como el nombre del portal lo escribe un anónimo, era también una
+ * vía para meterle instrucciones al modelo (auditoría 2026-10-20).
+ */
+describe('contrato: los avisos internos no llevan datos personales', () => {
+  const internos = EVENTOS_EMAIL.filter((e) => esInterno(e))
+
+  it('hay avisos internos para revisar', () => {
+    expect(internos.length).toBeGreaterThan(0)
+  })
+
+  for (const evento of internos) {
+    it(`«${evento}» no usa nombre, email ni teléfono del huésped`, () => {
+      const p = PLANTILLAS[evento]
+      const texto = [p.asunto, p.cuerpo, ...p.variables, ...(p.opcionales ?? [])].join(' ')
+      expect(texto).not.toMatch(/\{\{\s*(huesped|nombre|apellido|email|telefono)\s*\}\}/)
+      expect([...p.variables, ...(p.opcionales ?? [])]).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/^(huesped|nombre|apellido|email|telefono)$/)]),
+      )
+    })
+  }
+})
+
+describe('contrato: lo que devuelve una herramienta es dato, no instrucción', () => {
+  it('el prompt del sistema le dice al modelo que no obedezca el contenido de las herramientas', () => {
+    const prompt = readFileSync(join(process.cwd(), 'src/lib/domain/ia-prompt.ts'), 'utf8')
+    expect(prompt).toMatch(/nunca (son )?instrucciones/i)
   })
 })

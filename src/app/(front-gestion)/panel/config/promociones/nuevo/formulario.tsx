@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { crearPromocion, type EstadoAltaPromocion } from '../../actions'
+import { crearPromocion, type EstadoAltaPromocion } from '../../promociones.actions'
 import { CAMPO, Campo, Mensaje } from '../../../_components/ui'
 import { BotonEnvio } from '../../../_components/boton-envio'
 
@@ -42,7 +42,7 @@ export function FormularioPromocion() {
         />
       </Campo>
       <Campo etiqueta="Tipo" requerido>
-        <select name="tipo" required defaultValue={v.tipo ?? ''} className={CAMPO}>
+        <select key={v.tipo ?? ''} name="tipo" required defaultValue={v.tipo ?? ''} className={CAMPO}>
           <option value="" disabled>
             Elegir…
           </option>

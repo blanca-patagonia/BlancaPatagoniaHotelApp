@@ -9030,3 +9030,53 @@ Pedido del usuario: «analizá el proyecto entero y decime qué mejorar», y des
 **Fase 9 — dependencias.** Next 16.4.2, supabase-js 2.118, zod 4.6.7 (dentro de los rangos). `npm audit` de producción: 0. Apareció una alerta alta en `braces`, sin versión corregida, que entra sólo por el linter: el corte del CI pasó a `--omit=dev` y lo de desarrollo queda informativo.
 
 **Lo que NO se puede hacer desde el código** (queda para el usuario o el hotel): el push de la rama, rotar las claves de Gemini y Groq, activar la facturación de la IA, el deploy y la verificación de la base de la nube (`npm run esquema:comparar` con su URL), el cobro de la política de cancelación (ADR 0019), el channel manager, la tarifa rack de cabañas y el tarifario 2026/2027.
+
+## 2026-10-20 (tercera parte) — segunda pasada de análisis: seguridad, saldos, deploy y calidad
+
+Pedido del usuario: «analizá el proyecto y traé mejoras», y después «aplicá todas las mejoras». Cuatro revisiones de solo lectura (pendientes viejos contra el código actual, seguridad de lo nuevo, primer deploy, calidad) y cuatro tandas de cambios. Sin ADR nuevo: ninguna decisión de arquitectura, todo aplica reglas que ya estaban escritas.
+
+**Fase A — seguridad.**
+- **Migración 0121.** `expirar_reservas_pendientes` la podía ejecutar cualquier sesión del staff (grant a `authenticated` en la 0115) y nada validaba `p_dias`: una recepcionista con `p_dias = 0` por la API cancelaba en un `update` todas las pendientes sin pago, sin aviso ni rastro por reserva. Ahora sólo `service_role` (el cron) y `p_dias < 1` se rechaza. Test `expiracion-por-rol.test.ts` con los cuatro roles reales: 5 de 6 casos fallaban sin la migración. `generar_mantenimiento_preventivo` y `vencer_comprobantes_proveedor` se dejaron como estaban, con el motivo en la migración: las usan acciones de dirección y no reciben parámetros.
+- **El nombre del huésped ya no llega a la IA.** Los avisos internos `interno_nueva_reserva` e `interno_nuevo_pago` llevaban `{{huesped}}`, y la herramienta `avisos_internos` se los pasaba al modelo (contra los ADR 0039/0041). Era además una vía de inyección: un anónimo podía reservar con un apellido que fuera una instrucción. Se sacó la variable, el prompt dice que lo que devuelven las herramientas es dato y no instrucción, y el contrato `ia-sin-datos-personales` ahora mira también el texto de las plantillas internas. Los avisos ya guardados conservan el nombre: no se limpiaron.
+- **`mensaje_huesped` con límite y auditoría.** 10 por hora y por persona (`ia_mensaje_huesped`) y una fila en `auditoria` con quién mandó qué a qué reserva, sin el email.
+
+**Saldos.**
+- Las fichas de agencia y proveedor y el portal del socio calculaban el saldo sobre lecturas que PostgREST corta en 1000 filas sin avisar. Pasan por `traerTodo`, con aviso visible si la lectura falla o se trunca.
+- El listado de reservas, el CSV y la sección Pagos de la ficha medían lo pagado contra el alojamiento solo, sin consumos: mostraban menos deuda de la real. `resumenDeCuenta()` (`lib/domain/pagos.ts`) consolida; el listado embebe los consumos en la misma consulta (sin N+1) y el CSV suma la columna «Consumos USD».
+- «Pagado por reserva» y «primer check-in» estaban triplicados → `lib/domain/cuentas.ts`. La suma de notas de crédito, duplicada → `totalAcreditado()` en `lib/domain/facturacion.ts`. Test `saldos-consolidados.test.ts`.
+- La ficha de reserva agrupa en un `Promise.all` las lecturas que sólo dependen de la reserva.
+
+**Fase B — primer deploy.**
+- `despliegue.md`: requiere Vercel Pro (crons cada 5 y 15 min); procedimiento para la base de la nube (`migration list`, `esquema:comparar`, `migration repair` sólo de lo verificado, el caso 0107/0108 y confirmar la 0119); probar una restauración de backup **antes** de pushear 0107/0108, que borran en cascada; URLs de Supabase Auth y la redirect URI de MercadoPago; `ENCRYPTION_KEY` y `ASISTENTE_PROVIDER`; `BOOKING_ICAL_FEEDS` con los códigos de la 0106.
+- `ENCRYPTION_KEY` se valida al arrancar en producción cuando hay `MERCADOPAGO_APP_ID` (lo único que hoy cifra).
+- **IA con plazo real.** Antes el presupuesto de 50 s sólo impedía empezar otra vuelta: con tres proveedores de 30 s una consulta podía pasar el `maxDuration` de 120. Ahora hay un único plazo para toda la cadena y cada llamada espera lo que quede. El tablero declara `maxDuration`.
+- ⚠️ `.env.example` no se pudo editar (el hook lo bloquea): quedan por agregar a mano `IA_MODELO_RESPALDO`, `IA_RESPALDO_BASE_URL`, `IA_RESPALDO_API_KEY`, `IA_RESPALDO_MODELO` y `ENCRYPTION_KEY`.
+
+**Fase C — calidad.**
+- Dos mensajes de Postgres en inglés llegaban al usuario (`reservas/crear.ts`, `conciliacion/servicio.ts`) → `mensajeDeFalla()`. Contrato nuevo `errores-en-espanol.test.ts`, con allowlist justificada (4 en `saldar.ts` que no son de pantalla).
+- `seccion-cuenta.tsx` cortaba `venceEn` con `.slice(0, 10)` (día UTC). El contrato `fechas-del-hotel` sólo miraba snake_case; ahora también camelCase. Contrato nuevo `fechas-en-pantalla.test.ts`: cero `toLocaleDateString`/`toLocaleTimeString` fuera de `lib/fechas.ts`.
+- Lecturas que descartaban el error: la factura del huésped (decía «todavía no hay factura» cuando fallaba la lectura), el asistente público, alta de contrato y el conteo del asistente. `lib/limites.ts` sigue fallando abierto a propósito, pero ahora deja rastro.
+- 16 `.single()` → `.maybeSingle()` en lecturas por id. Dos escondían un fallo silencioso: la recotización caía en tarifa rack y la factura de agencia salía como responsable inscripto con CUIT vacío.
+- `config/actions.ts` (18 acciones, 7 temas) partido en siete `*.actions.ts`.
+
+**Para el deploy:** aplicar la **0121**.
+
+**Lo que NO se puede hacer desde el código:** contratar Vercel Pro, probar la restauración de un backup, decidir el cobro de cancelación/no-show (ADR 0019) y si housekeeping debe leer `contratos` (`0018:109`).
+
+## 2026-10-20 (cuarta parte) — segunda ronda: lo que quedó abierto del análisis
+
+Pedido del usuario: «continuá con las mejoras luego de tu análisis».
+
+- **Tests de RLS de escritura para 9 tablas más** (`notas_credito`, `movimientos_cuenta`, `movimientos_proveedor`, `movimientos_externos`, `contratos`, `firmas`, `proveedores`, `temporadas`, `reserva_huespedes`), 28 casos con filas sembradas en la propia sección. Encontraron dos cosas:
+  1. **Emitir una nota de crédito desde el panel fallaba siempre** («permission denied for table facturas»): el trigger de la 0076 hace `select … for update` sobre `facturas`, que exige UPDATE, y la 0034 se lo revocó a `authenticated`. Ningún test lo veía porque todos usaban `service_role`. **Migración 0123**: el trigger pasa a `security definer` con `search_path` fijo.
+  2. **Recepción podía insertar, modificar y borrar movimientos de la cuenta corriente de una agencia** por PostgREST (política «recepcion+ gestiona» de la 0012), aunque la app lo reserva a la dirección. **Migración 0124** acota la política a admin y gerencia. Los dos casos fallaban antes.
+- **Tarifas en lote atómicas — migración 0122** (`actualizar_tarifas_en_lote`, `security invoker`, `FOUND` por fila). Antes eran `update` sueltos en bucle: un fallo a mitad dejaba medio tarifario cambiado. Test: todo o nada, y 42501 para recepción y housekeeping en vez de un «listo» con cero filas.
+- **`RESEND_API_KEY` y `EMAIL_FROM` se validan al arrancar** en producción con `EMAIL_PROVIDER=resend`.
+- **Auditoría:** los mensajes a huéspedes del asistente tienen filtro y etiqueta propios y muestran el texto.
+- **Formularios que conservan lo escrito** ante un error (pendiente de agosto): helper `falloConValores()` (`lib/domain/formularios.ts`, nunca repone contraseñas, tokens ni tarjeta) en 12 formularios. Bug real en el alta de reserva: sus seis `<select>` volvían al valor por omisión tras un error —sin `key`, React no los re-monta— y al reenviar se cotizaba sin la agencia, con otra tarifa. Lo mismo en tres altas de configuración.
+- **Listados sin paginar (21):** sólo uno podía calcular mal pasadas las 1000 filas, la antigüedad de deuda de proveedores → `traerTodo`. Cuatro pantallas de configuración ahora avisan si la lectura falló en vez de mostrar la lista vacía.
+- **Ficha de reserva partida** (`page.tsx` 1.175 → 527 + `seccion-datos`, `seccion-cambios`, `seccion-avisos`, `seccion-acciones`). Verificado en el navegador: el HTML de 10 variantes de la ficha sale idéntico antes y después.
+
+**Verificación:** `npm run test:aislado` 2.811 tests (209 archivos), 0 salteados; componentes 15; typecheck, lint y build en verde.
+
+**Para el deploy:** aplicar **0121, 0122, 0123 y 0124**.

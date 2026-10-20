@@ -3,7 +3,7 @@ import { esDireccion } from '@/lib/domain/permisos'
 import { mensajeDe } from '@/lib/listados'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { editarPromocion, alternarActivoPromocion } from '../actions'
+import { editarPromocion, alternarActivoPromocion } from '../promociones.actions'
 import { MENSAJES_PROMOCION } from './mensajes'
 import { Icono } from '../../_components/iconos'
 import { registrarFalla } from '@/lib/acciones'
@@ -93,6 +93,11 @@ export default async function PromocionesPage({
       />
 
       {sp.error && <Mensaje tono="error">{mensajeDe(MENSAJES_ERROR, sp.error, 'No se pudo completar la operación.')}</Mensaje>}
+      {(error) && (
+        <Mensaje tono="error">
+          No se pudieron leer las promociones: la lista de abajo puede estar incompleta o vacía. Recargá antes de crear una que quizás ya existe.
+        </Mensaje>
+      )}
       {sp.ok === 'promo_creada' && <Mensaje tono="ok">Promoción creada.</Mensaje>}
       {sp.ok === 'promo_editada' && <Mensaje tono="ok">Cambios guardados.</Mensaje>}
       {sp.ok === 'promo_dada_de_baja' && (

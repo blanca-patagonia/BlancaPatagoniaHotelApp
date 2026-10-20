@@ -29,7 +29,8 @@ function claveInvalida(motivo: string): never {
   )
 }
 
-async function importarClave(): Promise<CryptoKey> {
+/** Lee y valida `ENCRYPTION_KEY`; lanza con un motivo legible si no sirve. */
+function bytesDeClave(): Uint8Array {
   const b64 = process.env.ENCRYPTION_KEY?.trim()
   if (!b64) claveInvalida('falta la variable de entorno')
 
@@ -42,6 +43,11 @@ async function importarClave(): Promise<CryptoKey> {
   if (bytes.length !== 32) {
     claveInvalida(`tiene ${bytes.length} bytes, hacen falta 32 (AES-256)`)
   }
+  return bytes
+}
+
+async function importarClave(): Promise<CryptoKey> {
+  const bytes = bytesDeClave()
 
   // `bytes` tipa como `Uint8Array<ArrayBufferLike>` y `importKey` pide
   // `Uint8Array<ArrayBuffer>`: es un desajuste de los tipos de lib.dom.d.ts,
@@ -51,6 +57,26 @@ async function importarClave(): Promise<CryptoKey> {
     'encrypt',
     'decrypt',
   ])
+}
+
+/**
+ * Verificación al arrancar (ADR 0018), la llama `instrumentation.ts`.
+ *
+ * Sólo exige la clave cuando hay algo que cifrar: hoy el único que guarda
+ * credenciales cifradas es el OAuth de Mercado Pago, que se habilita con
+ * `MERCADOPAGO_APP_ID`. Exigirla siempre haría fallar el arranque de un hotel
+ * que no conecta ninguna cuenta, sin proteger nada. Lo que sí se rechaza
+ * SIEMPRE es una clave cargada con mal formato: no hay caso en que sirva.
+ *
+ * Sin esto, la clave faltante aparecía recién en el callback del OAuth, con la
+ * autorización de Mercado Pago ya concedida y el token perdido.
+ */
+export function verificarClaveDeCifrado(): void {
+  if (process.env.NODE_ENV !== 'production') return
+  const hayClave = Boolean(process.env.ENCRYPTION_KEY?.trim())
+  const hayOAuth = Boolean(process.env.MERCADOPAGO_APP_ID?.trim())
+  if (!hayClave && !hayOAuth) return
+  bytesDeClave()
 }
 
 function aBase64(bytes: Uint8Array): string {

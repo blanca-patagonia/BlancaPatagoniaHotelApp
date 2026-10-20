@@ -274,6 +274,18 @@ export const MENSAJES_NO_ACREDITAR: Record<MotivoNoAcreditar, string> = {
   motivo_corto: 'Escribí el motivo de la nota de crédito: sin eso no se puede reconstruir después.',
 }
 
+/**
+ * Lo ya acreditado de una factura: la suma de sus notas de crédito.
+ *
+ * Lo usan la acción que emite la nota (para no acreditar de más) y la pantalla
+ * de la factura (para mostrar lo que queda): si cada una sumara por su lado,
+ * podrían anunciar y validar contra números distintos.
+ */
+export function totalAcreditado(notas: { total: number | string }[]): number {
+  const suma = notas.reduce((a, n) => a + Number(n.total), 0)
+  return Math.round((suma + Number.EPSILON) * 100) / 100
+}
+
 /** Cuánto queda por acreditar de una factura. Nunca negativo. */
 export function saldoAcreditable(totalFactura: number, yaAcreditado: number): number {
   const resto = totalFactura - yaAcreditado

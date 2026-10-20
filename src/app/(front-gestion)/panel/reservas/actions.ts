@@ -37,6 +37,7 @@ import { HORA_CHECK_IN } from '@/lib/domain/hotel'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
 import { paxQueOcupa, validarOcupantes, type Ocupantes } from '@/lib/domain/ocupantes'
 import { GARANTIAS, PLANES, SEGMENTOS } from '@/lib/domain/reservas'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 /*
   ⚠️ `avisarNuevaReserva` NO se importa acá, y es deliberado: el alta del
@@ -605,6 +606,8 @@ export interface EstadoReservaGrupal {
     motivo: string
     grupoId: string
   }
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 /**
@@ -624,8 +627,8 @@ export async function crearReservaGrupal(
   const apellido = String(formData.get('apellido') ?? '').trim()
   const email = String(formData.get('email') ?? '').trim()
 
-  if (!checkIn || !checkOut || checkOut <= checkIn) return { error: 'Revisá las fechas.' }
-  if (!apellido) return { error: 'Ingresá el apellido del titular del grupo.' }
+  if (!checkIn || !checkOut || checkOut <= checkIn) return falloConValores('Revisá las fechas.', formData)
+  if (!apellido) return falloConValores('Ingresá el apellido del titular del grupo.', formData)
 
   const selecciones: { tipoUnidadId: string; cantidad: number }[] = []
   for (const [k, v] of formData.entries()) {
@@ -634,7 +637,7 @@ export async function crearReservaGrupal(
       if (cantidad > 0) selecciones.push({ tipoUnidadId: k.slice(4), cantidad })
     }
   }
-  if (selecciones.length === 0) return { error: 'Elegí al menos una unidad.' }
+  if (selecciones.length === 0) return falloConValores('Elegí al menos una unidad.', formData)
 
   const supabase = await crearClienteServidor()
   const tarifaTipo = CANAL_TARIFA[canal] ?? 'rack'
@@ -648,7 +651,7 @@ export async function crearReservaGrupal(
       .maybeSingle()
     // Mismo motivo que en el alta individual: sin esto, una lectura que
     // falla duplica al titular en vez de reusar su ficha.
-    if (eExistente) return { error: 'No se pudo verificar si el titular ya está cargado. Probá de nuevo.' }
+    if (eExistente) return falloConValores('No se pudo verificar si el titular ya está cargado. Probá de nuevo.', formData)
     huespedId = existente?.id ?? null
   }
   if (!huespedId) {
@@ -657,11 +660,11 @@ export async function crearReservaGrupal(
       .insert({ nombre: nombre || apellido, apellido, email: email || null })
       .select('id')
       .single()
-    if (eHuesped || !nuevo) return { error: 'No se pudo registrar al titular.' }
+    if (eHuesped || !nuevo) return falloConValores('No se pudo registrar al titular.', formData)
     huespedId = nuevo.id
   }
 
-  if (!huespedId) return { error: 'No se pudo registrar al titular.' }
+  if (!huespedId) return falloConValores('No se pudo registrar al titular.', formData)
 
   const grupoId = crypto.randomUUID()
   let creadas = 0
@@ -694,7 +697,7 @@ export async function crearReservaGrupal(
     }
   }
 
-  if (creadas === 0) return { error: primerError ?? 'No se pudo crear el grupo.' }
+  if (creadas === 0) return falloConValores(primerError ?? 'No se pudo crear el grupo.', formData)
 
   // Cuántas unidades se habían pedido, para poder comparar contra lo que entró.
   const pedidas = selecciones.reduce((a, s) => a + s.cantidad, 0)

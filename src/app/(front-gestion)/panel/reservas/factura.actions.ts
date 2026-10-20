@@ -25,6 +25,7 @@ import {
   type CondicionIva,
   type TipoComprobante,
   ALICUOTA_ALOJAMIENTO,
+  totalAcreditado,
 } from '@/lib/domain/facturacion'
 import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
@@ -105,7 +106,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
       'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior), estadias(check_in, check_out)',
     )
     .eq('id', reservaId)
-    .single()
+    .maybeSingle()
 
   cortarSiFalla(eReserva, `/panel/reservas/${reservaId}`, 'lectura_reserva')
   if (!reserva) redirect('/panel/reservas')
@@ -138,7 +139,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
       .from('agencias')
       .select('condicion_iva, cuit')
       .eq('id', reserva.agencia_id)
-      .single()
+      .maybeSingle()
     /*
       Sin esto, una lectura fallida no se distingue de una agencia sin CUIT
       cargado: `receptor` caía a `responsable_inscripto` con `cuit: null` — la
@@ -148,6 +149,9 @@ export async function emitirFactura(formData: FormData): Promise<void> {
       se pudo leer, son las dos caras del mismo error.
     */
     cortarSiFalla(eAgencia, `/panel/reservas/${reservaId}`, 'lectura_agencia_fiscal')
+    // Una agencia que no se ve llega como null sin error: es el mismo caso
+    // que el de arriba (receptor más exigente con el CUIT en null) y se corta igual.
+    if (!agencia) redirect(`/panel/reservas/${reservaId}?error=lectura_agencia_fiscal`)
     receptor = {
       condicion: (agencia?.condicion_iva ?? 'responsable_inscripto') as CondicionIva,
       cuit: (agencia?.cuit as string) ?? null,
@@ -449,10 +453,7 @@ export async function emitirNotaCredito(formData: FormData): Promise<void> {
 
   cortarSiFalla(ePrevias, destino, 'lectura_notas')
 
-  const yaAcreditado = ((previas ?? []) as { total: number }[]).reduce(
-    (a, n) => a + Number(n.total),
-    0,
-  )
+  const yaAcreditado = totalAcreditado((previas ?? []) as { total: number }[])
 
   const impedimento = motivoNoAcreditar({
     factura: factura ? { total: Number(factura.total), cae: factura.cae } : null,

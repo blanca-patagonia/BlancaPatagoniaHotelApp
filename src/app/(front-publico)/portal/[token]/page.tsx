@@ -3,6 +3,8 @@ import { mensajeDe } from '@/lib/listados'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import {
   saldoCuenta,
+  pagadoPorReserva,
+  primerCheckIn,
   pagoAgenciaVencido,
   vencimientoPagoAgencia,
   type Movimiento,
@@ -21,7 +23,9 @@ import {
 } from '@/lib/domain/antiguedad'
 import { esMonedaExtranjera, formatearLocal } from '@/lib/domain/divisas'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
-import { hoyISO, formatoFechaCorta, parsearPeriodo } from '@/lib/fechas'
+import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import { traerTodo } from '@/lib/paginado'
+import { registrarFalla } from '@/lib/acciones'
 import { subirComprobantePagoAgencia } from './actions'
 import { SubirFoto } from '@/app/(front-gestion)/panel/_components/subir-foto'
 import { FotoAdjunta } from '@/app/(front-gestion)/panel/_components/foto-adjunta'
@@ -152,36 +156,59 @@ export default async function PortalSocioPage({
   const tipo: TipoContrato = agencia ? 'agencia' : 'proveedor'
   const esAgencia = tipo === 'agencia'
 
-  const [{ data: contratosData }, { data: movsData }, { data: reservasData }] = await Promise.all([
-    admin
-      .from('contratos')
-      .select('id, tipo, entidad_id, titulo, estado, vigencia_desde, vigencia_hasta')
-      .eq('tipo', tipo)
-      .eq('entidad_id', socio.id)
-      .order('creado_en', { ascending: false }),
-    esAgencia
-      ? admin
-          .from('movimientos_cuenta')
-          .select('tipo, monto, moneda, monto_origen, concepto, fecha, reserva_id, comprobante_ruta')
-          .eq('agencia_id', socio.id)
-          .order('fecha', { ascending: false })
-      : admin
-          .from('movimientos_proveedor')
-          .select('tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento')
-          .eq('proveedor_id', socio.id)
-          .order('fecha', { ascending: false }),
-    // Solo para agencias: reservas vigentes, para el aviso de pago vencido y
-    // el selector del formulario de subida. `esAgencia` decide con `? :`, no
-    // con un `if` aparte, para poder pedirla en el mismo `Promise.all`.
-    esAgencia
-      ? admin
-          .from('reservas')
-          .select('id, codigo, estado, total, estadias(periodo)')
-          .eq('agencia_id', socio.id)
-          .neq('estado', 'cancelada')
-          .order('creada_en', { ascending: false })
-      : Promise.resolve({ data: null }),
-  ])
+  /*
+    Movimientos y reservas van por `traerTodo`: el saldo suma el historial
+    entero y PostgREST corta en 1000 filas sin avisar. Un socio con años de
+    movimientos veía un saldo equivocado, dicho por el hotel.
+  */
+  const [{ data: contratosData, error: eContratos }, movsLectura, reservasLectura] =
+    await Promise.all([
+      admin
+        .from('contratos')
+        .select('id, tipo, entidad_id, titulo, estado, vigencia_desde, vigencia_hasta')
+        .eq('tipo', tipo)
+        .eq('entidad_id', socio.id)
+        .order('creado_en', { ascending: false }),
+      esAgencia
+        ? traerTodo<MovRow>((desde, hasta) =>
+            admin
+              .from('movimientos_cuenta')
+              .select('tipo, monto, moneda, monto_origen, concepto, fecha, reserva_id, comprobante_ruta')
+              .eq('agencia_id', socio.id)
+              .order('fecha', { ascending: false })
+              .order('id')
+              .range(desde, hasta) as never,
+          )
+        : traerTodo<MovRow>((desde, hasta) =>
+            admin
+              .from('movimientos_proveedor')
+              .select('tipo, monto, moneda, monto_origen, concepto, fecha, estado, vencimiento')
+              .eq('proveedor_id', socio.id)
+              .order('fecha', { ascending: false })
+              .order('id')
+              .range(desde, hasta) as never,
+          ),
+      // Solo para agencias: reservas vigentes, para el aviso de pago vencido y
+      // el selector del formulario de subida.
+      esAgencia
+        ? traerTodo<ReservaRow>((desde, hasta) =>
+            admin
+              .from('reservas')
+              .select('id, codigo, estado, total, estadias(periodo)')
+              .eq('agencia_id', socio.id)
+              .neq('estado', 'cancelada')
+              .order('creada_en', { ascending: false })
+              .order('id')
+              .range(desde, hasta) as never,
+          )
+        : Promise.resolve({ filas: [] as ReservaRow[], truncado: false, error: null }),
+    ])
+  registrarFalla(eContratos, 'portal:contratos')
+  if (movsLectura.error) registrarFalla({ message: movsLectura.error }, 'portal:movimientos')
+  if (reservasLectura.error) registrarFalla({ message: reservasLectura.error }, 'portal:reservas')
+  // El socio no tiene a quién preguntarle: si el saldo salió de un historial
+  // incompleto, la pantalla lo dice en vez de afirmarlo.
+  const saldoIncompleto = Boolean(movsLectura.error || movsLectura.truncado)
 
   // El filtro por entidad ya lo hace la consulta; se vuelve a aplicar la regla
   // del dominio para que el aislamiento y el ocultamiento de borradores sean
@@ -192,7 +219,7 @@ export default async function PortalSocioPage({
     (contratosData ?? []) as ContratoRow[],
   )
 
-  const movs = (movsData ?? []) as MovRow[]
+  const movs = movsLectura.filas
   const saldo = saldoCuenta(
     movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento),
   )
@@ -204,22 +231,17 @@ export default async function PortalSocioPage({
     suma de los pagos vinculados a ESA reserva puntual, no el saldo general —
     una agencia puede estar al día con una reserva y atrasada con otra.
   */
-  const pagadoPorReserva = new Map<string, number>()
-  for (const m of movs) {
-    if (m.tipo !== 'pago' || !m.reserva_id) continue
-    pagadoPorReserva.set(m.reserva_id, (pagadoPorReserva.get(m.reserva_id) ?? 0) + Number(m.monto))
-  }
+  const pagadoPorReservaId = pagadoPorReserva(
+    movs.map((m) => ({ tipo: m.tipo, monto: m.monto, reserva_id: m.reserva_id ?? null })),
+  )
   const hoy = hoyISO()
-  const reservas = esAgencia ? ((reservasData ?? []) as ReservaRow[]) : []
+  const reservas = reservasLectura.filas
   const reservasConCheckIn = reservas
-    .map((r) => {
-      const checkIns = (r.estadias ?? []).map((e) => parsearPeriodo(e.periodo).desde)
-      return { ...r, checkIn: checkIns.length ? checkIns.sort()[0] : null }
-    })
+    .map((r) => ({ ...r, checkIn: primerCheckIn((r.estadias ?? []).map((e) => e.periodo)) }))
     .filter((r): r is typeof r & { checkIn: string } => r.checkIn !== null)
   const reservasVencidas = reservasConCheckIn.filter((r) =>
     pagoAgenciaVencido(
-      { checkIn: r.checkIn, totalReserva: Number(r.total), totalPagado: pagadoPorReserva.get(r.id) ?? 0 },
+      { checkIn: r.checkIn, totalReserva: Number(r.total), totalPagado: pagadoPorReservaId.get(r.id) ?? 0 },
       hoy,
     ),
   )
@@ -329,6 +351,13 @@ export default async function PortalSocioPage({
               </span>
             </span>
           </header>
+
+          {saldoIncompleto && (
+            <p role="alert" className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
+              No pudimos leer todos los movimientos de su cuenta: el saldo y el detalle pueden estar
+              incompletos. Vuelva a intentar en unos minutos o consulte con el hotel.
+            </p>
+          )}
 
           {movs.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-stone-400">

@@ -107,7 +107,7 @@ export async function editarFichaReserva(formData: FormData): Promise<void> {
     .select('id, camas_extra, tipo:tipos_unidad(capacidad_max)')
     .eq('reserva_id', id)
     .limit(1)
-    .single()
+    .maybeSingle()
   // Sin la estadía no hay a qué unidad validar la capacidad, ni dónde
   // guardar: no tiene sentido repoblar un formulario que no se puede volver
   // a enviar.
@@ -183,14 +183,14 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
     .select('id, tipo_unidad_id')
     .eq('reserva_id', id)
     .limit(1)
-    .single()
+    .maybeSingle()
   const { data: reserva, error: eReserva } = await supabase
     .from('reservas')
     .select(
       'estado, tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono)',
     )
     .eq('id', id)
-    .single()
+    .maybeSingle()
   // Antes esto redirigía SIN `?error=` — la pantalla recargaba en silencio y
   // no había forma de saber que la reprogramación no había pasado nada.
   if (eEstadia || eReserva) redirect(`/panel/reservas/${id}?error=repro_lectura`)
@@ -373,14 +373,16 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
       .from('reservas')
       .select('tarifa_tipo')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     // Fail-closed, no fail-`rack`: si no se pudo leer `tarifa_tipo`, NO hay que
     // asumir "rack" — una reserva de agencia (`tarifa_tipo: 'neto'`, ADR 0004)
     // se recotizaría a precio de mostrador en vez de precio de agencia, sin que
     // nadie se entere. El huésped ya está mudado (lo urgente); la recotización
     // se corrige a mano, igual que cuando falta la tarifa del tipo destino.
-    if (eReserva) redirect(volverA({ error: 'tarifa_tipo_verificar' }))
+    // `!reserva` también: con `maybeSingle` una fila que no se ve llega como
+    // null sin error, y `reserva?.tarifa_tipo` caería a rack igual.
+    if (eReserva || !reserva) redirect(volverA({ error: 'tarifa_tipo_verificar' }))
 
     // Con la factura emitida el precio no cambia: el huésped ya quedó mudado
     // (lo urgente) y se avisa que el precio no se tocó.

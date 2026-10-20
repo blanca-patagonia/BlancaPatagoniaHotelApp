@@ -21,7 +21,7 @@ import { fechaDelHotel, sumarDias, hoyISO } from '@/lib/fechas'
  */
 
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { registrarFalla } from '@/lib/acciones'
+import { mensajeDeFalla, registrarFalla } from '@/lib/acciones'
 import { traerTodo } from '@/lib/paginado'
 import {
   coincidenciaAutomatica,
@@ -102,7 +102,7 @@ export async function importarMovimientos(
       nuevos: 0,
       repetidos: 0,
       conciliados: 0,
-      error: `No se pudieron guardar los movimientos: ${error.message}`,
+      error: mensajeDeFalla(error, 'conciliacion:guardar_movimientos', 'No se pudieron guardar los movimientos'),
     }
   }
 

@@ -11,6 +11,7 @@ const CAMPO =
 
 export function FormularioRecuperar() {
   const [estado, accion, pendiente] = useActionState(pedirRecuperacion, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   // Con el enlace ya enviado no se muestra el formulario de nuevo: volver a
   // enviarlo sin querer gasta el límite de tres por hora.
@@ -31,7 +32,7 @@ export function FormularioRecuperar() {
     <form action={accion} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="font-medium text-stone-700">Email de tu cuenta</span>
-        <input type="email" name="email" autoComplete="email" required className={CAMPO} />
+        <input type="email" name="email" defaultValue={v.email ?? ''} autoComplete="email" required className={CAMPO} />
       </label>
 
       {estado.error && (

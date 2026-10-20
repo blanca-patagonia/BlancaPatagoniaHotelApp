@@ -431,13 +431,22 @@ Equipo de Blanca Patagonia`,
 
   /* ────────────────────────── internos: van a la cartelera ──────────── */
 
+  /*
+    ⚠️ Ningún aviso interno lleva el NOMBRE del huésped (ni email ni teléfono).
+    La cartelera la lee el asistente de IA (herramienta `avisos_internos`) y lo
+    que lee sale a un proveedor externo: ADR 0039/0041 prohíben mandarle datos
+    personales. Y el nombre que llega del portal lo escribe un anónimo, así que
+    además es una vía para meterle instrucciones al modelo. El código de reserva
+    alcanza para encontrarla. Lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`.
+  */
+
   interno_nueva_reserva: {
     evento: 'interno_nueva_reserva',
     nombre: 'Interno · reserva nueva',
     disparador: 'Al entrar una reserva, sea del portal o de un canal',
     asunto: 'Reserva nueva: {{codigo}}',
-    cuerpo: `{{origen}} · {{codigo}} · {{huesped}} · {{check_in}} a {{check_out}} · {{total}}`,
-    variables: ['codigo', 'huesped', 'check_in', 'check_out', 'total', 'origen'],
+    cuerpo: `{{origen}} · {{codigo}} · {{check_in}} a {{check_out}} · {{total}}`,
+    variables: ['codigo', 'check_in', 'check_out', 'total', 'origen'],
   },
 
   interno_nuevo_pago: {
@@ -445,8 +454,8 @@ Equipo de Blanca Patagonia`,
     nombre: 'Interno · pago acreditado',
     disparador: 'Cuando se acredita un pago',
     asunto: 'Pago acreditado: {{importe}} ({{codigo}})',
-    cuerpo: `{{codigo}} · {{huesped}} · {{importe}} por {{medio}} · saldo {{saldo}}`,
-    variables: ['codigo', 'huesped', 'importe', 'medio', 'saldo'],
+    cuerpo: `{{codigo}} · {{importe}} por {{medio}} · saldo {{saldo}}`,
+    variables: ['codigo', 'importe', 'medio', 'saldo'],
   },
 
   interno_error_sincronizacion: {

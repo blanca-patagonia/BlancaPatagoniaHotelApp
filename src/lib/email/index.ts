@@ -14,7 +14,7 @@ import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
  * producción (ADR 0018).
  */
 
-import { seleccionarProveedor, advertirSiEsSimulado } from '@/lib/integraciones/seleccion'
+import { seleccionarProveedor, advertirSiEsSimulado, esProduccion } from '@/lib/integraciones/seleccion'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { registrarFalla } from '@/lib/acciones'
 import { ProveedorResend } from './resend'
@@ -115,6 +115,38 @@ export function obtenerProveedorEmail(
   })
   advertirSiEsSimulado(proveedor, 'EMAIL_PROVIDER')
   return proveedor
+}
+
+/** Lo que cada proveedor real necesita para poder mandar un solo correo. */
+const CREDENCIALES_POR_PROVEEDOR: Record<string, readonly string[]> = {
+  resend: ['RESEND_API_KEY', 'EMAIL_FROM'],
+}
+
+/**
+ * Falla al arrancar, en producción, si el proveedor de correo elegido no tiene
+ * sus credenciales (ADR 0018).
+ *
+ * `obtenerProveedorEmail()` ya exige que `EMAIL_PROVIDER` exista y nombre algo
+ * conocido, pero con `EMAIL_PROVIDER=resend` y sin `RESEND_API_KEY` el sistema
+ * levantaba igual: el adapter devolvía «falta la clave» recién en el primer
+ * envío, la bandeja lo marcaba fallido y nadie se enteraba hasta que un huésped
+ * preguntaba por qué no le llegó la confirmación. Mismo criterio que
+ * `verificarCredencialesDePasarela`.
+ */
+export function verificarCredencialesDeEmail(valor = process.env.EMAIL_PROVIDER): void {
+  if (!esProduccion()) return
+
+  const faltantes = (CREDENCIALES_POR_PROVEEDOR[(valor ?? '').trim()] ?? []).filter(
+    (variable) => !process.env[variable]?.trim(),
+  )
+
+  if (faltantes.length > 0) {
+    throw new Error(
+      `Faltan credenciales del proveedor de correo (EMAIL_PROVIDER=${valor}): ${faltantes.join(', ')}.\n` +
+        `El ADR 0018 exige fallar al arrancar antes que descubrirlo cuando una ` +
+        `confirmación de reserva no le llega al huésped. Cargá esas variables.`,
+    )
+  }
 }
 
 /**

@@ -33,12 +33,13 @@ export function FormularioOrden({
   unidadInicial?: string
 }) {
   const [estado, accion, pendiente] = useActionState(crearOrden, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       <Campo etiqueta="¿Qué hay que arreglar?" requerido anchoCompleto>
         <input
-          name="titulo"
+          name="titulo" defaultValue={v.titulo ?? ''}
           required
           className={CAMPO}
           placeholder="Pérdida de agua en el baño"
@@ -46,7 +47,12 @@ export function FormularioOrden({
       </Campo>
 
       <Campo etiqueta="Unidad afectada" ayuda="Dejalo en general si no es de una habitación puntual.">
-        <select name="unidad_id" defaultValue={unidadInicial} className={CAMPO}>
+        <select
+          name="unidad_id"
+          key={`unidad-${v.unidad_id ?? unidadInicial}`}
+          defaultValue={v.unidad_id ?? unidadInicial}
+          className={CAMPO}
+        >
           <option value="">Sin unidad / general</option>
           {unidades.map((u) => (
             <option key={u.id} value={u.id}>
@@ -57,7 +63,12 @@ export function FormularioOrden({
       </Campo>
 
       <Campo etiqueta="Prioridad" ayuda="Alta significa que impide usar la habitación.">
-        <select name="prioridad" defaultValue="media" className={CAMPO}>
+        <select
+          name="prioridad"
+          key={`prioridad-${v.prioridad ?? 'media'}`}
+          defaultValue={v.prioridad ?? 'media'}
+          className={CAMPO}
+        >
           <option value="baja">Baja</option>
           <option value="media">Media</option>
           <option value="alta">Alta</option>
@@ -65,7 +76,7 @@ export function FormularioOrden({
       </Campo>
 
       <Campo etiqueta="Detalle" ayuda="Lo que necesita saber quien lo va a resolver." anchoCompleto>
-        <textarea name="descripcion" rows={4} className={CAMPO} />
+        <textarea name="descripcion" defaultValue={v.descripcion ?? ''} rows={4} className={CAMPO} />
       </Campo>
 
       {estado.error && (

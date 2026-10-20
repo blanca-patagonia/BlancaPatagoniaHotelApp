@@ -24,7 +24,8 @@ import {
 } from '@/lib/domain/libro-ventas'
 import { ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { nombreCompleto } from '@/lib/domain/huespedes'
-import { resumenPagos, type EstadoPago, type TipoPago } from '@/lib/domain/pagos'
+import { resumenDeCuenta, type EstadoPago, type TipoPago } from '@/lib/domain/pagos'
+import { totalConsumos } from '@/lib/domain/consumos'
 import { esVista, type VistaReservas } from '@/lib/domain/vistas-reservas'
 import {
   ETIQUETAS_GARANTIA,
@@ -176,6 +177,8 @@ interface FilaReserva {
   estadias: { periodo: string }[]
   /** Para el saldo. Llega del `SELECT_RESERVAS` compartido con la pantalla. */
   pagos: { tipo: TipoPago; monto: number | string; estado: EstadoPago }[]
+  /** Para el saldo contra la cuenta consolidada, igual que la pantalla. */
+  consumos: { cantidad: number; precio_unitario: number | string }[] | null
   /* Desglose comercial y fiscal (paso 6). */
   plan: string
   garantia: string
@@ -184,10 +187,16 @@ interface FilaReserva {
   iva: number | string
 }
 
+/** Consumos de una fila, en la forma del dominio. */
+function consumosDe(r: FilaReserva) {
+  return (r.consumos ?? []).map((c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }))
+}
+
 /** Saldo de una fila, con el mismo cálculo que usa la pantalla. */
 function saldoDe(r: FilaReserva) {
-  return resumenPagos(
+  return resumenDeCuenta(
     Number(r.total),
+    consumosDe(r),
     (r.pagos ?? []).map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado })),
   )
 }
@@ -260,8 +269,14 @@ const RECURSOS: Record<string, Definicion> = {
         { titulo: 'Neto sin IVA USD', valor: (r) => decimal(r.total_neto) },
         { titulo: 'IVA USD', valor: (r) => decimal(r.iva) },
         { titulo: 'Total con IVA USD', valor: (r) => decimal(r.total) },
-        // Pagado y saldo salen de `resumenPagos`, el mismo cálculo que muestra la
-        // pantalla: el CSV y el listado no pueden decir cosas distintas.
+        // Consumos, pagado y saldo salen de `resumenDeCuenta`, el mismo cálculo
+        // que muestra la pantalla: el CSV y el listado no pueden decir cosas
+        // distintas. El saldo se mide contra alojamiento + consumos, así que
+        // los consumos van en su propia columna para que la cuenta cierre a mano.
+        {
+          titulo: 'Consumos USD',
+          valor: (r) => decimal(totalConsumos(consumosDe(r))),
+        },
         {
           titulo: 'Pagado USD',
           valor: (r) => decimal(saldoDe(r).pagado),

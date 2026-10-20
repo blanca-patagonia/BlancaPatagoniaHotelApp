@@ -99,7 +99,9 @@ export async function consultaRapida(
         error:
           e.motivo === 'cupo'
             ? 'Se agotó por ahora el cupo del servicio de IA. Probá de nuevo en unos minutos.'
-            : 'El servicio de IA está saturado en este momento. Probá de nuevo en un minuto.',
+            : e.motivo === 'tiempo'
+              ? 'El servicio de IA tardó demasiado en responder. Probá de nuevo en un rato.'
+              : 'El servicio de IA está saturado en este momento. Probá de nuevo en un minuto.',
       }
     }
     return { error: 'No se pudo consultar al asistente en este momento.' }

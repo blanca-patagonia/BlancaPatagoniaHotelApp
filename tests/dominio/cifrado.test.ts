@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { cifrar, descifrar } from '@/lib/seguridad/cifrado'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { cifrar, descifrar, verificarClaveDeCifrado } from '@/lib/seguridad/cifrado'
 
 /**
  * Cifrado de credenciales de terceros en reposo (ADR 0036).
@@ -58,5 +58,46 @@ describe('cifrar / descifrar', () => {
   it('caracteres no ASCII (por si algún día se cifra texto con acentos)', async () => {
     const texto = 'contraseña con ñ y émojis 🔒'
     expect(await descifrar(await cifrar(texto))).toBe(texto)
+  })
+})
+
+describe('verificarClaveDeCifrado (al arrancar, ADR 0018)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('fuera de producción no exige nada', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('ENCRYPTION_KEY', '')
+    vi.stubEnv('MERCADOPAGO_APP_ID', '123')
+    expect(() => verificarClaveDeCifrado()).not.toThrow()
+  })
+
+  it('en producción sin OAuth ni clave no exige nada: no hay qué cifrar', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('ENCRYPTION_KEY', '')
+    vi.stubEnv('MERCADOPAGO_APP_ID', '')
+    expect(() => verificarClaveDeCifrado()).not.toThrow()
+  })
+
+  it('en producción con el OAuth de Mercado Pago y sin clave, hace fallar el arranque', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('ENCRYPTION_KEY', '')
+    vi.stubEnv('MERCADOPAGO_APP_ID', '123')
+    expect(() => verificarClaveDeCifrado()).toThrow(/ENCRYPTION_KEY/)
+  })
+
+  it('en producción rechaza una clave cargada con mal formato aunque no haya OAuth', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('ENCRYPTION_KEY', btoa('demasiado-corta'))
+    vi.stubEnv('MERCADOPAGO_APP_ID', '')
+    expect(() => verificarClaveDeCifrado()).toThrow(/32/)
+  })
+
+  it('en producción con una clave válida no lanza', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('ENCRYPTION_KEY', CLAVE_DE_PRUEBA)
+    vi.stubEnv('MERCADOPAGO_APP_ID', '123')
+    expect(() => verificarClaveDeCifrado()).not.toThrow()
   })
 })

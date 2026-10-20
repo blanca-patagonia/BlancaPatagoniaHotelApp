@@ -35,6 +35,7 @@ export function FormularioGrupo({
   checkOut: string
 }) {
   const [estado, accion, pendiente] = useActionState(crearReservaGrupal, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="flex flex-col gap-4">
@@ -62,7 +63,7 @@ export function FormularioGrupo({
                 name={`qty_${o.tipoUnidadId}`}
                 min={0}
                 max={o.disponibles}
-                defaultValue={0}
+                defaultValue={v[`qty_${o.tipoUnidadId}`] ?? 0}
                 aria-label={`Cantidad de ${o.nombre}`}
                 className="toque w-20 shrink-0 rounded-lg border border-stone-300 px-3 py-2 text-center outline-none focus:border-lago-600"
               />
@@ -77,19 +78,24 @@ export function FormularioGrupo({
       >
         <div className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
           <Campo etiqueta="Apellido" requerido>
-            <input name="apellido" required className={CAMPO} />
+            <input name="apellido" defaultValue={v.apellido ?? ''} required className={CAMPO} />
           </Campo>
           <Campo etiqueta="Nombre">
-            <input name="nombre" className={CAMPO} />
+            <input name="nombre" defaultValue={v.nombre ?? ''} className={CAMPO} />
           </Campo>
           <Campo etiqueta="Email" ayuda="Ahí llega la confirmación del grupo.">
-            <input name="email" type="email" className={CAMPO} />
+            <input name="email" defaultValue={v.email ?? ''} type="email" className={CAMPO} />
           </Campo>
           <Campo
             etiqueta="Canal de venta"
             ayuda="Define si se cotiza con tarifa de mostrador (rack) o neta."
           >
-            <select name="canal" defaultValue="directo" className={CAMPO}>
+            <select
+              name="canal"
+              key={`canal-${v.canal ?? 'directo'}`}
+              defaultValue={v.canal ?? 'directo'}
+              className={CAMPO}
+            >
               <option value="directo">Directo (rack)</option>
               <option value="web">Web (rack)</option>
               <option value="booking">Booking (neto)</option>

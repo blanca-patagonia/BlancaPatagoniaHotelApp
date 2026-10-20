@@ -17,30 +17,31 @@ const ESTADO_INICIAL: EstadoProveedor = {}
 /** Alta de proveedor: quien nos factura a nosotros (cuentas por pagar). */
 export function FormularioProveedor() {
   const [estado, accion, pendiente] = useActionState(crearProveedor, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       <Campo etiqueta="Nombre" requerido>
-        <input name="nombre" required className={CAMPO} />
+        <input name="nombre" defaultValue={v.nombre ?? ''} required className={CAMPO} />
       </Campo>
 
       <Campo etiqueta="Rubro" ayuda="Con qué nos provee. Sirve para agrupar los gastos.">
-        <input name="rubro" className={CAMPO} placeholder="Lavandería, mantenimiento, insumos…" />
+        <input name="rubro" defaultValue={v.rubro ?? ''} className={CAMPO} placeholder="Lavandería, mantenimiento, insumos…" />
       </Campo>
 
       <Campo etiqueta="CUIT">
-        <input name="cuit" className={CAMPO} placeholder="30-71234567-1" />
+        <input name="cuit" defaultValue={v.cuit ?? ''} className={CAMPO} placeholder="30-71234567-1" />
       </Campo>
 
       <Campo etiqueta="Email">
-        <input name="email" type="email" className={CAMPO} />
+        <input name="email" defaultValue={v.email ?? ''} type="email" className={CAMPO} />
       </Campo>
 
       <Campo
         etiqueta="Teléfono / WhatsApp"
         ayuda="Número por el que se lo contacta."
       >
-        <input name="telefono" type="tel" className={CAMPO} />
+        <input name="telefono" defaultValue={v.telefono ?? ''} type="tel" className={CAMPO} />
       </Campo>
 
       {estado.error && (

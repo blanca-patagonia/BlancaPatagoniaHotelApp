@@ -23,6 +23,7 @@ const ESTADO_INICIAL: EstadoObjeto = {}
  */
 export function FormularioObjeto() {
   const [estado, accion, pendiente] = useActionState(crearObjeto, ESTADO_INICIAL)
+  const v = estado.valores ?? {}
 
   return (
     <form action={accion} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
@@ -31,11 +32,11 @@ export function FormularioObjeto() {
         requerido
         ayuda="Describilo como para reconocerlo si alguien lo reclama."
       >
-        <input name="descripcion" required className={CAMPO} placeholder="Campera azul de abrigo" />
+        <input name="descripcion" defaultValue={v.descripcion ?? ''} required className={CAMPO} placeholder="Campera azul de abrigo" />
       </Campo>
 
       <Campo etiqueta="¿Dónde estaba?">
-        <input name="ubicacion" className={CAMPO} placeholder="Habitación 203, comedor…" />
+        <input name="ubicacion" defaultValue={v.ubicacion ?? ''} className={CAMPO} placeholder="Habitación 203, comedor…" />
       </Campo>
 
       {estado.error && (

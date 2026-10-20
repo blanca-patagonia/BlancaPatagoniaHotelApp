@@ -44,14 +44,22 @@ const MAX_LLAMADAS_POR_VUELTA = 6
 const MAX_LLAMADAS_POR_CONSULTA = 12
 
 /**
- * Tiempo máximo de una consulta. Cada vuelta puede tardar hasta 30 s por
- * llamada (más reintento y modelo de respaldo); sin un corte propio, la
- * plataforma cortaría la función con un error genérico y en inglés. Pasado
- * este tiempo no se empieza otra vuelta: se responde con lo que hay.
+ * Pasado este tiempo no se empieza otra vuelta: se responde con lo que hay.
  */
 const PRESUPUESTO_MS = 50_000
 
-/** Vercel: margen sobre `PRESUPUESTO_MS` para terminar la vuelta en curso. */
+/**
+ * Plazo DURO de la consulta entera, reintentos y respaldos incluidos: se le
+ * pasa al proveedor (`hasta`) y cada llamada espera sólo lo que queda.
+ *
+ * `PRESUPUESTO_MS` solo no alcanzaba: una vuelta que empezaba a los 49 s podía
+ * durar 90 s más (30 s por eslabón, tres eslabones) y pasar el
+ * `maxDuration = 120` de `consulta/route.ts`; la plataforma cortaba la función
+ * con un error genérico y en inglés. Quedan 20 s de margen para ejecutar
+ * herramientas y responder.
+ */
+const LIMITE_TOTAL_MS = 100_000
+
 export interface MensajeEntrante {
   rol: 'user' | 'assistant'
   contenido: string
@@ -134,6 +142,7 @@ export async function conversar(p: {
     const proveedor = obtenerProveedorIa()
 
     const inicio = Date.now()
+    const hasta = inicio + LIMITE_TOTAL_MS
     for (let vuelta = 0; vuelta <= MAX_VUELTAS_HERRAMIENTA; vuelta++) {
       if (vuelta > 0 && Date.now() - inicio > PRESUPUESTO_MS) {
         await anotarSinRespuesta('demasiado_lenta')
@@ -143,7 +152,7 @@ export async function conversar(p: {
           estado: 200,
         }
       }
-      const respuesta = await proveedor.chat(conversacion, herramientas)
+      const respuesta = await proveedor.chat(conversacion, herramientas, { hasta })
 
       if (respuesta.llamadas.length === 0) {
         if (respuestaSinDato(respuesta.contenido ?? '')) await anotarSinRespuesta('sin_herramienta')
@@ -217,6 +226,15 @@ export async function conversar(p: {
       estado: 200,
     }
   } catch (e) {
+    // Se terminó el plazo: es la misma situación que pasar `PRESUPUESTO_MS`.
+    if (e instanceof IaNoDisponible && e.motivo === 'tiempo') {
+      await anotarSinRespuesta('demasiado_lenta')
+      return {
+        error: 'La consulta tardó demasiado. Probá con una pregunta más puntual.',
+        propuestas,
+        estado: 200,
+      }
+    }
     await registrarError(
       'ia_consulta',
       { detalle: e instanceof Error ? e.message : String(e) },

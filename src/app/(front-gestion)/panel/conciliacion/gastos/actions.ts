@@ -6,10 +6,13 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { requerirAcceso } from '@/lib/auth/session'
 import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
 import { validarGasto } from '@/lib/domain/gastos'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
 export interface EstadoGasto {
   error?: string
   ok?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
 }
 
 export async function crearGasto(_prev: EstadoGasto, formData: FormData): Promise<EstadoGasto> {
@@ -20,7 +23,7 @@ export async function crearGasto(_prev: EstadoGasto, formData: FormData): Promis
   const fecha = String(formData.get('fecha') ?? '')
 
   const problema = validarGasto({ categoria, descripcion, monto })
-  if (problema) return { error: problema }
+  if (problema) return falloConValores(problema, formData)
 
   const supabase = await crearClienteServidor()
   const { error } = await supabase.from('gastos_operativos').insert({
@@ -30,7 +33,7 @@ export async function crearGasto(_prev: EstadoGasto, formData: FormData): Promis
     fecha: fecha || undefined,
     creado_por: sesion.userId,
   })
-  if (error) return { error: mensajeDeFalla(error, 'gastos:registrar', 'No se pudo registrar el gasto') }
+  if (error) return falloConValores(mensajeDeFalla(error, 'gastos:registrar', 'No se pudo registrar el gasto'), formData)
 
   revalidatePath('/panel/conciliacion/gastos')
   return { ok: 'Gasto registrado.' }

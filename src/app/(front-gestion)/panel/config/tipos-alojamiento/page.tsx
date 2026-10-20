@@ -3,7 +3,7 @@ import { esDireccion } from '@/lib/domain/permisos'
 import { mensajeDe } from '@/lib/listados'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
-import { editarTipoUnidad, alternarActivoTipoUnidad } from '../actions'
+import { editarTipoUnidad, alternarActivoTipoUnidad } from '../tipos-unidad.actions'
 import { Icono } from '../../_components/iconos'
 import { registrarFalla } from '@/lib/acciones'
 import { ETIQUETAS_CATEGORIA, type CategoriaUnidad } from '@/lib/domain/unidades'
@@ -114,6 +114,11 @@ export default async function TiposAlojamientoPage({
       />
 
       {sp.error && <Mensaje tono="error">{mensajeDe(MENSAJES_ERROR, sp.error, 'No se pudo completar la operación.')}</Mensaje>}
+      {(error || errorUnidades) && (
+        <Mensaje tono="error">
+          No se pudieron leer los tipos de alojamiento o sus unidades: la lista y los conteos de abajo pueden estar incompletos. Recargá antes de crear un tipo que quizás ya existe.
+        </Mensaje>
+      )}
       {sp.ok === 'tipo_creado' && <Mensaje tono="ok">Tipo de alojamiento creado.</Mensaje>}
       {sp.ok === 'tipo_editado' && <Mensaje tono="ok">Cambios guardados.</Mensaje>}
       {sp.ok === 'tipo_dado_de_baja' && (

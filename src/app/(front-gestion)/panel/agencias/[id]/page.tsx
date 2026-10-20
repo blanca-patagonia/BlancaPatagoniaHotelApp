@@ -7,6 +7,8 @@ import { crearClienteServidor } from '@/lib/supabase/server'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import {
   saldoCuenta,
+  pagadoPorReserva,
+  primerCheckIn,
   pagoAgenciaVencido,
   vencimientoPagoAgencia,
   ETIQUETAS_TIPO_CUENTA,
@@ -45,7 +47,8 @@ import { SubirFoto } from '../../_components/subir-foto'
 import { FotoAdjuntaEliminable } from '../../_components/foto-adjunta-eliminable'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
 import { registrarFalla } from '@/lib/acciones'
-import { parsearPeriodo, hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import { hoyISO, formatoFechaCorta } from '@/lib/fechas'
+import { traerTodo } from '@/lib/paginado'
 
 interface Agencia {
   id: string
@@ -135,21 +138,31 @@ export default async function AgenciaDetallePage({
     El resto de la fila sigue pasando por RLS, que es lo que corresponde: la
     política de lectura ya limita quién ve la ficha.
   */
+  /*
+    Los movimientos y las reservas van por `traerTodo`: el saldo se calcula
+    sumando TODO el historial, y PostgREST corta en 1000 filas sin avisar. Una
+    agencia con años de movimientos mostraba un saldo equivocado sin que nada
+    lo delatara.
+  */
   const [
-    { data: agenciaData },
-    { data: movsData, error: eMovs },
-    { data: tokenData },
-    { data: reservasData, error: eReservas },
+    { data: agenciaData, error: eAgencia },
+    movsLectura,
+    { data: tokenData, error: eToken },
+    reservasLectura,
   ] = await Promise.all([
     supabase.from('agencias').select('id, nombre, tipo, cuit, email, telefono, descuento_pct, activo, condicion_iva').eq('id', id).maybeSingle(),
-    supabase
-      .from('movimientos_cuenta')
-      .select(
-        'id, tipo, monto, moneda, monto_origen, concepto, fecha, reserva_id, comprobante_ruta, reserva:reservas(codigo)',
-      )
-      .eq('agencia_id', id)
-      .order('fecha', { ascending: false })
-      .order('creado_en', { ascending: false }),
+    traerTodo<MovRow>((desde, hasta) =>
+      supabase
+        .from('movimientos_cuenta')
+        .select(
+          'id, tipo, monto, moneda, monto_origen, concepto, fecha, reserva_id, comprobante_ruta, reserva:reservas(codigo)',
+        )
+        .eq('agencia_id', id)
+        .order('fecha', { ascending: false })
+        .order('creado_en', { ascending: false })
+        .order('id')
+        .range(desde, hasta) as never,
+    ),
     crearClienteAdmin()
       .from('agencias')
       .select('token, token_revocado_en')
@@ -158,15 +171,26 @@ export default async function AgenciaDetallePage({
     // Reservas de esta agencia, para el aviso de pago vencido (regla del
     // dueño del hotel: se paga con un mes de anticipación al check-in). Las
     // canceladas quedan afuera: una reserva cancelada no genera reclamo.
-    supabase
-      .from('reservas')
-      .select('id, codigo, estado, total, estadias(periodo)')
-      .eq('agencia_id', id)
-      .neq('estado', 'cancelada'),
+    traerTodo<ReservaAgenciaRow>((desde, hasta) =>
+      supabase
+        .from('reservas')
+        .select('id, codigo, estado, total, estadias(periodo)')
+        .eq('agencia_id', id)
+        .neq('estado', 'cancelada')
+        .order('id')
+        .range(desde, hasta) as never,
+    ),
   ])
+  registrarFalla(eAgencia, 'agencias:ficha')
+  registrarFalla(eToken, 'agencias:token_portal')
   if (!agenciaData) notFound()
-  if (eMovs) registrarFalla(eMovs, 'agencias:movimientos')
-  if (eReservas) registrarFalla(eReservas, 'agencias:reservas_vencimiento')
+  if (movsLectura.error) registrarFalla({ message: movsLectura.error }, 'agencias:movimientos')
+  if (reservasLectura.error) {
+    registrarFalla({ message: reservasLectura.error }, 'agencias:reservas_vencimiento')
+  }
+  // Un saldo calculado sobre un historial incompleto se ve igual que uno real:
+  // la pantalla lo avisa en vez de mostrarlo como cierto.
+  const saldoIncompleto = Boolean(movsLectura.error || movsLectura.truncado)
   const agencia = agenciaData as Agencia
   // Puede ser null si la lectura privilegiada falla: la pantalla lo contempla
   // en vez de romperse, porque el enlace del portal es accesorio a la ficha.
@@ -175,7 +199,7 @@ export default async function AgenciaDetallePage({
   const revocado = Boolean(datosToken?.token_revocado_en)
   const cabeceras = await headers()
   const origen = `${cabeceras.get('x-forwarded-proto') ?? 'http'}://${cabeceras.get('host') ?? 'localhost:3000'}`
-  const movs = (movsData ?? []) as unknown as MovRow[]
+  const movs = movsLectura.filas
   const saldo = saldoCuenta(movs.map((m) => ({ tipo: m.tipo, monto: Number(m.monto) }) as Movimiento))
 
   /*
@@ -186,19 +210,15 @@ export default async function AgenciaDetallePage({
     de la cuenta: una agencia puede estar al día con una reserva y atrasada con
     otra.
   */
-  const pagadoPorReserva = new Map<string, number>()
-  for (const m of movs) {
-    if (m.tipo !== 'pago' || !m.reserva_id) continue
-    pagadoPorReserva.set(m.reserva_id, (pagadoPorReserva.get(m.reserva_id) ?? 0) + Number(m.monto))
-  }
+  const pagadoPorReservaId = pagadoPorReserva(movs)
   const hoy = hoyISO()
-  const reservasDeAgencia = (reservasData ?? []) as ReservaAgenciaRow[]
+  const reservasDeAgencia = reservasLectura.filas
   const reservasVencidas = reservasDeAgencia
-    .map((r) => {
-      const checkIns = (r.estadias ?? []).map((e) => parsearPeriodo(e.periodo).desde)
-      const checkIn = checkIns.length ? checkIns.sort()[0] : null
-      return { ...r, checkIn, totalPagado: pagadoPorReserva.get(r.id) ?? 0 }
-    })
+    .map((r) => ({
+      ...r,
+      checkIn: primerCheckIn((r.estadias ?? []).map((e) => e.periodo)),
+      totalPagado: pagadoPorReservaId.get(r.id) ?? 0,
+    }))
     .filter(
       (r): r is typeof r & { checkIn: string } =>
         r.checkIn !== null &&
@@ -242,6 +262,14 @@ export default async function AgenciaDetallePage({
         <div className="mb-4">
           <Mensaje tono="error">
             Esta cuenta está dada de baja: no aparece al cargar reservas nuevas.
+          </Mensaje>
+        </div>
+      )}
+      {saldoIncompleto && (
+        <div className="mb-4">
+          <Mensaje tono="error">
+            No se pudieron leer todos los movimientos de la cuenta: el saldo y el historial de
+            abajo pueden estar incompletos. No lo uses para reclamar ni para conciliar.
           </Mensaje>
         </div>
       )}

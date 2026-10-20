@@ -407,7 +407,7 @@ export function FormularioReserva({
           )}
 
           <Campo etiqueta="Canal" ayuda="Define si se cotiza con tarifa de mostrador o neta.">
-            <select name="canal" defaultValue={v.canal ?? 'directo'} className={CAMPO}>
+            <select name="canal" key={`canal-${v.canal ?? 'directo'}`} defaultValue={v.canal ?? 'directo'} className={CAMPO}>
               <option value="directo">Directo / Mostrador (rack)</option>
               <option value="web">Web (rack)</option>
               <option value="booking">Booking (neto)</option>
@@ -421,7 +421,7 @@ export function FormularioReserva({
             etiqueta="Agencia / empresa"
             ayuda="Con convenio siempre se aplica tarifa neta, sea cual sea el canal."
           >
-            <select name="agencia_id" defaultValue={v.agencia_id ?? ''} className={CAMPO}>
+            <select name="agencia_id" key={`agencia_id-${v.agencia_id ?? ''}`} defaultValue={v.agencia_id ?? ''} className={CAMPO}>
               <option value="">Sin convenio (huésped directo)</option>
               {agencias.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -519,7 +519,7 @@ export function FormularioReserva({
       <Tarjeta titulo="5 · Condiciones comerciales">
         <div className="grid gap-x-4 gap-y-4 p-5 sm:grid-cols-2">
           <Campo etiqueta="Plan" ayuda="Qué incluye la tarifa además del alojamiento.">
-            <select name="plan" defaultValue={v.plan ?? 'desayuno'} className={CAMPO}>
+            <select name="plan" key={`plan-${v.plan ?? 'desayuno'}`} defaultValue={v.plan ?? 'desayuno'} className={CAMPO}>
               {PLANES.map((p) => (
                 <option key={p} value={p}>
                   {ETIQUETAS_PLAN[p]}
@@ -532,7 +532,7 @@ export function FormularioReserva({
             etiqueta="Garantía"
             ayuda="Sin garantía, un no-show no se puede cobrar."
           >
-            <select name="garantia" defaultValue={v.garantia ?? 'sin_garantia'} className={CAMPO}>
+            <select name="garantia" key={`garantia-${v.garantia ?? 'sin_garantia'}`} defaultValue={v.garantia ?? 'sin_garantia'} className={CAMPO}>
               {GARANTIAS.map((g) => (
                 <option key={g} value={g}>
                   {ETIQUETAS_GARANTIA[g]}
@@ -542,7 +542,7 @@ export function FormularioReserva({
           </Campo>
 
           <Campo etiqueta="Segmento" ayuda="Se usa en los reportes de gerencia.">
-            <select name="segmento" defaultValue={v.segmento ?? ''} className={CAMPO}>
+            <select name="segmento" key={`segmento-${v.segmento ?? ''}`} defaultValue={v.segmento ?? ''} className={CAMPO}>
               <option value="">Según el canal</option>
               {SEGMENTOS.map((s) => (
                 <option key={s} value={s}>
@@ -560,7 +560,7 @@ export function FormularioReserva({
             etiqueta="Promoción"
             ayuda="Si no cumple sus propias condiciones (noches mínimas, anticipación), se cotiza sin el descuento."
           >
-            <select name="promocion_id" defaultValue={v.promocion_id ?? ''} className={CAMPO}>
+            <select name="promocion_id" key={`promocion_id-${v.promocion_id ?? ''}`} defaultValue={v.promocion_id ?? ''} className={CAMPO}>
               <option value="">Sin promoción</option>
               {promociones.map((p) => (
                 <option key={p.id} value={p.id}>

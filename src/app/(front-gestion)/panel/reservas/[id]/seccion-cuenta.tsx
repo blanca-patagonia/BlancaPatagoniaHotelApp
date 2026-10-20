@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { type EstadoReserva } from '@/lib/domain/reservas'
-import { formatoFechaCorta } from '@/lib/fechas'
+import { fechaDelHotel, formatoFechaCorta } from '@/lib/fechas'
 import { registrarPago, verificarTarjetaGarantia, generarLinkDePago } from '../cobros.actions'
 import { agregarConsumo, quitarConsumo } from '../consumos.actions'
 import { emitirFactura } from '../factura.actions'
@@ -646,7 +646,7 @@ export function CobroEnLinea({
 
               <p className="mt-1 text-xs text-stone-500">
                 {l.venceEn
-                  ? `Vence el ${formatoFechaCorta(l.venceEn.slice(0, 10))}.`
+                  ? `Vence el ${formatoFechaCorta(fechaDelHotel(l.venceEn))}.`
                   : 'Sin vencimiento.'}
               </p>
             </div>

@@ -22,11 +22,18 @@ import {
   botonClases,
   type Tono,
 } from '../_components/ui'
+import type { NombreIcono } from '../_components/iconos'
 import { fechaHoraHotel } from '@/lib/fechas'
 import { registrarFalla } from '@/lib/acciones'
 
-/** Tablas auditadas (las que tienen al menos un trigger de `registrar_auditoria`). */
-const TABLAS = ['pagos', 'tarifas', 'reservas', 'estadias'] as const
+/**
+ * Tablas auditadas: las que tienen un trigger de `registrar_auditoria`, más
+ * `notificaciones`, que no lo tiene. Esas filas las escribe a mano el asistente
+ * de IA cuando alguien confirma un mensaje a un huésped (`panel/ia/acciones.ts`):
+ * el envío lo encola `service_role`, así que sin esa constancia no quedaría
+ * registrado QUIÉN lo mandó.
+ */
+const TABLAS = ['pagos', 'tarifas', 'reservas', 'estadias', 'notificaciones'] as const
 type TablaAuditada = (typeof TABLAS)[number]
 
 const ETIQUETAS_TABLA: Record<TablaAuditada, string> = {
@@ -34,6 +41,28 @@ const ETIQUETAS_TABLA: Record<TablaAuditada, string> = {
   tarifas: 'Tarifas',
   reservas: 'Reservas',
   estadias: 'Estadías',
+  notificaciones: 'Mensajes a huéspedes (asistente)',
+}
+
+const ICONO_TABLA: Record<TablaAuditada, NombreIcono> = {
+  pagos: 'agencias',
+  tarifas: 'config',
+  reservas: 'reservas',
+  estadias: 'ocupacion',
+  notificaciones: 'sobre',
+}
+
+/**
+ * El texto que el asistente mandó, si la fila es un mensaje a un huésped.
+ *
+ * Esas filas son un alta sin `datos_previos`, así que `camposCambiados` no
+ * muestra nada: sin esto la pantalla decía «alta del registro» y escondía
+ * justo lo que se quiere auditar — qué se le escribió a quién.
+ */
+function mensajeDelAsistente(r: Registro): { codigo: string; mensaje: string } | null {
+  const d = r.datos_nuevos
+  if (r.tabla !== 'notificaciones' || !d || d.origen !== 'asistente_ia') return null
+  return { codigo: String(d.codigo ?? '—'), mensaje: String(d.mensaje ?? '') }
 }
 
 const TONO_ACCION: Record<string, Tono> = {
@@ -143,7 +172,7 @@ export default async function AuditoriaPage({
         icono="auditoria"
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi titulo="Registros" valor={String(total)} detalle="en el filtro actual" icono="auditoria" />
         {TABLAS.map((t) => (
           <Kpi
@@ -151,9 +180,7 @@ export default async function AuditoriaPage({
             titulo={ETIQUETAS_TABLA[t]}
             valor={t === tabla ? String(total) : '—'}
             detalle="ver solo esta tabla"
-            icono={
-              t === 'pagos' ? 'agencias' : t === 'tarifas' ? 'config' : t === 'estadias' ? 'ocupacion' : 'reservas'
-            }
+            icono={ICONO_TABLA[t]}
             href={`/panel/auditoria${construirQuery(filtros, { tabla: t, pagina: undefined })}`}
           />
         ))}
@@ -188,7 +215,7 @@ export default async function AuditoriaPage({
         {registros.length === 0 ? (
           <EstadoVacio
             titulo="Sin movimientos registrados"
-            descripcion="Se registran los cambios en pagos, tarifas y estados de reserva."
+            descripcion="Se registran los cambios en pagos, tarifas y estados de reserva, y los mensajes que el asistente le manda a un huésped."
             icono="auditoria"
           />
         ) : (
@@ -206,6 +233,7 @@ export default async function AuditoriaPage({
               <tbody>
                 {registros.map((r) => {
                   const cambios = camposCambiados(r)
+                  const mensaje = mensajeDelAsistente(r)
                   return (
                     <tr key={r.id} className={FILA}>
                       <td className={`${TD} tabular whitespace-nowrap text-stone-500`}>
@@ -226,7 +254,12 @@ export default async function AuditoriaPage({
                         <Etiqueta tono={TONO_ACCION[r.accion] ?? 'neutro'}>{r.accion}</Etiqueta>
                       </td>
                       <td className={`${TD} text-xs`}>
-                        {cambios.length === 0 ? (
+                        {mensaje ? (
+                          <p className="max-w-md">
+                            <span className="text-stone-500">Reserva {mensaje.codigo}: </span>
+                            <span className="text-stone-800">«{mensaje.mensaje}»</span>
+                          </p>
+                        ) : cambios.length === 0 ? (
                           <span className="text-stone-600">
                             {r.accion === 'INSERT' ? 'alta del registro' : 'baja del registro'}
                           </span>

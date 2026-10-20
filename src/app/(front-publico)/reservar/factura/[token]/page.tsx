@@ -64,6 +64,26 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
+/** La lectura falló: se dice, en vez de mostrar «no hay factura» o un total incompleto. */
+function NoSePudoLeer({ token }: { token: string }) {
+  return (
+    <Marco ancho="angosto">
+      <Tarjeta>
+        <div className="px-6 py-8 text-center sm:px-8" role="alert">
+          <p className="font-medium text-stone-800">No pudimos leer tu factura en este momento.</p>
+          <p className="mt-2 text-sm text-stone-600">
+            Es un problema de nuestro lado, no de tu enlace. Probá de nuevo en unos minutos; si sigue
+            pasando, escribinos y te la mandamos.
+          </p>
+          <Link href={`/reservar/confirmacion/${token}`} className="mt-4 inline-block text-sm text-lago-700 underline">
+            ‹ Volver a mi reserva
+          </Link>
+        </div>
+      </Tarjeta>
+    </Marco>
+  )
+}
+
 export default async function FacturaPublicaPage({
   params,
 }: {
@@ -78,13 +98,16 @@ export default async function FacturaPublicaPage({
       'id, codigo, total, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, doc_numero), estadias(periodo, unidad:unidades(nombre, tipo:tipos_unidad(nombre)))',
     )
     .eq('token', token)
-    .single()
+    // `maybeSingle` y no `single`: un enlace mal copiado no es una falla del
+    // sistema, y con `single` cada uno quedaba anotado en `/panel/errores`.
+    .maybeSingle()
   // Sin esto, una base caída se veía como «enlace inválido» y nadie se enteraba.
   registrarFalla(error, 'portal:leer_factura')
+  if (error) return <NoSePudoLeer token={token} />
   if (!data) notFound()
   const reserva = data as unknown as Reserva & { id: string }
 
-  const [{ data: consumosData }, { data: factura }] = await Promise.all([
+  const [{ data: consumosData, error: eConsumos }, { data: factura, error: eFactura }] = await Promise.all([
     admin
       .from('consumos')
       .select('cantidad, precio_unitario, producto:productos_servicios(nombre)')
@@ -98,6 +121,13 @@ export default async function FacturaPublicaPage({
       .eq('reserva_id', reserva.id)
       .maybeSingle(),
   ])
+  registrarFalla(eConsumos, 'portal:leer_factura_consumos')
+  registrarFalla(eFactura, 'portal:leer_factura_comprobante')
+  // Una lectura fallida devuelve `null`, igual que «todavía no hay factura» o
+  // «no hubo consumos». Mostrar cualquiera de las dos sería afirmarle al
+  // huésped algo que no se verificó: un total sin los consumos, o que su
+  // factura no existe.
+  if (eConsumos || eFactura) return <NoSePudoLeer token={token} />
   const consumos = (consumosData ?? []) as unknown as ConsumoRow[]
 
   // Sin factura emitida todavía no hay nada que mostrar — no es un error del

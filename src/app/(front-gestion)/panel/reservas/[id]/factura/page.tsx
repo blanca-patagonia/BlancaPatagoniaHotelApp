@@ -23,7 +23,7 @@ import { fechaHotel, hoyISO } from '@/lib/fechas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre } from '@/lib/fechas'
 import { BotonImprimir } from './boton-imprimir'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
-import { saldoAcreditable } from '@/lib/domain/facturacion'
+import { saldoAcreditable, totalAcreditado } from '@/lib/domain/facturacion'
 import { emitirNotaCredito } from '../../factura.actions'
 import { BotonEnvio } from '../../../_components/boton-envio'
 import { Mensaje } from '../../../_components/ui'
@@ -197,7 +197,7 @@ export default async function FacturaPage({
     cae: string | null
   }[]
 
-  const acreditado = notas.reduce((a, n) => a + Number(n.total), 0)
+  const acreditado = totalAcreditado(notas)
   const porAcreditar = saldoAcreditable(Number(fac?.total ?? 0), acreditado)
 
   return (

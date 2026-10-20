@@ -22,6 +22,17 @@ requiere las cuentas de Vercel, Supabase, la pasarela de pagos y —si se usa—
 Resend y WhatsApp Business. Ninguna de esas credenciales está ni debe estar en el
 repositorio.
 
+**Hace falta el plan Pro de Vercel**, no el gratuito (Hobby). `vercel.json`
+declara dos crons que corren varias veces por día —la bandeja de avisos cada 5
+minutos y el sondeo de salud cada 15—, y Hobby sólo admite crons **diarios**:
+con esos horarios el despliegue se rechaza. Bajarlos a uno por día para entrar
+en Hobby no es una salida: los avisos saldrían una vez al día (una confirmación
+de reserva llegaría al otro día) y el tablero marcaría la bandeja como atrasada
+todo el tiempo, porque su tolerancia es de 30 minutos (`src/lib/domain/crons.ts`).
+Verificar también en *Project Settings → Functions* que el límite de duración
+del plan alcance los `maxDuration = 120` s que declaran el asistente de IA
+(`panel/ia/consulta`) y el tablero (sus consultas rápidas de IA).
+
 ---
 
 ## 1. Variables de entorno (entregable 8)
@@ -73,7 +84,8 @@ emite un CAE inventado sobre una factura real.
 | Integración | Variables | Notas |
 |---|---|---|
 | **MercadoPago (cobro)** | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | El token es también el que usa la conciliación de liquidaciones. Cómo conseguirlas: §1.6 |
-| **MercadoPago (conexión OAuth)** | `MERCADOPAGO_APP_ID`, `MERCADOPAGO_APP_SECRET` | Para el botón «Conectar Mercado Pago» de `/panel/config/conexiones` (ADR 0036) — **no** reemplaza al par de arriba, ver §1.6 |
+| **MercadoPago (conexión OAuth)** | `MERCADOPAGO_APP_ID`, `MERCADOPAGO_APP_SECRET` | Para el botón «Conectar Mercado Pago» de `/panel/config/conexiones` (ADR 0036) — **no** reemplaza al par de arriba, ver §1.6. Exige `ENCRYPTION_KEY` |
+| **Cifrado de credenciales** (ADR 0036) | `ENCRYPTION_KEY` | Clave AES-256: 32 bytes en base64 (`openssl rand -base64 32`). Cifra los tokens OAuth guardados en `conexiones_proveedores`. **Obligatoria si está `MERCADOPAGO_APP_ID`**: sin ella la app no arranca. Ver la advertencia de abajo |
 | **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | ⚠️ Stripe cuenta en **centavos**. ⚠️ No admite cuentas de Argentina directas, ver §1.6 |
 | **Payway** (ADR 0038) | `PAYWAY_PUBLIC_KEY`, `PAYWAY_PRIVATE_KEY`, `PAYWAY_INTERNAL_SECRET` | ⚠️ Payway también cuenta en **centavos**. `PAYWAY_INTERNAL_SECRET` no es de Payway: firma el evento que el propio servidor se manda a sí mismo tras una respuesta síncrona (ver `src/lib/payments/payway.ts`). Cómo conseguirlas: §1.6 |
 | **Pago simulado** | `PAGO_WEBHOOK_SECRET` | Sólo con `PAGO_PROVIDER=simulado` |
@@ -81,9 +93,17 @@ emite un CAE inventado sobre una factura real.
 | **Resend (entrega)** | `RESEND_WEBHOOK_SECRET` | Sin esto **no se detectan los rebotes**: el aviso queda «enviada» para siempre |
 | **WhatsApp** | `WHATSAPP_PROVIDER`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_IDIOMA` | Ver §1.5 |
 | **Asistente de IA** | `IA_PROVIDER`, `IA_BASE_URL`, `IA_API_KEY`, `IA_MODELO` (+ `IA_MODELO_RESPALDO`, recomendada: `gemini-3.5-flash-lite`; + proveedor de respaldo `IA_RESPALDO_BASE_URL`, `IA_RESPALDO_API_KEY`, `IA_RESPALDO_MODELO`, por ejemplo Groq: `https://api.groq.com/openai/v1` y `openai/gpt-oss-120b`) | Opcionales. Sin las cuatro, `/panel/ia` no se ofrece. Con Gemini: `openai_compatible`, `https://generativelanguage.googleapis.com/v1beta/openai`, la clave de AI Studio y `gemini-2.5-flash` (ver `COMO-LEVANTARLO.md`) |
-| **Booking (iCal)** | `BOOKING_ICAL_FEEDS` | Pares `CODIGO_TIPO=url` separados por comas |
+| **Booking (iCal)** | `BOOKING_ICAL_FEEDS` | Pares `CODIGO_TIPO=url` separados por comas. ⚠️ Con los códigos **actuales** de `tipos_unidad`: la 0106 renombró varios (`HOST-DBL-STD` → `HOST-STD`, `HOST-DBL-SUP` → `HOST-SUP`, `CAB-3D-6P` → `CAB-BOLADOS`, `CAB-1D-3P` → `CAB-ONELLI`, `CAB-2D-4P` → `CAB-SPEGAZZINI`). Un código viejo no da error: ese tipo simplemente no se importa |
 | **Divisas** | `DOLARAPI_URL`, `ARGENTINADATOS_URL`, `AMBITO_URL` | Opcionales: vacías usan las públicas. `AMBITO_URL` es solo para el dato informativo de Banco Nación del dashboard (no participa del cobro); si Ámbito no responde, esa fila del widget simplemente no aparece |
-| **Login con Google** | `AUTH_GOOGLE_HABILITADO` | `1` lo habilita |
+| **Login con Google** | `AUTH_GOOGLE_HABILITADO` | `1` lo habilita. Además hay que configurar el proveedor en Supabase, ver §2.2 paso 4 |
+| **Asistente del portal público** | `ASISTENTE_PROVIDER` | Opcional. El único valor es `reglas`, que es también el que se usa si falta (ADR 0011: el portal no usa un modelo de IA, a propósito) |
+
+> ⚠️ **`ENCRYPTION_KEY` no se puede perder ni cambiar.** Los tokens que ya se
+> guardaron cifrados con una clave sólo se descifran con esa misma clave: si
+> se pierde o se reemplaza, las cuentas conectadas dejan de funcionar y hay
+> que volver a conectarlas una por una. Guardar una copia **fuera de Vercel**
+> (el gestor de contraseñas del hotel), porque Vercel no muestra el valor de
+> una variable sensible después de cargarla.
 
 ### 1.4 De desarrollo — **no ponerlas en producción**
 
@@ -243,34 +263,60 @@ sirviendo consultas contra columnas que todavía no existen.
 
 ### 2.2 Paso a paso
 
-**1. La base.**
+**1. La base.** No es sólo `db push`: la base de la nube se fue armando de a
+poco y puede tener migraciones aplicadas sin anotar, o anotadas sin aplicar.
+`db push` confía en lo anotado, así que hay que mirar primero.
+
+*a. Probar la restauración de un backup* (§3.4) en un proyecto descartable,
+**antes** de seguir. La 0107 y la 0108 borran tipos de unidad, unidades
+ficticias y sus tarifas en cascada; si algo sale mal, eso sólo vuelve
+restaurando.
+
+*b. Ver qué está anotado y qué existe de verdad:*
 
 ```bash
 npx supabase link --project-ref <ref-del-proyecto>
-npx supabase db push
-```
-
-`db push` aplica las migraciones pendientes en orden. **No usa `db reset`**, que
-borra todo — ver §3.
-
-Verificar que se aplicaron todas:
-
-```bash
 npx supabase migration list --linked
-```
 
-⚠️ **Eso dice qué se ANOTÓ, no qué se aplicó.** El 2026-10-20 la base local
-tenía anotada la 0087 sin su tabla, y otras doce aplicadas sin anotar. Antes de
-abrir el sistema al hotel, comparar el esquema real contra el de las
-migraciones (ADR 0042):
-
-```bash
 ESQUEMA_DB_URL='postgresql://postgres:<contraseña>@db.<ref>.supabase.co:5432/postgres' \
   npm run esquema:comparar
 ```
 
-Tiene que decir «✓ El esquema coincide». Si dice «FALTA», hay migraciones sin
-aplicar; si dice «SOBRA», hay objetos que no vienen de ninguna. ⚠️ En
+`migration list` dice qué se **anotó**, no qué se aplicó: el 2026-10-20 la base
+local tenía anotada la 0087 sin su tabla, y otras doce aplicadas sin anotar.
+`esquema:comparar` compara el esquema real contra el de las migraciones (ADR
+0042): «FALTA» son migraciones sin aplicar; «SOBRA», objetos que no vienen de
+ninguna.
+
+*c. Anotar lo que ya está aplicado.* Una migración que figura pendiente en
+`migration list` pero cuyos objetos **ya existen** según `esquema:comparar` hay
+que marcarla, porque `db push` la volvería a correr y la mayoría no se puede
+repetir (`create table` sin `if not exists`, `add column`):
+
+```bash
+npx supabase migration repair --status applied <versión>
+```
+
+⚠️ **Sólo después de comprobar que sus objetos existen.** Marcar como aplicada
+una migración que no lo está la saltea para siempre, sin ningún error.
+
+*d. El caso de la 0107.* Si la 0107 figura pendiente y la base todavía tiene las
+cabañas ficticias del catálogo representativo («Cabaña Lenga», «Ñire»,
+«Calafate», «Notro», «Coihue»), la 0107 se corta con un error de FK, y `db push`
+**no aplica nada de lo que sigue** —entre eso, la 0119—. Antes del push, correr
+a mano (SQL Editor de Supabase) el **primer bloque `do $$ … end $$`** de la
+`0108_*.sql`, que borra esas cinco unidades o las da de baja si tienen
+historial. No editar la 0107: ya está aplicada en otras bases.
+
+*e. Aplicar y volver a comparar:*
+
+```bash
+npx supabase db push
+ESQUEMA_DB_URL='…' npm run esquema:comparar
+```
+
+`db push` aplica las pendientes en orden. **Nunca `db reset`**, que borra todo —
+ver §3. Repetir la comparación hasta que diga «✓ El esquema coincide». ⚠️ En
 particular, confirmar que la **0119** quedó aplicada: sin ella, en una base
 nueva el rol público (`anon`, con la clave que viaja en el navegador) puede
 ejecutar funciones como `crear_reserva` o `registrar_acceso_huesped`.
@@ -281,14 +327,28 @@ Cargarlos desde `/panel/config` antes de emitir la primera factura.
 
 **3. Las variables** de la §1, en Vercel, para el entorno *Production*.
 
-**4. La aplicación.** Vercel despliega solo al hacer *push* a `main`. Para
+**4. Las URLs de autenticación.** Sin esto el login con contraseña funciona,
+pero la **recuperación de contraseña** y el **login con Google** devuelven a
+`localhost` o los rechaza Supabase:
+
+| Dónde | Qué cargar |
+|---|---|
+| Supabase → Authentication → URL Configuration → *Site URL* | `https://<dominio>` |
+| Supabase → Authentication → URL Configuration → *Redirect URLs* | `https://<dominio>/auth/callback` (Google) y `https://<dominio>/login/nueva-contrasena` (recuperar contraseña) |
+| Supabase → Authentication → Providers → Google | El *Client ID* y *Client Secret* de Google Cloud; en Google Cloud, como URI de redirección autorizada, la que muestra Supabase ahí (`https://<ref>.supabase.co/auth/v1/callback`) |
+| Mercado Pago → la aplicación del OAuth → *Redirect URL* | `https://<dominio>/api/conexiones/mercadopago/callback` (sólo si se usa «Conectar Mercado Pago») |
+
+`<dominio>` tiene que ser exactamente el de `NEXT_PUBLIC_SITE_URL`: el código
+arma las URLs de vuelta con esa variable.
+
+**5. La aplicación.** Vercel despliega solo al hacer *push* a `main`. Para
 forzarlo:
 
 ```bash
 npx vercel --prod
 ```
 
-**5. Los webhooks**, apuntando al dominio real:
+**6. Los webhooks**, apuntando al dominio real:
 
 | Proveedor | URL | Dónde se configura |
 |---|---|---|
@@ -300,8 +360,8 @@ npx vercel --prod
 > un error visible: el endpoint rechaza todos los eventos y el síntoma es «el
 > hotel dejó de enterarse de los pagos».
 
-**6. Los crons.** Los declara `vercel.json` y Vercel los toma del despliegue. Son
-seis:
+**7. Los crons.** Los declara `vercel.json` y Vercel los toma del despliegue.
+Requieren el plan **Pro** (§0): dos corren varias veces por día. Son seis:
 
 | Cron | Horario (UTC) | Qué hace |
 |---|---|---|
@@ -403,9 +463,15 @@ incluye, o restaurar el backup diario.
 
 > ⚠️ **Esto nunca se probó.** Es el punto ciego más grande que queda, y está
 > anotado como tal en `docs/5-pendientes/PENDIENTES.md`. Un backup que no se restauró nunca es
-> una suposición, no un respaldo. **Conviene probarlo en un proyecto de Supabase
-> descartable antes de necesitarlo de verdad**, que es el peor momento para
-> descubrir que algo falta.
+> una suposición, no un respaldo. **Hay que probarlo en un proyecto de Supabase
+> descartable antes del primer `db push`** (§2.2 paso 1a), no cuando se lo
+> necesite: la 0107 y la 0108 borran tipos de unidad y unidades con sus
+> tarifas, y eso no tiene otra vuelta atrás que restaurar.
+>
+> Cómo probarlo: restaurar el backup más reciente en el proyecto descartable,
+> apuntar una copia local de la app a ese proyecto y verificar que se ven las
+> reservas, los huéspedes y las facturas de los últimos días, y que el login
+> funciona (los usuarios de auth también tienen que volver).
 
 ### 3.5 Lo que ya salió del sistema
 
