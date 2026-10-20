@@ -1,7 +1,7 @@
 # Fase 7 (acotada) — Corregir la deriva de README/CLAUDE.md/PENDIENTES (2026-10-06)
 
 > Acotada por el mensaje 2 del brief a README.md, CLAUDE.md y
-> `docs/PENDIENTES.md` vs `docs/analisis-pendientes-2026-09-09.md`. El punto
+> `docs/5-pendientes/PENDIENTES.md` vs `docs/5-pendientes/analisis-pendientes-2026-09-09.md`. El punto
 > "que la documentación refleje lo que cambiaste" (`COMO-LEVANTARLO.md`,
 > `AGENTS.md`, manuales) queda para el cierre final, como pide el brief.
 
@@ -17,7 +17,7 @@ documento):
 | "24 archivos escriben con `service_role`" | 29 (`grep -rl clienteDePrueba tests/*.test.ts \| wc -l`) |
 | "22 decisiones de arquitectura numeradas" | 40 |
 | "83 migraciones SQL numeradas" | 108 |
-| Link "Auditoría de seguridad" → `docs/audit/` | Redirigido al documento vigente de pendientes + los issues de GitHub; `docs/audit/` y `docs/PENDIENTES.md` quedan citados como históricos (ver §3) |
+| Link "Auditoría de seguridad" → `docs/4-seguridad-y-auditorias/audit/` | Redirigido al documento vigente de pendientes + los issues de GitHub; `docs/4-seguridad-y-auditorias/audit/` y `docs/5-pendientes/PENDIENTES.md` quedan citados como históricos (ver §3) |
 
 **No se tocó** la sección "Lo que todavía no está" más allá de estos
 números: la mención a la atomicidad de reservas sigue describiendo el
@@ -51,10 +51,10 @@ integrar, fuera del alcance de esta corrida — ver `progreso.md`).
   para cuando se despliegue? — y no es algo que se pueda inferir leyendo
   código.
 
-## 3. `docs/PENDIENTES.md` vs `docs/analisis-pendientes-2026-09-09.md`
+## 3. `docs/5-pendientes/PENDIENTES.md` vs `docs/5-pendientes/analisis-pendientes-2026-09-09.md`
 
-**Decisión: `docs/analisis-pendientes-2026-09-09.md` queda como el vigente;
-`docs/PENDIENTES.md` se marca histórico** (congelado en migración 0064,
+**Decisión: `docs/5-pendientes/analisis-pendientes-2026-09-09.md` queda como el vigente;
+`docs/5-pendientes/PENDIENTES.md` se marca histórico** (congelado en migración 0064,
 con una nota al tope que dice exactamente eso y linkea al vigente). Motivo:
 es más reciente, está explícitamente verificado contra el código ("no
 inventado") y la mayoría de los items de `PENDIENTES.md` que seguían
@@ -81,6 +81,6 @@ perdería esa segunda mitad.
   103... sobre 56 tablas, y sigue creciendo" — otra inconsistencia entre
   los dos archivos base del repo, con tres números distintos para la misma
   cosa). Fuera del recorte de esta corrida.
-- `docs/manual-usuario.md` y `docs/manual-tecnico.md`: no se auditaron en
+- `docs/3-manuales/manual-usuario.md` y `docs/3-manuales/manual-tecnico.md`: no se auditaron en
   esta corrida (el brief los deja para el punto "que reflejen lo que
   cambiaste", al cierre).

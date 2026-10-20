@@ -23,14 +23,14 @@ de intentar nada (`gh api repos/blanca-patagonia/BlancaPatagoniaHotelApp
 Leé, en este orden, antes de hacer cualquier otra cosa:
 
 1. Este archivo entero.
-2. `docs/pulido-integral-2026-10/brief.md` — las instrucciones originales
+2. `docs/4-seguridad-y-auditorias/pulido-integral-2026-10/brief.md` — las instrucciones originales
    completas (las 8 fases) que dieron origen a todo esto.
-3. `docs/pulido-integral-2026-10/progreso.md` — el índice vivo, pero
+3. `docs/4-seguridad-y-auditorias/pulido-integral-2026-10/progreso.md` — el índice vivo, pero
    tratalo como **secundario a este archivo**: éste es más nuevo y más
    completo.
 4. Las entradas de `docs/bitacora.md` fechadas 2026-10-06 y 2026-10-07
    (son muchas — buscá por esas fechas, no leas el archivo entero).
-5. Los cinco `docs/pulido-integral-2026-10/fase-N-*.md` si necesitás el
+5. Los cinco `docs/4-seguridad-y-auditorias/pulido-integral-2026-10/fase-N-*.md` si necesitás el
    detalle de una fase puntual.
 
 `CLAUDE.md` y `AGENTS.md` siguen valiendo enteros y no quedan anulados por
@@ -75,7 +75,7 @@ en `.github/dependabot.yml` y se comentó en el PR.
      (`avanzar_estado_reserva`), con tests
      (`tests/avanzar-estado-reserva-atomico.test.ts`).
    - `emitirFactura`: se pensó que faltaba resolver (copiado de
-     `docs/analisis-pendientes-2026-09-09.md`) y **resultó que NO** — la
+     `docs/5-pendientes/analisis-pendientes-2026-09-09.md`) y **resultó que NO** — la
      migración 0069 (2026-09-01) ya lo había hecho. Se corrigió la
      documentación en vez de escribir código de más.
 3. Cotización sin tarifa: verificado EN EL NAVEGADOR en panel y portal.
@@ -192,7 +192,7 @@ fase nueva.**
     sobre 56, y sigue creciendo") — conviene unificar en una sola frase
     que no prometa un número exacto, como se hizo en `release-manager.md`
     al rescatarlo en la Fase 1.
-  - `docs/manual-usuario.md` y `docs/manual-tecnico.md`: no se
+  - `docs/3-manuales/manual-usuario.md` y `docs/3-manuales/manual-tecnico.md`: no se
     auditaron en ningún momento de este pulido.
 - **El informe final** (`docs/auditoria-pulido-2026-10.md`, sección 5 del
   brief original): línea de base vs. resultado, tabla de ramas/PRs,
@@ -240,7 +240,7 @@ fase nueva.**
   y `loading.tsx`). Los dos estaban en documentos que otra fase de esta
   MISMA rama había escrito sin correr el test/leer el código que lo
   habría desmentido en el momento. Antes de repetir una afirmación de
-  `docs/analisis-pendientes-2026-09-09.md`, `docs/PENDIENTES.md` o
+  `docs/5-pendientes/analisis-pendientes-2026-09-09.md`, `docs/5-pendientes/PENDIENTES.md` o
   cualquier nota de `progreso.md`, verificala contra el código si hay
   forma barata de hacerlo — es la lección que `docs/bitacora.md` del
   2026-10-07 deja escrita de punta a punta.
@@ -269,6 +269,6 @@ fase nueva.**
    brief original que no depende de nada externo.
 5. Pase lo que pase: `npm run check` en verde antes de cada commit,
    entrada en `docs/bitacora.md`, y actualizar
-   `docs/pulido-integral-2026-10/progreso.md` al terminar cada pieza —
+   `docs/4-seguridad-y-auditorias/pulido-integral-2026-10/progreso.md` al terminar cada pieza —
    es lo que permitió escribir este mismo prompt sin tener que releer
    24 commits a mano.

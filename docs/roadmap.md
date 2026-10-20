@@ -56,7 +56,7 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Comparativos interanuales y exportación (CSV / Power BI)
 
 ## Fase 7 — Hardening de producción
-- [x] Revisión de seguridad + RLS (ver `docs/revision-seguridad.md`)
+- [x] Revisión de seguridad + RLS (ver `docs/4-seguridad-y-auditorias/revision-seguridad.md`)
 - [x] Token opaco de confirmación (anti-enumeración) + expiración de reservas pendientes
 - [ ] Rate-limiting de endpoints públicos · programar expiración por cron
 - [ ] Backups, secrets, observabilidad · Dominio + SSL · Deploy (Vercel + Supabase cloud)
@@ -110,7 +110,7 @@ diseño / implementación / pruebas de la tesis.
 
 El cliente venía de **WinPAX** (Oracle Forms, ~año 2000) y se cubrieron sus
 funciones core. El plan completo, con el porqué de cada decisión, está en
-[`docs/modernizacion-winpax.md`](modernizacion-winpax.md). Migraciones `0036`–`0043`.
+[`docs/2-arquitectura/modernizacion-winpax.md`](2-arquitectura/modernizacion-winpax.md). Migraciones `0036`–`0043`.
 
 - [x] 1 Cotización de divisas automática con respaldo manual (ADR 0020, cierra el ADR 0003)
 - [x] 2 Fila resumen de la grilla y estados legibles sin color
@@ -139,7 +139,7 @@ Tres áreas nuevas del panel: `canales`, `punto_venta` y `respaldos`.
 - [x] **B6** Ingesta de reseñas y vínculo con la reserva (migración 0054)
 - [x] **B8** Sincronización automática: cron diario que **aterriza, no importa**
       (`app/api/cron/canales/route.ts`, `vercel.json`, PR #14).
-      Ver [`docs/sincronizacion-automatica.md`](sincronizacion-automatica.md)
+      Ver [`docs/2-arquitectura/sincronizacion-automatica.md`](2-arquitectura/sincronizacion-automatica.md)
 - [ ] **B3** Importador general (refactor sin valor visible por sí solo)
 - [ ] **B7** Feed iCal propio de salida + ADR 0022
 - [ ] **B9** Reporte de neto de comisión y costo por canal.
@@ -162,7 +162,7 @@ lo pedido ya estaba; lo que faltaba se abordó así:
       extranet sin API de partner
 
 ## Auditoría de seguridad (numeración propia)
-- [x] Fase 0 — Reconocimiento sin modificar código (`docs/AUDITORIA_INICIAL.md`)
+- [x] Fase 0 — Reconocimiento sin modificar código (`docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md`)
 - [x] Fase 1 — Límite de tasa en entradas públicas y login (migración 0029),
       guarda del seed y encabezados de seguridad
 - [x] Fase 2 — Cuatro bugs leyendo el código: precio neto de agencia expuesto a
@@ -174,7 +174,7 @@ lo pedido ya estaba; lo que faltaba se abordó así:
       webhook y simuladores que fallan fuerte en producción (ADR 0018).
       Migraciones `0032`–`0035`, **aplicadas y verificadas contra Postgres**
 - [x] Matriz de **lectura** RLS exhaustiva: 51 tablas × 4 roles
-      (`tests/rls-por-rol.test.ts`), con la lista traída de la base para que una
+      (`tests/base-de-datos/rls-por-rol.test.ts`), con la lista traída de la base para que una
       tabla nueva sin declarar haga fallar el test
 - [ ] Matriz de **escritura** RLS: hoy es dirigida (20 casos elegidos por
       consecuencia), no exhaustiva. El archivo lo declara. Es el pendiente de

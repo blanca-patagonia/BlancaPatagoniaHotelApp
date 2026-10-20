@@ -158,7 +158,7 @@ proyecto de Supabase:
   `MERCADOPAGO_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
   `ENCRYPTION_KEY` (para el OAuth2 de las conexiones de proveedores, migración
   0096). El detalle completo con qué pasa si falta cada una está en
-  `docs/despliegue.md` §1 — no repetirlo acá, pero es el primer lugar a mirar
+  `docs/3-manuales/despliegue.md` §1 — no repetirlo acá, pero es el primer lugar a mirar
   antes del deploy.
 
 ---

@@ -5,7 +5,7 @@
 - **Complementa:** [ADR 0027](0027-cobro-en-linea-dos-pasarelas-y-una-sola-moneda-de-saldo.md)
   (la invariante de moneda), [ADR 0021](0021-canales-de-venta-solo-lectura.md)
   (declarar lo que una integración **no** puede hacer)
-- **Origen:** Bloque C de la auditoría `docs/auditoria-pms-2026-09.md`. Cierra los
+- **Origen:** Bloque C de la auditoría `docs/4-seguridad-y-auditorias/auditoria-pms-2026-09.md`. Cierra los
   objetivos 4 («análisis y conciliación de facturas») y 10 («que se conecte a
   Mercado Pago y Santander y ver los gastos mensuales») del pedido.
 

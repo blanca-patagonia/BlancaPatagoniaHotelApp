@@ -95,7 +95,7 @@ Once intentos fallidos seguidos desde la misma IP: el undécimo responde
 
 ## ✅ Gestión de secretos — sin hallazgos
 
-Tres comprobaciones, todas limpias (ver `docs/AUDITORIA_INICIAL.md` §3):
+Tres comprobaciones, todas limpias (ver `docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md` §3):
 ningún `.env` en el historial, ningún token real en los 44 commits, ningún
 literal sospechoso en el código. **No hace falta rotar credenciales.**
 

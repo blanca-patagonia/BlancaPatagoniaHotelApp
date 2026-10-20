@@ -16,7 +16,7 @@ Trae lo que el canal tenga y lo deja en `canal_reservas` para que alguien lo rev
 
 Es la decisión más importante del módulo. Importar significa crear una reserva
 `confirmada` que ocupa inventario, y hacerlo sin que nadie mire contradice la razón por
-la que existe la zona de recepción ([ADR 0021](decisiones/0021-canales-de-venta-solo-lectura.md)):
+la que existe la zona de recepción ([ADR 0021](../decisiones/0021-canales-de-venta-solo-lectura.md)):
 que el choque con el anti-overbooking sea **visible** en vez de perderse en un log. Un
 cron que importara solo convertiría ese caso —el más caro que le puede pasar al hotel—
 en una fila de error que nadie lee.
@@ -32,7 +32,7 @@ Un secreto compartido en la cabecera `authorization`, comparado en tiempo consta
 **Si `CRON_SECRET` no está configurada, el handler rechaza con 503.** No existe un modo
 «sin secreto»: eso convertiría el endpoint en una puerta pública que escribe en la base
 con `service_role`, y el fallo sería silencioso justo en producción, que es donde
-importa. Mismo criterio que el [ADR 0018](decisiones/0018-los-simuladores-fallan-fuerte.md).
+importa. Mismo criterio que el [ADR 0018](../decisiones/0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md).
 
 **La cabecera `x-vercel-cron` no es autenticación.** Vercel la agrega a sus llamadas,
 pero cualquiera la escribe en un `curl`. Sirve para saber quién *dice* ser el llamador,

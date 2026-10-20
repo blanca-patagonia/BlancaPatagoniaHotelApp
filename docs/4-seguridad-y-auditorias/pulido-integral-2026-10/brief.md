@@ -19,8 +19,8 @@ completas; el segundo acota qué se hace en la corrida en curso.
 >
 > ## 0. Antes de tocar nada
 >
-> 1. Leé enteros CLAUDE.md, AGENTS.md, COMO-LEVANTARLO.md, docs/PENDIENTES.md y
->    docs/analisis-pendientes-2026-09-09.md. Todas sus reglas valen; este
+> 1. Leé enteros CLAUDE.md, AGENTS.md, COMO-LEVANTARLO.md, docs/5-pendientes/PENDIENTES.md y
+>    docs/5-pendientes/analisis-pendientes-2026-09-09.md. Todas sus reglas valen; este
 >    prompt no las anula, las ordena.
 > 2. En docs/bitacora.md leé la última entrada (2026-09-16) y la sección «Lo
 >    que NO se mergeó, y por qué» (entrada del 2026-08-25): explica por qué
@@ -296,10 +296,10 @@ completas; el segundo acota qué se hace en la corrida en curso.
 > - CLAUDE.md dice «Hay 35 ADRs, el último es el 0035»: el último es el 0040.
 >   Y dice «Deploy (Vercel + Supabase cloud) pendiente» mientras vercel.json
 >   tiene 6 crons configurados; confirmá conmigo el estado real y corregilo.
-> - docs/PENDIENTES.md quedó congelado en la migración 0064 y
->   docs/analisis-pendientes-2026-09-09.md lo reemplaza en parte. Dejá UN
+> - docs/5-pendientes/PENDIENTES.md quedó congelado en la migración 0064 y
+>   docs/5-pendientes/analisis-pendientes-2026-09-09.md lo reemplaza en parte. Dejá UN
 >   documento vigente de pendientes y marcá el otro como histórico.
-> - docs/manual-usuario.md y docs/manual-tecnico.md reflejan lo que
+> - docs/3-manuales/manual-usuario.md y docs/3-manuales/manual-tecnico.md reflejan lo que
 >   cambiaste.
 > - ADR nuevo (0041 en adelante) por cada decisión de arquitectura que
 >   tomes, por ejemplo la función transaccional de factura.

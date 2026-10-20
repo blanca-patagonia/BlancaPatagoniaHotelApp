@@ -119,7 +119,7 @@ para que la próxima sesión no arranque de cero.
    (2026-09-01) ya hizo idempotente la numeración; el test de concurrencia
    sí afirma ausencia de salto (`tests/acciones/reservas.test.ts`, "con dos
    emisiones SIMULTÁNEAS"), y pasa. Este punto venía copiado de
-   `docs/analisis-pendientes-2026-09-09.md`, que también se corrigió. Ver
+   `docs/5-pendientes/analisis-pendientes-2026-09-09.md`, que también se corrigió. Ver
    bitácora del 2026-10-07.
 3. ✅ **Resuelto (2026-10-07): no era una falta.** Las 13 rutas quedan
    cubiertas por el `loading.tsx` de un ancestro (`app/panel`,
@@ -132,7 +132,7 @@ para que la próxima sesión no arranque de cero.
 1. Los cinco archivos grandes (§4), con el criterio ya fijado por el brief
    (partir solo si ningún test existente se toca). Fase 4.
 2. Deriva de documentación: `README.md`, `CLAUDE.md`, `COMO-LEVANTARLO.md`,
-   `docs/PENDIENTES.md` vs `docs/analisis-pendientes-2026-09-09.md`. Parte
+   `docs/5-pendientes/PENDIENTES.md` vs `docs/5-pendientes/analisis-pendientes-2026-09-09.md`. Parte
    se corrige en la Fase 7 de esta misma corrida (README/CLAUDE.md/
    PENDIENTES); `COMO-LEVANTARLO.md` y el resto de "que reflejen lo que
    cambiaste" quedan para el cierre final, como pide el mensaje 2.

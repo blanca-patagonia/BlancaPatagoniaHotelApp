@@ -30,16 +30,22 @@ Tarifario 2025/2026 (Anexo A).
   `cookies()` es **async**.
 
 ## Dos vistas separadas (decisión de producto)
-- **Gestión hotelera** (`app/panel`, login de staff) — el foco actual del desarrollo.
-- **Reservas de clientes** (público: `app/reservar` + landing) — vista aparte, se
+- **Gestión hotelera** (`src/app/(front-gestion)/panel`, login de staff) — el foco actual del desarrollo.
+- **Reservas de clientes** (público: `src/app/(front-publico)/reservar` + landing) — vista aparte, se
   amplía más adelante. Las funciones cara al cliente (web check-in, encuestas) van
   ahí, NO en la gestión.
 
 ## Arquitectura (capas)
-- Presentación: `app/(public)` portal del huésped · `app/(admin)` panel por rol ·
-  `app/api/...` route handlers · `app/api/webhooks/...`.
-- Lógica: `lib/domain` (reglas puras, testeables), `lib/availability`,
-  `lib/payments`, `lib/supabase` (clientes server/client/admin/proxy).
+> **Mapa de carpetas completo: `ESTRUCTURA.md`** (raíz). Todo el código vive en `src/`.
+> Las rutas viejas sin `src/` (`app/panel/…`, `lib/…`) que aparecen en la bitácora,
+> los ADRs y los comentarios del código se leen desde `src/`, y `app/panel` pasó a
+> `src/app/(front-gestion)/panel` (el grupo entre paréntesis no cambia la URL).
+- Presentación (front): `src/app/(front-publico)` portal del huésped ·
+  `src/app/(front-gestion)` panel por rol + login.
+- Back HTTP: `src/app/(back-api)/api/...` route handlers ·
+  `src/app/(back-api)/api/webhooks/...`.
+- Lógica: `src/lib/domain` (reglas puras, testeables), `src/lib/availability`,
+  `src/lib/payments`, `src/lib/supabase` (clientes server/client/admin/proxy).
 - Datos: Postgres con **RLS por rol**. La integridad crítica vive en la **base**,
   no solo en la app.
 
@@ -65,7 +71,7 @@ Tarifario 2025/2026 (Anexo A).
 - En **local** hay que declarar los `GRANT` a `anon`/`authenticated`/`service_role`
   (migración `0006`); en **hosted** los aplica la plataforma. La seguridad real la
   impone RLS.
-- `service_role` **solo en servidor** (`lib/supabase/admin.ts`, `server-only`).
+- `service_role` **solo en servidor** (`src/lib/supabase/admin.ts`, `server-only`).
 
 ## Entorno de datos (decisión vigente: Supabase en la nube)
 - La base es un **proyecto Supabase hosted**, con las migraciones y el catálogo ya
@@ -78,7 +84,7 @@ Tarifario 2025/2026 (Anexo A).
 - **Docker sigue haciendo falta para una sola cosa: correr los tests.** Hay 24
   archivos que escriben con `service_role` —saltea RLS— y borran filas de `reservas`,
   `huespedes`, `tarifas`, `unidades` y `tipos_unidad`: contra la base real destruyen
-  datos del hotel. Por eso `tests/db.ts` **corta si la URL no es local**, con salida
+  datos del hotel. Por eso `tests/apoyo/db.ts` **corta si la URL no es local**, con salida
   de escape `PERMITIR_DB_REMOTA=1` para una base remota descartable.
 - Para testear: `npx supabase start` · `npx supabase db reset` · `npm run seed:usuarios`.
   Studio local http://127.0.0.1:54323 · API local http://127.0.0.1:54321.
@@ -124,14 +130,14 @@ Tarifario 2025/2026 (Anexo A).
   verificado (corrida #31) · **Fase 18** cinco bugs encontrados recorriendo el
   sistema a mano (el más caro: «USD 0» al reservar, por falta de temporadas
   cargadas) · **Fase 19** buscador global por rol, confirmaciones y encabezado ·
-  **Fase 20** ningún fallo de escritura en silencio (ver `lib/acciones.ts`) ·
+  **Fase 20** ningún fallo de escritura en silencio (ver `src/lib/acciones.ts`) ·
   **Fase 21** catálogo público de alojamientos (`/alojamientos` + detalle) ·
   **Fase 22** interfaz azul y blanca (ADR 0026), entrada con Google, el menú
   lateral fijo y las 38 pantallas sin arrastre lateral en el teléfono.
 - **Modernización WinPAX ✅ (2026-08-16, numeración propia de 11 pasos).** El cliente
   venía de WinPAX (Oracle Forms, ~año 2000) y se cubrieron sus funciones core.
   **El plan completo, con el porqué de cada decisión, está en
-  `docs/modernizacion-winpax.md`** — leerlo antes de tocar cualquiera de estos
+  `docs/2-arquitectura/modernizacion-winpax.md`** — leerlo antes de tocar cualquiera de estos
   módulos. Resumen: **1** cotización de divisas (cierra el ADR 0003) · **2** fila
   resumen de la grilla + estados legibles sin color · **3** diez vistas operativas
   del listado de reservas, con saldo · **4-5** canales de venta: se enchufó el
@@ -159,9 +165,9 @@ Tarifario 2025/2026 (Anexo A).
      hay en `/panel/respaldos` es una exportación de los datos operativos, y la
      pantalla lo explica. **No convertirlo en un botón que diga «hacer backup».**
 - **Auditoría de seguridad (numeración propia, empieza de nuevo en Fase 0):**
-  **Fase 0 ✅** reconocimiento sin tocar código (`docs/AUDITORIA_INICIAL.md`) ·
+  **Fase 0 ✅** reconocimiento sin tocar código (`docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md`) ·
   **Fase 1 ✅** límite de tasa en las entradas públicas y en el login
-  (migración 0029, `lib/domain/limites.ts`), guarda del seed contra bases no
+  (migración 0029, `src/lib/domain/limites.ts`), guarda del seed contra bases no
   locales y encabezados de seguridad en `next.config.ts` (sin CSP, y está
   documentado por qué) · **Fase 2 ✅** cuatro bugs leyendo el código: el **precio
   neto de agencia quedaba expuesto a `anon`** por RPC (migración 0030), el webhook
@@ -175,11 +181,11 @@ Tarifario 2025/2026 (Anexo A).
   (la función es `security invoker`, `anon` no lee `tarifas`, y la 0030 tiene la
   guarda `current_user <> 'anon'` adentro), pero recién la 0070 lo cierra con
   `revoke execute ... from public`. Hay un test de contrato
-  (`tests/funciones-sin-public.test.ts`) para que ninguna función nazca abierta.
+  (`tests/base-de-datos/funciones-sin-public.test.ts`) para que ninguna función nazca abierta.
   ⚠️ **No hacer `cotizar_estadia` `security definer`**: ahí `current_user` es el
   dueño de la función y la guarda quedaría siempre en verdadero.
   **Fase 5 ✅ (2026-09-08) — el borde público en ESCRITURA, exhaustivo.**
-  `tests/anon-no-escribe.test.ts` audita tabla por tabla que `anon` no tenga
+  `tests/base-de-datos/anon-no-escribe.test.ts` audita tabla por tabla que `anon` no tenga
   `insert/update/delete`, con la lista traída de la base. La primera corrida
   encontró que **sí los tenía**: no por una migración de este proyecto —la 0006
   le da sólo `select`— sino por los privilegios por omisión de la plataforma, que
@@ -190,11 +196,11 @@ Tarifario 2025/2026 (Anexo A).
   **Auditoría de las políticas RLS rol por rol — cerrada del lado de lectura,
   acotada a propósito del lado de escritura (verificado 2026-09-09 contra la
   base local: el esquema siguió creciendo — bastante más de 103 políticas sobre
-  56 tablas).** `tests/rls-por-rol.test.ts` prueba el `select` de
+  56 tablas).** `tests/base-de-datos/rls-por-rol.test.ts` prueba el `select` de
   **las 56 tablas y vistas, sin excepción**: lee la lista real de
   `pg_tables`/vistas y hace fallar el test de cobertura si aparece una sin
   declarar en la matriz — así que un `select` de más o de menos en cualquier
-  tabla nueva se detecta solo. `tests/rls-escritura-por-rol.test.ts` cubre el
+  tabla nueva se detecta solo. `tests/base-de-datos/rls-escritura-por-rol.test.ts` cubre el
   resto (`insert`/`update`/`delete`/`all`), y lo dice de frente en su propio
   encabezado: es **por consecuencia, no por cobertura** — una matriz completa
   serían 51 tablas × 4 roles × 3 operaciones, y la mayoría son catálogo de
@@ -221,7 +227,7 @@ Tarifario 2025/2026 (Anexo A).
   (`0033`), tokens de firma fuera del alcance del staff, facturas inmutables y 9
   índices en FKs (`0034`), las 51 Server Actions verifican rol con guarda estructural,
   firma HMAC real en el webhook y los simuladores fallan fuerte en producción
-  (ADR 0018). Estado y pendientes en `docs/audit/` (`00-pendientes.md` y `HANDOFF.md`).
+  (ADR 0018). Estado y pendientes en `docs/4-seguridad-y-auditorias/audit/` (`00-pendientes.md` y `HANDOFF.md`).
   ⚠️ **Al agregar una migración que toque un enum:** `alter type ... add value` y el
   primer uso de ese valor **no pueden ir en el mismo archivo**. El CLI de Supabase
   envuelve cada migración en una transacción y Postgres corta con SQLSTATE 55P04;
@@ -230,24 +236,24 @@ Tarifario 2025/2026 (Anexo A).
 - **Tests:** cero salteados contra la base local. Para
   que no salteen hay que exportar `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` **y**
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: vitest no lee `.env.local`, y `EXIGIR_DB=1`
-  protege `hayDB` pero **no** `hayAnon` (`tests/db.ts:40`), así que sin la clave
+  protege `hayDB` pero **no** `hayAnon` (`tests/apoyo/db.ts:40`), así que sin la clave
   publicable los 4 tests del borde público del ADR 0016 saltean en silencio. En CI
   no pasa: el workflow la exporta (`ci.yml:72`).
 - **Siete adapters** con el mismo patrón (interfaz + simulador, se cambia por env):
   `PaymentProvider`, `FirmaElectronicaProvider`, `AsistenteProvider`,
-  `FacturacionElectronicaProvider`, `EmailProvider` (`lib/email/index.ts`, el único
-  camino para mandar correo), `CanalVentaProvider` (`lib/canales/`, OTA) y
-  `CotizacionProvider` (`lib/divisas/`, tipo de cambio).
+  `FacturacionElectronicaProvider`, `EmailProvider` (`src/lib/email/index.ts`, el único
+  camino para mandar correo), `CanalVentaProvider` (`src/lib/canales/`, OTA) y
+  `CotizacionProvider` (`src/lib/divisas/`, tipo de cambio).
   ⚠️ Los dos últimos son distintos de los cinco primeros: **no tienen simulador que
   mienta**, porque sus fuentes son públicas y sin credenciales. El respaldo de
   divisas es `manual` (no inventa: usa lo que un admin cargó) y el de canales es
   `simulado` (ése sí no habla con nadie).
-  **El noveno es `WhatsAppProvider`** (`lib/whatsapp/`) y también rompe el patrón:
+  **El noveno es `WhatsAppProvider`** (`src/lib/whatsapp/`) y también rompe el patrón:
   si `WHATSAPP_PROVIDER` está vacía **el canal no se ofrece** y todo sale por
   correo, en vez de fallar al arrancar. No hace falta el fallo ruidoso del ADR
   0018 porque no hay nada que se pueda dar por enviado sin salir: la bandeja
   elige el canal **antes** de encolar (`canalDelAviso`).
-  **El octavo es `ExtractoProvider`** (`lib/conciliacion/`, ADR 0030) y rompe el
+  **El octavo es `ExtractoProvider`** (`src/lib/conciliacion/`, ADR 0030) y rompe el
   patrón a propósito: **no tiene variable de entorno**. No se elige una fuente —el
   hotel usa el banco y MercadoPago a la vez, como `PAGO_PROVIDER`— y su respaldo
   (`archivo`) no es un simulador sino la implementación real y única para un banco
@@ -272,7 +278,7 @@ Tarifario 2025/2026 (Anexo A).
      ya no desborda desde que la Fase 25 lo rehizo en tarjetas. Mismo
      resultado en el informe por categorías. Queda disponible para la
      próxima tabla que sí corte columnas.
-  3. ✅ **Hecho (2026-09-09):** `app/panel/reservas/nueva` guarda un borrador
+  3. ✅ **Hecho (2026-09-09):** `src/app/(front-gestion)/panel/reservas/nueva` guarda un borrador
      en `sessionStorage` (no `localStorage`: en una recepción con la
      computadora compartida, el nombre de un huésped a medio cargar no
      debería sobrevivir a que alguien cierre la pestaña), scoped por
@@ -299,7 +305,7 @@ Tarifario 2025/2026 (Anexo A).
      reservas 199 ms, los tres sin ningún error de consola — más el tamaño
      del bundle (~1.6 MB) y los planes de consulta con `EXPLAIN ANALYZE`.
      Son números de referencia en desarrollo, no un build de producción.
-- **Hay 39 ADRs, numerados hasta el 0040** (el 0034 quedó retirado: era la
+- **Hay 40 ADRs, numerados hasta el 0041.** El último es el **0041** (el asistente de IA **propone** acciones —aviso, orden de mantenimiento, objeto perdido, consumo— y una persona las **confirma**; al confirmar se llama a la MISMA Server Action del módulo, sin lógica de escritura propia. Las herramientas del asistente **no leen datos personales de huéspedes**: salen a Google, lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`). (El 0034 quedó retirado: era la
   WhatsApp por Cloud API de Meta, descartada antes de escribirse como
   archivo — ver más abajo, "la pieza de WhatsApp... NO entró con esta
   pasada"). El último es el **0040** (inventario físico real de
@@ -350,14 +356,14 @@ Tarifario 2025/2026 (Anexo A).
   el lado saliente del canal: el ARI **se calcula aunque no salga**, y el cron
   responde 200 cuando el proveedor no puede publicar.
 - **Nada del servidor se loguea con `console`** (P1-6). Va por `registrarError` /
-  `registrarAviso` de `lib/registro.ts`, que además de stdout escribe en `errores`
-  y se ve en `/panel/errores` (ADR 0029). `tests/observabilidad-del-dinero.test.ts`
-  recorre `app/` y `lib/` enteras y falla si aparece uno nuevo.
+  `registrarAviso` de `src/lib/registro.ts`, que además de stdout escribe en `errores`
+  y se ve en `/panel/errores` (ADR 0029). `tests/contratos/observabilidad-del-dinero.test.ts`
+  recorre `src/app/` y `lib/` enteras y falla si aparece uno nuevo.
   ⚠️ Hay **8 excepciones legítimas** declaradas en ese test **con su motivo**, y el
   test exige que el motivo esté escrito: `/api/salud` (el sink escribe en la misma
   base que sondea), los 3 *error boundaries* y `pwa.tsx` (son cliente y `registro`
   es `server-only`), el `EmailProvider` de consola (esa ES su salida) y
-  `lib/divisas` (502 transitorios; persistirlos ahogaría las señales reales).
+  `src/lib/divisas` (502 transitorios; persistirlos ahogaría las señales reales).
 - ⚠️ **El precio de la estadía y el total de la reserva se escriben JUNTOS**, con
   `aplicar_precio_reserva` (0085). Reprogramar y recotizar por mudanza lo hacían
   con dos `update` sueltos, y si el segundo fallaba el total contradecía a la
@@ -366,6 +372,11 @@ Tarifario 2025/2026 (Anexo A).
   flujos. ⚠️ La función es `security invoker` y comprueba `FOUND` después de CADA
   `update`: sin eso, un RLS que bloquee la escritura afecta cero filas, **no
   lanza**, y la función devolvería «listo» sin haber hecho nada.
+  ⚠️ **Desde la 0114 también escribe el desglose** (`p_subtotal`, `p_total_neto`,
+  `p_iva`, opcionales): pasarlo SIEMPRE al recotizar, o `total_neto + iva` deja
+  de ser el total. Y recotizar va con las condiciones de la reserva
+  (`lib/reservas/condiciones-de-precio.ts`: promoción y descuento adicional);
+  sin eso se perdían en silencio. Con factura emitida no se recotiza.
 - ⚠️ **`crear_reserva` recibe `p_agencia_id` desde la 0084.** El vínculo con la
   agencia va DENTRO de la función atómica: antes se guardaba con un `update`
   aparte y un fallo ahí dejaba una reserva de agencia sin agencia —sin saber a
@@ -374,7 +385,7 @@ Tarifario 2025/2026 (Anexo A).
   argumentos crea una sobrecarga y PostgREST puede resolver a la vieja), y
   **rehacer el `revoke execute ... from public`**, porque una función nace abierta.
 - **Fiscal — la parte sin certificado (Bloque D, 2026-09-07).**
-  `lib/domain/wsfev1.ts` traduce el comprobante al formato de ARCA, y la migración
+  `src/lib/domain/wsfev1.ts` traduce el comprobante al formato de ARCA, y la migración
   **0082** guarda los datos del **emisor**. ⚠️ Cuatro cosas antes de tocarlo:
   1. **El CUIT del hotel no estaba en ninguna tabla** hasta la 0082, y bloqueaba
      tanto la solicitud de CAE como el aviso de «esta factura no es para el hotel»
@@ -388,8 +399,8 @@ Tarifario 2025/2026 (Anexo A).
      `PES`/`DOL`, no ISO 4217 — con `MonId != PES`, `MonCotiz` no puede ser 1.
   ⚠️ **`facturas` YA tenía columna `moneda`** desde la 0010 (la auditoría decía que
   no). Lo que falta es la conversión a pesos para ARCA, que es del contador.
-- **Publicación al canal (Bloque E, 2026-09-07).** `lib/domain/ari.ts` +
-  `lib/canales/ari.ts` + migración **0081** (`canal_tipos`) + `/api/cron/ari`.
+- **Publicación al canal (Bloque E, 2026-09-07).** `src/lib/domain/ari.ts` +
+  `src/lib/canales/ari.ts` + migración **0081** (`canal_tipos`) + `/api/cron/ari`.
   ⚠️ Cuatro cosas antes de tocarlo:
   1. **Esto NO evita el overbooking hoy**, y la pantalla lo dice ARRIBA de la
      tabla. Con el proveedor real (iCal) el envío responde `noSoportado`. **No
@@ -433,7 +444,7 @@ Tarifario 2025/2026 (Anexo A).
      navegador y al servidor llega sólo el texto. Guardar fotos de facturas es el
      ADR 0013 (Storage, retención, permisos) y no está hecho.
   3. **`moneda` del QR NO es ISO 4217**: `PES` y `DOL` son códigos de ARCA. Se
-     traducen en `lib/domain/comprobante-qr.ts`, en un solo lugar.
+     traducen en `src/lib/domain/comprobante-qr.ts`, en un solo lugar.
   4. **Una nota de crédito se imputa como PAGO, no como cargo** (códigos 3, 8, 13,
      53). Devuelve plata; cargarla como un gasto más infla lo que el hotel debe.
 - **Avisos y notificaciones (objetivos 6 y 7, 2026-09-08).** El catálogo pasa de
@@ -447,7 +458,7 @@ Tarifario 2025/2026 (Anexo A).
      `leida` es la más imprecisa de las cinco: su **ausencia no prueba nada**
      (un cliente que bloquea imágenes nunca la reporta), su presencia sí.
   2. **Los eventos del webhook de entrega llegan DESORDENADOS.** El de apertura
-     puede entrar antes que el de entrega. `esAvance` (`lib/domain/entregas.ts`)
+     puede entrar antes que el de entrega. `esAvance` (`src/lib/domain/entregas.ts`)
      impide retroceder de `leida` a `entregada` —el sistema olvidaría que el
      huésped abrió el correo— pero deja que un **rebote pise una entrega**.
   3. **`canalDelAviso` devuelve UN canal, y se decide AL ENCOLAR.** La clave de
@@ -458,7 +469,7 @@ Tarifario 2025/2026 (Anexo A).
      de 24 horas: los cuerpos del catálogo **no se pueden mandar tal cual**. Y el
      **orden de los parámetros es el contrato** —Meta numera los huecos y valida
      la cantidad, no el significado—: cruzarlos manda el código de reserva donde
-     va la fecha y el mensaje sale igual. Ver `lib/domain/whatsapp.ts`.
+     va la fecha y el mensaje sale igual. Ver `src/lib/domain/whatsapp.ts`.
   5. **`avisos.rol` es RUTEO, no un secreto.** Admin y gerencia ven todo, y los
      avisos escritos por una persona (`rol is null`) los sigue viendo todo el
      staff. Existe porque un «pago acreditado: USD 120» no le sirve a quien está
@@ -466,15 +477,15 @@ Tarifario 2025/2026 (Anexo A).
   6. **El alta del mostrador NO avisa a la cartelera**, a propósito: la persona
      que la cargó está mirando la pantalla. El aviso sale del portal público y
      del cron de canales, que son los caminos sin nadie del otro lado.
-  7. **`DIAS_EXPIRACION` vive UNA sola vez**, en `lib/domain/recordatorios.ts`.
+  7. **`DIAS_EXPIRACION` vive UNA sola vez**, en `src/lib/domain/recordatorios.ts`.
      Con dos constantes, subir una sin la otra hace que el aviso de «se libera
      mañana» salga **después** de que el sistema ya soltó la unidad.
   8. **La reseña se pide sólo con puntaje ≥ 8 y `acepta_promociones`.** Pedírsela
      a quien puntuó bajo es pedirle que publique su queja; a quien no respondió,
      es apostar a ciegas con un costo público y permanente.
   ⚠️ Los dos módulos que existen **sólo para no duplicar una regla de plata**:
-  `lib/notificaciones/cobros.ts` (los avisos de un cobro, desde el webhook y
-  desde el mostrador) y `lib/reservas/cancelacion.ts` (el cargo por cancelar,
+  `src/lib/notificaciones/cobros.ts` (los avisos de un cobro, desde el webhook y
+  desde el mostrador) y `src/lib/reservas/cancelacion.ts` (el cargo por cancelar,
   desde la ficha y desde el correo). Es la misma situación de `saldarSiCorresponde`,
   que estuvo duplicada, divergió, y se notó en la plata.
 - **Conciliación y gastos (Bloque C, 2026-09-07).** Área nueva `/panel/conciliacion`
@@ -505,7 +516,7 @@ Tarifario 2025/2026 (Anexo A).
   `siguiente_numero_comprobante` eran ejecutables por cualquiera (migración 0070,
   con test de contrato `funciones-sin-public`), y `anon` conservaba SELECT de tabla
   sobre todo lo no-catálogo (migración 0072). **F5** los 28 índices de FK que
-  faltaban (migración 0071), caché del catálogo público (`lib/catalogo/publico.ts`,
+  faltaban (migración 0071), caché del catálogo público (`src/lib/catalogo/publico.ts`,
   la disponibilidad **no** se cachea) y `verificarCredencialesDePasarela` al
   arrancar. **Lo que NO se cierra desde código:** «el sistema nunca corrió en
   producción» — latencia real, límites de conexión, un pago por una pasarela viva,
@@ -524,14 +535,14 @@ Tarifario 2025/2026 (Anexo A).
   1. **Arrastrar una reserva en la grilla para cambiarla de habitación**
      (**ADR 0033**). El servidor ya estaba entero: llama a la misma
      `cambiar_unidad_reserva` de la 0028. Lo nuevo es
-     `lib/domain/arrastre-grilla.ts` (regla pura, que **llama** a
+     `src/lib/domain/arrastre-grilla.ts` (regla pura, que **llama** a
      `mudanzas.ts` en vez de reimplementarla) y
-     `app/panel/ocupacion/arrastre.tsx`.
+     `src/app/(front-gestion)/panel/ocupacion/arrastre.tsx`.
   2. **Informe de venta por categoría**: `/panel/reportes/categorias` +
-     `lib/domain/metricas-categoria.ts`.
+     `src/lib/domain/metricas-categoria.ts`.
   3. **Los informes en pantallas propias**: índice + `ocupacion`,
      `categorias`, `canales`, `satisfaccion` y `estados`, cada uno con su
-     URL, su mes y un botón «Abrir aparte». Catálogo en `lib/domain/informes.ts`.
+     URL, su mes y un botón «Abrir aparte». Catálogo en `src/lib/domain/informes.ts`.
   ⚠️ **Seis cosas que hay que saber antes de tocar esto:**
   1. **El arrastre mueve de HABITACIÓN, nunca de fechas** (ADR 0033). Correr
      fechas recotiza —cambia lo que el huésped paga— y eso no puede salir de un
@@ -584,9 +595,9 @@ Tarifario 2025/2026 (Anexo A).
   iconos generados con `ImageResponse` **sin dependencias nuevas**, service worker
   propio y pantalla de «sin conexión». ⚠️ Cuatro cosas antes de tocarlo:
   1. **El service worker NO cachea datos.** Es **lista blanca** en
-     `lib/domain/pwa.ts`: solo assets con hash, iconos y la pantalla de sin conexión.
+     `src/lib/domain/pwa.ts`: solo assets con hash, iconos y la pantalla de sin conexión.
      Cachear `/panel` deja datos de huéspedes en una tablet compartida y publica una
-     ocupación vencida. `public/sw.js` repite la lista y `tests/pwa.test.ts` **lee el
+     ocupación vencida. `public/sw.js` repite la lista y `tests/contratos/pwa.test.ts` **lee el
      archivo** y falla si se separan.
   2. **Un service worker roto no se arregla con un deploy**: queda instalado en el
      dispositivo. Por eso `Cache-Control: no-store` en `next.config.ts` y el
@@ -596,11 +607,11 @@ Tarifario 2025/2026 (Anexo A).
   4. **Cero escrituras diferidas.** Sin background sync: una escritura reproducida
      más tarde se aplicaría sobre una realidad distinta de la que la originó.
 - **Fase 25 (2026-09-09) — patrones de sistemas de referencia** (QloApps, Hotel
-  PMS, Evolution API, Invoice Ninja; ver `docs/analisis-pendientes-2026-09-09.md`
+  PMS, Evolution API, Invoice Ninja; ver `docs/5-pendientes/analisis-pendientes-2026-09-09.md`
   para el inventario completo de qué ya existía). Piezas nuevas:
   reservas nuevas/canceladas en el tablero (con `reservas.cancelada_en`);
   auditoría de LECTURA de fichas de huésped, no solo de escritura
-  (`lib/auditoria/accesos.ts`); gastos operativos sin factura de proveedor,
+  (`src/lib/auditoria/accesos.ts`); gastos operativos sin factura de proveedor,
   bajo el área `conciliacion` que ya existía; recordatorio automático de seña
   pendiente antes de que `expirar_reservas_pendientes` libere la unidad;
   cierre del día (night audit) de solo lectura en `/panel/cierre-diario`; el
@@ -611,7 +622,7 @@ Tarifario 2025/2026 (Anexo A).
   ⚠️ **La pieza de WhatsApp por Cloud API (ADR 0034) NO entró con esta pasada:**
   se superpuso con el canal WhatsApp de la Fase de avisos (que sí está en
   `main`, integrado al catálogo de 21 eventos) y quedó descartada; el
-  `WhatsAppProvider` vigente es el de `lib/whatsapp/` que elige la bandeja.
+  `WhatsAppProvider` vigente es el de `src/lib/whatsapp/` que elige la bandeja.
   Y a propósito **no** se tocaron: permisos por acción (hoy es rol→área
   completa, cambiarlo toca las 51 Server Actions), CSRF propio (Next ya
   protege el origen nativamente en Server Actions), facturación recurrente
@@ -639,7 +650,7 @@ Tarifario 2025/2026 (Anexo A).
   si su propia lectura fallaba. Dos bugs de UI reales encontrados y
   corregidos con test de regresión: fechas invertidas en el alta de
   mostrador que dejaban la pantalla en blanco (`parsearBusquedaFechas()` en
-  `lib/domain/reservas.ts`), y un `<select>` con `w-full` más una etiqueta
+  `src/lib/domain/reservas.ts`), y un `<select>` con `w-full` más una etiqueta
   `sr-only` que hacía arrastrar la página entera de costado en el teléfono.
   De paso, corriendo la suite contra la base local, apareció un bug de
   segundo orden en el propio test de auditoría de RLS: su seed de
@@ -648,7 +659,7 @@ Tarifario 2025/2026 (Anexo A).
   tests verdes** (137 archivos), 0 salteados. **Regla nueva a partir de
   acá:** toda página nueva del panel que lea de Supabase revisa `{ error }`
   con `registrarFalla`, igual que ya es obligatorio para las escrituras.
-- **Diseño del panel:** usar SIEMPRE los componentes de `app/panel/_components/ui.tsx`
+- **Diseño del panel:** usar SIEMPRE los componentes de `src/app/(front-gestion)/panel/_components/ui.tsx`
   (`Encabezado`, `Tarjeta`, `Kpi`, `Tabla`, `Buscador`, `Paginacion`, `Chip`…) y los
   iconos de `iconos.tsx`.
 - **Interfaz (Fase 15) — principio fijado por el usuario:** *nada oculto, nada
@@ -667,7 +678,7 @@ Tarifario 2025/2026 (Anexo A).
   siga en cero.
   - Acción que **devuelve estado**: `return { error: 'mensaje en español' }`.
   - Acción que **redirige**: `cortarSiFalla(error, destino, 'motivo')` de
-    `lib/acciones.ts`, y sumar el motivo al `MENSAJES_ERROR` de la pantalla destino
+    `src/lib/acciones.ts`, y sumar el motivo al `MENSAJES_ERROR` de la pantalla destino
     (que además tiene fallback, así que un motivo sin mapear igual muestra algo).
     Verificar que esa pantalla **renderice** `?error=`: varias no lo hacían y el
     mensaje se perdía.
@@ -693,32 +704,62 @@ Tarifario 2025/2026 (Anexo A).
 - **Precios al público — OBLIGATORIO:** `tarifas.precio_rack` se guarda **sin
   IVA** (ADR 0004) y el checkout lo suma en `calcularEstadia`. Toda pantalla que
   le muestre un precio a un huésped tiene que pasarlo por `conIva()` de
-  `lib/domain/catalogo.ts`, o publica un número más bajo del que después cobra.
+  `src/lib/domain/catalogo.ts`, o publica un número más bajo del que después cobra.
   Y los rangos de temporada son `[desde, hasta)` con el **fin excluido**: para
   mostrarlos va `textoRango()`, que resta el día.
+- **Días del hotel en consultas e informes — OBLIGATORIO (2026-10-19):** un
+  `timestamptz` se corta con `fechaDelHotel()` y no con `.slice(0, 10)` (eso es
+  el día UTC: entre las 21 y las 24 de El Calafate da el día siguiente), y para
+  filtrar «el día D» va `>= inicioDelDiaHotel(D)` y `< inicioDelDiaHotel(D+1)`,
+  no `'AAAA-MM-DD'` pelado. El cierre del día y «nuevas/canceladas hoy» del
+  tablero tenían este bug: lo cobrado a la noche caía en el día siguiente.
+- **La cuenta se cierra con la factura en TODOS los caminos:** cargar, mover de
+  folio, quitar consumos y cerrar o anular comandas pasan por
+  `motivoCuentaCerrada()` (`lib/reservas/cuenta-cerrada.ts`). Y la factura
+  impresa muestra el total del COMPROBANTE, no el recalculado.
+- **Tareas programadas (0117):** cada cron anota su resultado con
+  `anotarCorrida()` (`lib/crons.ts`) y el tablero avisa a la dirección, en
+  producción, cuando una lleva más de su tolerancia sin correr
+  (`lib/domain/crons.ts`). Un cron nuevo se suma a `CRONS` y a `vercel.json`
+  (el contrato `tests/contratos/cron-get.test.ts` exige que responda a GET).
+- **Listas blancas:** `deLista(LISTA, valor)` de `lib/domain/listas.ts` y no
+  `(LISTA as readonly string[]).includes(x) ? (x as T) : …`.
+- **Mensajes de error al usuario, en español:** nunca `${error.message}` en lo
+  que ve el usuario (llegaba Postgres en inglés). Va `mensajeDeFalla()` de
+  `lib/acciones.ts`, que registra el detalle y traduce duplicado/en uso/formato.
+  Y los `?error=` se leen con `mensajeDe()` de `lib/listados.ts` (seguro ante
+  claves heredadas como `constructor`).
 - **Fechas y horas en pantalla — OBLIGATORIO:** un `timestamptz` **nunca** se
   formatea con `new Date(iso).toLocaleDateString('es-AR')` pelado. Sin `timeZone`
   toma la del proceso, que en Vercel es UTC: entre las 21:00 y la medianoche de
   El Calafate la fecha se corre un día y toda hora sale tres horas adelantada.
-  Van `fechaHotel()`, `fechaHoraHotel()` y `horaHotel()` de `lib/fechas.ts`, que
+  Van `fechaHotel()`, `fechaHoraHotel()` y `horaHotel()` de `src/lib/fechas.ts`, que
   fijan `ZONA_HOTEL`. Es el mismo error que `hoyISO()` arregló del lado de lo que
   el sistema **opera**, y estaba en 14 pantallas del lado de lo que **muestra**
   (entre ellas la fecha de firma de un contrato, la emisión de una nota de
   crédito y la auditoría). Esos helpers además fijan **reloj de 24 horas**: el
   ICU de Node formatea `es-AR` en 12 y `toLocaleString` no le pone el a. m./p. m.,
   así que las 21:30 salían «09:30:00», iguales a las de la mañana.
-- **Exportaciones CSV:** `escaparCampo()` de `lib/csv.ts` antepone un apóstrofo a
+- **Exportaciones CSV:** `escaparCampo()` de `src/lib/csv.ts` antepone un apóstrofo a
   lo que empiece con `= + - @` (inyección de fórmulas), **salvo** un decimal
   escrito entero (`-50.00`). Sin esa excepción todo importe negativo —saldo a
   favor, nota de crédito, diferencia contra un canal— llegaba a Excel como texto
   y la columna sumaba mal sin que nada lo delatara.
+  ⚠️ **Los importes van con COMA decimal** (`decimal()` de `src/lib/csv.ts`):
+  Excel en es-AR —el mismo que separa columnas por `;`— no reconoce `145.20`
+  como número. **Los filtros de la pantalla tienen que llegar al archivo**: la
+  condición vive en `panel/exportar/busquedas.ts` y la usan la pantalla y el
+  exportador. **Un fallo de lectura responde 500**, nunca un CSV vacío (se ve
+  igual que «no hay datos»). El libro de ventas (facturas + notas de crédito en
+  negativo) sale de `lib/domain/libro-ventas.ts`, y los informes de facturación
+  también restan las notas de crédito.
 - **Filtros `or` de PostgREST:** el término del usuario **nunca** se interpola
   pelado (la coma separa condiciones y los paréntesis agrupan: `x,id.gt.0` cambia
-  el filtro). Va `patronOr()` de `lib/listados.ts`, que lo encierra entre comillas
+  el filtro). Va `patronOr()` de `src/lib/listados.ts`, que lo encierra entre comillas
   dobles. Escapar `%` y `_` **no alcanza**: esos son los comodines de LIKE, otra
   capa distinta. Las llamadas `.ilike('col', valor)` son seguras: ahí el valor
   viaja como parámetro y no como sintaxis.
-- **Ayuda:** el contenido vive en `lib/domain/ayuda.ts` y se filtra por rol con
+- **Ayuda:** el contenido vive en `src/lib/domain/ayuda.ts` y se filtra por rol con
   `puedeAcceder`. Al agregar un módulo, sumarle su capítulo ahí.
 - **Móvil (Fase 14):** columnas de tabla no esenciales con `COL_SECUNDARIA`
   (`hidden sm:table-cell`), aplicado al `<th>` **y** al `<td>`; si el dato importa,
@@ -732,14 +773,14 @@ Tarifario 2025/2026 (Anexo A).
   se arregla reiniciando el dev server.
 - ⚠️ El builder de PostgREST es **thenable**: una función `async` no debe devolverlo
   pelado o el `await` del llamador ejecuta la consulta (ver `reservas/consulta.ts`).
-- **Cara al cliente (diferido a la vista pública `app/reservar`):** web check-in y
+- **Cara al cliente (diferido a la vista pública `src/app/(front-publico)/reservar`):** web check-in y
   encuestas de satisfacción NO van en la gestión.
 - **Deploy** (Vercel + Supabase cloud) pendiente — requiere cuentas del usuario.
 - **Pagos: los adaptadores reales están escritos** (MercadoPago Checkout Pro y
   Stripe Checkout Sessions, por HTTP y sin SDK). Lo que falta es **contratar** las
   pasarelas: enchufarlas es cargar `PAGO_PROVIDER` y las credenciales, no tocar
   código (ADR 0027). **El envío de email real también está integrado** (Resend,
-  `lib/email/resend.ts`, por HTTP y sin SDK): enchufarlo es cargar
+  `src/lib/email/resend.ts`, por HTTP y sin SDK): enchufarlo es cargar
   `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` + `EMAIL_FROM` con un dominio
   verificado en Resend (ver `COMO-LEVANTARLO.md`).
 - ⚠️ **Variables obligatorias en producción** (ADR 0018: si faltan, el sistema falla
@@ -755,7 +796,7 @@ Tarifario 2025/2026 (Anexo A).
   rebotes**) y las cuatro de WhatsApp (`WHATSAPP_PROVIDER`, `WHATSAPP_TOKEN`,
   `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_IDIOMA`).
   **La tabla completa, con qué pasa si falta cada una, está en
-  `docs/despliegue.md` §1** — junto con las instrucciones de despliegue y de
+  `docs/3-manuales/despliegue.md` §1** — junto con las instrucciones de despliegue y de
   vuelta atrás (entregables 8, 15 y 16). Revisarlas **antes** del deploy.
 - Admin de la **base local de tests**: `admin@blancapatagonia.local` / `blancadev1234`
   (`npm run seed:usuarios`, que hay que repetir después de cada `db reset`). En el

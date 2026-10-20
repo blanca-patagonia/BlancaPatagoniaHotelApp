@@ -4,7 +4,7 @@
 - **Fecha:** 2026-09-07
 - **Complementa:** [ADR 0021](0021-canales-de-venta-solo-lectura.md) (la
   limitación) y [ADR 0022](0022-feed-ical-saliente.md) (el paliativo parcial)
-- **Origen:** Bloque E de `docs/auditoria-pms-2026-09.md`, hallazgo **P1-1**.
+- **Origen:** Bloque E de `docs/4-seguridad-y-auditorias/auditoria-pms-2026-09.md`, hallazgo **P1-1**.
   Objetivos 1, 2 y 3 del pedido.
 
 ## Contexto

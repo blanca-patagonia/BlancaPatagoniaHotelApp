@@ -1,19 +1,19 @@
 # Pendientes — HISTÓRICO (congelado 2026-08-24)
 
 > ⚠️ **Este documento quedó congelado y NO es la fuente vigente de pendientes.**
-> El vigente es [`docs/analisis-pendientes-2026-09-09.md`](analisis-pendientes-2026-09-09.md)
+> El vigente es [`docs/5-pendientes/analisis-pendientes-2026-09-09.md`](analisis-pendientes-2026-09-09.md)
 > (y, desde el 2026-10-01, los **issues de GitHub** — ver ahí mismo). Se
 > conserva acá por su detalle del bloque Booking y de la auditoría de RLS en
 > el momento en que se escribió; úsalo como contexto histórico, no como lista
 > de qué falta hoy. Decisión tomada en la Fase 7 del pulido integral 2026-10
-> (`docs/pulido-integral-2026-10/`), siguiendo la instrucción de dejar UN
+> (`docs/4-seguridad-y-auditorias/pulido-integral-2026-10/`), siguiendo la instrucción de dejar UN
 > documento vigente y marcar el otro como histórico.
 
 > Estado al cerrar la rama `feat/relevamiento-cliente-agosto`.
 > **Tests verdes, cero salteados.** Lint, typecheck y build en verde.
 > Migraciones hasta la **0064** (hoy, 108).
 
-Este archivo reemplazaba a `docs/audit/00-pendientes.md` y `docs/audit/HANDOFF.md`, que
+Este archivo reemplazaba a `docs/4-seguridad-y-auditorias/audit/00-pendientes.md` y `docs/4-seguridad-y-auditorias/audit/HANDOFF.md`, que
 quedaron congelados el 2026-08-14 y no incorporan nada del trabajo posterior. Esos dos
 siguen frescos como referencia histórica más vieja todavía.
 
@@ -69,7 +69,7 @@ de `guardarEntrantes`, y el contrato `LectorInforme`.
 > tocar un test, el refactor cambió comportamiento y se revisa el código, no el test.
 
 ### ~~B10 · Documentación~~ ✅ HECHO
-`README`, `docs/roadmap.md`, `docs/modelo-datos.md` y `docs/manual-usuario.md`
+`README`, `docs/roadmap.md`, `docs/2-arquitectura/modelo-datos.md` y `docs/3-manuales/manual-usuario.md`
 actualizados contra el estado real del repo (números verificados ejecutando, no
 copiados). El manual cubre el flujo de canales: bajar el informe, mapear
 columnas, conciliar la factura e importar reseñas.

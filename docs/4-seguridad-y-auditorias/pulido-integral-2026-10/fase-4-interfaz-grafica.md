@@ -75,7 +75,7 @@ Ninguna pantalla queda en blanco durante la navegación. Corregido en
 `ocupacion/page.tsx` (1004). El propio brief pone el criterio de
 terminado: **"se parten SOLO si el corte no cambia comportamiento y los
 tests existentes pasan sin editar una línea"**. Sin un solo test de
-componente en todo el repo (`docs/analisis-pendientes-2026-09-09.md` §1,
+componente en todo el repo (`docs/5-pendientes/analisis-pendientes-2026-09-09.md` §1,
 sigue siendo cierto), partir cualquiera de estas pantallas no tiene con
 qué verificarse sin editar código de producción a ciegas — exactamente lo
 que el criterio quiere evitar. Se deja sin tocar, documentado, no

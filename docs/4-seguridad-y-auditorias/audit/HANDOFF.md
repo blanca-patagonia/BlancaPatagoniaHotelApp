@@ -21,7 +21,7 @@ Documentación y comentarios **en español**. Usá `rg`, `fd`, `bat`; no uses `g
 
 ## ARRANQUE OBLIGATORIO — antes de escribir una línea
 
-1. Leé `docs/audit/00-pendientes.md` (estado completo) y `AGENTS.md` (convenciones y trampas).
+1. Leé `docs/4-seguridad-y-auditorias/audit/00-pendientes.md` (estado completo) y `AGENTS.md` (convenciones y trampas).
 2. Leé `CLAUDE.md` — es el documento de proceso del proyecto y tiene reglas que no se negocian.
 3. Estado de git: rama, diff sin commitear, migraciones sin aplicar.
 4. Corré y pegá la salida cruda de:
@@ -207,7 +207,7 @@ confirmados** tras verificación adversarial.
 - **Nada se marca resuelto sin evidencia ejecutada.** "Debería andar" no cuenta.
 - Por cada arreglo de seguridad, **un test que reproduzca el ataque** y demuestre que ahora se
   rechaza. El test es la prueba; el arreglo, solo la intención.
-- Actualizá `docs/audit/00-pendientes.md` después de cada lote: qué se cerró, con qué commit, con
+- Actualizá `docs/4-seguridad-y-auditorias/audit/00-pendientes.md` después de cada lote: qué se cerró, con qué commit, con
   qué test se demuestra.
 - Si un arreglo destapa un hallazgo nuevo, **agregalo a la lista con su severidad** en vez de
   arreglarlo de paso.

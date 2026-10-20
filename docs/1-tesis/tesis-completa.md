@@ -449,7 +449,7 @@ tarjeta, su vencimiento, el código de autorización y el PIN**.
 | Vercel | Alojamiento y despliegue | Publicar la aplicación con acceso desde cualquier lugar |
 
 **Fuente:** documento PP2 — secciones 2.1 a 2.4 y Anexos A, B y D;
-`docs/modernizacion-winpax.md` para el detalle de Winpax.
+`docs/2-arquitectura/modernizacion-winpax.md` para el detalle de Winpax.
 
 ---
 
@@ -547,7 +547,7 @@ de este tamaño es código repetitivo y superficie de error.
 | Facturación electrónica | A definir | Requiere certificado digital sobre el CUIT del hotel |
 
 **Fuente:** documento PP2 — sección 3; `docs/decisiones/0001`, `0002`, `0004`,
-`0012`, `0019`, `0021`; `docs/modernizacion-winpax.md`.
+`0012`, `0019`, `0021`; `docs/2-arquitectura/modernizacion-winpax.md`.
 
 ---
 
@@ -689,7 +689,7 @@ la contabilidad general.
   la definición el sistema **no arranca**, a propósito.
 
 **Fuente:** `CLAUDE.md`, `AGENTS.md`, `docs/roadmap.md`, `lib/domain/permisos.ts`,
-`docs/decisiones/0003`, `0004`, `0013`, `0018`, `0019`, `0021`, `docs/PENDIENTES.md`.
+`docs/decisiones/0003`, `0004`, `0013`, `0018`, `0019`, `0021`, `docs/5-pendientes/PENDIENTES.md`.
 
 ---
 
@@ -1266,7 +1266,7 @@ Tres decisiones sobre las pruebas:
   plausibles y equivocados, del tipo que una prueba detecta y una revisión visual
   no.
 
-**Fuente:** `docs/arquitectura.md`, `docs/modelo-datos.md`,
+**Fuente:** `docs/2-arquitectura/arquitectura.md`, `docs/2-arquitectura/modelo-datos.md`,
 `docs/decisiones/0001`–`0023`, `supabase/migrations/0005`, `0037`, `0039`,
 `0041`, `0045`, `lib/domain/`, `tests/db.ts`, `.github/workflows/ci.yml`.
 
@@ -1377,7 +1377,7 @@ Dos flujos merecen aclaración, porque el diagrama sería engañoso sin ella:
 
 **Fuente:** `app/reservar/actions.ts`, `app/panel/*/actions.ts`,
 `app/api/webhooks/pagos/`, `app/api/cron/canales`,
-`supabase/migrations/0011`, `0027`, `0052`, `docs/sincronizacion-automatica.md`.
+`supabase/migrations/0011`, `0027`, `0052`, `docs/2-arquitectura/sincronizacion-automatica.md`.
 
 ---
 
@@ -1592,14 +1592,14 @@ La pantalla de búsqueda es la entrada del portal. El buscador está siempre
 visible arriba y el asistente de consultas queda abajo, para que la acción
 principal no compita con nada.
 
-![Buscador del portal público](img/portal-buscador.png)
+![Buscador del portal público](../img/portal-buscador.png)
 
 Con fechas cargadas, el sistema devuelve una opción por tipo de alojamiento, con
 el precio por noche, el total de la estadía y la aclaración de que el IVA está
 incluido. La etiqueta «Última libre en estas fechas» aparece solo cuando queda
 una sola unidad de ese tipo.
 
-![Resultados de la búsqueda con precio final](img/portal-resultados.png)
+![Resultados de la búsqueda con precio final](../img/portal-resultados.png)
 
 | Elemento | Tipo | Comportamiento |
 |---|---|---|
@@ -3193,8 +3193,8 @@ que un término crudo puede cambiar el filtro entero.
 
 **Fuente:** los archivos citados en cada tabla; `lib/acciones.ts`,
 `lib/auth/session.ts`, `lib/paginado.ts`, `lib/listados.ts`;
-`docs/modernizacion-winpax.md`; `docs/sincronizacion-automatica.md`;
-`docs/SEGURIDAD.md`.
+`docs/2-arquitectura/modernizacion-winpax.md`; `docs/2-arquitectura/sincronizacion-automatica.md`;
+`docs/4-seguridad-y-auditorias/SEGURIDAD.md`.
 
 ---
 
@@ -3281,7 +3281,7 @@ que muestran por qué esa regla no es una formalidad:
 | El filtro sobre tabla embebida no filtraba | Devolvía todas las reservas con el arreglo vacío: un filtro que no filtra y no falla | Embebido interno y una prueba que verifica que «llegadas de hoy» no trae a quien entró ayer |
 
 **Fuente:** `tests/`, `tests/db.ts`, `.github/workflows/ci.yml`, `package.json`,
-`docs/bitacora.md` (fases 18 y 22), `docs/modernizacion-winpax.md`.
+`docs/bitacora.md` (fases 18 y 22), `docs/2-arquitectura/modernizacion-winpax.md`.
 
 ---
 
@@ -3514,11 +3514,11 @@ La auditoría de seguridad se hizo en fases, con numeración propia.
   mostrador pero no el neto de agencia exigiría un rol de base de datos por cada
   rol de negocio, que es un rediseño del modelo de seguridad completo.
 
-**Fuente:** `docs/SEGURIDAD.md`, `docs/AUDITORIA_INICIAL.md`,
-`docs/audit/00-pendientes.md`, `docs/decisiones/0005`, `0016`, `0017`, `0018`,
+**Fuente:** `docs/4-seguridad-y-auditorias/SEGURIDAD.md`, `docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md`,
+`docs/4-seguridad-y-auditorias/audit/00-pendientes.md`, `docs/decisiones/0005`, `0016`, `0017`, `0018`,
 `supabase/migrations/0020`, `0029`–`0035`, `0048`, `next.config.ts`,
 `supabase/config.toml`, `package.json`, `vercel.json`,
-`docs/sincronizacion-automatica.md`.
+`docs/2-arquitectura/sincronizacion-automatica.md`.
 
 ---
 

@@ -53,13 +53,13 @@
   pantalla por pantalla que pide el brief originalmente, todavía no se
   hizo ese nivel de detalle.
 - **Corrección 2026-10-07: `emitirFactura` NO estaba pendiente — era una
-  nota de esta misma rama (y de `docs/analisis-pendientes-2026-09-09.md`)
+  nota de esta misma rama (y de `docs/5-pendientes/analisis-pendientes-2026-09-09.md`)
   que había quedado desactualizada sin verificar contra el código.** La
   migración 0069 (2026-09-01) ya hizo idempotente `reservar_numero_factura`
   y `emitirFactura` ya trata el choque de dos emisiones como una carrera
   resuelta. Corrido `tests/acciones/reservas.test.ts` el 2026-10-07: el
   contador avanza 1, no 2, con dos emisiones simultáneas. Se corrigió la
-  nota en `docs/analisis-pendientes-2026-09-09.md` §4. Lección: no repetir
+  nota en `docs/5-pendientes/analisis-pendientes-2026-09-09.md` §4. Lección: no repetir
   una afirmación de un documento sin confirmarla contra el código cuando
   hay forma barata de hacerlo (acá, correr un test que ya existía).
 - **Fase 2: lo que queda.** Hechos los puntos 1 (máquina de estados,
@@ -97,7 +97,7 @@
   "105 políticas sobre 52 tablas" contra las "más de 103 sobre 56" de
   `CLAUDE.md` — unificar los dos en un solo número, o en la misma frase
   que ya no promete un número exacto) y los manuales de usuario/técnico.
-- **`docs/PENDIENTES.md` y `docs/analisis-pendientes-2026-09-09.md` ya
+- **`docs/5-pendientes/PENDIENTES.md` y `docs/5-pendientes/analisis-pendientes-2026-09-09.md` ya
   tienen veredicto**: el primero es histórico, el segundo es el vigente —
   pero ambos quedan atrás de los issues de GitHub (#68-#89), que es donde
   hay que mirar primero para saber qué falta hoy.

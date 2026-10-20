@@ -212,9 +212,9 @@ Lo siguiente **no está implementado**, y en cada caso hay una razón registrada
   ese entorno, 337 de las 1292 pruebas quedan salteadas, entre ellas las del
   motor anti-sobreventa.
 
-**Fuente:** `CLAUDE.md`, `AGENTS.md`, `docs/roadmap.md`, `docs/arquitectura.md`,
+**Fuente:** `CLAUDE.md`, `AGENTS.md`, `docs/roadmap.md`, `docs/2-arquitectura/arquitectura.md`,
 `lib/domain/permisos.ts`, `docs/decisiones/0003`, `0004`, `0012`, `0013`, `0018`,
-`0019`, `0021`, `docs/modernizacion-winpax.md`, `docs/PENDIENTES.md`,
+`0019`, `0021`, `docs/2-arquitectura/modernizacion-winpax.md`, `docs/5-pendientes/PENDIENTES.md`,
 `next.config.ts`.
 
 ---
@@ -824,7 +824,7 @@ La verificación completa —revisión de estilo, comprobación de tipos, prueba
 compilación— corre en un solo comando, y el pipeline la ejecuta con la base de
 datos levantada en contenedores. Está verificado en verde.
 
-**Fuente:** `docs/arquitectura.md`, `docs/modelo-datos.md`,
+**Fuente:** `docs/2-arquitectura/arquitectura.md`, `docs/2-arquitectura/modelo-datos.md`,
 `docs/decisiones/0001`–`0023`, `supabase/migrations/0002`, `0005`, `0037`,
 `0039`, `0041`, `0045`, `lib/domain/reservas.ts`, `lib/domain/vistas-reservas.ts`,
 `app/panel/_components/ui.tsx`, `app/globals.css`, `tests/db.ts`,
@@ -953,7 +953,7 @@ Dos flujos merecen una aclaración, porque el diagrama sería engañoso sin ella
 `app/panel/canales/actions.ts`, `app/panel/punto-venta/actions.ts`,
 `app/panel/housekeeping/actions.ts`, `app/api/webhooks/pagos/[proveedor]`,
 `app/api/cron/canales`, `supabase/migrations/0011`, `0027`, `0052`,
-`docs/sincronizacion-automatica.md`, `docs/decisiones/0019`, `0021`.
+`docs/2-arquitectura/sincronizacion-automatica.md`, `docs/decisiones/0019`, `0021`.
 
 ---
 
@@ -1787,7 +1787,7 @@ RNF-10.
 `app/panel/housekeeping/`, `app/panel/reportes/`, `lib/domain/reservas.ts`,
 `lib/domain/cancelacion.ts`, `lib/domain/facturacion.ts`,
 `lib/domain/housekeeping.ts`, `lib/domain/metricas.ts`, `lib/domain/folios.ts`,
-`lib/canales/`, `docs/modernizacion-winpax.md`, `docs/decisiones/0019`, `0021`,
+`lib/canales/`, `docs/2-arquitectura/modernizacion-winpax.md`, `docs/decisiones/0019`, `0021`,
 `0023`.
 
 ---
@@ -1831,7 +1831,7 @@ quien la lea no dé por buenos números desactualizados:
   hotel.
 
 **Fuente:** PP2 (secciones 1.2, 2.4.2, 3.2), `docs/decisiones/`,
-`docs/arquitectura.md`, `docs/roadmap.md`, `package.json`, `lib/env.ts`,
+`docs/2-arquitectura/arquitectura.md`, `docs/roadmap.md`, `package.json`, `lib/env.ts`,
 `supabase/migrations/`, ejecución de la suite de pruebas.
 
 ---

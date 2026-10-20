@@ -113,7 +113,7 @@ Dos cosas del CI que hay que respetar si se lo toca:
 ## Estructura del repositorio
 
 ```
-app/            # Next.js App Router
+src/app/            # Next.js App Router
   panel/        #   gestión hotelera (staff, por rol) — 21 áreas
   alojamientos/ #   catálogo público con detalle por tipo
   reservar/     #   portal público de reservas

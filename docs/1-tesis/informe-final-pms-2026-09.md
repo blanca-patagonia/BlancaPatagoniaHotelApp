@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-09-07, con una **segunda pasada el 2026-09-08** (§9).
 - **Alcance:** los 11 objetivos del pedido, ejecutados sobre la auditoría de
-  `docs/auditoria-pms-2026-09.md`.
+  `docs/4-seguridad-y-auditorias/auditoria-pms-2026-09.md`.
 - **Verificación:** en CI (Docker + `EXIGIR_DB=1`), con las **88 migraciones**
   aplicadas en orden. Lint 0, typecheck 0, build 0.
 - **Mergeado en `main`:** PR #35 (los once objetivos), #37 y #38 (P1-7), #39 (P1-6).
@@ -291,7 +291,7 @@ Ninguna de las tres se veía desde afuera. Las tres se ven abriendo el código.
 | **Restricciones por fecha** para el canal | migración **0087** |
 | La reserva que **el canal modifica** después de importarla | migración **0088** |
 | El **borde público en escritura**, tabla por tabla | `tests/anon-no-escribe.test.ts` |
-| **Despliegue, vuelta atrás y variables** (entregables 8, 15 y 16) | `docs/despliegue.md` |
+| **Despliegue, vuelta atrás y variables** (entregables 8, 15 y 16) | `docs/3-manuales/despliegue.md` |
 
 ### 9.3 Las decisiones que conviene discutir
 

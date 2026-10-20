@@ -19,8 +19,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Qué es este proyecto
 
 PMS (sistema de gestión hotelera) del Hotel Blanca Patagonia, El Calafate. Proyecto de tesis.
-Dos vistas separadas: **panel interno** de staff por rol (`app/panel`) y **portal público** de
-reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → estadía → consumos
+Dos vistas separadas: **panel interno** de staff por rol (`src/app/(front-gestion)/panel`) y **portal público** de
+reservas (`src/app/(front-publico)/reservar`, `src/app/(front-publico)/[idioma]/alojamientos`). El flujo central es reserva → estadía → consumos
 → pago → factura, con anti-overbooking garantizado por la base, no por la app.
 
 ## Setup y comandos
@@ -42,46 +42,48 @@ reservas (`app/reservar`, `app/alojamientos`). El flujo central es reserva → e
 + `.env.local` + `npm run dev`; no hay que levantar Docker. Lo único que sigue
 necesitando una base local son **los tests**: 24 archivos escriben con `service_role`
 y borran filas de `reservas`, `huespedes`, `tarifas`, `unidades` y `tipos_unidad`, así
-que contra la base real destruyen datos del hotel. `tests/db.ts` corta si la URL no es
+que contra la base real destruyen datos del hotel. `tests/apoyo/db.ts` corta si la URL no es
 local. Instructivo completo en `COMO-LEVANTARLO.md`.
 
 **Antes de decir que terminaste, corré `npm run check`. Sin excepciones.**
 
 ## Arquitectura en 20 líneas
 
+Los números son **archivos de `src/app/` que importan** cada capa (recontados el 2026-10-19):
+
 ```
-app/rutas ──124──> app/panel/_components (UI compartida)
-          ──100──> lib/domain          (reglas puras)
-          ───89──> lib/{auth,pricing,payments,email,firma,facturacion,availability,canales,divisas}
-          ───60──> lib/supabase        ← puentea la capa de datos (deuda conocida)
-lib/servicios ──> lib/domain ──> lib/fechas
-lib/supabase ──> Postgres + RLS (105 políticas sobre 52 tablas)
+src/app/rutas ──183──> panel/_components          (UI compartida del panel)
+              ──151──> src/lib/domain             (reglas puras — índice en su README)
+              ──133──> src/lib/{auth,reservas,payments,pricing,canales,notificaciones,…}
+              ──116──> src/lib/supabase           ← puentea la capa de datos (deuda conocida)
+src/lib/<servicio> ──> src/lib/domain ──> src/lib/fechas
+src/lib/supabase ──> Postgres + RLS (políticas en cada migración; matriz en tests/base-de-datos/rls-por-rol.test.ts)
 ```
 
 Reglas de dependencia, verificables con `rg`:
 
-- **`lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 50 módulos de
-  reglas testeables sin base. **Nunca** metas un cliente de datos ahí.
-- **`lib/` nunca importa de `app/`.** Cero excepciones (hoy hay cero aristas).
-- La lógica de negocio va en `lib/domain/`. Las páginas y acciones orquestan; no calculan reglas.
-- `lib/supabase/admin.ts` usa `service_role` y saltea RLS: **solo servidor**, nunca con datos del
+- **`src/lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 80 módulos de
+  reglas testeables sin base, agrupados por tema en `src/lib/domain/README.md`. **Nunca** metas un cliente de datos ahí.
+- **`src/lib/` nunca importa de `src/app/`.** Cero excepciones (hoy hay cero aristas).
+- La lógica de negocio va en `src/lib/domain/`. Las páginas y acciones orquestan; no calculan reglas.
+- `src/lib/supabase/admin.ts` usa `service_role` y saltea RLS: **solo servidor**, nunca con datos del
   usuario sin filtrar.
 
 ## Convenciones de código
 
 | Tema | Regla | Referencia canónica |
 |---|---|---|
-| Idioma | Código y docs en **español** (identificadores incluidos) | `lib/domain/cancelacion.ts` |
-| Autorización | `requerirAcceso(area)` en toda página y acción del panel | `lib/auth/session.ts:50` |
-| Escrituras que cortan | `cortarSiFalla(error, destino, motivo)` | `lib/acciones.ts:43` |
-| Escrituras accesorias | `registrarFalla(error, contexto)` — loguea, no corta | `lib/acciones.ts:71` |
-| Lecturas de página | `registrarFalla(error, contexto)` siempre; `Mensaje` visible si el dato es crítico | `app/panel/ocupacion/page.tsx` |
-| Server Action con estado | `(prev, formData) => Promise<EstadoX>` con `{ error }` / `{ ok }` | `app/panel/huespedes/actions.ts:67` |
-| Después de escribir | `revalidatePath(...)`; no redirigir en silencio | `app/panel/huespedes/actions.ts:92` |
-| UI | Componentes de `app/panel/_components/ui.tsx` y `boton-envio.tsx` | `app/panel/proveedores/page.tsx` |
-| Tests | `describe`/`it` en español, sin mocks en dominio | `tests/cancelacion.test.ts` |
+| Idioma | Código y docs en **español** (identificadores incluidos) | `src/lib/domain/cancelacion.ts` |
+| Autorización | `requerirAcceso(area)` en toda página y acción del panel | `src/lib/auth/session.ts:50` |
+| Escrituras que cortan | `cortarSiFalla(error, destino, motivo)` | `src/lib/acciones.ts:43` |
+| Escrituras accesorias | `registrarFalla(error, contexto)` — loguea, no corta | `src/lib/acciones.ts:71` |
+| Lecturas de página | `registrarFalla(error, contexto)` siempre; `Mensaje` visible si el dato es crítico | `src/app/(front-gestion)/panel/ocupacion/page.tsx` |
+| Server Action con estado | `(prev, formData) => Promise<EstadoX>` con `{ error }` / `{ ok }` | `src/app/(front-gestion)/panel/huespedes/actions.ts:67` |
+| Después de escribir | `revalidatePath(...)`; no redirigir en silencio | `src/app/(front-gestion)/panel/huespedes/actions.ts:92` |
+| UI | Componentes de `src/app/(front-gestion)/panel/_components/ui.tsx` y `boton-envio.tsx` | `src/app/(front-gestion)/panel/proveedores/page.tsx` |
+| Tests | `describe`/`it` en español, sin mocks en dominio | `tests/dominio/cancelacion.test.ts` |
 
-**Nunca revises `{ data }` sin revisar `{ error }`.** Es el bug clásico de este stack y `lib/acciones.ts`
+**Nunca revises `{ data }` sin revisar `{ error }`.** Es el bug clásico de este stack y `src/lib/acciones.ts`
 existe precisamente para eso.
 
 ## Cómo se agrega algo nuevo
@@ -90,34 +92,43 @@ Cada receta está en un skill. Invocalos: `add-feature`, `api-endpoint`, `ui-com
 `db-migration`, `write-tests`.
 
 Regla corta de módulo del panel: `page.tsx` (listado) · `nuevo/page.tsx` · `[id]/page.tsx` ·
-`[id]/editar/page.tsx` · `actions.ts` · `loading.tsx` · test en `tests/`.
+`[id]/editar/page.tsx` · `actions.ts` · `loading.tsx` · test en la carpeta de `tests/` que le corresponda (ver `tests/README.md`).
 
 **Un área nueva del panel se toca en cinco lugares, y cuatro tienen que moverse JUNTOS** o el
 typecheck falla (`Area` es una unión de tipos y `NAV` un `Record<Area, …>`):
 
-1. `lib/domain/permisos.ts` — `AREAS`, `ETIQUETAS_AREA` y los roles en `PERMISOS`
-2. `lib/domain/navegacion.ts` — el grupo del menú (hay un test que verifica cobertura)
-3. `app/panel/_components/shell.tsx` — la ruta y el icono
-4. `lib/domain/ayuda.ts` — el capítulo (`CLAUDE.md` lo exige)
-5. `app/panel/_components/iconos.tsx` si el icono es nuevo
+1. `src/lib/domain/permisos.ts` — `AREAS`, `ETIQUETAS_AREA` y los roles en `PERMISOS`
+2. `src/lib/domain/navegacion.ts` — el grupo del menú (hay un test que verifica cobertura)
+3. `src/app/(front-gestion)/panel/_components/shell.tsx` — la ruta y el icono
+4. `src/lib/domain/ayuda.ts` — el capítulo (`CLAUDE.md` lo exige)
+5. `src/app/(front-gestion)/panel/_components/iconos.tsx` si el icono es nuevo
 
 Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 
 ## Testing
 
-- Dominio puro en `tests/*.test.ts`, sin base ni mocks. Server Actions en `tests/acciones/`.
-- Los que tocan Postgres van bajo `describe.skipIf(!hayDB)` (`tests/db.ts`).
-- **Trampa:** `npm test` sale verde con **43 tests salteados** si no hay base local — entre ellos
-  el anti-overbooking. En CI `EXIGIR_DB=1` los vuelve obligatorios (`tests/db.ts:22`).
+- Los tests están separados por tipo (detalle en `tests/README.md`): `tests/dominio/` (reglas puras,
+  sin base ni mocks) · `tests/servicios/` (servidor con dependencias simuladas) · `tests/acciones/`
+  (Server Actions) · `tests/base-de-datos/` (contra Postgres local) · `tests/contratos/` (leen el
+  código y fallan si se rompe una regla de arquitectura) · `tests/apoyo/` (helpers, no son tests).
+  Cada tipo se corre solo con `npm run test:dominio`, `test:servicios`, `test:acciones`,
+  `test:db` y `test:contratos`.
+- **Las capas las vigila un test** (`tests/contratos/capas.test.ts`): `src/lib` no importa de
+  `src/app`, `src/lib/domain` solo importa de sí mismo y de `lib/fechas`, `(back-api)` no importa
+  de los fronts, y los cruces entre `(front-publico)` y `(front-gestion)` tienen que estar
+  declarados con su motivo.
+- Los que tocan Postgres van bajo `describe.skipIf(!hayDB)` (`tests/apoyo/db.ts`).
+- **Trampa:** `npm test` sale verde con **unos 600 tests salteados** si no hay base local — entre ellos
+  el anti-overbooking. En CI `EXIGIR_DB=1` los vuelve obligatorios (`tests/apoyo/db.ts:22`).
 - **Segunda trampa, la que `EXIGIR_DB` NO cubre:** esa guarda mira `hayDB`, no `hayAnon`
-  (`tests/db.ts:40`). Vitest no lee `.env.local`, así que sin exportar
+  (`tests/apoyo/db.ts:40`). Vitest no lee `.env.local`, así que sin exportar
   `NEXT_PUBLIC_SUPABASE_ANON_KEY` los **4 tests del borde público (ADR 0016) saltean en
   silencio** aun con `EXIGIR_DB=1`. Localmente hay que exportar **cuatro** variables:
   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` **y
   `NEXT_PUBLIC_SUPABASE_URL`** — esta última no la pide ningún test directamente, pero
-  `envServidor()` (`lib/env.ts`) la exige para construir el cliente admin, y sin ella
+  `envServidor()` (`src/lib/env.ts`) la exige para construir el cliente admin, y sin ella
   `crearClienteAdmin` no falla en silencio: tira `Error` y hace fallar (no saltear)
-  `tests/ari-servicio.test.ts` y `tests/registro.test.ts`. En CI ya se exportan las
+  `tests/base-de-datos/ari-servicio.test.ts` y `tests/base-de-datos/registro.test.ts`. En CI ya se exportan las
   cuatro (`ci.yml:77-80`).
 - Todo bugfix entra con un test que fallaba antes del fix.
 
@@ -154,19 +165,21 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 ## Trampas conocidas
 
 - **Next 16:** `cookies()` y `headers()` son `async`; `params` y `searchParams` son `Promise`;
-  `middleware` se llama `proxy.ts`. Leé `node_modules/next/dist/docs/` antes de tocar APIs de Next.
+  `middleware` se llama `src/proxy.ts`. Leé `node_modules/next/dist/docs/` antes de tocar APIs de Next.
 - **`next typegen`** genera tipos de rutas: `npm run typecheck` los regenera, no los edites.
 - **CI:** el seed invoca `node scripts/seed-usuarios.mjs` **directo**, no `npm run seed:usuarios`
   (ese usa `--env-file-if-exists`, que no aplica en el runner). Sin ese paso `perfiles` queda vacía
   y los tests de facturación fallan por la FK.
-- **Rol hardcodeado:** hay 21 lugares con el literal `['admin','gerencia']` en vez de
-  `lib/domain/permisos.ts`. Al tocar uno, migralo a `puedeAcceder(rol, area)` — es lo que hicieron
-  las acciones de la modernización WinPAX, así que hay ejemplos en
-  `app/panel/{canales,punto-venta}/actions.ts`.
-- **`lib/env.ts`** dice que falla "al arrancar", pero `envPublico()`/`envServidor()` son perezosas y
+- **Rol: área o rol, nunca el literal.** Los 23 `['admin','gerencia'].includes(sesion.rol)` ya se
+  migraron: `requerirAcceso(area)` cuando la regla coincide con la matriz de
+  `src/lib/domain/permisos.ts`, y `requerirRol(...)` (`src/lib/auth/session.ts`) cuando la acción
+  es **más estrecha que su área a propósito** (mover plata de una agencia, usuarios, preventivo).
+  No volver a escribir el literal: `tests/contratos/autorizacion-acciones.test.ts` acepta las dos
+  formas y exige una en cada Server Action.
+- **`src/lib/env.ts`** dice que falla "al arrancar", pero `envPublico()`/`envServidor()` son perezosas y
   no validan `MERCADOPAGO_*`, `STRIPE_*` ni `RESEND_API_KEY`.
 - **Un seed de test que se salta en silencio auditó menos de lo que decía auditar.**
-  `tests/rls-por-rol.test.ts` exige que cada tabla nueva tenga su caso negativo probado contra una
+  `tests/base-de-datos/rls-por-rol.test.ts` exige que cada tabla nueva tenga su caso negativo probado contra una
   fila REAL, no contra una tabla vacía (si no, el test pasa por el motivo equivocado). Su propio
   seed de `notas_credito` caía en eso: si `reservaParaSembrar()` devolvía una reserva preexistente
   sin factura propia, el bloque que crea la factura se saltaba —la tabla `facturas` ya no estaba
@@ -174,10 +187,10 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   `if (contar(tabla) === 0)`, verificar que la condición de guarda sea sobre la fila que hace falta
   para ESTE caso, no sobre si la tabla en general tiene algo.
 - **PostgREST corta en 1000 filas** (`max_rows`, `supabase/config.toml:10`), sin error y sin aviso.
-  Toda lectura que agregue sobre una tabla entera tiene que ir por `traerTodo` (`lib/paginado.ts`).
+  Toda lectura que agregue sobre una tabla entera tiene que ir por `traerTodo` (`src/lib/paginado.ts`).
 - **Los simuladores fallan fuerte en producción:** `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,
   `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER` y `CANAL_PROVIDER` son obligatorias ahí
-  (`lib/integraciones/seleccion.ts`, ADR 0018).
+  (`src/lib/integraciones/seleccion.ts`, ADR 0018).
 - **`estadias.check_in` / `check_out` son columnas GENERADAS** desde `periodo` (migración 0037). No
   se pueden escribir, y eso es la garantía de que no se desincronizan. Existen porque PostgREST no
   expone `lower()`: sin ellas, «las que llegan hoy» había que escribirlo con operadores de rango
@@ -186,7 +199,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **Un filtro sobre tabla embebida solo acota la fila madre si el embed es `!inner`.** Con un embed
   normal, PostgREST devuelve **todas** las filas madre con el array vacío: un filtro que no filtra y
   no falla. Es la trampa más silenciosa de este stack (ver `SELECT_RESERVAS` en
-  `app/panel/reservas/consulta.ts` y el test que la detecta).
+  `src/app/(front-gestion)/panel/reservas/consulta.ts` y el test que la detecta).
 - **`crear_reserva` deriva `estadias.huespedes` del desglose** (`adultos + menores`; los bebés no
   cuentan). No hay `check` que lo garantice, a propósito: habría roto los `update` de mudanza (0028)
   y reprogramación. Es el **único** lugar donde nacen estadías, así que la coherencia se garantiza
@@ -206,27 +219,27 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   el punto de venta cargaba el consumo de las 21:30 a la noche equivocada y el feed iCal
   publicaba como libre una noche vendida. No se ve programando —de día las dos fechas
   coinciden— ni en el CI, que corre en UTC y comparaba UTC contra UTC. `hoyISO()` acepta un
-  `Date` opcional para poder fijar el instante en los tests; `tests/fechas.test.ts` clava
+  `Date` opcional para poder fijar el instante en los tests; `tests/dominio/fechas.test.ts` clava
   00:30 y 02:59 UTC, que son las 21:30 y 23:59 del día anterior en el hotel. El resto de
-  `lib/fechas.ts` (`sumarDias`, `diasEntre`…) sí ancla en UTC **a propósito**: opera sobre
+  `src/lib/fechas.ts` (`sumarDias`, `diasEntre`…) sí ancla en UTC **a propósito**: opera sobre
   días, no sobre instantes, y ahí la zona no interviene.
-- **PostgREST NO sigue una clave foránea auto-referencial hacia el padre.** Un embed anidado como `departamento:departamentos(nombre, padre:departamentos(nombre))` devuelve `"padre": []` —los hijos, no el padre— y las pistas de FK no lo corrigen. La jerarquía se resuelve en la app con `lib/domain/departamentos.ts`.
-- **Los importes van por `formatearUSD`/`importe` de `lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Ya se migraron los 67 del panel; las cantidades (filas, puntos) sí van con `toLocaleString`.
+- **PostgREST NO sigue una clave foránea auto-referencial hacia el padre.** Un embed anidado como `departamento:departamentos(nombre, padre:departamentos(nombre))` devuelve `"padre": []` —los hijos, no el padre— y las pistas de FK no lo corrigen. La jerarquía se resuelve en la app con `src/lib/domain/departamentos.ts`.
+- **Los importes van por `formatearUSD`/`importe` de `src/lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Ya se migraron los 67 del panel; las cantidades (filas, puntos) sí van con `toLocaleString`.
 - **`[auth.email].enable_signup` NO es «no dejes que se registren»: es «habilitá el proveedor de
   email».** En `false` desactiva **también el inicio de sesión con contraseña**, que es el único
-  camino de acceso del staff (`app/login/actions.ts` usa `signInWithPassword`), o sea que nadie
+  camino de acceso del staff (`src/app/(front-gestion)/login/actions.ts` usa `signInWithPassword`), o sea que nadie
   entra al panel. Quien cierra el auto-registro es `[auth].enable_signup = false`. Y no se nota en
   local: un contenedor que ya está corriendo conserva la configuración con la que arrancó, así que
-  el síntoma aparece recién en un entorno nuevo — lo destapó el CI. `tests/auth-config.test.ts`
+  el síntoma aparece recién en un entorno nuevo — lo destapó el CI. `tests/base-de-datos/auth-config.test.ts`
   fija las dos garantías juntas.
 - **«El login me acepta y me devuelve al login» NO es una contraseña mal puesta: es un perfil
   `sin_rol`.** `signInWithPassword` **funciona** —si fallara verías «Email o contraseña
-  incorrectos» sin salir de la pantalla, porque `app/login/actions.ts:43` devuelve `{ error }` en
-  vez de redirigir—. Lo que rechaza es `obtenerSesion()` (`lib/auth/session.ts:53`):
+  incorrectos» sin salir de la pantalla, porque `src/app/(front-gestion)/login/actions.ts:43` devuelve `{ error }` en
+  vez de redirigir—. Lo que rechaza es `obtenerSesion()` (`src/lib/auth/session.ts:53`):
   `!perfil.activo || !esRolValido(perfil.rol)` devuelve `null`, y `requerirSesion` redirige a
-  `/login`. Un usuario creado fuera de `app/panel/usuarios` —desde el dashboard de Supabase, por
+  `/login`. Un usuario creado fuera de `src/app/(front-gestion)/panel/usuarios` —desde el dashboard de Supabase, por
   ejemplo— nace `sin_rol` y `activo = false` (ADR 0017, migraciones 0032 y 0035), y `sin_rol` está
-  deliberadamente **fuera** de `ROLES` en `lib/domain/roles.ts`. Lo promueve
+  deliberadamente **fuera** de `ROLES` en `src/lib/domain/roles.ts`. Lo promueve
   `node scripts/seed-usuarios.mjs`. Se diagnostica en un query:
   `select u.email, p.rol, p.activo from perfiles p join auth.users u on u.id = p.id;`
   ⚠️ No «arreglar» esto agregando `sin_rol` a `ROLES`: reabre el agujero que cerró la 0032.
@@ -236,11 +249,11 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   reemplazo que lo apaga— y el propio archivo documenta en su encabezado el service worker vacío
   que lo desregistra. Al tocarlo hay que **subir `VERSION`** en los dos lados (ADR 0028).
 - **El service worker NO cachea datos, y es a propósito.** La política es una **lista blanca** en
-  `lib/domain/pwa.ts`: solo assets con hash de `/_next/static/`, los iconos y la pantalla de sin
+  `src/lib/domain/pwa.ts`: solo assets con hash de `/_next/static/`, los iconos y la pantalla de sin
   conexión. Cachear `/panel` dejaría nombres de huéspedes y datos de pago en el disco de una tablet
   compartida, legibles tras cerrar sesión, y publicaría una ocupación vencida —libre una unidad ya
   vendida—. No convertirla en lista negra: una ruta nueva se cachearía sola. `public/sw.js` repite
-  la lista porque no pasa por el bundler, y `tests/pwa.test.ts` **lee el archivo** y falla si las
+  la lista porque no pasa por el bundler, y `tests/contratos/pwa.test.ts` **lee el archivo** y falla si las
   dos se separan (ADR 0028).
 - **El service worker solo se registra en producción.** En dev, Next recompila los chunks de
   `/_next/static` sin hash estable: una caché «primero lo guardado» devuelve JavaScript viejo y la
@@ -249,7 +262,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   `navigator.onLine`, `matchMedia` o `localStorage` a estado desde un efecto provoca un render en
   cascada y el linter lo corta (`react-hooks/set-state-in-effect`). El tercer argumento —el
   snapshot del servidor— no es opcional: sin él, el render del servidor rompe porque `navigator` no
-  existe. Ejemplo en `app/panel/_components/pwa.tsx`.
+  existe. Ejemplo en `src/app/(front-gestion)/panel/_components/pwa.tsx`.
 - **El feed iCal de salida marca ocupado sólo cuando NO queda ninguna unidad del tipo libre.** Un
   calendario dice «ocupado», no «me queda una»: cerrar el tipo al vender la primera unidad le
   costaría ventas reales al hotel. Y si la consulta de estadías se trunca, el handler responde
@@ -259,7 +272,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   `ResultadoEnvio.noSoportado` distingue «no puedo» de «fallé». No borrar esas advertencias (ADR 0021).
 - **NUNCA agregues una columna que pueda guardar datos de tarjeta** (`tarjeta_numero`, `pan`,
   `cvv`, `codigo_seguridad`, `pin`…). Saca al hotel del alcance SAQ-A de PCI-DSS. Hay un
-  **test-contrato** que recorre las migraciones y falla si aparece una (`tests/garantia-tarjeta.test.ts`),
+  **test-contrato** que recorre las migraciones y falla si aparece una (`tests/contratos/garantia-tarjeta.test.ts`),
   más restricciones en la `0059` que rechazan 12+ dígitos seguidos en el token y en el detalle.
   Se resuelve con preautorización tokenizada (ADR 0025).
 - **La exención de IVA NO se tilda, se deriva.** No existe ni debe existir un campo «exento»:
@@ -285,7 +298,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   escritura a admin y gerencia— pero es exactamente la forma del hallazgo de `cotizar_estadia`.
   Lo cierra la `0089` con un `revoke` en bloque **más** `alter default privileges`, sin lo cual
   el arreglo duraría hasta el próximo `create table`. Test de contrato:
-  `tests/anon-no-escribe.test.ts`, apoyado en `privilegios_de_escritura(rol)`.
+  `tests/base-de-datos/anon-no-escribe.test.ts`, apoyado en `privilegios_de_escritura(rol)`.
   ⚠️ **Ese test pregunta `has_table_privilege`, no sondea con un `insert`.** La primera versión
   sondeaba y leía el código de error, y tiene dos falsos negativos invisibles: una **vista**
   responde `55000` y una tabla con **trigger BEFORE INSERT** responde lo que lance el trigger —
@@ -298,7 +311,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   auditorías (lo cerró la `0070` con `revoke execute ... from public` + `grant` nominal). El
   patrón correcto —`revoke ... from public; grant ... to <roles>`— ya lo usaban
   `tablas_publicas` (0046/0047) y `sumar_puntos_huesped` (0053). Hay un test de contrato,
-  `tests/funciones-sin-public.test.ts`, apoyado en `funciones_expuestas_a_publico()`.
+  `tests/base-de-datos/funciones-sin-public.test.ts`, apoyado en `funciones_expuestas_a_publico()`.
   ⚠️ `rol_actual()` y `puede_ver_canal()` **tienen que quedar** ejecutables por PUBLIC: se
   usan en expresiones de políticas RLS y Postgres chequea el EXECUTE del rol que consulta al
   evaluar una policy (verificado). Revocárselo rompe la lectura de `anon` sobre el catálogo.
@@ -314,7 +327,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **Contar filas es `count: 'exact', head: true`, nunca traerlas.** PostgREST corta en
   1000 (`max_rows`) con **HTTP 200 y sin aviso**: contar en JavaScript da un número
   equivocado a partir de la fila 1001 y nada falla. Hay un test que lo demuestra
-  (`tests/truncado-mil-filas.test.ts`).
+  (`tests/base-de-datos/truncado-mil-filas.test.ts`).
 - **La cuenta se cierra con la FACTURA, no con el check-out** (`motivoNoCargable`, ADR/P3). Es lo
   que permite cobrarle el desayuno al que llegó a las 9 y al que se va a las 10.
 - **`truncate` no achica: agranda el ancho MÍNIMO.** Incluye `white-space: nowrap`, así que el
@@ -358,7 +371,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **Stripe cuenta en centavos y MercadoPago firma un manifiesto.** Mandarle `145.2` a Stripe cobra
   un dólar cuarenta y cinco **sin ningún error**; firmar el cuerpo crudo para MercadoPago —en vez
   de `id:…;request-id:…;ts:…;`— rechaza todos los eventos y el síntoma es «el hotel dejó de
-  enterarse de los pagos». Los dos casos tienen test (`tests/pasarelas-reales.test.ts`).
+  enterarse de los pagos». Los dos casos tienen test (`tests/servicios/pasarelas-reales.test.ts`).
 - **Un webhook que responde 400 a un evento que no le interesa termina deshabilitado.** Stripe y
   MercadoPago mandan decenas de tipos de evento; acumulan fallos y cortan el endpoint, y ahí se
   pierden también los cobros buenos. Por eso `ResultadoWebhook` distingue `ignorar` (200),
@@ -372,7 +385,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   Tratarlas como una sola deja invisible el caso que el hotel necesita ver —«le escribimos y no le
   llegó»— y un huésped con la dirección mal cargada figura avisado. Y **la ausencia de `leida` no
   prueba nada**: muchos clientes de correo bloquean el pixel de apertura, así que su presencia
-  informa y su ausencia no (migración 0086, `lib/domain/entregas.ts`).
+  informa y su ausencia no (migración 0086, `src/lib/domain/entregas.ts`).
 - **Los eventos de un webhook de entrega llegan DESORDENADOS.** El de apertura puede entrar antes
   que el de entrega, y aplicarlos a ciegas haría retroceder de `leida` a `entregada`: el sistema
   olvidaría que el huésped abrió el correo. Lo decide `esAvance`, que sí deja que un **rebote pise
@@ -382,12 +395,12 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   del prefijo `whsec_`, y la comparación es en base64, no en hex. La cabecera puede traer **varias
   firmas separadas por espacios** durante una rotación de secreto. Reimplementar mal un HMAC no
   falla ruidosamente: **rechaza todos los eventos**, y el síntoma es que el hotel deja de enterarse
-  de los rebotes. Está en `lib/integraciones/firma-svix.ts` con tests por cada diferencia.
+  de los rebotes. Está en `src/lib/integraciones/firma-svix.ts` con tests por cada diferencia.
 - **WhatsApp no deja mandar texto libre fuera de la ventana de 24 horas:** hay que usar
   **plantillas aprobadas por Meta**, así que los cuerpos del catálogo NO sirven tal cual. Y **el
   orden de los parámetros es el contrato**: Meta numera los huecos (`{{1}}`, `{{2}}`) y valida la
   **cantidad**, no el significado — cruzarlos manda el código de reserva donde va la fecha y el
-  mensaje sale igual. Ver `lib/domain/whatsapp.ts` y el test que compara cada parámetro contra la
+  mensaje sale igual. Ver `src/lib/domain/whatsapp.ts` y el test que compara cada parámetro contra la
   plantilla del catálogo.
 - **Un aviso se encola con UN canal, decidido al encolar y no al despachar.** La clave de
   idempotencia no incluye el canal: dos filas del mismo aviso chocarían contra el `unique` y una se
@@ -397,7 +410,7 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   pagado. Quien confirma es el webhook; la pantalla de confirmación lee el estado de la base.
 - **`npm run check` devuelve 0 con tests en rojo** si no hay `.env.local`: tres archivos fallan por
   falta de `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` y el exit code igual da 0. Es la misma trampa
-  que `tests/db.ts` documenta querer evitar, pero el guardián (`EXIGIR_DB=1`) no está en ese script.
+  que `tests/apoyo/db.ts` documenta querer evitar, pero el guardián (`EXIGIR_DB=1`) no está en ese script.
   **Leé la salida, no el exit code**, o exportá las tres variables antes.
 
 ## Automatizaciones (hooks activos)

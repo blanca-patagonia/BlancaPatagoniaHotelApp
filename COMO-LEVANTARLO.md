@@ -86,7 +86,7 @@ npm run seed:usuarios       # OJO: db reset borra los usuarios de auth
 npm test
 ```
 
-`tests/db.ts` tiene una guarda que corta si las variables apuntan a una base que no
+`tests/apoyo/db.ts` tiene una guarda que corta si las variables apuntan a una base que no
 es local, así que el accidente no puede pasar en silencio.
 
 Sin base local, `npm test` **saltea** los tests de integración en vez de fallar
@@ -147,7 +147,7 @@ El detalle y el porqué de cada decisión está en
 
 ## Para conectar el correo de verdad (Resend)
 
-Tampoco hay que tocar código: el adapter (`lib/email/resend.ts`) ya está escrito.
+Tampoco hay que tocar código: el adapter (`src/lib/email/resend.ts`) ya está escrito.
 Se cargan estas variables:
 
 ```
@@ -163,6 +163,54 @@ simulador `consola` nunca avisa, porque no habla con nadie.
 
 Sin `EMAIL_PROVIDER=resend` el sistema sigue con el simulador `consola`: el correo
 queda escrito en el log del servidor y no sale.
+
+## Para activar el asistente de IA (Gemini)
+
+Sin código: el asistente del panel (`/panel/ia`, ADR 0039) habla el formato
+«compatible con OpenAI», y Gemini ofrece ese mismo formato. Se cargan estas
+cuatro variables en `.env.local` (y en Vercel, para producción):
+
+```
+IA_PROVIDER=openai_compatible
+IA_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+IA_API_KEY=<la clave de Google AI Studio>
+IA_MODELO=gemini-2.5-flash
+```
+
+Después hay que **reiniciar** `npm run dev`: las variables se leen al arrancar.
+
+- La clave se crea en Google AI Studio → «Get API key». Es un secreto: va sólo en
+  `.env.local` (que no se sube al repositorio) y en las variables de Vercel.
+- Sin las cuatro, el asistente **no se ofrece** y la pantalla lo dice. No hay
+  simulador a propósito: uno de IA tendría que inventar respuestas sobre los
+  datos del hotel.
+- **Recomendado: un modelo de respaldo.** El plan gratuito tiene un cupo por
+  minuto y por día *por modelo*, y a veces el modelo está saturado. Con esta línea
+  extra, cuando el principal no responde el asistente pasa a uno más liviano, que
+  tiene su propio cupo:
+
+  ```
+  IA_MODELO_RESPALDO=gemini-3.5-flash-lite
+  ```
+- **Recomendado también: un segundo proveedor (Groq).** Si Gemini se queda sin
+  cupo, está saturado o no responde, el asistente pasa a otro proveedor, de otra
+  empresa. La clave se crea en https://console.groq.com/keys:
+
+  ```
+  IA_RESPALDO_BASE_URL=https://api.groq.com/openai/v1
+  IA_RESPALDO_API_KEY=<la clave de Groq, empieza con gsk_>
+  IA_RESPALDO_MODELO=openai/gpt-oss-120b
+  ```
+
+  El orden es: modelo principal → `IA_MODELO_RESPALDO` → Groq. Cada vez que se
+  usa un respaldo queda anotado en «Errores del sistema» (`ia_respaldo_usado`):
+  si aparece seguido, conviene revisar el cupo o la clave del principal. Groq es
+  otro tercero, así que vale lo mismo que con Gemini: la IA no recibe datos
+  personales de huéspedes, y lo que se escribe en el chat se enmascara.
+- El asistente consulta datos y **prepara** tareas simples (aviso, orden de
+  mantenimiento, consumo) que se hacen recién cuando alguien aprieta
+  «Confirmar» (ADR 0039 y 0041). Cada rol ve sólo las herramientas de sus
+  pantallas, y hay un tope de 40 consultas por hora por persona.
 
 ## Variables obligatorias en producción
 

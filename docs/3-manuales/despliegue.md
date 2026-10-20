@@ -75,11 +75,12 @@ emite un CAE inventado sobre una factura real.
 | **MercadoPago (cobro)** | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | El token es también el que usa la conciliación de liquidaciones. Cómo conseguirlas: §1.6 |
 | **MercadoPago (conexión OAuth)** | `MERCADOPAGO_APP_ID`, `MERCADOPAGO_APP_SECRET` | Para el botón «Conectar Mercado Pago» de `/panel/config/conexiones` (ADR 0036) — **no** reemplaza al par de arriba, ver §1.6 |
 | **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | ⚠️ Stripe cuenta en **centavos**. ⚠️ No admite cuentas de Argentina directas, ver §1.6 |
-| **Payway** (ADR 0038) | `PAYWAY_PUBLIC_KEY`, `PAYWAY_PRIVATE_KEY`, `PAYWAY_INTERNAL_SECRET` | ⚠️ Payway también cuenta en **centavos**. `PAYWAY_INTERNAL_SECRET` no es de Payway: firma el evento que el propio servidor se manda a sí mismo tras una respuesta síncrona (ver `lib/payments/payway.ts`). Cómo conseguirlas: §1.6 |
+| **Payway** (ADR 0038) | `PAYWAY_PUBLIC_KEY`, `PAYWAY_PRIVATE_KEY`, `PAYWAY_INTERNAL_SECRET` | ⚠️ Payway también cuenta en **centavos**. `PAYWAY_INTERNAL_SECRET` no es de Payway: firma el evento que el propio servidor se manda a sí mismo tras una respuesta síncrona (ver `src/lib/payments/payway.ts`). Cómo conseguirlas: §1.6 |
 | **Pago simulado** | `PAGO_WEBHOOK_SECRET` | Sólo con `PAGO_PROVIDER=simulado` |
 | **Resend (envío)** | `RESEND_API_KEY`, `EMAIL_FROM` | ⚠️ `EMAIL_FROM` debe ser de un dominio **verificado** o la API responde 403 |
 | **Resend (entrega)** | `RESEND_WEBHOOK_SECRET` | Sin esto **no se detectan los rebotes**: el aviso queda «enviada» para siempre |
 | **WhatsApp** | `WHATSAPP_PROVIDER`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_IDIOMA` | Ver §1.5 |
+| **Asistente de IA** | `IA_PROVIDER`, `IA_BASE_URL`, `IA_API_KEY`, `IA_MODELO` (+ `IA_MODELO_RESPALDO`, recomendada: `gemini-3.5-flash-lite`; + proveedor de respaldo `IA_RESPALDO_BASE_URL`, `IA_RESPALDO_API_KEY`, `IA_RESPALDO_MODELO`, por ejemplo Groq: `https://api.groq.com/openai/v1` y `openai/gpt-oss-120b`) | Opcionales. Sin las cuatro, `/panel/ia` no se ofrece. Con Gemini: `openai_compatible`, `https://generativelanguage.googleapis.com/v1beta/openai`, la clave de AI Studio y `gemini-2.5-flash` (ver `COMO-LEVANTARLO.md`) |
 | **Booking (iCal)** | `BOOKING_ICAL_FEEDS` | Pares `CODIGO_TIPO=url` separados por comas |
 | **Divisas** | `DOLARAPI_URL`, `ARGENTINADATOS_URL`, `AMBITO_URL` | Opcionales: vacías usan las públicas. `AMBITO_URL` es solo para el dato informativo de Banco Nación del dashboard (no participa del cobro); si Ámbito no responde, esa fila del widget simplemente no aparece |
 | **Login con Google** | `AUTH_GOOGLE_HABILITADO` | `1` lo habilita |
@@ -106,7 +107,7 @@ y son trámites del hotel:
 2. Un **token permanente** de usuario de sistema. El token de prueba dura 24
    horas y sirve sólo para probar.
 3. Las **plantillas aprobadas**, una por evento, con el nombre y el orden de
-   huecos que declara `lib/domain/whatsapp.ts`:
+   huecos que declara `src/lib/domain/whatsapp.ts`:
 
    | Evento | Plantilla en Meta | Huecos, en orden |
    |---|---|---|
@@ -125,7 +126,7 @@ y son trámites del hotel:
 
 ### 1.6 Pasarelas de pago: qué trámite hace falta para cada una
 
-El código de las cuatro está escrito (`lib/payments/`); lo que falta en los
+El código de las cuatro está escrito (`src/lib/payments/`); lo que falta en los
 cuatro casos es el trámite comercial, no programar. Investigado el
 2026-09-14 para tenerlo a mano cuando el hotel decida contratar. Nada de esto
 se probó contra una cuenta real todavía (ver ADR 0027 y ADR 0038): antes de
@@ -138,7 +139,7 @@ porque las tres se llaman parecido pero son trámites distintos:
 
 | Variable | Para qué | De dónde sale |
 |---|---|---|
-| `MERCADOPAGO_ACCESS_TOKEN` + `MERCADOPAGO_WEBHOOK_SECRET` | Cobrar de verdad (Checkout Pro, `lib/payments/mercadopago.ts`) | Credenciales de **producción** de la cuenta de cobro del hotel, en `mercadopago.com.ar/developers/panel/app` → la aplicación → «Credenciales de producción». El webhook secret se genera al configurar la URL de notificaciones dentro de esa misma aplicación (menú Webhooks → Configurar notificaciones → pestaña «Modo productivo», poner `https://<dominio>/api/webhooks/pagos/mercadopago`) |
+| `MERCADOPAGO_ACCESS_TOKEN` + `MERCADOPAGO_WEBHOOK_SECRET` | Cobrar de verdad (Checkout Pro, `src/lib/payments/mercadopago.ts`) | Credenciales de **producción** de la cuenta de cobro del hotel, en `mercadopago.com.ar/developers/panel/app` → la aplicación → «Credenciales de producción». El webhook secret se genera al configurar la URL de notificaciones dentro de esa misma aplicación (menú Webhooks → Configurar notificaciones → pestaña «Modo productivo», poner `https://<dominio>/api/webhooks/pagos/mercadopago`) |
 | `MERCADOPAGO_APP_ID` + `MERCADOPAGO_APP_SECRET` | El botón «Conectar Mercado Pago» de `/panel/config/conexiones` (OAuth2, ADR 0036) — para que el staff conecte la cuenta sin pegar un token a mano | Se registra **una sola aplicación** de Mercado Pago para Blanca Patagonia (no una por hotel, acá hay uno solo) en el mismo panel de developers, sección «Tus integraciones» → «Crear aplicación». Ahí salen el `Client ID` (= `APP_ID`) y el `Client Secret` (= `APP_SECRET`) |
 
 ⚠️ **Requisito previo, para cualquiera de los dos pares:** una cuenta de
@@ -151,7 +152,7 @@ real: no se puede activar contra `localhost`.
 ⚠️ **La conexión OAuth (segundo par) hoy es solo de estado** — Fase 1 de 4
 del ADR 0036, según la bitácora del 2026-09-09: guarda el token conectado en
 `conexiones_proveedores` (cifrado) y lo muestra en la pantalla, pero
-`lib/payments/mercadopago.ts` y la conciliación (ADR 0030) siguen leyendo el
+`src/lib/payments/mercadopago.ts` y la conciliación (ADR 0030) siguen leyendo el
 primer par (`MERCADOPAGO_ACCESS_TOKEN`) directo de las variables de entorno,
 no de la conexión guardada. Conectar por OAuth hoy no reemplaza cargar el
 `ACCESS_TOKEN` a mano.
@@ -170,7 +171,7 @@ no de la conexión guardada. Conectar por OAuth hoy no reemplaza cargar el
    y las claves —pública y privada— escribiendo a
    **soporte@payway.com.ar**. Ahí es donde conviene preguntar explícitamente
    por las dos cosas que el código dejó sin confirmar (ver el docblock de
-   `lib/payments/payway.ts` y el ADR 0038):
+   `src/lib/payments/payway.ts` y el ADR 0038):
    - el nombre exacto del header de autenticación de la API REST (el código
      usa `apikey`, que es lo que documentan los SDKs públicos, pero no se
      verificó contra una respuesta real),
@@ -209,7 +210,7 @@ ese trámite.
 
 No hace falta ninguna credencial nueva de API: Santander Argentina **no
 tiene banca abierta** para descargar movimientos por API, así que
-`lib/conciliacion/extracto-csv.ts` está armado para importación manual de
+`src/lib/conciliacion/extracto-csv.ts` está armado para importación manual de
 archivo, no para conectarse solo. Lo único que hace falta operativamente:
 
 1. Bajar el extracto desde **Online Banking Santander**
@@ -229,7 +230,7 @@ adquirentes locales) — no hay código escrito para Getnet todavía, y no se
 escribió en esta pasada porque el pedido original mencionaba «Santander»
 esperando que fuera la conciliación, no un posnet nuevo. Si el hotel
 confirma que quiere Getnet como medio de cobro además de Payway, es un
-adapter nuevo con el mismo patrón que `lib/payments/payway.ts`.
+adapter nuevo con el mismo patrón que `src/lib/payments/payway.ts`.
 
 ---
 
@@ -385,7 +386,7 @@ El procedimiento es el de Supabase: *Point-in-time recovery* si el plan lo
 incluye, o restaurar el backup diario.
 
 > ⚠️ **Esto nunca se probó.** Es el punto ciego más grande que queda, y está
-> anotado como tal en `docs/PENDIENTES.md`. Un backup que no se restauró nunca es
+> anotado como tal en `docs/5-pendientes/PENDIENTES.md`. Un backup que no se restauró nunca es
 > una suposición, no un respaldo. **Conviene probarlo en un proyecto de Supabase
 > descartable antes de necesitarlo de verdad**, que es el peor momento para
 > descubrir que algo falta.

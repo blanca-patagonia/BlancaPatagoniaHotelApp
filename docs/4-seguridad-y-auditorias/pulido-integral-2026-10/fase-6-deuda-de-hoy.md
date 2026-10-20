@@ -16,7 +16,7 @@ proveedores,punto-venta,respaldos,usuarios}/page.tsx`):
 
 | Pantalla | Por qué está bien así |
 |---|---|
-| `agencias`, `proveedores` | No se paginan a propósito — filtran en memoria por saldo (viene de una vista); paginar daría un filtro equivocado. Ya documentado en `docs/PENDIENTES.md` §2 y `AGENTS.md`. |
+| `agencias`, `proveedores` | No se paginan a propósito — filtran en memoria por saldo (viene de una vista); paginar daría un filtro equivocado. Ya documentado en `docs/5-pendientes/PENDIENTES.md` §2 y `AGENTS.md`. |
 | `avisos` | `.limit(100)`, fijados primero. |
 | `canales` | Archivo de 2448 líneas con 15 consultas — **las 15** tienen `.limit()` (200/5/100/100/500) o están acotadas por mes/ventana de 14 días. Un comentario propio explica que el límite de 200 "se truncaba... sin avisar" hasta que se acotó por mes. |
 | `cierre-diario` | Un solo día (night audit), acotado por diseño. |

@@ -8,7 +8,7 @@
   si el canal conviene.
 - **Relacionado:** [ADR 0004](0004-tarifas-neto-rack-iva.md) (el precio lo pone el
   hotel) · [ADR 0021](0021-canales-de-venta-solo-lectura.md) (la integración es de
-  solo lectura) · [ADR 0003](0003-moneda-usd-base.md) y
+  solo lectura) · [ADR 0003](0003-moneda-usd-ars.md) y
   [ADR 0020](0020-cotizacion-de-divisas.md) (moneda)
 
 ## El problema

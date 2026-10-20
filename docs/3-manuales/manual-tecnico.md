@@ -41,4 +41,4 @@ supabase db reset            # aplica migraciones + seed
 
 ## Estructura del repositorio
 
-Ver [arquitectura.md](arquitectura.md) y el README principal.
+Ver [arquitectura.md](../2-arquitectura/arquitectura.md) y el README principal.

@@ -94,3 +94,27 @@ agotaría el cupo del hotel con una sola pregunta.
    historial de cada contacto unificado sin importar por dónde escribió.
    Queda para cuando lleguen el código y las credenciales de esos dos
    canales, como una pasada de diseño propia.
+
+## Adenda (2026-10-19) — Gemini, más herramientas y privacidad
+
+**Proveedor.** El hotel usa Gemini (Google AI Studio) por su endpoint compatible con OpenAI. No hizo falta un adapter nuevo. Se agregaron tres cosas al existente: reenviar `extra_content` (la firma de razonamiento de Gemini 3), reintentar una vez ante saturación (429/5xx), y un tope de salida de 8192, porque el razonamiento del modelo se descuenta del mismo tope y con 1024 las respuestas largas llegaban cortadas.
+
+**Herramientas.** Pasaron de 5 a 10, todas de **solo lectura**: `operacion_del_dia`, `buscar_reserva`, `saldos_pendientes`, `disponibilidad` y `consultar_ayuda`. Esta última responde dudas de uso con la guía real del sistema, filtrada por el rol de quien pregunta. Cada una reusa la regla que ya usa la pantalla correspondiente (tablero, alta de reservas, Ayuda), así el asistente no contradice al panel.
+
+**Privacidad — decisión nueva.** Lo que devuelve una herramienta viaja a un tercero, y en el plan gratuito de Gemini Google puede usarlo para mejorar sus modelos. Por eso **ninguna herramienta lee datos personales de huéspedes**: el asistente habla de códigos de reserva y unidades, y la persona abre la ficha en el panel. Lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`. Si el hotel pasa a un plan pago con garantía de no-entrenamiento, se puede revisar, pero tiene que ser una decisión explícita.
+
+**Presencia en el panel.** Un botón flotante abre el chat desde cualquier pantalla, y el chat sabe desde cuál se lo abrió: la ruta se traduce a una etiqueta conocida con `pantallaDeRuta`, nunca viaja texto libre. Los informes tienen además «Analizar con IA», que **carga** la pregunta en el chat pero no la envía sola, porque cada consulta gasta cupo.
+
+**Sigue vigente:** el asistente no escribe nada. Que ejecute procesos (con confirmación humana) queda propuesto y requiere un ADR propio.
+
+## Adenda 2 (2026-10-19) — cadena de respaldo con otro proveedor
+
+El adaptador pasó a ser una **cadena**: modelo principal → otro modelo del mismo
+proveedor (`IA_MODELO_RESPALDO`) → otro **proveedor** (`IA_RESPALDO_BASE_URL`,
+`IA_RESPALDO_API_KEY`, `IA_RESPALDO_MODELO`; el hotel usa Groq). Se pasa al
+siguiente eslabón ante cupo agotado o saturación (después de un reintento), ante
+falta de respuesta y ante cualquier otro error —incluida una clave rota—. Cada
+uso del respaldo queda registrado (`ia_respaldo_usado`), así una falla
+permanente del principal no se esconde detrás del respaldo. `extra_content` (la
+firma de Gemini) sólo se reenvía a Gemini: otro proveedor podría rechazar el
+pedido por ese campo.

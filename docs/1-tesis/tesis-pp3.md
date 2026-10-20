@@ -539,7 +539,7 @@ es una formalidad: varios de los defectos encontrados usando el sistema a mano
 daban resultados plausibles y equivocados, del tipo que una prueba detecta y una
 revisión visual no.
 
-**Fuente:** `docs/arquitectura.md`, `docs/modelo-datos.md`,
+**Fuente:** `docs/2-arquitectura/arquitectura.md`, `docs/2-arquitectura/modelo-datos.md`,
 `docs/decisiones/0002`–`0012`, `supabase/migrations/0005`, `0045`,
 `lib/domain/`, `tests/db.ts`, `.github/workflows/ci.yml`.
 

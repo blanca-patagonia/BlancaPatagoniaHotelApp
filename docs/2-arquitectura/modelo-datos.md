@@ -134,8 +134,8 @@ La tabla `estadias` usa una **restricción de exclusión** de PostgreSQL
 (`EXCLUDE USING gist (unidad_id WITH =, periodo WITH &&) WHERE estado activo`)
 para impedir que dos reservas activas se solapen sobre la misma unidad. La
 garantía vive en el motor de datos, no en la aplicación. Ver
-[ADR 0002](decisiones/0002-motor-de-disponibilidad.md). Verificado por
-`tests/overbooking.test.ts`.
+[ADR 0002](../decisiones/0002-motor-de-disponibilidad.md). Verificado por
+`tests/base-de-datos/overbooking.test.ts`.
 
 ## Garantías que impone la base, no la aplicación
 

@@ -1,7 +1,7 @@
 # Análisis de lo que le falta al proyecto (2026-09-09) — documento vigente
 
 > **Documento vigente de pendientes** (decisión de la Fase 7 del pulido
-> integral 2026-10, `docs/pulido-integral-2026-10/`): `docs/PENDIENTES.md`
+> integral 2026-10, `docs/4-seguridad-y-auditorias/pulido-integral-2026-10/`): `docs/5-pendientes/PENDIENTES.md`
 > quedó marcado histórico, congelado en el cierre de
 > `feat/relevamiento-cliente-agosto` (migración 0064) — varios de sus
 > pendientes, por ejemplo B7 (el feed iCal de salida), ya se resolvieron
@@ -60,12 +60,12 @@ simulador.
   es un gap, aunque `CLAUDE.md` las mencione en la misma frase que el
   check-in.
 - Fases D–F del portal público, sin especificar en ningún doc todavía
-  (`docs/PENDIENTES.md` §4): filtros laterales, galería con lightbox, barra
+  (`docs/5-pendientes/PENDIENTES.md` §4): filtros laterales, galería con lightbox, barra
   sticky de reserva, mapa SVG, desglose de precio en el checkout, insignia de
   escasez (necesita una migración de RLS) y layout de dos columnas en «Nueva
   reserva».
 
-## 4. Deuda técnica conocida (`docs/PENDIENTES.md` §4, sigue vigente)
+## 4. Deuda técnica conocida (`docs/5-pendientes/PENDIENTES.md` §4, sigue vigente)
 
 - **El punto ciego más grande, en palabras del propio repo: nunca se restauró
   un backup.** Un backup que no se probó restaurar no es un backup.

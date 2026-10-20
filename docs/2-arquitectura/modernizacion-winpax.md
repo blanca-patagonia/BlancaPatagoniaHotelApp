@@ -22,7 +22,7 @@ Salieron del recorrido inicial del repo. Cada una tiene su razón.
    agregarlo*. El riesgo real es que alguien pegue un número de tarjeta en `pagos.nota` o
    `reservas.notas` por costumbre de WinPAX — eso se mitiga validando la entrada.
 2. **`estadias.huespedes` alimenta el motor anti-overbooking** (ADR 0002) y las validaciones de
-   capacidad. Tocar esa columna exige mirar `lib/domain/*` y `tests/capacidad.test.ts` primero.
+   capacidad. Tocar esa columna exige mirar `src/lib/domain/*` y `tests/dominio/capacidad.test.ts` primero.
 3. **`alter type ... add value` y el primer uso de ese valor van en migraciones separadas.**
    SQLSTATE 55P04; el `db reset` corta ahí y no aplica nada de lo que sigue (ver `0032` + `0035`).
    Afecta al paso 8, que toca el enum `categoria_producto`.
@@ -40,9 +40,9 @@ Varios módulos del checklist **parecen** existir y son otra cosa:
 |---|---|---|
 | tabla `canales` (0019) | canales de **chat interno** del staff | canales de venta / OTA |
 | tabla `puntos_venta` (0025) | punto de venta **fiscal**, numera facturas | POS de frigobar |
-| `lib/domain/cuenta.ts` | validación de **cambio de contraseña** | cuenta corriente del huésped |
-| `lib/domain/moneda.ts` | **formateo** de importes (`USD 145,20`) | tipo de cambio |
-| `lib/pricing/cotizar.ts`, `0008_cotizacion.sql` | cotizar una **estadía** (precio) | cotización de moneda |
+| `src/lib/domain/cuenta.ts` | validación de **cambio de contraseña** | cuenta corriente del huésped |
+| `src/lib/domain/moneda.ts` | **formateo** de importes (`USD 145,20`) | tipo de cambio |
+| `src/lib/pricing/cotizar.ts`, `0008_cotizacion.sql` | cotizar una **estadía** (precio) | cotización de moneda |
 
 Por eso el paso 1 se llama **divisas** y no «cotización», y el paso 7 no puede llamarse
 `puntos_venta`.
@@ -81,16 +81,16 @@ aplicadas y verificadas con `npx supabase migration up --local`.
 anotado *«Hace falta un mecanismo para cargar/actualizar la cotización»*. Nunca se hizo: hasta
 hoy el sistema no sabía convertir nada.
 
-- [x] `lib/domain/divisas.ts` — puro: validación, frescura, conversión, resolución de la vigente
-- [x] `tests/divisas.test.ts` — 38 tests
-- [x] `lib/divisas/index.ts` — adapter `CotizacionProvider` (DolarAPI, ArgentinaDatos, manual)
-- [x] `tests/divisas-proveedor.test.ts` — 24 tests del borde externo (ceros, 500, timeout, HTML)
-- [x] `lib/divisas/servicio.ts` — cadena de respaldo: caché → fuente → base → USD
+- [x] `src/lib/domain/divisas.ts` — puro: validación, frescura, conversión, resolución de la vigente
+- [x] `tests/dominio/divisas.test.ts` — 38 tests
+- [x] `src/lib/divisas/index.ts` — adapter `CotizacionProvider` (DolarAPI, ArgentinaDatos, manual)
+- [x] `tests/servicios/divisas-proveedor.test.ts` — 24 tests del borde externo (ceros, 500, timeout, HTML)
+- [x] `src/lib/divisas/servicio.ts` — cadena de respaldo: caché → fuente → base → USD
 - [x] Migración `0036_cotizaciones_de_divisas.sql`
-- [x] `app/api/cotizacion/route.ts` — endpoint interno, con sesión obligatoria
-- [x] Widget en el dashboard (en `Suspense`) + carga manual en `app/panel/config#divisas`
+- [x] `src/app/(back-api)/api/cotizacion/route.ts` — endpoint interno, con sesión obligatoria
+- [x] Widget en el dashboard (en `Suspense`) + carga manual en `src/app/(front-gestion)/panel/config#divisas`
 - [x] Icono `divisas` en `iconos.tsx` (aditivo)
-- [x] [ADR 0020](decisiones/0020-cotizacion-de-divisas.md)
+- [x] [ADR 0020](../decisiones/0020-cotizacion-de-divisas.md)
 
 **Variables de entorno nuevas:** `COTIZACION_PROVIDER` (**obligatoria en producción**
 por ADR 0018), `DOLARAPI_URL` y `ARGENTINADATOS_URL` (opcionales, para apuntar a un
@@ -114,11 +114,11 @@ proxy).
 
 **Terminado el 2026-08-16.** `npm run check` exit 0 · 20 tests nuevos.
 
-La grilla Gantt ya existía y estaba bien hecha (`app/panel/ocupacion/page.tsx`): unidades en
+La grilla Gantt ya existía y estaba bien hecha (`src/app/(front-gestion)/panel/ocupacion/page.tsx`): unidades en
 filas, días en columnas, barras por estado, ventana 14/30, celda libre → reserva.
 
-- [x] `lib/domain/grilla.ts` — `resumenPorDia`, `totalesDeVentana`, `tonoOcupacion`, `claveEstado`
-- [x] `tests/grilla.test.ts` — 20 tests
+- [x] `src/lib/domain/grilla.ts` — `resumenPorDia`, `totalesDeVentana`, `tonoOcupacion`, `claveEstado`
+- [x] `tests/dominio/grilla.test.ts` — 20 tests
 - [x] **Fila resumen por día** en `<tfoot>` pegado abajo: ocupadas, libres, llegadas, salidas,
       pax, % ocupación
 - [x] **Accesibilidad**: cada estado lleva **letra + color** (`P` pendiente, `C` confirmada,
@@ -147,13 +147,13 @@ filas, días en columnas, barras por estado, ventana 14/30, celda libre → rese
 **Terminado el 2026-08-16.** `npm run check` exit 0 · 32 tests nuevos (12 contra Postgres real).
 
 - [x] Migración `0037_estadias_fechas_consultables.sql` — `check_in`/`check_out` **generadas**
-- [x] `lib/domain/vistas-reservas.ts` — las 10 vistas con su definición de negocio
+- [x] `src/lib/domain/vistas-reservas.ts` — las 10 vistas con su definición de negocio
 - [x] Chips: **En el hotel · Llegadas hoy · Salidas hoy · Pendientes · Confirmadas · Check-out ·
       No-show · Canceladas · Grupos · Particulares**
 - [x] Columna de **saldo** (reusa `resumenPagos`, no se duplicó el cálculo) + totales al pie
 - [x] Estado vacío que dice el hecho operativo («no hay llegadas previstas para hoy»)
 - [x] Export CSV alineado: viaja la vista y suma columnas Pagado/Saldo
-- [x] `tests/vistas-reservas.test.ts` (20) + `tests/vistas-reservas-consulta.test.ts` (12, con base)
+- [x] `tests/dominio/vistas-reservas.test.ts` (20) + `tests/base-de-datos/vistas-reservas-consulta.test.ts` (12, con base)
 
 **Por qué hacía falta una migración para esto.** `estadias.periodo` es un `daterange` —correcto,
 es lo que hace posible la exclusión GiST del ADR 0002— pero PostgREST no expone `lower()`. «Las
@@ -191,8 +191,8 @@ no falla. El test «Llegadas hoy NO trae a quien entró ayer» es el que lo dete
 
 ## Paso 4 y 5 — Canales / Booking
 
-**Hallazgo clave: el puerto existe y está desconectado de todo.** `lib/canales/index.ts`
-(`CanalVentaProvider` + simulador) y `lib/domain/canales.ts` (reglas puras, 19 tests) tienen
+**Hallazgo clave: el puerto existe y está desconectado de todo.** `src/lib/canales/index.ts`
+(`CanalVentaProvider` + simulador) y `src/lib/domain/canales.ts` (reglas puras, 19 tests) tienen
 **cero referencias** fuera de sus propios tests. El diseño está hecho; falta el cableado.
 
 Ya fijado por esos módulos: OTA va a tarifa **neto** (ADR 0004), entra como **confirmada** (no
@@ -223,12 +223,12 @@ miente; si lanza, rompe al llamador.
 - [x] Migración `0038_canales_de_venta.sql` — 4 tablas: `canal_reservas`,
       `canal_sincronizaciones`, `canal_mensajes`, `canal_resenas`. Ninguna legible por `anon`
 - [x] Descriptor `CapacidadesCanal` + `ResultadoEnvio.noSoportado` en el puerto
-- [x] `lib/canales/csv.ts` — lector del informe del extranet (50 tests)
-- [x] `lib/canales/ical.ts` + `booking-ical.ts` — feed iCal (33 + 20 tests)
-- [x] `lib/canales/servicio.ts` — aterrizar e importar (15 tests contra Postgres)
-- [x] `app/panel/canales` — entrantes, mensajes y reseñas, con la advertencia de overbooking
+- [x] `src/lib/canales/csv.ts` — lector del informe del extranet (50 tests)
+- [x] `src/lib/canales/ical.ts` + `booking-ical.ts` — feed iCal (33 + 20 tests)
+- [x] `src/lib/canales/servicio.ts` — aterrizar e importar (15 tests contra Postgres)
+- [x] `src/app/(front-gestion)/panel/canales` — entrantes, mensajes y reseñas, con la advertencia de overbooking
 - [x] Área `canales` en permisos (admin, gerencia, **recepción**), navegación, icono y ayuda
-- [x] [ADR 0021](decisiones/0021-canales-de-venta-solo-lectura.md)
+- [x] [ADR 0021](../decisiones/0021-canales-de-venta-solo-lectura.md)
 
 **Variables nuevas:** `CANAL_PROVIDER` (`simulado` | `booking-ical`, obligatoria en producción)
 y `BOOKING_ICAL_FEEDS` con pares `CODIGO_TIPO=url`.
@@ -262,7 +262,7 @@ y `BOOKING_ICAL_FEEDS` con pares `CODIGO_TIPO=url`.
 - Un estado desconocido del canal cae en `nueva`, no en `cancelada`: interpretarlo mal liberaría
   una unidad vendida.
 
-**Bug preexistente corregido de paso:** `lib/pricing/cotizar.ts` siempre creaba su propio cliente
+**Bug preexistente corregido de paso:** `src/lib/pricing/cotizar.ts` siempre creaba su propio cliente
 con `cookies()`, así que `crearReservaEnUnidadLibre` —que recibe un cliente justamente para poder
 correr con `service_role`— quedaba atada a una petición HTTP. No se podía crear una reserva desde
 un webhook, un cron ni un test, y el error no dejaba adivinar la causa. Ahora el cliente se
@@ -317,9 +317,9 @@ extra no serviría para nada.
 
 ### Lo implementado
 
-- [x] `lib/domain/ocupantes.ts` — pax, validación contra capacidad, texto para pantalla
-- [x] `lib/domain/reservas.ts` — planes, garantías, segmentos, `noShowEsCobrable`, `segmentoDeCanal`
-- [x] `tests/ocupantes.test.ts` (24) + `tests/ficha-reserva.test.ts` (12, con base)
+- [x] `src/lib/domain/ocupantes.ts` — pax, validación contra capacidad, texto para pantalla
+- [x] `src/lib/domain/reservas.ts` — planes, garantías, segmentos, `noShowEsCobrable`, `segmentoDeCanal`
+- [x] `tests/dominio/ocupantes.test.ts` (24) + `tests/base-de-datos/ficha-reserva.test.ts` (12, con base)
 - [x] Alta: dos pasos nuevos en el formulario (ocupantes y condiciones comerciales)
 - [x] Detalle: desglose de ocupantes, VIP, plan, garantía, segmento, voucher y **desglose fiscal**
 - [x] Aviso de **«no mover»** en la pantalla de cambio de unidad, que es donde ese dato sirve
@@ -361,9 +361,9 @@ cubierto por `pagos.tipo = 'senia'`.
 
 - [x] Migración `0040_comandas_punto_de_venta.sql` — `comanda`, `punto` y `nota` en `consumos`,
       más la secuencia `comandas_numero_seq` y la función `siguiente_comanda()`
-- [x] `lib/domain/punto-venta.ts` — totales, validación de stock, buscador sin acentos
-- [x] `tests/punto-venta.test.ts` — 22 tests
-- [x] `app/panel/punto-venta` — grilla por departamento, buscador, total en vivo, comandas recientes
+- [x] `src/lib/domain/punto-venta.ts` — totales, validación de stock, buscador sin acentos
+- [x] `tests/dominio/punto-venta.test.ts` — 22 tests
+- [x] `src/app/(front-gestion)/panel/punto-venta` — grilla por departamento, buscador, total en vivo, comandas recientes
 - [x] Área `punto_venta` en permisos (admin, gerencia, recepción), navegación y ayuda
 
 **Por qué NO se creó una tabla `comandas`.** Sería duplicar `consumos`, que ya tiene producto,
@@ -411,9 +411,9 @@ futuro, pero acá no aplicaba.
 - [x] Migración `0041_folios_y_departamentos.sql` — tabla `departamentos` (jerarquía de **dos
       niveles**, con trigger que rechaza el tercero), `folio`/`comprobante`/`departamento_id` y
       moneda de origen en `consumos`, `folio_alojamiento` y titular del folio B en `reservas`
-- [x] `lib/domain/folios.ts` — totales por folio, agrupación por departamento, split, invariante
-- [x] `tests/folios.test.ts` — 28 tests
-- [x] `app/panel/reservas/[id]/cuenta` — detalle por departamento, dos folios, split línea por
+- [x] `src/lib/domain/folios.ts` — totales por folio, agrupación por departamento, split, invariante
+- [x] `tests/dominio/folios.test.ts` — 28 tests
+- [x] `src/app/(front-gestion)/panel/reservas/[id]/cuenta` — detalle por departamento, dos folios, split línea por
       línea, anticipos, cargo manual multimoneda
 - [x] El POS graba el departamento del producto en cada línea
 
@@ -452,7 +452,7 @@ folios pero dentro del total, y la diferencia se ve. Sumar los folios la habría
 
 ## Detalle original del paso 8 (**mostrar diff**)
 
-Existe la cuenta consolidada (`lib/domain/consumos.ts`), los consumos con snapshot de precio, y el
+Existe la cuenta consolidada (`src/lib/domain/consumos.ts`), los consumos con snapshot de precio, y el
 gancho AFIP completo: columnas CAE, numeración correlativa (0025/0033), ADR 0012 y el adapter
 `FacturacionElectronicaProvider`.
 
@@ -466,9 +466,9 @@ como línea explícita.
 
 **Terminado el 2026-08-16.** 24 tests nuevos.
 
-- [x] `lib/domain/housekeeping.ts` — prioridad, contadores por mucama, avance del turno
-- [x] `tests/housekeeping.test.ts` — 24 tests
-- [x] `app/panel/housekeeping/mi-trabajo` — una tarjeta por habitación, ordenadas por prioridad,
+- [x] `src/lib/domain/housekeeping.ts` — prioridad, contadores por mucama, avance del turno
+- [x] `tests/dominio/housekeeping.test.ts` — 24 tests
+- [x] `src/app/(front-gestion)/panel/housekeeping/mi-trabajo` — una tarjeta por habitación, ordenadas por prioridad,
       un botón grande por tarjeta
 - [x] Fila de contexto en el tablero de admin: **faltan por hacer (con urgentes) · llegadas hoy ·
       salidas hoy · en reparación**
@@ -554,10 +554,10 @@ pantalla hace tres cosas que sí son ciertas:
 3. **Registra cuándo fue la última vez**, para que la respuesta no dependa de que alguien se acuerde.
 
 - [x] Migración `0043_registro_de_respaldos.sql` — tabla `respaldos`, sin `update` ni `delete`
-- [x] `lib/domain/respaldos.ts` — las 22 tablas con el motivo de cada una, frescura, nombre de archivo
-- [x] `tests/respaldos.test.ts` — 22 tests, incluido el orden de dependencia de las tablas
-- [x] `app/api/respaldo/route.ts` — export completo, **solo admin**, con `traerTodo`
-- [x] `app/panel/respaldos` — estado, explicación, qué incluye y historial
+- [x] `src/lib/domain/respaldos.ts` — las 22 tablas con el motivo de cada una, frescura, nombre de archivo
+- [x] `tests/dominio/respaldos.test.ts` — 22 tests, incluido el orden de dependencia de las tablas
+- [x] `src/app/(back-api)/api/respaldo/route.ts` — export completo, **solo admin**, con `traerTodo`
+- [x] `src/app/(front-gestion)/panel/respaldos` — estado, explicación, qué incluye y historial
 - [x] Área `respaldos`: admin exporta, **gerencia sólo mira** el estado
 
 **Decisiones:**
@@ -608,6 +608,6 @@ paso** — anotar acá y decidir después.
 | Qué | Dónde | Por qué importa |
 |---|---|---|
 | `pagos.nota` y `reservas.notas` son texto libre | esquema | Es donde recepción va a pegar un número de tarjeta por costumbre de WinPAX |
-| `toLocaleString('es-AR')` repetido en ~30 lugares del panel | `app/panel/**` | Publica 3 formatos distintos en una misma columna; `lib/domain/moneda.ts` ya lo resuelve para el portal |
-| 19 lugares con el literal `['admin','gerencia']` | varios | Debería ser `lib/domain/permisos.ts` (ya anotado en `AGENTS.md`) |
-| Atomicidad en los flujos de varios pasos de `reservas` | `app/panel/reservas/actions.ts` | Si falla el paso 3 los datos quedan a medias; pide una función SQL transaccional |
+| `toLocaleString('es-AR')` repetido en ~30 lugares del panel | `src/app/(front-gestion)/panel/**` | Publica 3 formatos distintos en una misma columna; `src/lib/domain/moneda.ts` ya lo resuelve para el portal |
+| 19 lugares con el literal `['admin','gerencia']` | varios | Debería ser `src/lib/domain/permisos.ts` (ya anotado en `AGENTS.md`) |
+| Atomicidad en los flujos de varios pasos de `reservas` | `src/app/(front-gestion)/panel/reservas/actions.ts` | Si falla el paso 3 los datos quedan a medias; pide una función SQL transaccional |
