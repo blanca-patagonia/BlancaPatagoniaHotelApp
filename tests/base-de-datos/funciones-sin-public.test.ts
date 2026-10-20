@@ -112,3 +112,37 @@ describe.skipIf(!hayAnon)('borde público: las funciones sensibles ya no se alca
     expect((data ?? []).length).toBeGreaterThan(0)
   })
 })
+
+/**
+ * Lo mismo, mirando a `anon` por CUALQUIER camino (migración 0119).
+ *
+ * El test de arriba mira PUBLIC, y no alcanzaba: los privilegios por omisión de
+ * la plataforma le dan EXECUTE a `anon` DIRECTAMENTE al crear cada función. Así,
+ * en una base nueva, `anon` podía ejecutar `crear_reserva`, `fusionar_huespedes`
+ * y la DEFINER `registrar_acceso_huesped`, aunque cada migración hacía su
+ * `revoke ... from public`. Este test pregunta `has_function_privilege('anon')`.
+ */
+const PERMITIDAS_A_ANON = [
+  // En políticas RLS (ver arriba).
+  'puede_ver_canal(uuid)',
+  'rol_actual()',
+  // La llama `cotizar_estadia_publica` en modo invoker.
+  'temporada_en(date)',
+  // El portal público: cotizar y mostrar disponibilidad.
+  'cotizar_estadia_publica(uuid,date,date)',
+  'disponibilidad_por_tipo(date,date,categoria_unidad)',
+  'unidades_disponibles(date,date,categoria_unidad)',
+]
+
+describe.skipIf(!hayDB)('funciones que anon puede ejecutar (0119)', () => {
+  it('sólo las del portal y las de las políticas RLS', async () => {
+    const { data, error } = await clienteDePrueba().rpc('funciones_ejecutables_por_anon')
+    expect(error, error?.message).toBeNull()
+    const firmas = ((data ?? []) as { firma: string }[]).map((f) => f.firma.replace(/\s/g, ''))
+    expect(
+      firmas.filter((f) => !PERMITIDAS_A_ANON.includes(f)),
+      'función(es) ejecutables por anon fuera de la lista: revocá el execute a anon en su migración ' +
+        '(los privilegios por omisión de la plataforma se lo dan directo, no por PUBLIC).',
+    ).toEqual([])
+  })
+})
