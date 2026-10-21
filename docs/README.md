@@ -27,6 +27,7 @@ Mapa del código y de las carpetas del repositorio: [`../ESTRUCTURA.md`](../ESTR
 | [manual-usuario.md](3-manuales/manual-usuario.md) | Cómo se usa el sistema |
 | [manual-tecnico.md](3-manuales/manual-tecnico.md) | Cómo está hecho |
 | [despliegue.md](3-manuales/despliegue.md) | Puesta en producción, variables y vuelta atrás |
+| [integraciones-y-bandeja.md](3-manuales/integraciones-y-bandeja.md) | Cargar las claves de cada servicio, registrar los webhooks y conectar WhatsApp, Instagram, Messenger, correo y Telegram a la bandeja |
 
 ## 4. Seguridad y auditorías — `4-seguridad-y-auditorias/`
 
@@ -55,6 +56,7 @@ Mapa del código y de las carpetas del repositorio: [`../ESTRUCTURA.md`](../ESTR
 | [bitacora.md](bitacora.md) | Diario del desarrollo, fecha por fecha |
 | [roadmap.md](roadmap.md) | Fases del proyecto |
 | [decisiones/](decisiones/) | ADRs: cada decisión de arquitectura, numerada |
+| [licencias/](licencias/) | Avisos de licencia de código de terceros en el que se basa el sistema (Chatwoot, MIT) |
 | [wiki/](wiki/) | Páginas de la wiki de GitHub |
 | [img/](img/) | Capturas usadas en la documentación |
 

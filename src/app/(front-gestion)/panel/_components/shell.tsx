@@ -46,6 +46,7 @@ const ICONO_AREA: Record<Area, NombreIcono> = {
   mantenimiento: 'mantenimiento',
   objetos_perdidos: 'objetos',
   avisos: 'avisos',
+  bandeja: 'chat',
   conversaciones: 'chat',
   agencias: 'agencias',
   proveedores: 'proveedores',

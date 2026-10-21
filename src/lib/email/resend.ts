@@ -71,7 +71,7 @@ export class ProveedorResend implements EmailProvider {
             —la respuesta se perdió, no el envío—. Con esta clave, el segundo
             intento devuelve el mismo id en vez de mandar un duplicado.
           */
-          'Idempotency-Key': `${m.para}:${m.asunto}`.slice(0, 256),
+          'Idempotency-Key': (m.claveIdempotencia ?? `${m.para}:${m.asunto}`).slice(0, 256),
         },
         body: JSON.stringify({
           from: de,
@@ -82,6 +82,8 @@ export class ProveedorResend implements EmailProvider {
           // correo elige cuál mostrar. Sin `html`, algunos clientes muestran
           // el texto plano sin ningún salto de línea propio.
           ...(m.cuerpoHtml ? { html: m.cuerpoHtml } : {}),
+          ...(m.cabeceras ? { headers: m.cabeceras } : {}),
+          ...(m.responderA ? { reply_to: [m.responderA] } : {}),
         }),
         signal: corte,
       })

@@ -44,7 +44,9 @@ export interface GrupoNavegacion {
  * silencio del menú.
  */
 export const GRUPOS: readonly GrupoNavegacion[] = [
-  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
+  // La bandeja va en Operación, al lado de reservas y huéspedes: contestar a
+  // quien pregunta por disponibilidad es parte de vender, no de administrar.
+  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'bandeja', 'punto_venta', 'huespedes'] },
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
   { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
   // El registro de envíos va en Equipo, junto al tablón: las dos responden la
@@ -108,6 +110,7 @@ export const RUTA_AREA: Record<Area, string> = {
   mantenimiento: '/panel/mantenimiento',
   objetos_perdidos: '/panel/objetos-perdidos',
   avisos: '/panel/avisos',
+  bandeja: '/panel/bandeja',
   conversaciones: '/panel/conversaciones',
   agencias: '/panel/agencias',
   proveedores: '/panel/proveedores',

@@ -9080,3 +9080,84 @@ Pedido del usuario: «continuá con las mejoras luego de tu análisis».
 **Verificación:** `npm run test:aislado` 2.811 tests (209 archivos), 0 salteados; componentes 15; typecheck, lint y build en verde.
 
 **Para el deploy:** aplicar **0121, 0122, 0123 y 0124**.
+
+## 2026-10-21 — Bandeja de mensajes estilo Chatwoot y las claves en un solo lugar (ADR 0043)
+
+Pedido del usuario: «que yo solo tenga que pasarte las api keys de Mercado Pago, Booking, Payway, mail…» y «la bandeja de canales y CRM basada en Chatwoot, con WhatsApp, Instagram y demás».
+
+**Antes de empezar: el merge a medias.** El repo tenía un merge sin cerrar de `origin/pulido/integral-2026-10` con 84 conflictos (estructura vieja `app/`/`lib/` contra la nueva `src/`). Antes de resolver se comparó contenido y no rutas: 69 archivos del remoto ya estaban idénticos en local, 11 eran versiones viejas de la historia local, y del resto se buscaron las líneas una por una en todo el árbol. Las que no aparecían eran versiones anteriores que la rama local ya había reescrito (`deLista`, `fechaDelHotel`, `mensajeDeFalla`, los formularios que no pasan datos por la URL). La bitácora, el CI y las dependencias del remoto también estaban contenidos. Se resolvió con la versión local en todo, y se borraron los cinco tests duplicados en la raíz de `tests/`. El merge queda **en stage, sin commit**.
+
+**Bandeja (área nueva `bandeja`).** Se tomó el modelo del núcleo MIT de Chatwoot (nada de `enterprise/`; aviso en `docs/licencias/chatwoot-MIT.txt`).
+- Migraciones **0125** (tablas `crm_*`, función atómica de entrada, trigger, RLS y realtime) y **0126**: si el mismo email o teléfono escribe por otro canal, se suma al contacto existente. Va en una migración aparte porque una migración escrita no se edita.
+- **Webhooks:**
+  - `/api/webhooks/meta`: WhatsApp, Instagram y Messenger, con firma `X-Hub-Signature-256` y verificación `hub.challenge`.
+  - `/api/webhooks/telegram`: token secreto en cabecera.
+  - `email.received` dentro del webhook de Resend que ya existía.
+- **Pantalla de tres columnas:** lista con filtros (mías, sin asignar, estado, canal, etiqueta, búsqueda), hilo en tiempo real con caja de respuesta / nota privada y respuestas guardadas con «/», y el contacto con su ficha de huésped, sus reservas, asignación, prioridad, posponer, etiquetas y bloqueo.
+- **Respuestas guardadas y etiquetas:** cada una con su pantalla de alta y edición.
+- **Chat de la web:** «Hablar con recepción» dentro del asistente del portal, en cinco idiomas. La identidad del visitante va en una cookie httpOnly y `anon` no tiene permisos sobre `crm_*`. La respuesta le llega también por correo.
+- **Bug evitado en el correo:** la clave de idempotencia de Resend era `destinatario:asunto`, así que la segunda respuesta de un mismo hilo («Re: …») se descartaba en silencio. Ahora cada mensaje lleva su propia clave, más `In-Reply-To`.
+
+**Integraciones.**
+- `lib/domain/integraciones.ts` es el catálogo único de los 15 servicios: variables, interruptor, pasos para conseguir cada clave, webhook, qué pasa si falta y limitaciones (Booking sin API, ventana de 24 h de Meta, AFIP sin certificado).
+- `/panel/config/integraciones` lo muestra sin valores y prueba cada servicio con una consulta de solo lectura (`lib/integraciones/sondas.ts`).
+- `npm run integraciones` hace lo mismo desde la terminal e importa el mismo TypeScript: Node ≥ 22 lo carga sin compilar. Con `--plantilla` imprime el bloque de variables. Esto reemplaza editar `.env.example`, que la configuración de permisos no deja leer.
+
+**Capa de datos.** La primera versión creaba 23 clientes de base en `src/app` y el contrato `deuda-capa-de-datos` la frenó. Todo pasó a `lib/bandeja/consultas.ts` y `gestion.ts`: la pantalla y las acciones quedaron sin acceso directo a la base, y el tope no se tocó.
+
+**Tests nuevos:**
+- Dominio: `bandeja`, `bandeja-entrante` (payloads reales de cada canal) y `catalogo-integraciones`.
+- Servicios: `firma-meta`, comparado contra `node:crypto`.
+- Contrato: `bandeja-integraciones`, que exige que toda variable que lee la bandeja esté en el catálogo.
+- Base de datos: `bandeja`, con idempotencia, **carrera de dos mensajes simultáneos**, reapertura, vínculo por teléfono, unificación por email, bloqueo y RLS por rol. Además, las 8 tablas en la matriz de `rls-por-rol`, con filas sembradas.
+
+**Un tropiezo propio, corregido:** al crear el test del catálogo se pisó `tests/dominio/integraciones.test.ts`, que ya existía (es el de `seleccionarProveedor`). Se restauró desde git y el test nuevo quedó como `catalogo-integraciones.test.ts`.
+
+**Lo que NO se resuelve con código:**
+- la app de Meta verificada y en vivo, el token permanente y las plantillas aprobadas;
+- el permiso Human Agent;
+- un dominio de Resend con recepción (MX);
+- una URL pública para los webhooks;
+- y Booking/Expedia, que siguen necesitando un channel manager.
+
+Paso a paso en `docs/3-manuales/integraciones-y-bandeja.md`.
+
+**Para el deploy:** aplicar **0120 a 0126**. En la base local de desarrollo ya están aplicadas, con `supabase migration up`, sin reset.
+
+## 2026-10-21 (segunda parte) — conexión guiada de canales, contactos e informes (ADR 0044)
+
+Pedido del usuario, con una captura de la bandeja vacía: «agregá las otras cosas de Chatwoot, dejá mejor la interfaz gráfica, que las integraciones con WhatsApp, mail e Instagram sean sencillas, basate en el repo de Chatwoot y usá su código open source».
+
+**De Chatwoot se leyó cómo logra que conectar sea simple**, y la respuesta es que **el sistema registra el webhook solo**: `Whatsapp::WebhookSetupService` hace `POST /{waba}/subscribed_apps` y fija `override_callback_uri` en el número, `Channel::Instagram#subscribe` suscribe la cuenta por API, y `ManualWebhookStatusService` después pregunta a Meta si quedó bien. Eso es lo que se portó.
+
+**Conexión guiada.**
+- `lib/integraciones/meta.ts` (sin imports, para que lo cargue también la terminal): `conectarWhatsApp`, `conectarInstagram`, `conectarMessenger`, `crearWebhookDeCorreo` y `verificarConexion`. Cada una devuelve **una lista de pasos** (✓ / ✗ / «no se pudo»); el total es éxito sólo si ninguno falló y alguno salió. `urlPublicaValida` frena antes con un motivo claro si la dirección es `localhost`.
+- Asistente por canal (`/panel/bandeja/conectar` y `…/[canal]`): requisitos, datos con ✓/✗ en vivo, bloque para copiar, botón «Conectar», «Verificar que funciona» y ajustes. Un botón genera las claves que inventa el hotel (en el navegador, sin pasar por el servidor).
+- **`npm run configurar`**: una clave por vez (oculta), genera las propias, **prueba contra el proveedor antes de guardar**, escribe `.env.local` (modo 600; la copia `.bak` también, que al principio quedó en 644 con las claves viejas) y ofrece conectar el canal. Probado contra un archivo de prueba, nunca contra el `.env.local` real.
+
+**Lo de Chatwoot que faltaba** (migración **0127**):
+- **Contactos** (el CRM): lista con segmentos (huéspedes, interesados, bloqueados), búsqueda, ficha con sus canales, conversaciones y reservas.
+- **Informes:** conversaciones, esperando, primera respuesta y resolución, por canal y por persona. **Mediana, no promedio.**
+- **Búsqueda en el texto de los mensajes**, con índice de trigramas.
+- **Saludo y fuera de horario** por canal. Fuera de horario gana sobre el saludo. Horario en la hora del hotel, con soporte para cruzar la medianoche.
+- **Asignación automática** dentro de la función atómica (con el candado del contacto), sólo a recepción.
+- **Variables** `{{nombre}}` y `{{agente}}` en las respuestas guardadas.
+- **Imágenes de WhatsApp:** proxy `/api/bandeja/medio/{id}` (WhatsApp da un ID, no una URL; la URL de Meta vence en minutos).
+
+**Interfaz.** Pestañas por estado con contadores, control segmentado mías / sin asignar / todas, filtro de canal con íconos propios, separadores «Hoy / Ayer», burbujas agrupadas, fotos y audio en el hilo, y una **guía de bienvenida** (tres pasos y una fila por canal) cuando todavía no llegó ningún mensaje, en lugar de dos paneles vacíos. Una barra de secciones reemplaza la fila de botones sueltos. Verificado en el navegador a escritorio y a 390 px, sin desborde lateral.
+
+**Bugs encontrados y corregidos en la verificación:**
+1. El ícono del canal tapaba las iniciales del avatar.
+2. A 1200 px el hilo quedaba aplastado: la altura fija estaba en el contenedor de dos filas y no en los paneles.
+3. Al abrir una conversación con una foto, el hilo no quedaba al final: la imagen cargaba después del scroll. `AlFinal` ahora acompaña la carga, pero sin arrastrar de vuelta a quien subió a leer un mensaje viejo.
+4. Mi propio test del horario estaba mal (un instante que era miércoles 22:00 del hotel). Se corrigió la expectativa, no el código.
+
+**Un riesgo detectado al pensar el correo:** habilitar la recepción de Resend con un registro MX en el dominio principal **dejaría sin correo al hotel**. La guía y el asistente lo dicen de entrada: va en un subdominio.
+
+**Tests nuevos:** `bandeja-automatico` (horario con zona del hotel, mensajes, variables, ajustes), `bandeja-informes`, `integraciones-meta` (qué se le manda a cada proveedor, con `fetch` simulado), `bandeja-medio` (SSRF, lista blanca de tipos, tamaño), `bandeja-automaticos` y ampliación de `bandeja` (contra Postgres: lo automático no es una respuesta, `resuelta_en`, asignación, RLS de los ajustes) y el contrato `scripts-sin-compilar`, que se comprobó rompiendo un archivo a propósito.
+
+**Lo que NO está verificado, dicho de frente:** no hay credenciales de Meta, Resend ni Telegram en este entorno. Lo que sale por red está probado contra `fetch` simulado con las formas documentadas. **No se probó contra Meta real**, y el punto de más riesgo es `POST /{app-id}/subscriptions` (webhook a nivel de la app para Instagram y Messenger), que no se pudo contrastar con la referencia oficial.
+
+**No se hizo:** enviar archivos desde la bandeja (pide Storage, ADR 0013), el inicio de sesión con Facebook de WhatsApp (pide una app de Meta aprobada), presencia en línea y exportar contactos a CSV.
+
+**Para el deploy:** aplicar **0127**. En la base local ya está aplicada.

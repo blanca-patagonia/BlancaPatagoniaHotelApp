@@ -557,6 +557,62 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
+    area: 'bandeja',
+    resumen: 'Todos los mensajes de los huéspedes —WhatsApp, Instagram, Messenger, correo, Telegram y el chat de la web— en un solo lugar.',
+    pasos: [
+      {
+        titulo: 'Cómo se lee la pantalla',
+        detalle:
+          'A la izquierda, las conversaciones, con pestañas arriba (abiertas, pendientes, pospuestas, resueltas) y el número de cada una. En el medio, la que elegiste, con la caja para responder abajo. A la derecha, quién es: si ya es huésped, sus reservas; y los botones para asignarla, etiquetarla o cerrarla. En el teléfono se ve una parte por vez.',
+      },
+      {
+        titulo: 'Responder o dejar una nota',
+        detalle:
+          'Arriba de la caja hay dos botones. «Responder» le manda el mensaje al huésped por el mismo canal por donde escribió. «Nota privada» la ve sólo el equipo (la caja se pone amarilla para que no se confunda). Se envía con el botón o con Ctrl + Enter.',
+      },
+      {
+        titulo: 'Respuestas guardadas',
+        detalle:
+          'Escribí «/» en la caja y aparecen los textos guardados (horarios, ubicación, saludo). Tocás uno y se completa. Si el texto lleva {{nombre}}, se reemplaza por el primer nombre del huésped; {{agente}}, por el tuyo. Los textos los carga la dirección en «Respuestas guardadas».',
+      },
+      {
+        titulo: 'Buscar',
+        detalle:
+          'El buscador de la lista encuentra por nombre, teléfono, email y también por lo que dice el mensaje: sirve para encontrar «¿quién preguntó por las mascotas?».',
+      },
+      {
+        titulo: 'Por qué a veces no deja responder',
+        detalle:
+          'WhatsApp, Instagram y Messenger dejan responder sólo durante 24 horas desde el último mensaje del huésped. Pasado ese tiempo, la pantalla lo avisa: escribile por correo o esperá a que vuelva a escribir. Tampoco se puede responder por un canal que todavía no está conectado.',
+      },
+      {
+        titulo: 'Abierta, pendiente, pospuesta y resuelta',
+        detalle:
+          'Abierta: hay que atenderla. Pendiente: estás esperando algo interno (un precio, una confirmación). Pospuesta: vuelve sola en la fecha elegida. Resuelta: terminada; si el huésped vuelve a escribir, se reabre sola.',
+      },
+      {
+        titulo: 'Las que esperan, en rojo',
+        detalle:
+          'Cada conversación muestra hace cuánto espera respuesta. Pasada una hora se marca en rojo: es lo que un huésped tolera antes de ir a reservar a otro lado. El saludo automático no cuenta como respuesta: sigue esperando hasta que conteste una persona.',
+      },
+      {
+        titulo: 'Contactos',
+        detalle:
+          'En «Contactos» están todas las personas que escribieron alguna vez. «Huéspedes» son los que ya tienen ficha y reservas; «Interesados», los que preguntaron y todavía no reservaron. Si el teléfono o el email coinciden con un único huésped, se vincula solo; si no, se vincula a mano desde la conversación.',
+      },
+      {
+        titulo: 'Informes',
+        detalle:
+          'En «Informes» ves cuántas conversaciones hubo, cuántas esperan, cuánto se tarda en contestar la primera vez y cuánto en resolver, por canal y por persona. Se usa la mediana: dice lo que le pasa a un huésped típico, sin que lo distorsione una consulta de la noche.',
+      },
+      {
+        titulo: 'Conectar un canal',
+        detalle:
+          'En «Canales» hay una tarjeta por cada uno con su estado y un botón «Conectar». El asistente te lleva paso a paso: qué datos conseguir, cómo cargarlos, un botón que avisa al proveedor y otro que verifica que funciona. Conectar lo hace la dirección. También se pueden configurar el saludo, el aviso de fuera de horario y la asignación automática.',
+      },
+    ],
+  },
+  {
     area: 'errores',
     resumen: 'Qué falló, cuándo y en qué pantalla. Sirve para pedir ayuda con datos.',
     pasos: [

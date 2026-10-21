@@ -19,6 +19,9 @@ export type AccionLimitada =
   | 'webhook_pago'
   | 'webhook_email'
   | 'webhook_canal_externo'
+  | 'webhook_meta'
+  | 'webhook_telegram'
+  | 'chat_web'
   | 'comprobante_agencia'
   | 'payway_ejecutar_pago'
   | 'pago_portal'
@@ -162,6 +165,34 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 40,
     minutos: 60,
     motivo: 'Martilleo del webhook de correo por parte de quien no tiene el secreto.',
+  },
+
+  /*
+    Los webhooks de la bandeja de mensajes (ADR 0043), con el mismo criterio:
+    se cuenta DESPUÉS de rechazar la firma o el token. Un evento legítimo nunca
+    pasa por acá, y descartarlo por volumen sería perder el mensaje de un
+    huésped, que no vuelve a llegar.
+  */
+  webhook_meta: {
+    maximo: 40,
+    minutos: 60,
+    motivo: 'Martilleo del webhook de Meta por parte de quien no tiene el secreto de la app.',
+  },
+  webhook_telegram: {
+    maximo: 40,
+    minutos: 60,
+    motivo: 'Martilleo del webhook de Telegram por parte de quien no tiene el token secreto.',
+  },
+
+  /*
+    El chat de la web, sin sesión: cualquiera puede abrirlo. Treinta mensajes
+    por hora por IP es una conversación muy larga con recepción y está muy por
+    debajo de lo que haría falta para llenar la bandeja de basura.
+  */
+  chat_web: {
+    maximo: 30,
+    minutos: 60,
+    motivo: 'Cada mensaje del chat de la web aparece en la bandeja del staff.',
   },
 
   /*

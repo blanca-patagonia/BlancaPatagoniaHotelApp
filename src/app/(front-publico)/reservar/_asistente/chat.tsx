@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRef, useState, useTransition } from 'react'
 import { preguntarAlAsistente } from './acciones'
+import { ChatRecepcion } from './recepcion-chat'
 import type { AccionSugerida } from '@/lib/domain/asistente'
 import type { Diccionario } from '@/lib/i18n/diccionarios/es'
 
@@ -45,6 +46,8 @@ export function ChatAsistente({ t, consultasEs }: Props) {
   }))
   const [pendiente, iniciarTransicion] = useTransition()
   const formRef = useRef<HTMLFormElement>(null)
+  // Recepción: el chat con una persona (canal `web` de la bandeja, ADR 0043).
+  const [conRecepcion, setConRecepcion] = useState(false)
 
   /** `mostrar` es lo que ve el huésped; `consulta`, lo que recibe el motor. */
   function preguntar(mostrar: string, consulta = mostrar) {
@@ -56,10 +59,7 @@ export function ChatAsistente({ t, consultasEs }: Props) {
 
     iniciarTransicion(async () => {
       const r = await preguntarAlAsistente(consulta.trim())
-      setBurbujas((previas) => [
-        ...previas,
-        { de: 'asistente', texto: r.texto, accion: r.accion },
-      ])
+      setBurbujas((previas) => [...previas, { de: 'asistente', texto: r.texto, accion: r.accion }])
     })
   }
 
@@ -67,82 +67,108 @@ export function ChatAsistente({ t, consultasEs }: Props) {
     <section className="rounded-2xl border border-stone-200 bg-white shadow-sm">
       <header className="flex items-center gap-2 border-b border-stone-100 px-5 py-3">
         <span className="flex size-8 items-center justify-center rounded-full bg-lago-100 text-lago-700">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
             <path d="M20.5 12.5c0 3.6-3.8 6.5-8.5 6.5-1 0-2-.1-2.9-.4l-5.1 1.4 1.5-4.2c-1.2-1-1.9-2.4-1.9-3.9C3.6 8.9 7.4 6 12 6s8.5 2.9 8.5 6.5z" />
           </svg>
         </span>
         <div>
-          <h2 className="font-display text-base font-semibold text-stone-900">
-            {t.nombre}
-          </h2>
+          <h2 className="font-display text-base font-semibold text-stone-900">{t.nombre}</h2>
           <p className="text-xs text-stone-500">{t.subtitulo}</p>
           {t.aviso && <p className="mt-0.5 text-xs text-lago-800">{t.aviso}</p>}
         </div>
+        {!conRecepcion && (
+          <button
+            type="button"
+            onClick={() => setConRecepcion(true)}
+            className="ml-auto shrink-0 rounded-full bg-lago-50 px-3 py-1 text-xs font-medium text-lago-800 ring-1 ring-lago-200 transition hover:bg-lago-100"
+          >
+            {t.recepcionBoton}
+          </button>
+        )}
       </header>
 
-      <div className="flex max-h-80 flex-col gap-2 overflow-y-auto px-5 py-4" aria-live="polite">
-        {burbujas.map((b, i) => (
+      {conRecepcion ? (
+        <ChatRecepcion t={t} alVolver={() => setConRecepcion(false)} />
+      ) : (
+        <>
           <div
-            key={i}
-            className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-line ${
-              b.de === 'huesped'
-                ? 'self-end bg-lago-700 text-white'
-                : 'self-start bg-stone-100 text-stone-800'
-            }`}
+            className="flex max-h-80 flex-col gap-2 overflow-y-auto px-5 py-4"
+            aria-live="polite"
           >
-            {b.texto}
-            {b.accion && (
-              <Link
-                href={b.accion.href}
-                className="mt-2 block rounded-lg bg-white px-3 py-1.5 text-center text-xs font-medium text-lago-800 ring-1 ring-lago-200 transition hover:bg-lago-50"
+            {burbujas.map((b, i) => (
+              <div
+                key={i}
+                className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-line ${
+                  b.de === 'huesped'
+                    ? 'self-end bg-lago-700 text-white'
+                    : 'self-start bg-stone-100 text-stone-800'
+                }`}
               >
-                {b.accion.etiqueta}
-              </Link>
+                {b.texto}
+                {b.accion && (
+                  <Link
+                    href={b.accion.href}
+                    className="mt-2 block rounded-lg bg-white px-3 py-1.5 text-center text-xs font-medium text-lago-800 ring-1 ring-lago-200 transition hover:bg-lago-50"
+                  >
+                    {b.accion.etiqueta}
+                  </Link>
+                )}
+              </div>
+            ))}
+            {pendiente && (
+              <p className="self-start rounded-2xl bg-stone-100 px-3.5 py-2 text-sm text-stone-400">
+                {t.escribiendo}
+              </p>
             )}
           </div>
-        ))}
-        {pendiente && (
-          <p className="self-start rounded-2xl bg-stone-100 px-3.5 py-2 text-sm text-stone-400">
-            {t.escribiendo}
-          </p>
-        )}
-      </div>
 
-      {burbujas.length === 1 && (
-        <div className="flex flex-wrap gap-1.5 px-5 pb-3">
-          {sugerencias.map((s) => (
+          {burbujas.length === 1 && (
+            <div className="flex flex-wrap gap-1.5 px-5 pb-3">
+              {sugerencias.map((s) => (
+                <button
+                  key={s.etiqueta}
+                  type="button"
+                  onClick={() => preguntar(s.etiqueta, s.consulta)}
+                  className="rounded-full bg-stone-50 px-3 py-1 text-xs text-stone-600 ring-1 ring-stone-200 transition hover:bg-stone-100"
+                >
+                  {s.etiqueta}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <form
+            ref={formRef}
+            action={(formData) => preguntar(String(formData.get('pregunta') ?? ''))}
+            className="flex items-center gap-2 border-t border-stone-100 px-5 py-3"
+          >
+            <input
+              name="pregunta"
+              placeholder={t.campo}
+              aria-label={t.campoEtiqueta}
+              autoComplete="off"
+              className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
+            />
             <button
-              key={s.etiqueta}
-              type="button"
-              onClick={() => preguntar(s.etiqueta, s.consulta)}
-              className="rounded-full bg-stone-50 px-3 py-1 text-xs text-stone-600 ring-1 ring-stone-200 transition hover:bg-stone-100"
+              type="submit"
+              disabled={pendiente}
+              className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
             >
-              {s.etiqueta}
+              {t.enviar}
             </button>
-          ))}
-        </div>
+          </form>
+        </>
       )}
-
-      <form
-        ref={formRef}
-        action={(formData) => preguntar(String(formData.get('pregunta') ?? ''))}
-        className="flex items-center gap-2 border-t border-stone-100 px-5 py-3"
-      >
-        <input
-          name="pregunta"
-          placeholder={t.campo}
-          aria-label={t.campoEtiqueta}
-          autoComplete="off"
-          className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-lago-600"
-        />
-        <button
-          type="submit"
-          disabled={pendiente}
-          className="rounded-lg bg-lago-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-lago-800 disabled:opacity-60"
-        >
-          {t.enviar}
-        </button>
-      </form>
     </section>
   )
 }

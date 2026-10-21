@@ -25,7 +25,9 @@
     "e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "setup": "npm ci && node --env-file-if-exists=.env.local scripts/setup.mjs",
-    "seed:usuarios": "node --env-file-if-exists=.env.local scripts/seed-usuarios.mjs"
+    "seed:usuarios": "node --env-file-if-exists=.env.local scripts/seed-usuarios.mjs",
+    "integraciones": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/verificar-integraciones.mjs",
+    "configurar": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings scripts/configurar-integraciones.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

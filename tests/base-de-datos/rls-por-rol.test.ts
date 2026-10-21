@@ -238,6 +238,21 @@ const MATRIZ: Record<string, Partial<Record<Rol, Expectativa>> & { todos?: Expec
   // tokens cifrados de la cuenta real de Mercado Pago o de Google del hotel.
   conexiones_proveedores: { admin: 'si', gerencia: 'si', recepcion: 'no', housekeeping: 'no' },
 
+  // ── Bandeja de mensajes con huéspedes (migraciones 0125-0126, ADR 0043) ──
+  //
+  // La atienden admin, gerencia y recepción: los mismos roles que `huespedes`.
+  // Housekeeping NO: los mensajes traen teléfonos, emails y a veces datos de
+  // pago, y no es quien contesta. Mismos roles que el área `bandeja` de
+  // `lib/domain/permisos.ts`.
+  crm_bandejas: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+  crm_contactos: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+  crm_identidades: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+  crm_conversaciones: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+  crm_mensajes: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+  crm_etiquetas: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+  crm_conversacion_etiquetas: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+  crm_respuestas: { admin: 'si', gerencia: 'si', recepcion: 'si', housekeeping: 'no' },
+
   // ── Divisas y respaldos ──
   cotizaciones: { todos: 'si' },
   respaldos: { todos: 'si' },
@@ -505,6 +520,37 @@ describe.skipIf(!hayDB || !hayRoles)('auditoría RLS · lectura por rol', () => 
       función consulta consentimiento y calcula el horario, y acá sólo hace falta
       que exista una fila.
     */
+    /*
+      ── bandeja de mensajes (migraciones 0125-0126) ───────────────────────────
+
+      Housekeeping no lee ninguna tabla `crm_*`, y sobre tablas vacías ese caso
+      pasaría solo. Se siembra un mensaje por la MISMA función que usan los
+      webhooks —crea contacto, identidad, conversación y mensaje— y una etiqueta
+      puesta. La guarda mira `crm_conversacion_etiquetas`, que es la última fila
+      que hace falta: si existe, las anteriores también.
+    */
+    if ((await contar('crm_conversacion_etiquetas')) === 0) {
+      const { data: r, error } = await admin.rpc('crm_registrar_entrante', {
+        p_canal: 'web',
+        p_externo_contacto: `auditoria-rls-${sufijo}`,
+        p_nombre: 'Auditoría RLS',
+        p_email: null,
+        p_telefono: null,
+        p_externo_mensaje: `auditoria-rls-${sufijo}`,
+        p_contenido: 'fila de prueba de la matriz RLS',
+      })
+      if (error) throw new Error(`No se pudo sembrar la bandeja: ${error.message}`)
+      const sembrado = r as { conversacion_id: string; contacto_id: string }
+      sembradas.push({ tabla: 'crm_contactos', columna: 'id', valor: sembrado.contacto_id })
+
+      const { data: etiqueta, error: eEtiqueta } = await admin.from('crm_etiquetas').select('id').limit(1).single<{ id: string }>()
+      if (eEtiqueta) throw new Error(`No se pudo leer una etiqueta de la bandeja: ${eEtiqueta.message}`)
+      const { error: eMarca } = await admin
+        .from('crm_conversacion_etiquetas')
+        .insert({ conversacion_id: sembrado.conversacion_id, etiqueta_id: etiqueta.id })
+      if (eMarca) throw new Error(`No se pudo sembrar la etiqueta de la conversación: ${eMarca.message}`)
+    }
+
     if ((await contar('notificaciones')) === 0) {
       const clave = `auditoria_rls_${sufijo}`
       const { error } = await admin.from('notificaciones').insert({

@@ -25,6 +25,19 @@ export interface MensajeEmail {
   cuerpo: string
   /** Variante HTML del mismo mensaje (Fase 5). Opcional: un proveedor puede ignorarla. */
   cuerpoHtml?: string
+  /**
+   * Clave de idempotencia propia (bandeja de mensajes, ADR 0043).
+   *
+   * ⚠️ Sin ella se usa `destinatario:asunto`, que sirve para los avisos —cada
+   * evento tiene su asunto— pero NO para una conversación: dos respuestas al
+   * mismo huésped en el mismo hilo («Re: Consulta») tienen igual asunto, y
+   * Resend devolvería el id de la primera sin mandar la segunda.
+   */
+  claveIdempotencia?: string
+  /** Cabeceras extra. La bandeja manda `In-Reply-To`/`References` para hilar. */
+  cabeceras?: Record<string, string>
+  /** A dónde responde el huésped, si no es el remitente. */
+  responderA?: string
 }
 
 export interface ResultadoEnvio {

@@ -96,6 +96,9 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `notificaciones.ts` | Bandeja de salida de avisos |
 | `entregas.ts` | Estados de entrega de un correo (`enviada` ≠ `entregada`) |
 | `whatsapp.ts` | Plantillas de WhatsApp y orden de sus parámetros |
+| `bandeja.ts` | Bandeja de mensajes con huéspedes: estados, ventana de 24 h de Meta, entregas, posponer y respuestas guardadas (ADR 0043) |
+| `bandeja-entrante.ts` | Traducción de los webhooks de WhatsApp, Instagram, Messenger, Telegram y correo a un formato único (ADR 0043) |
+| `bandeja-informes.ts` | Informes de la bandeja: conversaciones, primera respuesta y resolución (mediana), por canal y por persona (ADR 0044) |
 | `conversaciones.ts` | Chat interno del staff |
 | `contratos.ts` | Ciclo de vida y firma de contratos (ADR 0010) |
 | `comercial.ts` | Pipeline comercial de agencias y empresas |
@@ -146,6 +149,7 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 
 | Módulo | Qué decide |
 |---|---|
+| `integraciones.ts` | Catálogo de integraciones: qué clave lleva cada servicio, dónde se consigue y qué pasa si falta (ADR 0043) |
 | `formularios.ts` | `falloConValores()`: devolver lo escrito cuando una acción falla (sin campos sensibles) |
 | `limites.ts` | Límites de intentos de las entradas públicas |
 | `listas.ts` | `deLista()`: validar un valor contra una lista blanca |

@@ -72,6 +72,12 @@ const SECCIONES: Seccion[] = [
     icono: 'ocupacion',
   },
   {
+    titulo: 'Integraciones y claves',
+    descripcion: 'Qué servicios externos están conectados (cobros, correo, WhatsApp, Instagram…), qué clave falta y una prueba de cada uno.',
+    href: '/panel/config/integraciones',
+    icono: 'config',
+  },
+  {
     titulo: 'Conexiones',
     descripcion: 'Vincular Mercado Pago, el correo, Booking y Expedia sin pegar claves a mano.',
     href: '/panel/config/conexiones',

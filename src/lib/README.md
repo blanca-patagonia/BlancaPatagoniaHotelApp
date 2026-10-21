@@ -34,8 +34,9 @@ falla si aparece uno sin listar.
 | `email/` | Envío de correo: consola o Resend |
 | `whatsapp/` | Envío por WhatsApp (opcional) |
 | `notificaciones/` | Bandeja de salida de avisos y recordatorios |
+| `bandeja/` | Bandeja de mensajes con huéspedes: entrada de webhooks, respuesta por cada canal, chat de la web y consultas (ADR 0043) |
 | `firma/` | Firma electrónica de contratos (ADR 0010) |
-| `integraciones/` | Elección de proveedor por variable de entorno y firma de webhooks |
+| `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks (también la de Meta), pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
 | `conexiones/` | OAuth2 con Mercado Pago y Google |
 | `storage/` | Fotos operativas en Supabase Storage (ADR 0037) |
 | `asistente/` | Asistente del portal público, por reglas (ADR 0011) |

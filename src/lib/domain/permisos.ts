@@ -17,6 +17,7 @@ export const AREAS = [
   'mantenimiento',
   'objetos_perdidos',
   'avisos',
+  'bandeja',
   'conversaciones',
   'agencias',
   'proveedores',
@@ -47,6 +48,7 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   mantenimiento: 'Mantenimiento',
   objetos_perdidos: 'Objetos perdidos',
   avisos: 'Avisos',
+  bandeja: 'Bandeja de mensajes',
   conversaciones: 'Conversaciones',
   agencias: 'Agencias',
   proveedores: 'Proveedores',
@@ -77,6 +79,10 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
     'proveedores', 'contratos', 'canales', 'reportes', 'config',
+    // La bandeja de mensajes con huéspedes (ADR 0043). Mismos tres roles que la
+    // política RLS de `crm_*` (migración 0125): si se sumara housekeeping, vería
+    // la pantalla vacía.
+    'bandeja',
     /*
       Conciliación es el extracto bancario del hotel: sueldos, proveedores, todo lo
       que pasó por la cuenta, y no sólo lo que tiene que ver con las reservas. Va
@@ -115,6 +121,9 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   recepcion: [
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'objetos_perdidos',
     'avisos', 'conversaciones', 'agencias', 'canales',
+    // Recepción es quien contesta WhatsApp e Instagram: la bandeja es su trabajo
+    // diario, igual que el teléfono del mostrador.
+    'bandeja',
     /*
       Recepción entra al registro de envíos porque es quien atiende el «no me
       llegó nada». Mirar si el correo salió, rebotó o nunca se intentó es parte

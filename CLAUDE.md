@@ -305,7 +305,49 @@ Tarifario 2025/2026 (Anexo A).
      reservas 199 ms, los tres sin ningún error de consola — más el tamaño
      del bundle (~1.6 MB) y los planes de consulta con `EXPLAIN ANALYZE`.
      Son números de referencia en desarrollo, no un build de producción.
-- **Hay 41 ADRs, numerados hasta el 0042.** El último es el **0042** (cómo se verifica el sistema: base de tests AISLADA en `supabase-tests/` con `npm run test:aislado` —los tests nunca van contra la base de trabajo—, `npm run esquema:comparar` antes de cualquier deploy, tests de interfaz en `tests/componentes/` y el recorrido e2e con `npm run e2e`). El anterior, el **0041** (el asistente de IA **propone** acciones —aviso, orden de mantenimiento, objeto perdido, consumo— y una persona las **confirma**; al confirmar se llama a la MISMA Server Action del módulo, sin lógica de escritura propia. Las herramientas del asistente **no leen datos personales de huéspedes**: salen a Google, lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`). (El 0034 quedó retirado: era la
+- **Bandeja de mensajes con huéspedes + integraciones (ADR 0043, 2026-10-21).**
+  Área nueva `bandeja` (`/panel/bandeja`, admin/gerencia/recepción): WhatsApp,
+  Instagram, Messenger, correo entrante, Telegram y el chat de la web en una sola
+  bandeja estilo Chatwoot (modelo tomado de su núcleo MIT, **nada de
+  `enterprise/`**; aviso en `docs/licencias/`). Migraciones **0125-0126**
+  (tablas `crm_*`). Webhooks `/api/webhooks/meta`, `/api/webhooks/telegram` y el
+  `email.received` dentro de `/api/webhooks/email/resend`. Servicios en
+  `src/lib/bandeja/`, reglas en `lib/domain/bandeja.ts` y
+  `bandeja-entrante.ts`. **Las claves:** catálogo único en
+  `lib/domain/integraciones.ts`, pantalla `/panel/config/integraciones` (estado
+  y prueba de cada una, nunca el valor) y `npm run integraciones` (con
+  `--plantilla` imprime el bloque de variables). Guía: `docs/3-manuales/integraciones-y-bandeja.md`.
+  **ADR 0044 (misma fecha): conexión guiada y CRM.** `/panel/bandeja/conectar` es
+  un asistente por canal: **«Conectar» le dice al proveedor a dónde avisar por API**
+  (`lib/integraciones/meta.ts`, tomado de `Whatsapp::WebhookSetupService` de
+  Chatwoot) y **«Verificar»** pregunta qué quedó; `npm run configurar` carga las
+  claves por terminal, las prueba antes de guardar y las escribe en `.env.local`.
+  Sumó contactos, informes, búsqueda en mensajes, saludo y fuera de horario,
+  asignación automática y las imágenes de WhatsApp (proxy). Migración **0127**.
+  ⚠️ **Lo que hay que saber:** (a) **nunca probado contra Meta real** —sin
+  credenciales—; el punto de riesgo es `POST /{app-id}/subscriptions` (ADR 0044);
+  (b) **un mensaje automático NO es una respuesta humana** (`crm_mensajes.automatico`):
+  si lo fuera, el huésped dejaría de figurar «esperando»; (c) **el correo entrante va
+  en un SUBDOMINIO**: el MX de Resend reemplaza al del dominio; (d) el horario se
+  evalúa en la hora del hotel, no la del servidor; (e) los archivos que cargan los
+  scripts (`integraciones.ts`, `sondas.ts`, `meta.ts`) **no pueden tener imports**
+  (lo vigila `tests/contratos/scripts-sin-compilar.test.ts`).
+  ⚠️ **Cinco cosas antes de tocarlo:**
+  1. **Las tablas llevan prefijo `crm_`** porque `canales`/`mensajes` ya son el
+     chat interno (0019) y `canal_*` los canales de venta.
+  2. **Todo mensaje externo entra por `crm_registrar_entrante`** (definer, sólo
+     `service_role`): identidad + contacto + conversación + mensaje en una
+     transacción, candado por contacto e idempotencia por `externo_id`. No
+     insertar entrantes a mano.
+  3. **El trigger `crm_al_insertar_mensaje` mantiene la conversación**
+     (no leídos, espera, reapertura). No escribir esos campos desde la app.
+  4. **La ventana de 24 h de Meta se decide ANTES de mandar**
+     (`ventanaDeRespuesta`), y un canal sin claves no se ofrece: no hay
+     simulador que diga «enviado».
+  5. **Las claves NO van a la base** (Chatwoot sí las guarda): variables de
+     entorno. Toda variable que lea la bandeja tiene que estar en el catálogo
+     (`tests/contratos/bandeja-integraciones.test.ts`).
+- **Hay 43 ADRs, numerados hasta el 0044.** El último es el **0044** (conexión guiada de canales, contactos e informes de la bandeja, ver arriba). El anterior, el **0043** (bandeja de mensajes estilo Chatwoot y las claves en un solo lugar). Antes, el **0042** (cómo se verifica el sistema: base de tests AISLADA en `supabase-tests/` con `npm run test:aislado` —los tests nunca van contra la base de trabajo—, `npm run esquema:comparar` antes de cualquier deploy, tests de interfaz en `tests/componentes/` y el recorrido e2e con `npm run e2e`). El anterior, el **0041** (el asistente de IA **propone** acciones —aviso, orden de mantenimiento, objeto perdido, consumo— y una persona las **confirma**; al confirmar se llama a la MISMA Server Action del módulo, sin lógica de escritura propia. Las herramientas del asistente **no leen datos personales de huéspedes**: salen a Google, lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`). (El 0034 quedó retirado: era la
   WhatsApp por Cloud API de Meta, descartada antes de escribirse como
   archivo — ver más abajo, "la pieza de WhatsApp... NO entró con esta
   pasada"). El último es el **0040** (inventario físico real de

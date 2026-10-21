@@ -3,6 +3,12 @@ import { verificarFirmaSvix } from '@/lib/integraciones/firma-svix'
 import { esAvance, interpretarEvento } from '@/lib/domain/entregas'
 import { permitirIntento } from '@/lib/limites'
 import { registrarError } from '@/lib/registro'
+import { procesarCorreoRecibido } from '@/lib/bandeja/correo'
+
+function emailIdRecibido(evento: { data?: { email_id?: string } }): string | undefined {
+  const id = evento.data?.email_id
+  return typeof id === 'string' && id.trim() ? id.trim() : undefined
+}
 
 /**
  * Webhook de entrega de correo: `POST /api/webhooks/email/{proveedor}`.
@@ -89,6 +95,23 @@ export async function POST(
     evento = JSON.parse(cuerpo)
   } catch {
     return Response.json({ error: 'cuerpo inválido' }, { status: 400 })
+  }
+
+  /*
+    Correo que ENTRA (Resend Inbound): va a la bandeja de mensajes (ADR 0043).
+    Comparte endpoint y secreto con los eventos de entrega a propósito: en Resend
+    se configura un solo webhook con todos los eventos, y un secreto menos que
+    administrar.
+  */
+  if (evento.type === 'email.received') {
+    if (!emailIdRecibido(evento)) return Response.json({ ok: true, ignorado: 'sin id' })
+    const r = await procesarCorreoRecibido(emailIdRecibido(evento) as string)
+    if ('error' in r) {
+      await registrarError('webhook_email_entrante', { motivo: r.error })
+      return Response.json({ error: 'no se pudo leer el correo' }, { status: 500 })
+    }
+    if (r.fallidos > 0) return Response.json({ error: 'no se pudo guardar' }, { status: 500 })
+    return Response.json({ ok: true, guardados: r.guardados })
   }
 
   const entrega = interpretarEvento(evento.type ?? '')
