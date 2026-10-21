@@ -1,0 +1,220 @@
+/**
+ * Control de acceso por rol (lógica pura). Define qué áreas del panel interno
+ * puede ver cada rol. La seguridad de datos la impone RLS en la base; esto
+ * gobierna la navegación y el gating de las pantallas.
+ */
+
+import type { Rol } from './roles'
+
+export const AREAS = [
+  'dashboard',
+  'ocupacion',
+  'servicio',
+  'punto_venta',
+  'reservas',
+  'huespedes',
+  'housekeeping',
+  'mantenimiento',
+  'objetos_perdidos',
+  'avisos',
+  'bandeja',
+  'conversaciones',
+  'agencias',
+  'proveedores',
+  'contratos',
+  'canales',
+  'conciliacion',
+  'auditoria',
+  'errores',
+  'notificaciones',
+  'reportes',
+  'ia',
+  'config',
+  'usuarios',
+  'respaldos',
+  'ayuda',
+] as const
+
+export type Area = (typeof AREAS)[number]
+
+export const ETIQUETAS_AREA: Record<Area, string> = {
+  dashboard: 'Inicio',
+  ocupacion: 'Ocupación',
+  servicio: 'Servicio de cocina',
+  punto_venta: 'Punto de venta',
+  reservas: 'Reservas',
+  huespedes: 'Huéspedes',
+  housekeeping: 'Housekeeping',
+  mantenimiento: 'Mantenimiento',
+  objetos_perdidos: 'Objetos perdidos',
+  avisos: 'Avisos',
+  bandeja: 'Bandeja de mensajes',
+  conversaciones: 'Conversaciones',
+  agencias: 'Agencias',
+  proveedores: 'Proveedores',
+  contratos: 'Contratos',
+  canales: 'Canales de venta',
+  conciliacion: 'Conciliación y gastos',
+  auditoria: 'Auditoría',
+  errores: 'Errores del sistema',
+  notificaciones: 'Avisos enviados',
+  reportes: 'Reportes',
+  ia: 'Asistente IA',
+  config: 'Configuración',
+  usuarios: 'Usuarios',
+  respaldos: 'Respaldos',
+  ayuda: 'Ayuda',
+}
+
+/**
+ * Áreas accesibles por rol.
+ *
+ * `ayuda` la tienen **todos**: es la guía de uso del sistema, y quien más la
+ * necesita es justamente quien menos permisos tiene. La guía se filtra por
+ * dentro para mostrarle a cada uno solo lo que puede hacer.
+ */
+export const PERMISOS: Record<Rol, readonly Area[]> = {
+  admin: [...AREAS],
+  gerencia: [
+    'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
+    'mantenimiento', 'objetos_perdidos', 'avisos', 'conversaciones', 'agencias',
+    'proveedores', 'contratos', 'canales', 'reportes', 'config',
+    // La bandeja de mensajes con huéspedes (ADR 0043). Mismos tres roles que la
+    // política RLS de `crm_*` (migración 0125): si se sumara housekeeping, vería
+    // la pantalla vacía.
+    'bandeja',
+    /*
+      Conciliación es el extracto bancario del hotel: sueldos, proveedores, todo lo
+      que pasó por la cuenta, y no sólo lo que tiene que ver con las reservas. Va
+      para admin y gerencia y para nadie más, igual que la política RLS de
+      `movimientos_externos` (migración 0077). Si acá se agregara otro rol, vería
+      la pantalla vacía y no entendería por qué.
+    */
+    'conciliacion',
+    // Gerencia ve los errores del sistema porque es quien decide si hay que
+    // llamar a alguien. La política RLS de `errores` (migración 0068) declara
+    // los mismos dos roles: si acá se agregara uno más, vería la pantalla vacía.
+    'errores',
+    /*
+      El registro de envíos. Va para los mismos tres roles que la política de
+      lectura de `notificaciones` (migración 0075) — admin, gerencia y
+      recepción—: si acá se agregara housekeeping, vería la pantalla vacía y no
+      entendería por qué.
+    */
+    'notificaciones',
+    // Gerencia **ve** el estado de los respaldos —saber que hace 40 días que nadie
+    // exporta es información de gestión— pero **no puede exportar**: eso lo
+    // restringe la propia pantalla y el endpoint, porque el archivo concentra los
+    // datos personales de todos los huéspedes del hotel.
+    'respaldos',
+    /*
+      El asistente de IA lo usan los cuatro roles desde el 2026-10-19, pero cada
+      uno con las herramientas de SUS áreas (`herramientasPara`): los datos de
+      plata salen de herramientas del área `reportes`, que sólo tienen admin y
+      gerencia. Antes era sólo para estos dos roles porque no había ese filtro.
+    */
+    'ia',
+    'ayuda',
+  ],
+  // Recepción entra a `canales`: las reservas de Booking las importa y las
+  // atiende quien está en el mostrador, no gerencia. Es trabajo diario.
+  recepcion: [
+    'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'objetos_perdidos',
+    'avisos', 'conversaciones', 'agencias', 'canales',
+    // Recepción es quien contesta WhatsApp e Instagram: la bandeja es su trabajo
+    // diario, igual que el teléfono del mostrador.
+    'bandeja',
+    /*
+      Recepción entra al registro de envíos porque es quien atiende el «no me
+      llegó nada». Mirar si el correo salió, rebotó o nunca se intentó es parte
+      de esa conversación, y tener que pedírselo a un admin la vuelve inútil.
+    */
+    'notificaciones',
+    // Asistente: disponibilidad, reservas, saldos, dudas de uso y consumos.
+    'ia',
+    'ayuda',
+  ],
+  housekeeping: [
+    'dashboard', 'housekeeping', 'mantenimiento', 'avisos', 'conversaciones',
+    // Asistente: dudas de uso, avisos y órdenes de mantenimiento. Nada de plata.
+    'ia',
+    'ayuda',
+  ],
+}
+
+/**
+ * Áreas apagadas por decisión del hotel: no se van a usar por ahora.
+ *
+ * ── Por qué apagadas y no borradas ──────────────────────────────────────────
+ *
+ * El código, las tablas, las políticas RLS y los tests siguen enteros. Borrar tres
+ * módulos que funcionan para volver a escribirlos si el hotel cambia de idea sería
+ * tirar trabajo verificado; y como el sistema es una entrega de tesis, las pantallas
+ * siguen siendo demostrables sacando el nombre de esta lista.
+ *
+ * Para volver a habilitar una, se le quita el nombre de acá. Nada más: no hay que
+ * tocar el menú, ni el hub de inicio, ni la Ayuda, ni las páginas.
+ *
+ * ── Qué apaga exactamente ───────────────────────────────────────────────────
+ *
+ * Todo lo que pregunta por el área, porque todo pasa por `puedeAcceder`:
+ * el menú lateral y el móvil (`_components/shell.tsx` vía `navegacion.ts`), las
+ * tarjetas del hub (`app/panel/page.tsx`), el capítulo correspondiente de la Ayuda
+ * (`lib/domain/ayuda.ts`) y el `requerirAcceso` de cada página y cada Server Action
+ * del módulo. Entrar a la URL a mano tampoco sirve: `requerirAcceso` redirige.
+ *
+ * ⚠️ Lo que NO apaga, y es deliberado: la **tabla** `auditoria` sigue registrando
+ * las operaciones sensibles. Lo que se oculta es la pantalla que las muestra, no el
+ * registro. Un rastro de auditoría que se deja de escribir porque nadie lo mira
+ * pierde justamente el valor que tiene —estar ahí cuando hay que revisar algo que
+ * pasó antes—, y volver a encenderlo no recupera lo que no se guardó.
+ */
+export const AREAS_OCULTAS: readonly Area[] = [
+  'auditoria',
+  'objetos_perdidos',
+  // Pedido del dueño del hotel (2026-09-14): ocultar por ahora, sin borrar
+  // nada (ver el porqué de este mecanismo arriba).
+  'contratos',
+  'respaldos',
+  // `conversaciones` se reactivó el 2026-09-15 y se volvió a ocultar el mismo
+  // día, a pedido del hotel: la pantalla se va a rediseñar como bandeja única
+  // por conversación (estilo Chatwoot) cuando lleguen WhatsApp e Instagram, y
+  // hasta entonces prefiere no mostrar el chat interno por área (ADR 0011)
+  // que va a dejar de ser la versión final. El código sigue entero.
+  'conversaciones',
+]
+
+export function estaOculta(area: Area): boolean {
+  return AREAS_OCULTAS.includes(area)
+}
+
+export function areasDe(rol: Rol): readonly Area[] {
+  return PERMISOS[rol].filter((a) => !estaOculta(a))
+}
+
+export function puedeAcceder(rol: Rol, area: Area): boolean {
+  if (estaOculta(area)) return false
+  return PERMISOS[rol].includes(area)
+}
+
+/**
+ * ¿Es de la dirección del hotel (admin o gerencia)?
+ *
+ * Para las acciones MÁS restrictivas que el área: recepción entra a agencias,
+ * canales y notificaciones, pero algunas operaciones de esas pantallas son
+ * sólo de la dirección. La regla estaba escrita a mano 22 veces, en dos formas
+ * (`=== … || ===` y `!== … && !==`); una sola definición evita que una se
+ * corrija y la otra no.
+ */
+export function esDireccion(rol: string | null | undefined): boolean {
+  return rol === 'admin' || rol === 'gerencia'
+}
+
+/**
+ * La pantalla del panel de cada área (`/panel/punto-venta` para `punto_venta`).
+ * Un test verifica que exista la carpeta de cada una, así un enlace armado con
+ * esto no lleva a un 404.
+ */
+export function rutaDeArea(area: Area): string {
+  return area === 'dashboard' ? '/panel' : `/panel/${area.replaceAll('_', '-')}`
+}

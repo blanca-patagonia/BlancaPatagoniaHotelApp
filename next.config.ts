@@ -52,7 +52,7 @@ const ENCABEZADOS_SEGURIDAD = [
   aplicación de formas difíciles de diagnosticar —la página carga a medias y la
   consola muestra un bloqueo genérico—. Hacerla bien exige `nonce` por petición
   y probar cada pantalla. Queda anotado como trabajo pendiente en
-  `docs/SEGURIDAD.md`: es mejor no tenerla que tenerla mal y desactivarla al
+  `docs/4-seguridad-y-auditorias/SEGURIDAD.md`: es mejor no tenerla que tenerla mal y desactivarla al
   primer problema.
 */
 
@@ -77,6 +77,23 @@ const ENCABEZADOS_SERVICE_WORKER = [
 ]
 
 const nextConfig: NextConfig = {
+  // Sin esto, cada respuesta lleva `X-Powered-By: Next.js`: le regala a
+  // cualquiera que mire los encabezados el framework exacto, sin ganar nada a
+  // cambio.
+  poweredByHeader: false,
+  experimental: {
+    serverActions: {
+      /*
+        Fotos y comprobantes viajan dentro de Server Actions. El límite por
+        omisión es 1 MB y la pantalla prometía 8: una foto de la cámara del
+        teléfono (3 a 6 MB) se rechazaba antes de llegar a la acción, con la
+        pantalla de error genérica. Las fotos ahora se achican en el navegador
+        (`_components/subir-foto.tsx`); esto deja lugar para un PDF. No puede
+        pasar de ~4,5 MB: es el tope de cuerpo de las funciones de Vercel.
+      */
+      bodySizeLimit: '4mb',
+    },
+  },
   async headers() {
     return [
       { source: '/:path*', headers: ENCABEZADOS_SEGURIDAD },

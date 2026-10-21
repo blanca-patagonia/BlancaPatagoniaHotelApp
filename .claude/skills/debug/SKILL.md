@@ -44,10 +44,10 @@ hipótesis sin verificar.
 Bajá por capas hasta encontrar dónde se rompe:
 
 ```
-pantalla → Server Action → lib/domain (¿la regla pura da bien?) → consulta → RLS → dato en la base
+pantalla → Server Action → src/lib/domain (¿la regla pura da bien?) → consulta → RLS → dato en la base
 ```
 
-`lib/domain/` es puro: probá la regla sola en un test. Si la regla da bien, el bug está más afuera.
+`src/lib/domain/` es puro: probá la regla sola en un test. Si la regla da bien, el bug está más afuera.
 Si da mal, ya lo encontraste y no hace falta mirar la base.
 
 ## 4. Arreglar la causa, no el síntoma
@@ -80,4 +80,4 @@ npm test -- <patrón> --reporter=verbose  # detalle del test
 ```
 
 `console.error` con contexto es válido para diagnosticar, pero **no queda en el commit final**
-salvo que sea un log deliberado, como los de `lib/acciones.ts`.
+salvo que sea un log deliberado, como los de `src/lib/acciones.ts`.

@@ -21,7 +21,7 @@ Si no hay tests sobre eso, **escribilos primero** — describiendo el comportami
 que te parece feo. Ese es el contrato que tenés que preservar. Refactorizar sin red es reescribir a
 ciegas y descubrir lo que rompiste en producción.
 
-De los 28 módulos de `lib/domain`, 25 tienen test. Si el tuyo es de los otros tres, empezá por ahí.
+De los 28 módulos de `src/lib/domain`, 25 tienen test. Si el tuyo es de los otros tres, empezá por ahí.
 
 ## 2. Pasos chicos, verificando en cada uno
 
@@ -39,14 +39,14 @@ Commits atómicos: uno por paso. Ver el skill `work-unit-commits` si está dispo
 Salen de la auditoría, no son gustos:
 
 **Centralizar la autorización.** Hay 19 lugares con el literal `['admin','gerencia'].includes(...)`
-y `lib/domain/permisos.ts` existe justamente para eso. Migralos de a uno, verificando en cada paso.
+y `src/lib/domain/permisos.ts` existe justamente para eso. Migralos de a uno, verificando en cada paso.
 
-**Unificar el guard de sesión.** `app/panel/huespedes/actions.ts:26` define un `exigirAcceso` local
+**Unificar el guard de sesión.** `src/app/(front-gestion)/panel/huespedes/actions.ts:26` define un `exigirAcceso` local
 más débil que el `requerirAcceso` que usan los otros 36 sitios. **Ojo: este cambia el comportamiento
 —empieza a rechazar roles que antes pasaban— así que NO es un refactor.** Va como corrección, con su
 propio test.
 
-**Bajar lógica de `app/` a `lib/domain/`.** El 79 % del código vive en `app/`. Cuando toques una
+**Bajar lógica de `src/app/` a `src/lib/domain/`.** El 79 % del código vive en `src/app/`. Cuando toques una
 pantalla con reglas de negocio adentro, extraé la regla a un módulo puro y testeala. De a poco, no
 todo junto.
 
@@ -57,9 +57,9 @@ fd -e ts -e tsx --exclude node_modules -x wc -l {} | sort -rn | head -15
 
 ## 4. Reglas que no se rompen al mover código
 
-- `lib/domain/` no importa Supabase, `next/*`, React ni zod. Si al extraer una función necesitás un
+- `src/lib/domain/` no importa Supabase, `next/*`, React ni zod. Si al extraer una función necesitás un
   cliente de datos, esa función no va al dominio: partila en dos.
-- `lib/` nunca importa de `app/`.
+- `lib/` nunca importa de `src/app/`.
 - Español en nombres, comentarios y mensajes.
 
 ## 5. Verificación final

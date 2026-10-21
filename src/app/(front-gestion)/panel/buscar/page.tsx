@@ -1,0 +1,459 @@
+import Link from 'next/link'
+import { requerirSesion } from '@/lib/auth/session'
+import { crearClienteServidor } from '@/lib/supabase/server'
+import { ETIQUETAS_ESTADO_RESERVA } from '@/lib/domain/reservas'
+import { nombreCompleto } from '@/lib/domain/huespedes'
+import { ETIQUETAS_AMBITO } from '@/lib/domain/busqueda'
+import { buscarGlobal, TOPE_BUSQUEDA } from '@/lib/busqueda/servicio'
+import { parsearPeriodo, formatoFechaCorta } from '@/lib/fechas'
+import { TONO_ESTADO } from '../_components/estilos'
+import {
+  Encabezado,
+  EstadoVacio,
+  Etiqueta,
+  Pagina,
+  Tarjeta,
+  botonClases,
+} from '../_components/ui'
+import { Icono } from '../_components/iconos'
+
+/**
+ * Búsqueda global.
+ *
+ * Pensada para el momento en que alguien llama y hay que encontrarlo mientras
+ * está al teléfono: se escribe un apellido, un código o un email y aparece todo
+ * lo que coincide, sin tener que adivinar en qué módulo está cargado.
+ *
+ * Los ámbitos se filtran por rol con los mismos permisos que arman el menú
+ * (ver `lib/domain/busqueda.ts`).
+ */
+export default async function BuscarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
+  const sesion = await requerirSesion()
+  const { q } = await searchParams
+  const supabase = await crearClienteServidor()
+
+  const {
+    termino,
+    ambitos,
+    secciones,
+    glosario,
+    reservas,
+    huespedes,
+    huespedesAproximados,
+    agencias,
+    proveedores,
+    unidades,
+    tipos_unidad,
+    productos,
+    promociones,
+    usuarios,
+    total,
+  } = await buscarGlobal(supabase, sesion.rol, q)
+
+  return (
+    <Pagina>
+      {/*
+        Buscar de nuevo, sin volver al principio.
+
+        El campo del encabezado (`shell.tsx`) es el mismo en TODAS las
+        pantallas y siempre arranca vacío: no sabe qué se buscó para llegar
+        acá. Sin un campo propio en esta pantalla, refinar una búsqueda
+        —sacar una letra, agregar el apellido— obligaba a borrar y escribir
+        todo de nuevo. Este sí arranca con el término actual.
+      */}
+      <form action="/panel/buscar" method="get" className="mb-4">
+        <label className="sr-only" htmlFor="busqueda-de-nuevo">
+          Buscar en todo el sistema
+        </label>
+        <div className="relative max-w-lg">
+          <span
+            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-500"
+            aria-hidden="true"
+          >
+            <Icono nombre="buscar" tam={16} />
+          </span>
+          <input
+            id="busqueda-de-nuevo"
+            type="search"
+            name="q"
+            defaultValue={(q ?? '').trim()}
+            placeholder="Buscar huésped, reserva o una sección…"
+            className="toque w-full rounded-lg border border-stone-300 bg-white py-2 pr-3 pl-9 text-stone-800 outline-none transition placeholder:text-stone-500 focus:border-lago-600"
+          />
+        </div>
+      </form>
+
+      <Encabezado
+        titulo={termino ? `Resultados de «${(q ?? '').trim()}»` : 'Buscar'}
+        descripcion={
+          termino
+            ? `${total} ${total === 1 ? 'coincidencia' : 'coincidencias'} entre las secciones del sistema y ${ambitos.map((a) => ETIQUETAS_AMBITO[a].toLowerCase()).join(', ')}.`
+            : 'Escribí un apellido, un código de reserva, un email, un documento — o qué querés hacer, para que te lleve a la sección.'
+        }
+        icono="buscar"
+      />
+
+      {!termino && (
+        <Tarjeta>
+          <EstadoVacio
+            titulo="Escribí al menos dos letras"
+            descripcion="Busca a la vez entre los datos —apellido, nombre, email, documento, código de reserva— y entre las secciones del sistema. Si no sabés dónde se hace algo, escribilo: «factura», «limpieza», «cotización»."
+            icono="buscar"
+          />
+        </Tarjeta>
+      )}
+
+      {termino && total === 0 && (
+        <Tarjeta>
+          <EstadoVacio
+            titulo="No encontramos nada con ese texto"
+            descripcion="Probá con menos letras, o con el apellido en lugar del nombre. No distingue mayúsculas ni acentos."
+            icono="buscar"
+          />
+        </Tarjeta>
+      )}
+
+      <div className="flex flex-col gap-4">
+        {/*
+          Las secciones van PRIMERO, arriba de los datos.
+
+          Quien escribe «ocupación» o «factura» casi siempre quiere ir a un lugar
+          del sistema, no ver una lista de coincidencias. Poner los datos primero
+          obligaría a scrollear para encontrar el atajo, que es lo contrario de lo
+          que el buscador tiene que resolver.
+        */}
+        {secciones.length > 0 && (
+          <Tarjeta
+            titulo="Secciones del sistema"
+            descripcion={`${secciones.length} ${secciones.length === 1 ? 'sección' : 'secciones'} donde se hace esto`}
+          >
+            <ul>
+              {secciones.map((s) => (
+                <li key={s.area} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href={s.href}
+                    className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-lago-50 text-lago-700 ring-1 ring-lago-100">
+                      <Icono nombre="siguiente" tam={15} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-stone-800">{s.titulo}</span>
+                      {s.descripcion && (
+                        <span className="block text-xs text-stone-600">{s.descripcion}</span>
+                      )}
+                      {/*
+                        Por qué apareció. Sin esta línea, buscar «factura» y recibir
+                        «Reservas» se lee como un resultado equivocado; con ella se
+                        entiende que facturar se hace desde ahí.
+                      */}
+                      {s.motivo && (
+                        <span className="mt-0.5 block text-xs text-lago-700">
+                          Coincide con «{s.motivo}»
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs text-stone-500">Ir a la sección</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {/* Palabras del oficio: «tarifa rack», «ADR», «folio». Quien las lee en una
+            pantalla y no las entiende, las escribe acá antes que ir a la Ayuda. */}
+        {glosario.length > 0 && (
+          <Tarjeta titulo="Qué significa" descripcion="Términos del sistema">
+            <dl className="grid gap-x-6 gap-y-3 px-5 py-4 sm:grid-cols-2">
+              {glosario.map((t) => (
+                <div key={t.termino} className="min-w-0">
+                  <dt className="text-sm font-medium text-stone-800">{t.termino}</dt>
+                  <dd className="mt-0.5 text-sm leading-snug text-stone-600">{t.definicion}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="border-t border-stone-100 px-5 py-3">
+              <Link href="/panel/ayuda#glosario" className={botonClases('secundario')}>
+                Ver el glosario completo
+              </Link>
+            </div>
+          </Tarjeta>
+        )}
+
+        {reservas.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.reservas}
+            descripcion={`${reservas.length} ${reservas.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
+            <ul>
+              {reservas.map((r) => {
+                const p = r.estadias?.[0] ? parsearPeriodo(r.estadias[0].periodo) : null
+                return (
+                  <li key={r.id} className="border-t border-stone-100 first:border-0">
+                    <Link
+                      href={`/panel/reservas/${r.id}`}
+                      className="flex flex-wrap items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                    >
+                      <span className="font-medium text-lago-700">{r.codigo}</span>
+                      <span className="min-w-0 flex-1 text-stone-700">
+                        {r.huesped ? nombreCompleto(r.huesped) : 'Sin huésped'}
+                        {p && (
+                          <span className="block text-sm text-stone-500">
+                            {formatoFechaCorta(p.desde)} → {formatoFechaCorta(p.hasta)}
+                          </span>
+                        )}
+                      </span>
+                      <Etiqueta tono={TONO_ESTADO[r.estado]}>
+                        {ETIQUETAS_ESTADO_RESERVA[r.estado]}
+                      </Etiqueta>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {huespedes.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.huespedes}
+            descripcion={
+              huespedesAproximados
+                ? 'No hay coincidencia exacta. ¿Quisiste decir…?'
+                : `${huespedes.length} ${huespedes.length === 1 ? 'encontrado' : 'encontrados'}`
+            }
+          >
+            <ul>
+              {huespedes.map((h) => (
+                <li key={h.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href={`/panel/huespedes/${h.id}`}
+                    className="flex flex-wrap items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">
+                        {nombreCompleto(h)}
+                      </span>
+                      <span className="block text-sm text-stone-500">
+                        {[h.email, h.doc_numero].filter(Boolean).join(' · ') || 'sin datos de contacto'}
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {agencias.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.agencias}
+            descripcion={`${agencias.length} ${agencias.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
+            <ul>
+              {agencias.map((a) => (
+                <li key={a.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href={`/panel/agencias/${a.id}`}
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1 font-medium text-stone-800">{a.nombre}</span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {proveedores.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.proveedores}
+            descripcion={`${proveedores.length} ${proveedores.length === 1 ? 'encontrado' : 'encontrados'}`}
+          >
+            <ul>
+              {proveedores.map((p) => (
+                <li key={p.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href={`/panel/proveedores/${p.id}`}
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">{p.nombre}</span>
+                      {p.rubro && <span className="block text-sm text-stone-500">{p.rubro}</span>}
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {unidades.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.unidades}
+            descripcion={`${unidades.length} ${unidades.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
+            <ul>
+              {unidades.map((u) => (
+                <li key={u.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/config/unidades"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">{u.nombre}</span>
+                      <span className="block text-sm text-stone-500">
+                        {[
+                          u.tipo?.nombre,
+                          u.piso !== null ? `Piso ${u.piso}` : null,
+                          u.activo ? null : 'Inactiva',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {tipos_unidad.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.tipos_unidad}
+            descripcion={`${tipos_unidad.length} ${tipos_unidad.length === 1 ? 'encontrado' : 'encontrados'}`}
+          >
+            <ul>
+              {tipos_unidad.map((t) => (
+                <li key={t.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/config/tipos-alojamiento"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">{t.nombre}</span>
+                      <span className="block text-sm text-stone-500">
+                        Capacidad: {t.capacidad_max} huéspedes
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {productos.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.productos}
+            descripcion={`${productos.length} ${productos.length === 1 ? 'encontrado' : 'encontrados'}`}
+          >
+            <ul>
+              {productos.map((p) => (
+                <li key={p.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/punto_venta"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">{p.nombre}</span>
+                      <span className="block text-sm text-stone-500">
+                        {[p.departamento?.nombre, `USD ${Number(p.precio).toFixed(2)}`]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {promociones.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.promociones}
+            descripcion={`${promociones.length} ${promociones.length === 1 ? 'encontrada' : 'encontradas'}`}
+          >
+            <ul>
+              {promociones.map((p) => (
+                <li key={p.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/config/promociones"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1 font-medium text-stone-800">{p.nombre}</span>
+                    <span className="text-sm text-stone-500">{p.activa ? 'Activa' : 'Inactiva'}</span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+
+        {usuarios.length > 0 && (
+          <Tarjeta
+            titulo={ETIQUETAS_AMBITO.usuarios}
+            descripcion={`${usuarios.length} ${usuarios.length === 1 ? 'encontrado' : 'encontrados'}`}
+          >
+            <ul>
+              {usuarios.map((u) => (
+                <li key={u.id} className="border-t border-stone-100 first:border-0">
+                  <Link
+                    href="/panel/usuarios"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium text-stone-800">
+                        {u.nombre || 'Usuario sin nombre'}
+                      </span>
+                      <span className="block text-sm text-stone-500">
+                        {u.rol || 'sin rol'}
+                      </span>
+                    </span>
+                    <Icono nombre="siguiente" tam={16} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
+        )}
+      </div>
+
+      {termino && total > 0 && (
+        <p className="mt-4 text-sm text-stone-500">
+          Se muestran hasta {TOPE_BUSQUEDA} resultados por sección. Si lo que buscás no está, entrá al
+          módulo y usá su buscador, que tiene filtros y paginado.
+        </p>
+      )}
+
+      {ambitos.length === 0 && (
+        <Tarjeta>
+          <EstadoVacio
+            titulo="Tu perfil no tiene secciones donde buscar"
+            descripcion="La búsqueda cubre reservas, huéspedes y cuentas corrientes."
+            icono="buscar"
+            accion={
+              <Link href="/panel" className={botonClases('secundario')}>
+                Volver al inicio
+              </Link>
+            }
+          />
+        </Tarjeta>
+      )}
+    </Pagina>
+  )
+}

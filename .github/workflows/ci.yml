@@ -35,7 +35,8 @@ jobs:
           # 22 es la LTS vigente. Con 20 el runner podía traer una versión
           # anterior a la 20.12, que es desde donde existe
           # `--env-file-if-exists`, y eso hacía fallar el paso del seed.
-          node-version: 22
+          # La versión vive en `.nvmrc`, la misma que usa `nvm use` en local.
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Versiones (para diagnosticar)
@@ -147,40 +148,18 @@ jobs:
       # pone rojo por cosas que no se pueden arreglar hoy, y un CI que falla
       # siempre deja de leerse. Las moderadas quedan visibles en la salida.
       #
-      # ── Por qué el gate bloqueante mira SÓLO lo que se despliega ────────────
-      #
-      # El 2026-10-07 pasó, un escalón más arriba, exactamente lo que ese párrafo
-      # advertía: apareció una cadena de severidad ALTA **sin arreglo posible**.
-      #
-      #   braces → micromatch → fast-glob → @next/eslint-plugin-next → eslint-config-next
-      #
-      # Es un DoS por agotamiento de pila con patrones muy anidados
-      # (GHSA-vfj7-8cjw-p6xm). No se puede cerrar hoy, y no por desidia:
-      # `npm audit` reporta `braces *` —todas las versiones afectadas, la última
-      # es la 3.0.3— y `fast-glob@latest` sigue colgando de `micromatch`. Un
-      # `overrides` no tiene a qué apuntar. Lo único que propone
-      # `npm audit fix --force` es bajar `eslint-config-next` a la 14.2.35: dos
-      # versiones mayores para atrás, con Next 16 instalado. Eso rompe el lint.
-      #
-      # Así que el gate quedaba insatisfacible, y un gate insatisfacible no
-      # protege: se vuelve ruido que se saltea.
-      #
-      # La línea nueva es **qué se despliega**. `--omit=dev` audita las
-      # dependencias de producción: lo que corre en el servidor del hotel y lo
-      # que viaja al navegador del huésped. Ahí un alta bloquea, sin excepciones.
-      # `eslint-config-next` no está en esa foto: lo único que le pasa patrones
-      # es `npm run lint`, con los globs de este repo, en la máquina de quien
-      # desarrolla.
-      #
-      # ⚠️ Esto NO es «ignorar las de desarrollo». El paso siguiente las sigue
-      # auditando y las imprime enteras; lo que no hace es cortar la corrida por
-      # algo que nadie puede arreglar. Si aparece una alta en desarrollo que SÍ
-      # tiene arreglo, se ve en la salida y se arregla.
-      - name: Vulnerabilidades de lo que se despliega (bloquea)
+      # ⚠️ Desde el 2026-10-20 el corte mira sólo PRODUCCIÓN (`--omit=dev`). Ese
+      # día apareció una alerta alta en `braces` (DoS con patrones anidados) sin
+      # versión corregida, que entra únicamente por el linter
+      # (eslint-config-next → fast-glob → micromatch). No llega al hotel: es una
+      # herramienta de desarrollo que procesa patrones escritos por nosotros. Con
+      # el corte sobre todo el árbol, el CI quedaba rojo por algo que nadie
+      # puede arreglar. Lo de desarrollo se sigue mostrando, sin cortar.
+      - name: Vulnerabilidades de dependencias de producción (npm audit)
         run: npm audit --omit=dev --audit-level=high
 
-      - name: Vulnerabilidades de las herramientas de desarrollo (informativo)
-        run: npm audit --audit-level=high || true
+      - name: Vulnerabilidades de herramientas de desarrollo (informativo)
+        run: npm audit --audit-level=high || echo "::warning::npm audit encontró vulnerabilidades en dependencias de desarrollo (ver arriba)."
 
       - name: Typecheck (TypeScript)
         run: npm run typecheck

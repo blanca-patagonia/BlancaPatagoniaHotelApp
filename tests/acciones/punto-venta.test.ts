@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { hayDB } from '../db'
+import { hayDB } from '../apoyo/db'
 import { nuevoContexto, limpiar, usarSesion, type Contexto } from './entorno'
 
 vi.mock('next/navigation', () => ({
@@ -20,7 +20,7 @@ vi.mock('@/lib/auth/session', async () => {
   }
 })
 vi.mock('@/lib/supabase/server', async () => {
-  const { clienteDePrueba } = await import('../db')
+  const { clienteDePrueba } = await import('../apoyo/db')
   return { crearClienteServidor: async () => clienteDePrueba() }
 })
 
@@ -40,7 +40,7 @@ vi.mock('@/lib/supabase/server', async () => {
  * · **admin/gerencia** → RLS permitía el `update` manual → el stock bajaba **el doble**.
  * · **recepción** → RLS lo bloqueaba → bajaba una sola vez, correcto por accidente.
  *
- * `tests/stock-descuento.test.ts` prueba el trigger insertando en `consumos`
+ * `tests/base-de-datos/stock-descuento.test.ts` prueba el trigger insertando en `consumos`
  * **como recepción**, o sea justo el camino que enmascaraba el defecto. Por eso
  * este test corre la **acción completa** y con sesión **admin**: el andamiaje de
  * `tests/acciones/` usa `service_role`, así que el `update` manual no encontraba
@@ -51,7 +51,7 @@ describe.skipIf(!hayDB)('Server Actions · punto de venta', () => {
   let reservaId = ''
   let productoId = ''
   let servicioId = ''
-  type Acciones = typeof import('@/app/panel/punto-venta/actions')
+  type Acciones = typeof import('@/app/(front-gestion)/panel/punto-venta/actions')
   let cerrarComanda: Acciones['cerrarComanda']
 
   const STOCK_INICIAL = 50
@@ -59,7 +59,7 @@ describe.skipIf(!hayDB)('Server Actions · punto de venta', () => {
   beforeAll(async () => {
     ctx = nuevoContexto()
     usarSesion({ rol: 'admin' })
-    cerrarComanda = (await import('@/app/panel/punto-venta/actions')).cerrarComanda
+    cerrarComanda = (await import('@/app/(front-gestion)/panel/punto-venta/actions')).cerrarComanda
 
     // `consumos.cargado_por` tiene FK contra `perfiles`, así que el userId de
     // fantasía del andamiaje no entra. Se toma uno real, como hace

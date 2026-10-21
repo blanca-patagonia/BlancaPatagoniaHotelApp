@@ -13,17 +13,17 @@ código, quiere saber dónde mirar.
 ## Mapa para orientarte rápido
 
 ```
-app/panel/**            panel de staff por rol (100 archivos)
-app/panel/_components/  ui.tsx (componentes compartidos), iconos.tsx, boton-envio.tsx
-app/portal/[token], app/firmar/[token], app/encuesta/[token]   accesos públicos sin login
-app/reservar/**, app/alojamientos/**                           portal público
-app/api/webhooks/pagos/[proveedor]                             webhook de pagos
-lib/domain/**           28 módulos de reglas puras (sin framework)
-lib/acciones.ts         cortarSiFalla / registrarFalla
-lib/auth/session.ts     obtenerSesion / requerirSesion / requerirAcceso
-lib/supabase/**         server · client · admin (service_role) · proxy
+src/app/(front-gestion)/panel/**            panel de staff por rol (100 archivos)
+src/app/(front-gestion)/panel/_components/  ui.tsx (componentes compartidos), iconos.tsx, boton-envio.tsx
+src/app/(front-publico)/portal/[token], src/app/(front-publico)/firmar/[token], src/app/(front-publico)/encuesta/[token]   accesos públicos sin login
+src/app/(front-publico)/reservar/**, src/app/(front-publico)/[idioma]/alojamientos/**                           portal público
+src/app/(back-api)/api/webhooks/pagos/[proveedor]                             webhook de pagos
+src/lib/domain/**           28 módulos de reglas puras (sin framework)
+src/lib/acciones.ts         cortarSiFalla / registrarFalla
+src/lib/auth/session.ts     obtenerSesion / requerirSesion / requerirAcceso
+src/lib/supabase/**         server · client · admin (service_role) · proxy
 supabase/migrations/    31 migraciones numeradas, en español
-tests/                  38 archivos; tests/db.ts tiene los helpers de integración
+tests/                  38 archivos; tests/apoyo/db.ts tiene los helpers de integración
 docs/decisiones/        16 ADRs — el porqué de las decisiones grandes
 proxy.ts                reemplaza middleware en Next 16
 ```
@@ -40,7 +40,7 @@ git log -S "<texto>" --oneline           # cuándo entró algo
 Usá `rg` y `fd`. No uses `grep`, `find`, `cat` ni `ls`.
 
 Para "cómo fluye X", seguí la cadena completa y anotá cada eslabón con su archivo:
-`pantalla → Server Action → lib/domain → consulta a Supabase → política RLS → tabla`.
+`pantalla → Server Action → src/lib/domain → consulta a Supabase → política RLS → tabla`.
 
 ## Formato de salida
 

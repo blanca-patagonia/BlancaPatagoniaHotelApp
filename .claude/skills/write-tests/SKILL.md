@@ -9,15 +9,15 @@ Dos familias, y confundirlas es el error más común acá.
 
 | | Dominio puro | Integración |
 |---|---|---|
-| Dónde | `tests/<modulo>.test.ts` | `tests/acciones/*.test.ts`, `tests/overbooking.test.ts` |
-| Qué prueba | Reglas de `lib/domain/**` | Server Actions, RLS, RPC, restricciones de la base |
+| Dónde | `tests/dominio/<modulo>.test.ts` | `tests/acciones/*.test.ts`, `tests/base-de-datos/overbooking.test.ts` |
+| Qué prueba | Reglas de `src/lib/domain/**` | Server Actions, RLS, RPC, restricciones de la base |
 | Necesita base | No | **Sí** |
 | Guarda | ninguna | `describe.skipIf(!hayDB)` |
 
 ## Dominio puro — el caso normal
 
-`lib/domain/` no importa Supabase ni React, así que se testea sin nada montado. Modelo canónico:
-[tests/cancelacion.test.ts](../../../tests/cancelacion.test.ts).
+`src/lib/domain/` no importa Supabase ni React, así que se testea sin nada montado. Modelo canónico:
+[tests/dominio/cancelacion.test.ts](../../../tests/dominio/cancelacion.test.ts).
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -57,7 +57,7 @@ describe.skipIf(!hayDB)('anti-overbooking (restricción de exclusión)', () => {
 })
 ```
 
-Helpers en [tests/db.ts](../../../tests/db.ts):
+Helpers en [tests/apoyo/db.ts](../../../tests/apoyo/db.ts):
 `hayDB` · `hayAnon` · `clienteDePrueba()` (service_role) · `clienteAnonimo()` (rol `anon`, para
 probar qué ve internet) · `sufijoUnico()` · `periodo(desde, hasta)`.
 
@@ -78,7 +78,7 @@ npm run seed:usuarios             # sin esto fallan los tests de facturación (F
 EXIGIR_DB=1 npm test              # ahora la falta de base es ERROR, no salto
 ```
 
-`EXIGIR_DB=1` es lo que corre el CI ([tests/db.ts:22](../../../tests/db.ts)).
+`EXIGIR_DB=1` es lo que corre el CI ([tests/apoyo/db.ts:22](../../../tests/apoyo/db.ts)).
 
 ## Casos borde que este dominio exige
 

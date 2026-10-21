@@ -1,0 +1,216 @@
+import 'server-only'
+import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
+
+/**
+ * Abstracción del proveedor de correo (`EmailProvider`).
+ *
+ * Quinto adapter del proyecto, con el mismo patrón que `PaymentProvider`,
+ * `FirmaElectronicaProvider`, `AsistenteProvider` y
+ * `FacturacionElectronicaProvider`.
+ *
+ * Proveedor real: `resend` (`ProveedorResend`, HTTP directo, sin SDK). El de
+ * consola es el respaldo — no envía nada, solo deja metadatos en el log — y es
+ * el que rige si falta `EMAIL_PROVIDER`, razón por la que es obligatoria en
+ * producción (ADR 0018).
+ */
+
+import { seleccionarProveedor, advertirSiEsSimulado, esProduccion } from '@/lib/integraciones/seleccion'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
+import { registrarFalla } from '@/lib/acciones'
+import { ProveedorResend } from './resend'
+
+export interface MensajeEmail {
+  para: string
+  asunto: string
+  cuerpo: string
+  /** Variante HTML del mismo mensaje (Fase 5). Opcional: un proveedor puede ignorarla. */
+  cuerpoHtml?: string
+  /**
+   * Clave de idempotencia propia (bandeja de mensajes, ADR 0043).
+   *
+   * ⚠️ Sin ella se usa `destinatario:asunto`, que sirve para los avisos —cada
+   * evento tiene su asunto— pero NO para una conversación: dos respuestas al
+   * mismo huésped en el mismo hilo («Re: Consulta») tienen igual asunto, y
+   * Resend devolvería el id de la primera sin mandar la segunda.
+   */
+  claveIdempotencia?: string
+  /** Cabeceras extra. La bandeja manda `In-Reply-To`/`References` para hilar. */
+  cabeceras?: Record<string, string>
+  /** A dónde responde el huésped, si no es el remitente. */
+  responderA?: string
+}
+
+export interface ResultadoEnvio {
+  ok: boolean
+  /** Detalle para mostrar en pantalla (motivo del rechazo o confirmación). */
+  detalle: string
+  /**
+   * Id que le dio el proveedor al mensaje.
+   *
+   * Es con lo que el webhook de entrega (`/api/webhooks/email/[proveedor]`) casa
+   * el evento contra la fila de la bandeja: sin él, un rebote no tiene a qué
+   * imputarse y el estado se queda en `enviada` para siempre — que es
+   * indistinguible de «salió bien y todavía no informaron».
+   *
+   * Opcional porque el proveedor de consola no manda nada y no tiene ninguno.
+   */
+  proveedorId?: string
+}
+
+export interface EmailProvider {
+  nombre: string
+  enviar(m: MensajeEmail): Promise<ResultadoEnvio>
+  /** Indica si los correos salen de verdad. La UI lo usa para avisar. */
+  esReal(): boolean
+}
+
+/** Proveedor de consola: deja el rastro del envío sin mandar nada. */
+class ProveedorConsola implements EmailProvider {
+  nombre = 'consola'
+
+  esReal(): boolean {
+    return false
+  }
+
+  async enviar(m: MensajeEmail): Promise<ResultadoEnvio> {
+    if (!m.para || !m.para.includes('@')) {
+      return { ok: false, detalle: 'El destinatario no tiene un email válido.' }
+    }
+
+    /*
+      Se loguean METADATOS, nunca el cuerpo.
+
+      Antes salía el mensaje entero, y los cuerpos llevan credenciales: el correo
+      de confirmación incluye `/reservar/confirmacion/<token>` y el de la encuesta
+      `/encuesta/<token>`. Como éste es el proveedor **por omisión** y no hay uno
+      real integrado, cada reserva pública dejaba en el log el email del huésped,
+      su nombre, el total y un token que abre su ficha — y los tokens no caducan,
+      así que la ventana es permanente.
+
+      Cualquiera con acceso de lectura a los logs —una integración de
+      observabilidad, un dump mal guardado— tenía credenciales de larga vida.
+
+      El destinatario va enmascarado por el mismo motivo: es un dato personal.
+    */
+    const [usuario, dominio] = m.para.split('@')
+    console.info(
+      `[email:${this.nombre}] → ${usuario.slice(0, 2)}***@${dominio} · «${m.asunto}» · ${m.cuerpo.length} caracteres`,
+    )
+
+    // El cuerpo completo, solo bajo una bandera explícita de desarrollo. Sirve
+    // para depurar una plantilla sin que sea el comportamiento por defecto.
+    if (process.env.EMAIL_LOG_CUERPO === '1') {
+      console.debug(`[email:${this.nombre}] cuerpo:\n  ${m.cuerpo.replace(/\n/g, '\n  ')}`)
+    }
+    return {
+      ok: true,
+      detalle: `Simulado: el correo para ${m.para} quedó registrado en el servidor, no se envió.`,
+    }
+  }
+}
+
+const PROVEEDORES: Record<string, EmailProvider> = {
+  consola: new ProveedorConsola(),
+  resend: new ProveedorResend(),
+}
+
+export function obtenerProveedorEmail(
+  nombre: string | undefined = process.env.EMAIL_PROVIDER,
+): EmailProvider {
+  // El proveedor «consola» no envía nada: escribe el correo en el log. Si queda
+  // activo por descuido en producción, la confirmación de reserva, el enlace de
+  // firma y la encuesta nunca llegan al huésped, y el sistema informa «enviado».
+  const proveedor = seleccionarProveedor({
+    variable: 'EMAIL_PROVIDER',
+    proveedores: PROVEEDORES,
+    simulado: 'consola',
+    valor: nombre,
+  })
+  advertirSiEsSimulado(proveedor, 'EMAIL_PROVIDER')
+  return proveedor
+}
+
+/** Lo que cada proveedor real necesita para poder mandar un solo correo. */
+const CREDENCIALES_POR_PROVEEDOR: Record<string, readonly string[]> = {
+  resend: ['RESEND_API_KEY', 'EMAIL_FROM'],
+}
+
+/**
+ * Falla al arrancar, en producción, si el proveedor de correo elegido no tiene
+ * sus credenciales (ADR 0018).
+ *
+ * `obtenerProveedorEmail()` ya exige que `EMAIL_PROVIDER` exista y nombre algo
+ * conocido, pero con `EMAIL_PROVIDER=resend` y sin `RESEND_API_KEY` el sistema
+ * levantaba igual: el adapter devolvía «falta la clave» recién en el primer
+ * envío, la bandeja lo marcaba fallido y nadie se enteraba hasta que un huésped
+ * preguntaba por qué no le llegó la confirmación. Mismo criterio que
+ * `verificarCredencialesDePasarela`.
+ */
+export function verificarCredencialesDeEmail(valor = process.env.EMAIL_PROVIDER): void {
+  if (!esProduccion()) return
+
+  const faltantes = (CREDENCIALES_POR_PROVEEDOR[(valor ?? '').trim()] ?? []).filter(
+    (variable) => !process.env[variable]?.trim(),
+  )
+
+  if (faltantes.length > 0) {
+    throw new Error(
+      `Faltan credenciales del proveedor de correo (EMAIL_PROVIDER=${valor}): ${faltantes.join(', ')}.\n` +
+        `El ADR 0018 exige fallar al arrancar antes que descubrirlo cuando una ` +
+        `confirmación de reserva no le llega al huésped. Cargá esas variables.`,
+    )
+  }
+}
+
+/**
+ * Trae el override de asunto/cuerpo de `plantillas_email` (migración 0097),
+ * si alguien lo editó desde el panel.
+ *
+ * Por `crearClienteAdmin()` y no el cliente del usuario: `enviarPlantilla` se
+ * llama también desde cron y webhooks, donde no hay sesión ni cookies. El
+ * contenido de una plantilla no es un dato sensible por rol — la RLS de la
+ * tabla ya deja leerla a cualquier staff, esto solo evita depender de que
+ * haya una petición HTTP con sesión detrás.
+ */
+async function obtenerOverridePlantilla(
+  evento: EventoEmail,
+): Promise<{ asunto: string | null; cuerpo: string | null } | null> {
+  const { data, error } = await crearClienteAdmin()
+    .from('plantillas_email')
+    .select('asunto, cuerpo')
+    .eq('evento', evento)
+    .maybeSingle()
+  // Sin esto, una lectura que falla (RLS, la tabla caída, lo que sea) se
+  // confunde con «no hay texto editado para este evento»: el correo sale
+  // igual, pero con el texto ORIGINAL del código en vez del que alguien
+  // personalizó a mano, y nadie se entera de que la personalización no se
+  // aplicó.
+  registrarFalla(error, 'email:override_plantilla')
+  return data
+}
+
+/**
+ * Renderiza una plantilla y la envía.
+ *
+ * Es el único punto por el que salen las comunicaciones al huésped: así el
+ * texto siempre viene del catálogo de plantillas (o de su override editado
+ * desde el panel) y nunca se arma a mano.
+ */
+export async function enviarPlantilla(
+  evento: EventoEmail,
+  para: string | null,
+  variables: Record<string, string | number>,
+): Promise<ResultadoEnvio> {
+  if (!para) return { ok: false, detalle: 'El destinatario no tiene email cargado.' }
+
+  const override = await obtenerOverridePlantilla(evento)
+  const { asunto, cuerpo, cuerpoHtml, faltantes } = renderizar(evento, variables, override ?? undefined)
+  if (faltantes.length > 0) {
+    return {
+      ok: false,
+      detalle: `Faltan datos para completar la plantilla: ${faltantes.join(', ')}.`,
+    }
+  }
+
+  return obtenerProveedorEmail().enviar({ para, asunto, cuerpo, cuerpoHtml })
+}

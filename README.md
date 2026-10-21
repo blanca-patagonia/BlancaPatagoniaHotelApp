@@ -66,7 +66,7 @@ arrancar** a propósito ([ADR 0018](docs/decisiones/0018-seleccion-de-proveedor-
 
 El **deploy** (Vercel + Supabase cloud) está pendiente. La sincronización
 automática de canales ya tiene su tarea programada (`vercel.json`), documentada
-en [`docs/sincronizacion-automatica.md`](docs/sincronizacion-automatica.md) —
+en [`docs/2-arquitectura/sincronizacion-automatica.md`](docs/2-arquitectura/sincronizacion-automatica.md) —
 con la advertencia de que el plan Hobby de Vercel corre **una vez por día**,
 no cada tres horas.
 
@@ -74,7 +74,7 @@ Tres pendientes técnicos, anotados donde viven y no solo acá:
 
 - **Auditar las políticas RLS una por una.** Que estén activadas en todas las
   tablas no dice qué permite cada una. La matriz de **lectura** ya es exhaustiva
-  (todas las tablas × 4 roles, `tests/rls-por-rol.test.ts`); la de **escritura** es
+  (todas las tablas × 4 roles, `tests/base-de-datos/rls-por-rol.test.ts`); la de **escritura** es
   dirigida, no exhaustiva, y está declarado en el propio archivo.
 - **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
   de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
@@ -82,7 +82,7 @@ Tres pendientes técnicos, anotados donde viven y no solo acá:
 - **Las fotos de los alojamientos.** El catálogo está diseñado para verse
   terminado sin ellas; para sumarlas, copiar los archivos en
   `public/alojamientos/` y descomentar su línea en `FOTOS`
-  (`lib/domain/catalogo.ts`).
+  (`src/lib/domain/catalogo.ts`).
 
 Ver [roadmap](docs/roadmap.md) y [ADR 0013](docs/decisiones/0013-alcance-erp-y-trabajo-futuro.md)
 para el trabajo futuro documentado.
@@ -141,7 +141,7 @@ contraseña perdida se recupera en **`/login/recuperar`**.
 Los tests **no** se corren contra el proyecto de la nube: 29 archivos escriben con
 `service_role` —que saltea RLS— y borran filas de `reservas`, `huespedes`,
 `tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso destruye datos del
-hotel, así que `tests/db.ts` corta si las variables no apuntan a una base local.
+hotel, así que `tests/apoyo/db.ts` corta si las variables no apuntan a una base local.
 
 ```bash
 npx supabase start      # Postgres + Auth locales; la primera vez tarda unos minutos
@@ -155,7 +155,7 @@ Sin base local `npm test` **saltea** los tests de integración en vez de fallar
 eso no puede pasar: `EXIGIR_DB=1` convierte la ausencia de base en error.
 
 Detalle completo en [cómo levantarlo](COMO-LEVANTARLO.md) y en el
-[manual técnico](docs/manual-tecnico.md).
+[manual técnico](docs/3-manuales/manual-tecnico.md).
 
 ## Roles
 
@@ -165,37 +165,41 @@ propios capítulos de Ayuda ([ADR 0005](docs/decisiones/0005-autenticacion-y-rol
 
 ## Documentación
 
-Toda la documentación vive en [`docs/`](docs/), en español:
+Toda la documentación vive en [`docs/`](docs/), en español (índice en [`docs/README.md`](docs/README.md)):
 
 - [Bitácora de avances](docs/bitacora.md) — registro cronológico del desarrollo.
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
-- [Arquitectura](docs/arquitectura.md) — visión técnica del sistema.
-- [Modelo de datos](docs/modelo-datos.md) — entidades y relaciones.
+- [Arquitectura](docs/2-arquitectura/arquitectura.md) — visión técnica del sistema.
+- [Modelo de datos](docs/2-arquitectura/modelo-datos.md) — entidades y relaciones.
 - [Decisiones (ADR)](docs/decisiones/) — 40 decisiones de arquitectura numeradas.
-- [Qué queda pendiente](docs/analisis-pendientes-2026-09-09.md) — documento vigente; el
+- [Qué queda pendiente](docs/5-pendientes/analisis-pendientes-2026-09-09.md) — documento vigente; el
   estado más actual son los [issues de GitHub](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/issues).
-  [`docs/audit/`](docs/audit/) y [`docs/PENDIENTES.md`](docs/PENDIENTES.md) quedaron
+  [`docs/4-seguridad-y-auditorias/audit/`](docs/4-seguridad-y-auditorias/audit/) y [`docs/5-pendientes/PENDIENTES.md`](docs/5-pendientes/PENDIENTES.md) quedaron
   congelados, como referencia histórica.
-- [Manual de usuario](docs/manual-usuario.md) · [Manual técnico](docs/manual-tecnico.md)
-- [Seguridad](docs/SEGURIDAD.md) · [Auditoría inicial](docs/AUDITORIA_INICIAL.md) ·
-  [Revisión de RLS y endpoints](docs/revision-seguridad.md)
+- [Manual de usuario](docs/3-manuales/manual-usuario.md) · [Manual técnico](docs/3-manuales/manual-tecnico.md)
+- [Seguridad](docs/4-seguridad-y-auditorias/SEGURIDAD.md) · [Auditoría inicial](docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md) ·
+  [Revisión de RLS y endpoints](docs/4-seguridad-y-auditorias/revision-seguridad.md)
 
 ## Estructura
 
+Mapa completo, carpeta por carpeta: **[ESTRUCTURA.md](ESTRUCTURA.md)**.
+
 ```
-app/            # Next.js App Router
-  panel/        #   gestión hotelera (staff, por rol)
-  alojamientos/ #   catálogo público con detalle por tipo
-  reservar/     #   portal público de reservas
-  firmar/       #   firma de contratos por token
-  encuesta/     #   encuesta de satisfacción por token
-  portal/       #   portal de agencias y proveedores por token
-  api/          #   route handlers, webhooks y cron
-lib/            # dominio puro, disponibilidad, pagos, canales, divisas, clientes Supabase
-supabase/       # 108 migraciones SQL numeradas + seed
-docs/           # documentación del proyecto / tesis
-tests/          # 146 archivos, 2294 tests (Vitest)
+src/                    # TODO el código de la aplicación
+  app/(front-publico)/  #   FRONT · sitio del huésped (5 idiomas, reserva y pago)
+  app/(front-gestion)/  #   FRONT · panel de gestión del staff + login
+  app/(back-api)/       #   BACK  · endpoints, webhooks y cron
+  lib/                  #   BACK  · reglas de negocio, datos e integraciones
+  proxy.ts              #   BACK  · sesión, idioma y límites de cada pedido
+supabase/               # base de datos: migraciones SQL numeradas
+tests/                  # pruebas por tipo: dominio, servicios, acciones, base de datos, contratos
+public/                 # fotos del hotel, íconos, service worker
+docs/                   # documentación: tesis, arquitectura, manuales, ADRs, bitácora
+scripts/                # utilidades de consola
 ```
+
+Los paréntesis son grupos de rutas de Next.js: ordenan el código sin cambiar
+ninguna URL (`src/app/(front-gestion)/panel` se sigue abriendo en `/panel`).
 
 ## Scripts
 

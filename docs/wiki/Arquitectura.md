@@ -20,14 +20,14 @@ flowchart TB
     end
 
     subgraph next["Next.js 16 — App Router"]
-        POR["Portal público<br/>app/reservar · app/alojamientos"]
-        PAN["Panel interno<br/>app/panel — 21 áreas"]
-        TOK["Accesos por token<br/>app/portal · app/firmar · app/encuesta"]
-        API["Route handlers<br/>app/api — webhooks, iCal, salud, cron"]
+        POR["Portal público<br/>src/app/(front-publico)/reservar · src/app/(front-publico)/[idioma]/alojamientos"]
+        PAN["Panel interno<br/>src/app/(front-gestion)/panel — 21 áreas"]
+        TOK["Accesos por token<br/>src/app/(front-publico)/portal · src/app/(front-publico)/firmar · src/app/(front-publico)/encuesta"]
+        API["Route handlers<br/>src/app/(back-api)/api — webhooks, iCal, salud, cron"]
     end
 
     subgraph logica["lib/ — lógica de negocio"]
-        DOM["lib/domain<br/>50 módulos PUROS<br/>sin base, sin React"]
+        DOM["src/lib/domain<br/>50 módulos PUROS<br/>sin base, sin React"]
         SRV["availability · pricing · payments<br/>canales · divisas · firma<br/>facturacion · email · auth"]
     end
 
@@ -53,26 +53,26 @@ flowchart TB
 ## Las capas, y las reglas que las sostienen
 
 ```
-app/rutas ──124──> app/panel/_components   (interfaz compartida)
-          ──100──> lib/domain              (reglas puras)
+src/app/rutas ──124──> src/app/(front-gestion)/panel/_components   (interfaz compartida)
+          ──100──> src/lib/domain              (reglas puras)
           ───89──> lib/{auth,pricing,payments,email,firma,
                         facturacion,availability,canales,divisas}
-          ───60──> lib/supabase            ← puentea la capa de datos (deuda conocida)
+          ───60──> src/lib/supabase            ← puentea la capa de datos (deuda conocida)
 
-lib/servicios ──> lib/domain ──> lib/fechas
-lib/supabase  ──> PostgreSQL + RLS
+src/lib/servicios ──> src/lib/domain ──> src/lib/fechas
+src/lib/supabase  ──> PostgreSQL + RLS
 ```
 
 Tres reglas de dependencia, todas **verificables con `rg`** y no sólo declaradas:
 
-1. **`lib/domain/` es puro.** No importa `@supabase/*`, ni `next/*`, ni `react`,
+1. **`src/lib/domain/` es puro.** No importa `@supabase/*`, ni `next/*`, ni `react`,
    ni `zod`. Son 50 módulos de reglas que se testean sin levantar una base. Es lo
    que permite tener una suite de 2294 tests que corren en segundos.
-2. **`lib/` nunca importa de `app/`.** Cero excepciones, y hoy hay cero aristas.
-3. **La lógica de negocio va en `lib/domain/`.** Las páginas y las acciones
+2. **`lib/` nunca importa de `src/app/`.** Cero excepciones, y hoy hay cero aristas.
+3. **La lógica de negocio va en `src/lib/domain/`.** Las páginas y las acciones
    orquestan: leen, llaman al dominio, escriben. No calculan reglas.
 
-`lib/supabase/admin.ts` usa la `service_role` y **saltea RLS**: es sólo de
+`src/lib/supabase/admin.ts` usa la `service_role` y **saltea RLS**: es sólo de
 servidor (marcado con `server-only`) y nunca recibe datos del usuario sin filtrar.
 
 ---
@@ -81,7 +81,7 @@ servidor (marcado con `server-only`) y nunca recibe datos del usuario sin filtra
 
 | | Panel interno | Portal público |
 |---|---|---|
-| **Ruta** | `app/panel` | `app/reservar`, `app/alojamientos` |
+| **Ruta** | `src/app/(front-gestion)/panel` | `src/app/(front-publico)/reservar`, `src/app/(front-publico)/[idioma]/alojamientos` |
 | **Quién entra** | Staff con sesión, por rol | Cualquiera, sin cuenta |
 | **Qué ve** | Las 21 áreas que su rol permite | Catálogo, disponibilidad, checkout |
 | **Datos** | Todo lo del hotel | Sólo el catálogo público |
@@ -103,7 +103,7 @@ la ruta existe y que el token tenía la forma correcta.
 
 ## Cómo entra y sale la información
 
-**Escrituras: Server Actions.** Hay 33 archivos `actions.ts` en `app/`, uno por módulo. Cada
+**Escrituras: Server Actions.** Hay 33 archivos `actions.ts` en `src/app/`, uno por módulo. Cada
 acción verifica el rol con `requerirAcceso(area)` —con una guarda estructural, no
 por convención— valida con `zod` y **nunca descarta el error de la base**.
 
@@ -158,11 +158,11 @@ dos puntas —la tarjeta del exterior y el pago en pesos con cuotas—.
 Se toca en **cinco lugares, y cuatro tienen que moverse juntos** o el typecheck
 falla (`Area` es una unión de tipos y la navegación un `Record<Area, …>`):
 
-1. `lib/domain/permisos.ts` — el área, su etiqueta y qué roles la ven
-2. `lib/domain/navegacion.ts` — el grupo del menú (hay un test que verifica cobertura)
-3. `app/panel/_components/shell.tsx` — la ruta y el icono
-4. `lib/domain/ayuda.ts` — el capítulo de la Ayuda
-5. `app/panel/_components/iconos.tsx` — si el icono es nuevo
+1. `src/lib/domain/permisos.ts` — el área, su etiqueta y qué roles la ven
+2. `src/lib/domain/navegacion.ts` — el grupo del menú (hay un test que verifica cobertura)
+3. `src/app/(front-gestion)/panel/_components/shell.tsx` — la ruta y el icono
+4. `src/lib/domain/ayuda.ts` — el capítulo de la Ayuda
+5. `src/app/(front-gestion)/panel/_components/iconos.tsx` — si el icono es nuevo
 
 Y la estructura de un módulo: `page.tsx` (listado) · `nuevo/page.tsx` ·
 `[id]/page.tsx` · `[id]/editar/page.tsx` · `actions.ts` · `loading.tsx` · su test.

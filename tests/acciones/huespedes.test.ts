@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { hayDB } from '../db'
+import { hayDB } from '../apoyo/db'
 import { nuevoContexto, limpiar, formulario, type Contexto } from './entorno'
 
 vi.mock('next/navigation', () => ({
@@ -20,19 +20,19 @@ vi.mock('@/lib/auth/session', async () => {
   }
 })
 vi.mock('@/lib/supabase/server', async () => {
-  const { clienteDePrueba } = await import('../db')
+  const { clienteDePrueba } = await import('../apoyo/db')
   return { crearClienteServidor: async () => clienteDePrueba() }
 })
 
 describe.skipIf(!hayDB)('Server Actions · huéspedes', () => {
-  type Acciones = typeof import('@/app/panel/huespedes/actions')
+  type Acciones = typeof import('@/app/(front-gestion)/panel/huespedes/actions')
   let ctx: Contexto
   let crearHuesped: Acciones['crearHuesped']
   let actualizarHuesped: Acciones['actualizarHuesped']
 
   beforeAll(async () => {
     ctx = nuevoContexto()
-    const acciones = await import('@/app/panel/huespedes/actions')
+    const acciones = await import('@/app/(front-gestion)/panel/huespedes/actions')
     crearHuesped = acciones.crearHuesped
     actualizarHuesped = acciones.actualizarHuesped
   })

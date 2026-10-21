@@ -99,7 +99,7 @@ en cero por esto y decía «no hay nadie alojado hoy».
 ### De Next.js 16
 
 **No es el Next.js habitual.** `cookies()` y `headers()` son **async**; `params`
-y `searchParams` son **Promise**; `middleware` se llama `proxy.ts`. Antes de tocar
+y `searchParams` son **Promise**; `middleware` se llama `src/proxy.ts`. Antes de tocar
 APIs de Next hay que leer `node_modules/next/dist/docs/`.
 
 **El builder de PostgREST es *thenable*:** una función `async` no debe devolverlo

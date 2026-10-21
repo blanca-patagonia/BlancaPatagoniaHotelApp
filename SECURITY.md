@@ -12,7 +12,7 @@ una tabla de «versiones soportadas» porque sería inventada: se trabaja sobre 
 
 El sistema **no procesa dinero real ni envía correo real**. Las pasarelas de pago,
 la facturación electrónica, la firma y el correo son adaptadores con un simulador
-detrás (`lib/payments`, `lib/email`, `lib/firma`, `lib/facturacion`). Esos
+detrás (`src/lib/payments`, `src/lib/email`, `src/lib/firma`, `src/lib/facturacion`). Esos
 simuladores **fallan al arrancar si el entorno es de producción** y no están
 configuradas las variables correspondientes: es deliberado, para que nadie confunda
 un comprobante simulado con uno fiscal (ADR 0018).
@@ -78,7 +78,7 @@ porque un documento que solo enumera aciertos no sirve para decidir si confiar.
 
 - **Las ~90 políticas RLS no fueron auditadas una por una.** Que estén activadas en
   las 43 tablas dice que hay una puerta, no qué deja pasar. Es el pendiente
-  principal (`docs/audit/00-pendientes.md`).
+  principal (`docs/4-seguridad-y-auditorias/audit/00-pendientes.md`).
 - **No hay Content-Security-Policy.** Está decidido y documentado en
   `next.config.ts`: una CSP mal puesta rompe la aplicación en silencio, y ponerla
   bien exige un inventario de orígenes que todavía no se hizo.
@@ -116,9 +116,9 @@ escribir esto queda **una vulnerabilidad de severidad baja**.
 
 ## Más detalle
 
-- `docs/SEGURIDAD.md` — cada hallazgo con el formato «qué encontré → por qué es
+- `docs/4-seguridad-y-auditorias/SEGURIDAD.md` — cada hallazgo con el formato «qué encontré → por qué es
   riesgo → qué hice → cómo verificarlo».
-- `docs/AUDITORIA_INICIAL.md` — el reconocimiento inicial.
-- `docs/audit/00-pendientes.md` — lo que falta.
+- `docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md` — el reconocimiento inicial.
+- `docs/4-seguridad-y-auditorias/audit/00-pendientes.md` — lo que falta.
 - `docs/decisiones/` — los 26 ADRs. Los de seguridad son el 0002, 0016, 0017, 0018
   y 0025.

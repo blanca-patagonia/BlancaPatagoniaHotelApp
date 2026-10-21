@@ -1,0 +1,379 @@
+'use server'
+
+import { crearClienteAdmin } from '@/lib/supabase/admin'
+import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
+import { crearClienteServidor } from '@/lib/supabase/server'
+import { requerirAcceso, requerirRol } from '@/lib/auth/session'
+import {
+  periodicidadValida,
+  primeraEjecucionSugerida,
+  proximaEjecucion,
+} from '@/lib/domain/preventivo'
+import { hoyISO } from '@/lib/fechas'
+import { cortarSiFalla, mensajeDeFalla } from '@/lib/acciones'
+import { avisarIncidenteMantenimiento } from '@/lib/notificaciones/eventos'
+import { subirAdjunto, eliminarAdjunto } from '@/lib/storage'
+import { registrarAviso } from '@/lib/registro'
+import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
+
+export interface EstadoOrden {
+  error?: string
+  ok?: string
+  /** Lo escrito, para reponerlo si la acción falla (React resetea el form). */
+  valores?: ValoresFormulario
+}
+
+const PRIORIDADES = ['baja', 'media', 'alta']
+const ESTADOS = ['pendiente', 'en_proceso', 'resuelta']
+
+export async function crearOrden(_prev: EstadoOrden, formData: FormData): Promise<EstadoOrden> {
+  await requerirAcceso('mantenimiento')
+  const titulo = String(formData.get('titulo') ?? '').trim()
+  const descripcion = String(formData.get('descripcion') ?? '').trim()
+  const prioridad = String(formData.get('prioridad') ?? 'media')
+  const unidadId = String(formData.get('unidad_id') ?? '')
+  if (!titulo) return falloConValores('Ingresá un título.', formData)
+  if (!PRIORIDADES.includes(prioridad)) return falloConValores('Prioridad inválida.', formData)
+
+  const supabase = await crearClienteServidor()
+  const { data: creada, error } = await supabase
+    .from('ordenes_mantenimiento')
+    .insert({ titulo, descripcion, prioridad, unidad_id: unidadId || null })
+    .select('id, unidad:unidades(nombre)')
+    .single()
+  if (error) return falloConValores(mensajeDeFalla(error, 'mantenimiento:crear', 'No se pudo crear la orden'), formData)
+
+  /*
+    Sólo lo urgente sale a la cartelera.
+
+    Una orden de prioridad baja —«cambiar la lamparita del pasillo»— no necesita
+    interrumpir a nadie, y si todas avisaran, la cartelera se llenaría de cosas
+    que pueden esperar y se dejaría de mirar. La que no puede esperar es la que
+    deja una habitación fuera de servicio.
+  */
+  if (prioridad === 'alta') {
+    const orden = creada as unknown as {
+      id: string
+      // ⚠️ El TIPO generado dice arreglo, pero en tiempo de ejecución PostgREST
+      // devuelve un objeto (la relación es a-uno). Se leía `[0]` sobre un
+      // objeto y la alerta urgente decía siempre «Sin unidad asignada». Se
+      // aceptan las dos formas.
+      unidad: { nombre: string } | { nombre: string }[] | null
+    }
+    const unidad = Array.isArray(orden.unidad) ? orden.unidad[0] : orden.unidad
+    await avisarIncidenteMantenimiento(crearClienteAdmin(), {
+      ordenId: orden.id,
+      // Una orden puede no tener unidad (algo del edificio, no de una habitación).
+      unidad: unidad?.nombre ?? 'Sin unidad asignada',
+      titulo,
+      prioridad: 'alta',
+    })
+  }
+
+  revalidatePath('/panel/mantenimiento')
+  return { ok: 'Orden creada.' }
+}
+
+/**
+ * Cambia el estado de una orden. Vuelve al listado o al detalle según de
+ * dónde se haya llamado.
+ *
+ * `origen` es una lista blanca de dos valores literales, no una URL de
+ * vuelta que venga del formulario: un campo "volvé acá" sería un redirect
+ * abierto (mismo criterio que `retornoDeMudanza` en `lib/reservas/`). El
+ * destino real —con el id de la orden interpolado— lo arma el servidor.
+ */
+export async function cambiarEstadoOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
+  const id = String(formData.get('id') ?? '')
+  const estado = String(formData.get('estado') ?? '')
+  const origen = formData.get('origen') === 'detalle' ? 'detalle' : 'listado'
+  const destino = origen === 'detalle' ? `/panel/mantenimiento/${id}` : '/panel/mantenimiento'
+
+  if (id && ESTADOS.includes(estado)) {
+    const supabase = await crearClienteServidor()
+    const upd: { estado: string; resuelta_en?: string | null } = { estado }
+    upd.resuelta_en = estado === 'resuelta' ? new Date().toISOString() : null
+    const { error } = await supabase.from('ordenes_mantenimiento').update(upd).eq('id', id)
+    cortarSiFalla(error, destino, 'estado_orden')
+  }
+  revalidatePath('/panel/mantenimiento')
+  redirect(destino)
+}
+
+/**
+ * Edita título, descripción, prioridad y unidad de una orden ya cargada.
+ *
+ * Antes de esto, la única forma de corregir un título mal tipeado o una
+ * unidad equivocada era borrar la orden y cargarla de nuevo — perdiendo las
+ * fotos y el historial de cambio de estado.
+ */
+export async function editarOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
+  const id = String(formData.get('id') ?? '')
+  if (!id) redirect('/panel/mantenimiento')
+  const destino = `/panel/mantenimiento/${id}`
+
+  const titulo = String(formData.get('titulo') ?? '').trim()
+  const descripcion = String(formData.get('descripcion') ?? '').trim()
+  const prioridad = String(formData.get('prioridad') ?? 'media')
+  const unidadId = String(formData.get('unidad_id') ?? '')
+
+  if (!titulo) redirect(`${destino}?error=orden_titulo`)
+  if (!PRIORIDADES.includes(prioridad)) redirect(`${destino}?error=orden_prioridad`)
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('ordenes_mantenimiento')
+    .update({ titulo, descripcion, prioridad, unidad_id: unidadId || null })
+    .eq('id', id)
+  cortarSiFalla(error, destino, 'orden_editar')
+
+  revalidatePath('/panel/mantenimiento')
+  redirect(`${destino}?ok=orden`)
+}
+
+/**
+ * Da de alta un plan de mantenimiento preventivo.
+ *
+ * La primera ejecución se propone dentro de una semana (ver `preventivo.ts`)
+ * para no llenar el tablero de órdenes apenas se carga el plan.
+ */
+export async function crearPlanPreventivo(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const titulo = String(formData.get('titulo') ?? '').trim()
+  const unidadId = String(formData.get('unidad_id') ?? '')
+  const cadaMeses = Number(formData.get('cada_meses'))
+  const prioridadCruda = String(formData.get('prioridad') ?? 'media')
+  const prioridad = PRIORIDADES.includes(prioridadCruda) ? prioridadCruda : 'media'
+
+  if (!titulo || !periodicidadValida(cadaMeses)) {
+    redirect('/panel/mantenimiento?error=plan')
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from('planes_mantenimiento').insert({
+    titulo,
+    unidad_id: unidadId || null,
+    cada_meses: cadaMeses,
+    prioridad,
+    proxima_ejecucion: primeraEjecucionSugerida(hoyISO()),
+  })
+  cortarSiFalla(error, '/panel/mantenimiento', 'plan_guardar')
+
+  revalidatePath('/panel/mantenimiento')
+  redirect('/panel/mantenimiento?ok=plan')
+}
+
+/**
+ * Edita título, unidad, periodicidad y prioridad de un plan preventivo ya
+ * cargado, en un solo guardado por fila (mismo patrón que el tarifario).
+ *
+ * No toca `proxima_ejecucion`: cambiar la periodicidad de un plan no debe
+ * mover la fecha ya calculada, o un plan «cada 6 meses» pasado a «cada 3»
+ * podría atrasar la próxima tarea en vez de adelantarla.
+ */
+export async function editarPlanPreventivo(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) redirect('/panel/mantenimiento?error=plan')
+
+  const titulo = String(formData.get('titulo') ?? '').trim()
+  const unidadId = String(formData.get('unidad_id') ?? '')
+  const cadaMeses = Number(formData.get('cada_meses'))
+  const prioridadCruda = String(formData.get('prioridad') ?? 'media')
+  const prioridad = PRIORIDADES.includes(prioridadCruda) ? prioridadCruda : 'media'
+
+  if (!titulo || !periodicidadValida(cadaMeses)) {
+    redirect('/panel/mantenimiento?error=plan')
+  }
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('planes_mantenimiento')
+    .update({ titulo, unidad_id: unidadId || null, cada_meses: cadaMeses, prioridad })
+    .eq('id', id)
+  cortarSiFalla(error, '/panel/mantenimiento', 'plan_editar')
+
+  revalidatePath('/panel/mantenimiento')
+  redirect('/panel/mantenimiento?ok=plan_editado')
+}
+
+/**
+ * Da de baja un plan preventivo (baja lógica: `activo = false`).
+ *
+ * No se borra la fila: es el mismo criterio que ya usa el resto del sistema
+ * para lo que tiene historial (huéspedes, agencias…), y acá además evita que
+ * una orden ya generada por este plan se quede apuntando a nada.
+ */
+export async function eliminarPlanPreventivo(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('id') ?? '')
+  if (id) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase
+      .from('planes_mantenimiento')
+      .update({ activo: false })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/mantenimiento', 'plan_eliminar')
+  }
+
+  revalidatePath('/panel/mantenimiento')
+  redirect('/panel/mantenimiento?ok=plan_eliminado')
+}
+
+/**
+ * Registra que la tarea se hizo hoy, fuera del ciclo automático, y calcula
+ * la próxima ejecución a partir de HOY (no de la fecha vencida).
+ *
+ * Sin esto, la única forma de que un plan avance era esperar a que quedara
+ * vencido y generar la orden — no hay manera de anotar «esto ya se hizo» si
+ * se resolvió por afuera del sistema (una visita del técnico sin pasar por
+ * la orden).
+ */
+export async function marcarPlanHecho(formData: FormData): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const id = String(formData.get('id') ?? '')
+  const cadaMeses = Number(formData.get('cada_meses'))
+  if (id && periodicidadValida(cadaMeses)) {
+    const supabase = await crearClienteServidor()
+    const { error } = await supabase
+      .from('planes_mantenimiento')
+      .update({ proxima_ejecucion: proximaEjecucion(hoyISO(), cadaMeses) })
+      .eq('id', id)
+    cortarSiFalla(error, '/panel/mantenimiento', 'plan_marcar_hecho')
+  }
+
+  revalidatePath('/panel/mantenimiento')
+  redirect('/panel/mantenimiento?ok=plan_hecho')
+}
+
+/**
+ * Ejecuta los planes vencidos y genera sus órdenes.
+ *
+ * Hoy se dispara a mano desde el panel; en producción iría por cron, igual que
+ * `expirar_reservas_pendientes`. La lógica vive en la base para que valga sea
+ * cual sea el disparador.
+ */
+export async function generarPreventivo(): Promise<void> {
+  await requerirRol('admin', 'gerencia')
+
+  const supabase = await crearClienteServidor()
+  const { data, error } = await supabase.rpc('generar_mantenimiento_preventivo')
+  // Sin esto, un RPC que falla termina en «?generadas=0» — igual que si de
+  // verdad no hubiera ningún plan vencido. Las dos situaciones piden
+  // reacciones opuestas: una no requiere nada, la otra hay que reintentarla.
+  cortarSiFalla(error, '/panel/mantenimiento', 'generar_preventivo')
+
+  revalidatePath('/panel/mantenimiento')
+  redirect(`/panel/mantenimiento?generadas=${data ?? 0}`)
+}
+
+/**
+ * Adjunta una foto nueva a una orden de mantenimiento (ADR 0037).
+ *
+ * Sube el archivo a `mantenimiento/<orden_id>` con `subirAdjunto` y agrega la
+ * RUTA devuelta al arreglo `fotos` de la orden — nunca se guarda una URL ni el
+ * archivo en la base, sólo el nombre dentro del bucket privado.
+ *
+ * Se lee el arreglo actual y se reescribe con la ruta nueva en vez de un
+ * `array_append` en la base: el volumen es una foto por vez, cargada por una
+ * sola persona parada frente a la orden, así que la ventana de carrera es
+ * despreciable frente a la simplicidad de no sumar una función SQL sólo para
+ * esto.
+ */
+export async function agregarFotoOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
+
+  const ordenId = String(formData.get('orden_id') ?? '')
+  const archivo = formData.get('foto')
+  if (!ordenId || !(archivo instanceof File) || archivo.size === 0) {
+    redirect(`/panel/mantenimiento/${ordenId}?error=foto_falta`)
+  }
+
+  const subida = await subirAdjunto(`mantenimiento/${ordenId}`, archivo)
+  if ('error' in subida) {
+    redirect(`/panel/mantenimiento/${ordenId}?error=foto_subida`)
+  }
+
+  const supabase = await crearClienteServidor()
+  const { data: actual, error: errorLectura } = await supabase
+    .from('ordenes_mantenimiento')
+    .select('fotos')
+    .eq('id', ordenId)
+    .maybeSingle()
+  if (errorLectura) {
+    cortarSiFalla(errorLectura, `/panel/mantenimiento/${ordenId}`, 'foto_leer')
+  }
+  // No existe (o no se ve): no es una falla del sistema, y seguir escribiría
+  // sobre cero filas como si hubiera salido bien.
+  if (!actual) redirect(`/panel/mantenimiento/${ordenId}?error=foto_leer`)
+
+  const fotos = [...(((actual as { fotos: string[] } | null)?.fotos) ?? []), subida.ruta]
+  const { error } = await supabase
+    .from('ordenes_mantenimiento')
+    .update({ fotos })
+    .eq('id', ordenId)
+  cortarSiFalla(error, `/panel/mantenimiento/${ordenId}`, 'foto_guardar')
+
+  revalidatePath(`/panel/mantenimiento/${ordenId}`)
+  redirect(`/panel/mantenimiento/${ordenId}?ok=foto`)
+}
+
+/**
+ * Quita una foto de una orden de mantenimiento: del arreglo `fotos` y del
+ * bucket. Una foto equivocada o con datos personales de un huésped (una
+ * persona de fondo, un documento sobre la mesa) quedaba para siempre —nadie
+ * llamaba a `eliminarAdjunto`, que ya existía desde la migración 0099—.
+ *
+ * Se borra de la base PRIMERO: si `eliminarAdjunto` fallara después, la peor
+ * consecuencia es un archivo huérfano en el bucket (invisible, no se sirve sin
+ * su ruta en `fotos`). Al revés —borrar el archivo y que el `update` fallara—
+ * dejaría la ficha mostrando una foto que ya no existe.
+ */
+export async function eliminarFotoOrden(formData: FormData): Promise<void> {
+  await requerirAcceso('mantenimiento')
+
+  const ordenId = String(formData.get('orden_id') ?? '')
+  const ruta = String(formData.get('ruta') ?? '')
+  if (!ordenId || !ruta) redirect(`/panel/mantenimiento/${ordenId}?error=foto_eliminar`)
+
+  const supabase = await crearClienteServidor()
+  const { data: actual, error: errorLectura } = await supabase
+    .from('ordenes_mantenimiento')
+    .select('fotos')
+    .eq('id', ordenId)
+    .maybeSingle()
+  if (errorLectura) {
+    cortarSiFalla(errorLectura, `/panel/mantenimiento/${ordenId}`, 'foto_leer')
+  }
+  // No existe (o no se ve): no es una falla del sistema, y seguir escribiría
+  // sobre cero filas como si hubiera salido bien.
+  if (!actual) redirect(`/panel/mantenimiento/${ordenId}?error=foto_leer`)
+
+  const previas = ((actual as { fotos: string[] } | null)?.fotos) ?? []
+  /*
+    Sólo se borra un archivo que de verdad era de esta entidad. La ruta viene
+    del formulario y el borrado del bucket va con `service_role`: sin esta
+    guarda, cualquiera con acceso al módulo podía borrar CUALQUIER archivo del
+    bucket (por ejemplo, el comprobante de pago de una agencia) mandando su ruta.
+  */
+  if (!previas.includes(ruta)) redirect(`/panel/mantenimiento/${ordenId}?error=foto_eliminar`)
+  const fotos = previas.filter((f) => f !== ruta)
+  const { error } = await supabase
+    .from('ordenes_mantenimiento')
+    .update({ fotos })
+    .eq('id', ordenId)
+  cortarSiFalla(error, `/panel/mantenimiento/${ordenId}`, 'foto_eliminar')
+
+  await eliminarAdjunto(ruta)
+  await registrarAviso('adjunto_eliminado', { modulo: 'mantenimiento', orden_id: ordenId, ruta })
+
+  revalidatePath(`/panel/mantenimiento/${ordenId}`)
+  redirect(`/panel/mantenimiento/${ordenId}?ok=foto_eliminada`)
+}

@@ -37,8 +37,8 @@ genera Next.
    correrla, **marcá el número como no verificado en vez de copiarlo**.
 
 2. **Rutas y nombres que se movieron.** Es el error más traicionero, porque el texto sigue leyéndose
-   bien. Caso real detectado: `docs/arquitectura.md` describe `app/(public)` y `app/(admin)`, que
-   hoy son `app/reservar` y `app/panel`. Comprobá que cada ruta, archivo y función citada exista.
+   bien. Caso real detectado: `docs/2-arquitectura/arquitectura.md` describe `app/(public)` y `app/(admin)`, que
+   hoy son `src/app/(front-publico)/reservar` y `src/app/(front-gestion)/panel`. Comprobá que cada ruta, archivo y función citada exista.
 
 3. **Afirmaciones que el código contradice.** Las más caras son las que prometen una garantía. Cada
    «siempre», «nunca» y «no se puede» de la documentación tiene que poder señalarse en el código: la
@@ -53,7 +53,7 @@ genera Next.
    0020 cierra el 0003; el 0026 reemplaza al 0009 **sólo en paleta y tipografía** —. Un ADR que
    quedó viejo en silencio hace que alguien lo aplique de nuevo.
 
-6. **Estado que se quedó atrás.** `docs/roadmap.md`, `docs/PENDIENTES.md` y `docs/audit/00-pendientes.md`
+6. **Estado que se quedó atrás.** `docs/roadmap.md`, `docs/5-pendientes/PENDIENTES.md` y `docs/4-seguridad-y-auditorias/audit/00-pendientes.md`
    pueden seguir listando como pendiente algo ya hecho, o al revés. Y `docs/bitacora.md` tiene que
    tener entrada del último avance: es el insumo de los capítulos de implementación de la tesis.
 

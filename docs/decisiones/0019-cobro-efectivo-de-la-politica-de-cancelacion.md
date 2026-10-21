@@ -142,6 +142,42 @@ Se quita el monto de la pantalla y la política pasa a ser informativa, gestiona
 4. ¿Quién autoriza el cargo: se aplica solo, o lo confirma alguien de recepción?
 5. ¿Qué pasa con el no-show, que hoy no tiene ningún llamador?
 
+## Actualización (2026-10-14): qué cambió en la base desde agosto
+
+Desde que se escribió este ADR se construyeron dos piezas que las opciones C y D
+daban por existentes y hoy **sí existen de verdad**: las cuentas corrientes de
+agencia (`movimientos_cuenta`, con moneda real desde la 0078) y las notas de
+crédito (`notas_credito`, Bloque D). `PaymentProvider` sigue **sin** ningún
+método de cobro *merchant-initiated* ni de reembolso — las opciones A y B
+siguen exigiendo una pieza de pasarela que hoy no está, con el riesgo de
+contracargo que ya describe cada una.
+
+**Recomendación, si ayuda a decidir más rápido:** empezar por **C + D**
+combinadas, y dejar A/B fuera de este alcance:
+
+- **C (cargo a cuenta corriente)** cubre las reservas de agencia — ya hay
+  pantalla, ya hay movimiento, es escribir una fila más con el concepto
+  «cargo por cancelación».
+- **D (nota de crédito sobre lo ya cobrado)** cubre al huésped directo que
+  pagó una seña y cancela — que por el Tarifario es el caso más común,
+  porque casi toda reserva pide seña al confirmarse.
+- Lo que queda sin cobrar con esta combinación: el huésped directo que
+  **canceló sin haber pagado nada**. Ahí no hay de dónde retener ni cuenta
+  corriente que debitar — el mismo residuo que ya señala la opción C, y que
+  en la práctica se gestiona a mano o se da por perdido, como ya pasa hoy.
+- El no-show (pregunta 5) se resuelve con el **mismo mecanismo**: es el
+  mismo cargo del 100 %, disparado por un estado distinto (`no_show` en vez
+  de `cancelada`), no una pieza nueva.
+- Responde la pregunta 4 por sí sola: con C/D el cargo no se dispara solo —
+  lo escribe recepción al cancelar o al marcar el no-show, como ya hace hoy
+  con cualquier otro movimiento de cuenta. Nadie cobra una tarjeta sin que
+  haya una persona mirando la pantalla.
+
+Esto no reemplaza la decisión: sigue faltando que el hotel responda las
+preguntas 1 y 2. Pero acota el trabajo real a algo que no depende de
+contratar nada nuevo ni de tokenizar tarjetas, y deja A/B documentadas para
+el día en que el hotel tenga una pasarela con esa capacidad.
+
 ## Decisión
 
 <!--

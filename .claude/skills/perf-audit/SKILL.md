@@ -32,7 +32,7 @@ fd -e js . .next/static/chunks -x du -k {} | sort -rn | head -10
 Un `select` que devuelve N filas y después una consulta por fila dentro de un `map` o un `for`.
 
 ```bash
-rg -n -B3 "\.from\(" -g '*.tsx' app/panel | rg -n "map\(|for \(|forEach"
+rg -n -B3 "\.from\(" -g '*.tsx' src/app/(front-gestion)/panel | rg -n "map\(|for \(|forEach"
 ```
 
 Se arregla con un `select` anidado de PostgREST (`select('*, relacion(*)')`) o con un `in` sobre los
@@ -59,7 +59,7 @@ rg -n "create index" supabase/migrations
 del padre escanee la tabla hija entera.
 
 ### Agregaciones en JavaScript
-`lib/domain/metricas.ts` (ocupación, ADR, RevPAR) y las vistas de saldos (`0026`): si se traen todas
+`src/lib/domain/metricas.ts` (ocupación, ADR, RevPAR) y las vistas de saldos (`0026`): si se traen todas
 las filas al servidor para sumar en JS, eso va a SQL.
 
 ### Serie vs paralelo

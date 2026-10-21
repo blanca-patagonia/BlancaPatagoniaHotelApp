@@ -1,6 +1,6 @@
 # Reglas de negocio
 
-Todas viven en `lib/domain/`, en módulos **puros**: sin base de datos, sin React,
+Todas viven en `src/lib/domain/`, en módulos **puros**: sin base de datos, sin React,
 sin `zod`. Se testean solas y las pantallas sólo las muestran.
 
 ---

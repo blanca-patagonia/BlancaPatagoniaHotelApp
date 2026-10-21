@@ -149,7 +149,7 @@ pendiente.
 - **Piso y bloque** en las unidades, que es como el personal se refiere a ellas.
 
 El plan completo, con el porqué de cada paso, está en
-[`docs/modernizacion-winpax.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/modernizacion-winpax.md).
+[`docs/2-arquitectura/modernizacion-winpax.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/modernizacion-winpax.md).
 
 ---
 

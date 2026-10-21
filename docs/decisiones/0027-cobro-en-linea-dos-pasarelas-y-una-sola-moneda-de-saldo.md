@@ -2,7 +2,7 @@
 
 - **Estado:** Aceptada
 - **Fecha:** 2026-08-25
-- **Complementa:** [ADR 0003](0003-moneda.md) · [ADR 0006](0006-pagos-abstraccion-e-idempotencia.md) · [ADR 0018](0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md) · [ADR 0020](0020-cotizacion-de-divisas.md) · [ADR 0025](0025-verificar-la-tarjeta-sin-guardar-el-numero.md)
+- **Complementa:** [ADR 0003](0003-moneda-usd-ars.md) · [ADR 0006](0006-pagos-abstraccion-e-idempotencia.md) · [ADR 0018](0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md) · [ADR 0020](0020-cotizacion-de-divisas.md) · [ADR 0025](0025-verificar-la-tarjeta-sin-guardar-el-numero.md)
 - **Origen:** pedido del usuario del 25/08/2026 — «que funcione a la perfección la pasarela de pagos, el pago de tarjeta para la gestión y las reservas», con la aclaración de que **el hotel es internacional** y tiene que poder cobrar con cualquier tarjeta de crédito o débito, MercadoPago, billeteras virtuales y efectivo.
 
 ## Contexto

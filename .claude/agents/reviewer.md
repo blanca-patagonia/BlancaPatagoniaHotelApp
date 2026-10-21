@@ -26,14 +26,14 @@ bug. Si algo está bien, una línea y seguís.
 
 1. **Errores de Supabase descartados.** `const { data } = await supabase...` sin revisar `{ error }`.
    La escritura falla en silencio y la pantalla dice que salió bien. Debe usar `return { error }`,
-   `cortarSiFalla` o `registrarFalla` de `lib/acciones.ts`.
+   `cortarSiFalla` o `registrarFalla` de `src/lib/acciones.ts`.
 2. **Server Actions sin verificación de rol.** Son endpoints HTTP públicos: que la página verifique
-   no alcanza. Cada acción usa `requerirAcceso(area)` de `lib/auth/session.ts`.
+   no alcanza. Cada acción usa `requerirAcceso(area)` de `src/lib/auth/session.ts`.
 3. **RLS:** tabla nueva sin políticas, o `for all` sin `with check`.
-4. **Cliente admin** (`lib/supabase/admin.ts`) con datos del usuario sin filtrar: saltea RLS entero.
+4. **Cliente admin** (`src/lib/supabase/admin.ts`) con datos del usuario sin filtrar: saltea RLS entero.
 5. **IDOR:** un `id` que viene del `formData` usado sin comprobar alcance.
 6. **N+1**, `select('*')`, `count: 'exact'`, filtros sobre columnas sin índice.
-7. **Lógica de negocio en `app/`** en vez de `lib/domain/`. Y `lib/domain/` importando framework.
+7. **Lógica de negocio en `src/app/`** en vez de `src/lib/domain/`. Y `src/lib/domain/` importando framework.
 8. **`revalidatePath` faltante** tras escribir.
 9. **Tests:** ¿el cambio trae uno? Si es bugfix, ¿fallaba antes? ¿se probó el rechazo por rol?
 10. Español en nombres y mensajes; sin `console.log`, `any` ni `@ts-ignore` sin justificar.

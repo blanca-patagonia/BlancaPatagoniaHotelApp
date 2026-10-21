@@ -62,5 +62,5 @@ El typecheck real corre en `/check` y en CI, sobre el proyecto entero, que es do
 echo '{"tool_input":{"file_path":".env.local"}}' | .claude/hooks/proteger-archivos.sh
 
 # Debe DEJAR PASAR (exit 0)
-echo '{"tool_input":{"file_path":"app/panel/page.tsx"}}' | .claude/hooks/proteger-archivos.sh
+echo '{"tool_input":{"file_path":"src/app/(front-gestion)/panel/page.tsx"}}' | .claude/hooks/proteger-archivos.sh
 ```

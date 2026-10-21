@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { hayDB } from '../db'
+import { hayDB } from '../apoyo/db'
 import {
   nuevoContexto,
   crearHuespedDePrueba,
@@ -32,14 +32,17 @@ vi.mock('@/lib/auth/session', async () => {
   }
 })
 vi.mock('@/lib/supabase/server', async () => {
-  const { clienteDePrueba } = await import('../db')
+  const { clienteDePrueba } = await import('../apoyo/db')
   return { crearClienteServidor: async () => clienteDePrueba() }
 })
 
 describe.skipIf(!hayDB)('Server Actions · reservas', () => {
   // Los tipos se derivan del módulo real: si cambia la firma de una acción,
   // el typecheck lo marca acá en lugar de fallar en tiempo de ejecución.
-  type Acciones = typeof import('@/app/panel/reservas/actions')
+  type Acciones = typeof import('@/app/(front-gestion)/panel/reservas/actions') &
+    typeof import('@/app/(front-gestion)/panel/reservas/cobros.actions') &
+    typeof import('@/app/(front-gestion)/panel/reservas/consumos.actions') &
+    typeof import('@/app/(front-gestion)/panel/reservas/factura.actions')
   let ctx: Contexto
   let emitirFactura: Acciones['emitirFactura']
   let crearReservaAction: Acciones['crearReservaAction']
@@ -50,7 +53,12 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
 
   beforeAll(async () => {
     ctx = nuevoContexto()
-    const acciones = await import('@/app/panel/reservas/actions')
+    const acciones = {
+      ...(await import('@/app/(front-gestion)/panel/reservas/actions')),
+      ...(await import('@/app/(front-gestion)/panel/reservas/cobros.actions')),
+      ...(await import('@/app/(front-gestion)/panel/reservas/consumos.actions')),
+      ...(await import('@/app/(front-gestion)/panel/reservas/factura.actions')),
+    }
     emitirFactura = acciones.emitirFactura
     crearReservaAction = acciones.crearReservaAction
     cambiarEstadoReserva = acciones.cambiarEstadoReserva
