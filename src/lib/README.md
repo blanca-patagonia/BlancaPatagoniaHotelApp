@@ -40,7 +40,6 @@ falla si aparece uno sin listar.
 | `conexiones/` | OAuth2 con Mercado Pago y Google |
 | `storage/` | Fotos operativas en Supabase Storage (ADR 0037) |
 | `asistente/` | Asistente del portal público, por reglas (ADR 0011) |
-| `ia/` | Asistente de IA del panel, de sólo lectura (ADR 0039) |
 | `busqueda/` | Consulta del buscador global |
 | `catalogo/` | Catálogo público cacheado |
 | `i18n/` | Diccionarios del portal en cinco idiomas |

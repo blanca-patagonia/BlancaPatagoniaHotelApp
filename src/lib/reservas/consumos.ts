@@ -22,10 +22,7 @@ function falla(clave: ClaveFallaConsumo): ResultadoCargo {
  * Carga un consumo a la cuenta de una reserva, con el precio del catálogo.
  *
  * Es la regla de la ficha de reserva (`agregarConsumo`) sacada a una función que
- * DEVUELVE el resultado en vez de redirigir, para que la use también el
- * asistente de IA (ADR 0041). Con el `redirect` adentro, confirmar un consumo
- * desde el chat sacaba a la persona de la pantalla y perdía la conversación,
- * tanto si salía bien como si salía mal.
+ * DEVUELVE el resultado en vez de redirigir.
  *
  * ¿Se le puede cargar algo a esta reserva? (P3 del relevamiento del 15/08/2026)
  *

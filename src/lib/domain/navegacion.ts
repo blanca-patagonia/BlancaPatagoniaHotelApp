@@ -57,7 +57,7 @@ export const GRUPOS: readonly GrupoNavegacion[] = [
   // tercero enfrente, se mira a fin de mes con el extracto del banco al lado.
   // `ia` entra justo después de `reportes`: contesta preguntas con los mismos
   // números que esos informes, así que conviene que aparezca al lado.
-  { titulo: 'Administración', areas: ['reportes', 'ia', 'conciliacion', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
+  { titulo: 'Administración', areas: ['reportes', 'conciliacion', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
   { titulo: null, areas: ['ayuda'] },
 ]
 
@@ -121,7 +121,6 @@ export const RUTA_AREA: Record<Area, string> = {
   errores: '/panel/errores',
   notificaciones: '/panel/notificaciones',
   reportes: '/panel/reportes',
-  ia: '/panel/ia',
   config: '/panel/config',
   usuarios: '/panel/usuarios',
   respaldos: '/panel/respaldos',

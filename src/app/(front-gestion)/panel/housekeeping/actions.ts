@@ -27,8 +27,7 @@ export async function cambiarEstadoUnidad(formData: FormData): Promise<void> {
   const estado = String(formData.get('estado') ?? '') as EstadoHousekeeping
   if (!id || !ESTADOS_HK.includes(estado)) redirect('/panel/housekeeping')
 
-  // La regla (y el aviso a recepción) vive en `lib/housekeeping/estado.ts`,
-  // compartida con el asistente de IA.
+  // La regla (y el aviso a recepción) vive en `lib/housekeeping/estado.ts`.
   const resultado = await fijarEstadoUnidad(await crearClienteServidor(), id, estado)
   if (!resultado.ok) redirect('/panel/housekeeping?error=estado')
   redirect('/panel/housekeeping')

@@ -28,7 +28,6 @@ export const AREAS = [
   'errores',
   'notificaciones',
   'reportes',
-  'ia',
   'config',
   'usuarios',
   'respaldos',
@@ -59,7 +58,6 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   errores: 'Errores del sistema',
   notificaciones: 'Avisos enviados',
   reportes: 'Reportes',
-  ia: 'Asistente IA',
   config: 'Configuración',
   usuarios: 'Usuarios',
   respaldos: 'Respaldos',
@@ -107,13 +105,6 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
     // restringe la propia pantalla y el endpoint, porque el archivo concentra los
     // datos personales de todos los huéspedes del hotel.
     'respaldos',
-    /*
-      El asistente de IA lo usan los cuatro roles desde el 2026-10-19, pero cada
-      uno con las herramientas de SUS áreas (`herramientasPara`): los datos de
-      plata salen de herramientas del área `reportes`, que sólo tienen admin y
-      gerencia. Antes era sólo para estos dos roles porque no había ese filtro.
-    */
-    'ia',
     'ayuda',
   ],
   // Recepción entra a `canales`: las reservas de Booking las importa y las
@@ -130,14 +121,10 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
       de esa conversación, y tener que pedírselo a un admin la vuelve inútil.
     */
     'notificaciones',
-    // Asistente: disponibilidad, reservas, saldos, dudas de uso y consumos.
-    'ia',
     'ayuda',
   ],
   housekeeping: [
     'dashboard', 'housekeeping', 'mantenimiento', 'avisos', 'conversaciones',
-    // Asistente: dudas de uso, avisos y órdenes de mantenimiento. Nada de plata.
-    'ia',
     'ayuda',
   ],
 }
@@ -208,13 +195,4 @@ export function puedeAcceder(rol: Rol, area: Area): boolean {
  */
 export function esDireccion(rol: string | null | undefined): boolean {
   return rol === 'admin' || rol === 'gerencia'
-}
-
-/**
- * La pantalla del panel de cada área (`/panel/punto-venta` para `punto_venta`).
- * Un test verifica que exista la carpeta de cada una, así un enlace armado con
- * esto no lleva a un 404.
- */
-export function rutaDeArea(area: Area): string {
-  return area === 'dashboard' ? '/panel' : `/panel/${area.replaceAll('_', '-')}`
 }

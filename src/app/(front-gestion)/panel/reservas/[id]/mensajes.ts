@@ -6,8 +6,7 @@ import { MENSAJES_NO_CARGABLE } from '@/lib/domain/servicio'
  * Los motivos que la ficha de reserva muestra desde `?error=`.
  *
  * Viven fuera de `page.tsx` (que sólo puede exportar lo que Next espera de una
- * página) porque también los usa el asistente de IA: una acción preparada por
- * el chat que falla muestra en la tarjeta el MISMO texto que la ficha.
+ * página).
  */
 export const MENSAJES_FICHA_RESERVA: Record<string, string> = {
   transicion: 'Esa transición de estado no es válida.',

@@ -9,7 +9,7 @@ import { ETIQUETAS_CANAL, type Canal, type EstadoReserva } from '@/lib/domain/re
 import { comisionEfectivaPct, netoDeComision } from '@/lib/domain/canales-costos'
 import { costoAdquisicion, totalesDeCanales } from '@/lib/domain/metricas-canal'
 import { traerReservas, traerRentabilidadCanal } from '../datos'
-import { SelectorDeMes, AvisoIncompleto, AnalizarConIA } from '../_componentes'
+import { SelectorDeMes, AvisoIncompleto } from '../_componentes'
 import { Icono } from '../../_components/iconos'
 import {
   COL_SECUNDARIA,
@@ -37,7 +37,7 @@ export default async function InformeCanalesPage({
 }: {
   searchParams: Promise<{ mes?: string }>
 }) {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
   const sp = await searchParams
   const mes = mesValido(sp.mes, mesActual())
 
@@ -106,10 +106,6 @@ export default async function InformeCanalesPage({
         descripcion={`Qué deja cada canal en ${etiquetaMes(mes)}, después de su comisión.`}
         icono="canales"
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={'¿Por qué canales entran las reservas y cuáles conviene empujar para depender menos de Booking?'} />
-      </div>
-
       <AvisoIncompleto incompleto={reservasRes.truncado || Boolean(rentabilidad.error)} />
 
       <SelectorDeMes base="/panel/reportes/canales" mes={mes} />

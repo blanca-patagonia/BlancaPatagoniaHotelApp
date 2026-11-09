@@ -13,7 +13,7 @@ import {
 } from '@/lib/domain/metricas-categoria'
 import { ETIQUETAS_FILTRO, type FiltroCategoria } from '@/lib/domain/catalogo'
 import { traerEstadiasPorTipo, traerTiposConInventario } from '../datos'
-import { SelectorDeMes, AvisoIncompleto, AnalizarConIA } from '../_componentes'
+import { SelectorDeMes, AvisoIncompleto } from '../_componentes'
 import {
   COL_SECUNDARIA,
   Encabezado,
@@ -43,7 +43,7 @@ export default async function InformeCategoriasPage({
 }: {
   searchParams: Promise<{ mes?: string }>
 }) {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
   const sp = await searchParams
   const mes = mesValido(sp.mes, mesActual())
 
@@ -77,10 +77,6 @@ export default async function InformeCategoriasPage({
         descripcion={`Qué vendió cada tipo de alojamiento en ${etiquetaMes(mes)}.`}
         icono="reportes"
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={`¿Qué categoría vendió más en ${etiquetaMes(mes)}, cuál rinde menos y cuál conviene empujar?`} />
-      </div>
-
       <AvisoIncompleto incompleto={estadias.truncado || tipos.truncado} />
 
       <SelectorDeMes base="/panel/reportes/categorias" mes={mes} />

@@ -18,7 +18,7 @@ import {
 import { formatearUSD } from '@/lib/domain/moneda'
 import { mesValido, semanaValida } from '@/lib/domain/informes'
 import { traerUnidades, traerEstadias } from '../datos'
-import { SelectorDeMes, SelectorDeSemana, SelectorDeVista, AvisoIncompleto, Variacion, AnalizarConIA } from '../_componentes'
+import { SelectorDeMes, SelectorDeSemana, SelectorDeVista, AvisoIncompleto, Variacion } from '../_componentes'
 import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
 
 /** Cantidad de columnas del gráfico de evolución, en cada vista. */
@@ -39,7 +39,7 @@ export default async function InformeOcupacionPage({
 }: {
   searchParams: Promise<{ mes?: string; semana?: string; vista?: string }>
 }) {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
   const sp = await searchParams
   const vista = sp.vista === 'semanal' ? 'semanal' : 'mensual'
 
@@ -63,10 +63,6 @@ export default async function InformeOcupacionPage({
         descripcion="Los tres indicadores con los que se mide un hotel, mes a mes o semana a semana."
         icono="ocupacion"
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={'¿Cómo vienen la ocupación, el ADR y el RevPAR este mes comparados con el mes anterior y con el mismo mes del año pasado? ¿Qué harías?'} />
-      </div>
-
       <AvisoIncompleto incompleto={incompleto} />
 
       <SelectorDeVista base="/panel/reportes/ocupacion" vista={vista} />

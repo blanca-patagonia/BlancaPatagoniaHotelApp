@@ -103,38 +103,3 @@ export async function permitirIntento(accion: AccionLimitada): Promise<boolean> 
   }
 }
 
-/**
- * Lo mismo, contado por una clave propia —el id de la persona— en lugar de la IP.
- *
- * Para lo que se usa con sesión: todo el personal del hotel sale a internet por
- * la misma IP, así que un límite sólo por IP lo compartirían todos y la primera
- * persona que lo agotara dejaría sin servicio al resto. La clave va pegada a la
- * acción (`ia_consulta:<id>`), así no hace falta otra tabla ni otra función SQL.
- */
-export async function permitirIntentoDe(accion: AccionLimitada, clave: string): Promise<boolean> {
-  /*
-    IP fija, a propósito. La función SQL cuenta por (ip, acción): con la IP real,
-    la misma persona tendría una cubeta por red (el Wi-Fi del hotel y los datos
-    del celular) y duplicaría su tope. La persona ya va en la acción.
-  */
-  const ip = '0.0.0.0'
-  const { maximo, minutos } = LIMITES[accion]
-  try {
-    const admin = crearClienteAdmin()
-    const { data, error } = await admin.rpc('registrar_intento', {
-      p_ip: ip,
-      p_accion: `${accion}:${clave}`,
-      p_maximo: maximo,
-      p_minutos: minutos,
-    })
-    if (error) {
-      // Deja pasar (ver arriba), pero no en silencio: mientras falle, el
-      // límite no protege nada y alguien tiene que enterarse.
-      registrarFalla(error, `limites:${accion}`)
-      return true
-    }
-    return data !== false
-  } catch {
-    return true
-  }
-}

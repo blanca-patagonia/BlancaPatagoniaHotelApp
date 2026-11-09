@@ -120,7 +120,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `catalogo.ts` | Catálogo de alojamientos y precio con IVA (`conIva`) |
 | `comodidades.ts` | Reconocimiento de comodidades |
 | `senales.ts` | Señales de escasez («quedan pocas») |
-| `clima.ts` | Clima y pronóstico de El Calafate para el asistente, con el aviso de viento fuerte |
 | `asistente.ts` | Asistente del portal, por reglas y sin IA (ADR 0011) |
 | `destino-seguro.ts` | A dónde se puede volver después de un pago (evita redirects abiertos) |
 
@@ -138,11 +137,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `ayuda.ts` | Contenido de la sección de Ayuda |
 | `cuenta.ts` | «Mi cuenta» y el mínimo de contraseña |
 | `pwa.ts` | Qué cachea la app instalable — lista blanca (ADR 0028) |
-| `ia-acciones.ts` | Acciones que el asistente propone y una persona confirma (ADR 0041) |
-| `ia-herramientas.ts` | Catálogo de herramientas del asistente de IA y cuáles mandar en cada consulta (ADR 0039) |
-| `ia-prompt.ts` | Instrucciones fijas del asistente, la pantalla de origen y las preguntas de ejemplo por rol |
-| `ia-respuesta.ts` | La respuesta del asistente partida en párrafos, listas y enlaces internos (datos, no HTML) |
-| `ia-datos.ts` | Lo que las herramientas le devuelven al modelo, sin datos personales (resumen del día, enmascarado) |
 | `conexiones.ts` | Conexiones con proveedores externos |
 
 ## Utilidades transversales

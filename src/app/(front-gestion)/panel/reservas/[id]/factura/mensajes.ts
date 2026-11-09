@@ -1,6 +1,6 @@
 import { MENSAJES_NO_ACREDITAR } from '@/lib/domain/facturacion'
 
-/** Los motivos que la pantalla de factura muestra desde `?error=` (también los usa el asistente de IA). */
+/** Los motivos que la pantalla de factura muestra desde `?error=`. */
 export const MENSAJES_FACTURA: Record<string, string> = {
   ...MENSAJES_NO_ACREDITAR,
   cae: 'El proveedor de facturación rechazó la nota de crédito. Revisá el importe.',

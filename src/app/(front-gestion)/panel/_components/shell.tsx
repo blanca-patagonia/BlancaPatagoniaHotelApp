@@ -59,7 +59,6 @@ const ICONO_AREA: Record<Area, NombreIcono> = {
   errores: 'alerta',
   notificaciones: 'sobre',
   reportes: 'reportes',
-  ia: 'ia',
   config: 'config',
   usuarios: 'usuarios',
   respaldos: 'descargar',

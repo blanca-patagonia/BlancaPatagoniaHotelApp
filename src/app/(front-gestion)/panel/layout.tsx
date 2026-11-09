@@ -5,10 +5,6 @@ import { cerrarSesion } from '@/app/(front-gestion)/login/actions'
 import { PanelShell } from './_components/shell'
 import { Icono } from './_components/iconos'
 import { SoportePWA } from './_components/pwa'
-import { AsistenteFlotante } from './_components/asistente-flotante'
-import { puedeAcceder } from '@/lib/domain/permisos'
-import { iaActiva } from '@/lib/ia/proveedor'
-import { preguntasSugeridas } from '@/lib/domain/ia-prompt'
 
 export default async function PanelLayout({ children }: { children: ReactNode }) {
   const sesion = await requerirSesion()
@@ -39,10 +35,6 @@ export default async function PanelLayout({ children }: { children: ReactNode })
         <SoportePWA />
       </div>
       {children}
-      {/* El asistente en todas las pantallas, para quien puede usarlo y si está configurado. */}
-      {puedeAcceder(sesion.rol, 'ia') && iaActiva() && (
-        <AsistenteFlotante sugerencias={preguntasSugeridas(sesion.rol, 4)} />
-      )}
     </PanelShell>
   )
 }

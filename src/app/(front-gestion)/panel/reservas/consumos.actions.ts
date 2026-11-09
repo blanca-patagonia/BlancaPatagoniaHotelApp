@@ -19,7 +19,7 @@ export async function agregarConsumo(formData: FormData): Promise<void> {
   const cantidad = Math.max(1, Number(formData.get('cantidad') ?? 1) || 1)
   if (!reservaId || !productoId) redirect(`/panel/reservas/${reservaId}`)
 
-  // La regla vive en `lib/reservas/consumos.ts`, compartida con el asistente de IA.
+  // La regla vive en `lib/reservas/consumos.ts`.
   const resultado = await cargarConsumo(await crearClienteServidor(), reservaId, productoId, cantidad)
   if (!resultado.ok) redirect(`/panel/reservas/${reservaId}?error=${resultado.clave}`)
   redirect(`/panel/reservas/${reservaId}`)

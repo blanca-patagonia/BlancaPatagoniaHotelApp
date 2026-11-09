@@ -369,21 +369,3 @@ describe('buscarGlobal · huéspedes con error de tipeo (0118)', () => {
     PARECIDOS = []
   })
 })
-
-describe('buscarGlobal · sinPersonas (lo usa el asistente de IA)', () => {
-  it('no consulta huéspedes, usuarios ni la búsqueda aproximada, y la reserva va sin el nombre del huésped', async () => {
-    PARECIDOS = [{ id: 'h-parecido', parecido: 0.9 }]
-    const { cliente, llamadas, tablas } = clienteFalso()
-    const r = await buscarGlobal(cliente as never, 'admin', 'almiron', 6, { sinPersonas: true })
-    expect(tablas()).not.toContain('huespedes')
-    expect(tablas()).not.toContain('perfiles')
-    expect(tablas()).not.toContain('rpc:buscar_huespedes_parecidos')
-    const reservas = llamadas.find((l) => l.tabla === 'reservas')
-    expect(reservas?.select).not.toMatch(/huesped/)
-    expect(r.huespedes).toEqual([])
-    expect(r.usuarios).toEqual([])
-    // Lo que no es de personas se sigue buscando.
-    expect(tablas()).toEqual(expect.arrayContaining(['agencias', 'proveedores', 'productos_servicios']))
-    PARECIDOS = []
-  })
-})

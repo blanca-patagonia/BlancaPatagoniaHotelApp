@@ -26,8 +26,6 @@ export type AccionLimitada =
   | 'payway_ejecutar_pago'
   | 'pago_portal'
   | 'registro_firma_rechazada'
-  | 'ia_consulta'
-  | 'ia_mensaje_huesped'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -257,33 +255,6 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 5,
     minutos: 10,
     motivo: 'Que firmas falsas en masa no tapen las señales reales en /panel/errores.',
-  },
-  /*
-    Consultas al asistente de IA, POR PERSONA (`permitirIntentoDe`). Cada una
-    son hasta cinco llamadas al proveedor, que tiene cupo o costo. Cuarenta por
-    hora es mucho más de lo que alguien pregunta trabajando, y corta una pestaña
-    que reintenta sola o un script.
-  */
-  ia_consulta: {
-    maximo: 40,
-    minutos: 60,
-    motivo: 'Cupo del proveedor de IA, compartido por todo el hotel.',
-  },
-
-  /*
-    Mensajes a huéspedes desde el asistente (`mensaje_huesped`), por persona.
-
-    Es la única vía del sistema que manda un correo con texto libre firmado por
-    el hotel, y no tiene pantalla equivalente que lo frene. Con una sesión
-    robada se podía mandar en bucle a cada reserva visible un «pagá acá:
-    https://…» desde el dominio del hotel. Diez por hora sobra para la
-    recepción más ocupada —un mensaje así se escribe y se revisa a mano— y
-    corta un script en el décimo primero.
-  */
-  ia_mensaje_huesped: {
-    maximo: 10,
-    minutos: 60,
-    motivo: 'Correo con texto libre firmado por el hotel: phishing desde una sesión robada.',
   },
 
 }

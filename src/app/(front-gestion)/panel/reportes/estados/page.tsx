@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { ESTADOS_RESERVA, ETIQUETAS_ESTADO_RESERVA, type EstadoReserva } from '@/lib/domain/reservas'
 import { traerReservas } from '../datos'
-import { AvisoIncompleto, AnalizarConIA } from '../_componentes'
+import { AvisoIncompleto } from '../_componentes'
 import { TONO_ESTADO } from '../../_components/estilos'
 import { Encabezado, Etiqueta, Pagina, Tarjeta } from '../../_components/ui'
 
@@ -13,7 +13,7 @@ import { Encabezado, Etiqueta, Pagina, Tarjeta } from '../../_components/ui'
  * reservas se caen —canceladas y no-show contra las que llegaron a checkout—.
  */
 export default async function InformeEstadosPage() {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
 
   const reservas = await traerReservas()
 
@@ -38,10 +38,6 @@ export default async function InformeEstadosPage() {
         descripcion={`Distribución histórica de las ${total.toLocaleString('es-AR')} reservas cargadas.`}
         icono="reservas"
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={'¿Cómo están las reservas por estado y qué debería revisar hoy?'} />
-      </div>
-
       <AvisoIncompleto incompleto={reservas.truncado} />
 
       <Tarjeta titulo="Distribución" descripcion="Histórico completo, no del mes">

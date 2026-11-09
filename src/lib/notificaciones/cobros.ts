@@ -99,7 +99,7 @@ async function contextoDelCobro(
       email: r.huesped?.email ?? null,
       telefono: r.huesped?.telefono ?? null,
       // El nombre de pila para saludar. La cartelera interna no lleva nombre
-      // (la lee el asistente de IA: ver los avisos internos en `plantillas.ts`).
+      // (ver los avisos internos en `plantillas.ts`).
       nombre: nombre || apellido,
       codigo: r.codigo,
     },

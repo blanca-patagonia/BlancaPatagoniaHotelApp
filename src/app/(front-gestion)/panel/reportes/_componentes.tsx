@@ -2,10 +2,6 @@ import { mesRelativo, semanaRelativa, etiquetaSemana } from '@/lib/domain/metric
 import { Icono } from '../_components/iconos'
 import { BarraHerramientas, Mensaje, botonClases } from '../_components/ui'
 import { SelectorMes } from '../_components/selector-mes'
-import Link from 'next/link'
-import { puedeAcceder } from '@/lib/domain/permisos'
-import type { Rol } from '@/lib/domain/roles'
-import { iaActiva } from '@/lib/ia/proveedor'
 
 /**
  * Piezas compartidas por los informes.
@@ -166,26 +162,5 @@ export function AbrirAparte({ href, titulo }: { href: string; titulo: string }) 
       Abrir aparte
       <span className="sr-only">— {titulo}, en una pestaña nueva</span>
     </a>
-  )
-}
-
-/**
- * «Analizar con IA»: abre el asistente con una pregunta sobre este informe ya
- * escrita. No la manda sola —cada consulta gasta cupo del proveedor—: la
- * persona la lee, la ajusta si quiere y aprieta «Preguntar».
- *
- * No aparece si el rol no usa el asistente o si no hay proveedor configurado:
- * un botón que lleva a «no está configurado» no ayuda a nadie.
- */
-export function AnalizarConIA({ rol, pregunta }: { rol: Rol; pregunta: string }) {
-  if (!puedeAcceder(rol, 'ia') || !iaActiva()) return null
-  return (
-    <Link
-      href={`/panel/ia?pregunta=${encodeURIComponent(pregunta)}`}
-      className={botonClases('secundario', 'gap-1.5')}
-    >
-      <Icono nombre="ia" tam={16} />
-      Analizar con IA
-    </Link>
   )
 }

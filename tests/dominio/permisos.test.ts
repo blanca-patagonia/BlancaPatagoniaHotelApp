@@ -17,13 +17,10 @@ describe('permisos por rol', () => {
       'housekeeping',
       'mantenimiento',
       'avisos',
-      'ia',
       'ayuda',
     ])
     expect(puedeAcceder('housekeeping', 'reservas')).toBe(false)
     expect(puedeAcceder('housekeeping', 'usuarios')).toBe(false)
-    // Housekeeping usa el asistente, pero sin herramientas de plata: esas son
-    // del área `reportes` (ver `herramientasPara` en los tests del asistente).
     expect(puedeAcceder('housekeeping', 'reportes')).toBe(false)
   })
 

@@ -1,4 +1,4 @@
-import { puedeAcceder, rutaDeArea, ETIQUETAS_AREA, type Area } from './permisos'
+import { puedeAcceder, ETIQUETAS_AREA, type Area } from './permisos'
 import type { Rol } from './roles'
 
 /**
@@ -772,53 +772,6 @@ export const CAPITULOS: Capitulo[] = [
       },
     ],
   },
-  {
-    area: 'ia',
-    resumen:
-      'Preguntale por los números del hotel, por una reserva o por cómo se hace algo, y pedile que te prepare tareas simples. Está en esta pantalla y en el botón "Preguntale a la IA" de todas las demás.',
-    pasos: [
-      {
-        titulo: 'Qué puede responder',
-        detalle:
-          'Ocupación, ADR y RevPAR, venta por categoría, lo facturado y cobrado, quién llega y se va un día o en la semana, la disponibilidad y el precio de una estadía entre dos fechas, el estado de limpieza de las unidades, una reserva por su código o por el nombre del huésped, y las reservas con saldo pendiente. Cuando hace falta un dato, lo busca en el sistema en el momento: no inventa números. También responde cómo se hace algo, con esta misma guía y un enlace a la pantalla.',
-      },
-      {
-        titulo: 'Tareas que te prepara',
-        detalle:
-          'Casi todo: crear una reserva, confirmarla, hacer el check-in y el check-out, marcar un no-show, cancelar (con el cargo de la política a la vista), mudar de habitación, cambiar las fechas, emitir la factura o una nota de crédito, dar de alta o actualizar un huésped, cargar un consumo, marcar una habitación limpia, abrir una orden de mantenimiento y publicar un aviso —cada rol, las de sus pantallas—. El email, el teléfono y el documento de un huésped se completan en la tarjeta, no por el chat. Lo único que no prepara son los cobros: se registran en la ficha de la reserva. La conversación se recuerda mientras no cierres la pestaña; «Nueva conversación» la borra. Las deja en una tarjeta: no se hace nada hasta que apretás "Confirmar", y si algo no está bien apretás "Descartar". Se hacen con los mismos permisos y controles que si las cargaras a mano.',
-      },
-      {
-        titulo: 'Resumen del día y lo que necesita atención',
-        detalle:
-          'En el Inicio hay dos botones del asistente: "Resumen del día" (llegadas y salidas de hoy y mañana, unidades libres, habitaciones sucias, saldos pendientes y el clima) y "¿Qué necesita atención hoy?", que marca lo que conviene resolver y en qué pantalla. Sólo leen: no cambian nada.',
-      },
-      {
-        titulo: 'Escribirle a un huésped',
-        detalle:
-          'Pedile «escribile al huésped de BP-… que …». El asistente redacta el mensaje y te lo muestra en una tarjeta para que lo corrijas. Al confirmar, sale por correo con el saludo y la firma del hotel, queda registrado en "Avisos enviados" y no se envía si el huésped pidió no recibir avisos.',
-      },
-      {
-        titulo: 'Buscar y consultar cualquier módulo',
-        detalle:
-          'Si no sabés dónde está algo, preguntale: busca en todo el sistema (productos y su precio, unidades, agencias, proveedores, promociones y la pantalla donde se hace cada cosa). También te dice qué consumió y pagó una reserva, qué órdenes de mantenimiento siguen abiertas, qué hay en la cartelera, cuánto deben las agencias, cuánto se les debe a los proveedores y, a la dirección, si el sistema tuvo errores. Siempre dentro de lo que tu rol puede ver.',
-      },
-      {
-        titulo: 'Cerrar una orden de mantenimiento',
-        detalle:
-          'Decile «ya se arregló la ducha de la 12». El asistente busca la orden y te muestra la tarjeta para marcarla resuelta (o en proceso, o reabrirla). Al confirmar se hace con el mismo botón de la pantalla de Mantenimiento.',
-      },
-      {
-        titulo: 'Qué NO hace',
-        detalle:
-          'No cobra ni cambia tarifas: para eso te explica los pasos y te deja el enlace a la pantalla. Tampoco recibe datos personales de los huéspedes: busca por nombre, pero contesta con el código de la reserva y el enlace a la ficha.',
-      },
-      {
-        titulo: 'Si dice que no está configurado',
-        detalle:
-          'El asistente necesita un proveedor de IA enchufado por variable de entorno. Sin eso, la pantalla lo dice claramente en vez de simular una respuesta.',
-      },
-    ],
-  },
 ]
 
 /** Palabras del sistema que no son obvias para quien recién empieza. */
@@ -879,82 +832,4 @@ export function guiaPara(rol: Rol): Capitulo[] {
 /** Título legible de un capítulo, tomado de la etiqueta del menú. */
 export function tituloCapitulo(c: Capitulo): string {
   return ETIQUETAS_AREA[c.area]
-}
-
-/* ───────────────────────────────────────────── búsqueda (asistente de IA) ── */
-
-export interface FragmentoAyuda {
-  /** Dónde está en la guía: «Primeros pasos», el capítulo o «Glosario». */
-  seccion: string
-  titulo: string
-  texto: string
-  /** La pantalla de la que habla, para que el asistente dé un enlace. */
-  ruta?: string
-}
-
-/** Palabras que no ayudan a encontrar nada. */
-const VACIAS = new Set([
-  'como', 'cómo', 'que', 'qué', 'para', 'por', 'con', 'una', 'uno', 'los', 'las', 'del',
-  'hago', 'hacer', 'puedo', 'donde', 'dónde', 'cual', 'cuál', 'esta', 'este', 'sobre',
-])
-
-function normalizar(texto: string): string {
-  return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-}
-
-function palabras(texto: string): string[] {
-  return normalizar(texto)
-    .split(/[^a-z0-9ñ]+/)
-    .filter((p) => p.length >= 3 && !VACIAS.has(p))
-}
-
-/**
- * Los fragmentos de la guía que mejor responden una pregunta, **sólo de lo que
- * ese rol puede usar** (`guiaPara`).
- *
- * Es lo que le permite al asistente de IA contestar «¿cómo hago tal cosa?» con
- * la guía real del sistema en vez de con lo que el modelo cree que hace un PMS:
- * un paso inventado («apretá Facturar en la grilla») es tan dañino como un
- * número inventado. Y el filtro por rol evita explicarle a recepción una
- * pantalla a la que no puede entrar.
- *
- * Puntaje simple y explicable: cuántas palabras de la pregunta aparecen, con
- * más peso si están en el título. Una coincidencia por prefijo cuenta
- * («factur» encuentra «facturar» y «factura»).
- */
-export function buscarEnAyuda(rol: Rol, pregunta: string, maximo = 5): FragmentoAyuda[] {
-  const buscadas = palabras(pregunta).map((p) => p.slice(0, Math.max(4, p.length - 2)))
-  if (buscadas.length === 0) return []
-
-  const candidatos: FragmentoAyuda[] = [
-    ...PRIMEROS_PASOS.map((p) => ({ seccion: 'Primeros pasos', titulo: p.titulo, texto: p.detalle })),
-    ...guiaPara(rol).flatMap((c) => [
-      { seccion: tituloCapitulo(c), titulo: tituloCapitulo(c), texto: c.resumen, ruta: rutaDeArea(c.area) },
-      ...c.pasos.map((p) => ({
-        seccion: tituloCapitulo(c),
-        titulo: p.titulo,
-        texto: p.detalle,
-        ruta: rutaDeArea(c.area),
-      })),
-    ]),
-    ...GLOSARIO.map((t) => ({ seccion: 'Glosario', titulo: t.termino, texto: t.definicion })),
-  ]
-
-  const puntuar = (f: FragmentoAyuda) => {
-    const titulo = palabras(`${f.seccion} ${f.titulo}`)
-    const cuerpo = palabras(f.texto)
-    let puntos = 0
-    for (const b of buscadas) {
-      if (titulo.some((p) => p.startsWith(b))) puntos += 3
-      if (cuerpo.some((p) => p.startsWith(b))) puntos += 1
-    }
-    return puntos
-  }
-
-  return candidatos
-    .map((f) => ({ f, puntos: puntuar(f) }))
-    .filter((x) => x.puntos > 0)
-    .sort((a, b) => b.puntos - a.puntos)
-    .slice(0, maximo)
-    .map((x) => x.f)
 }

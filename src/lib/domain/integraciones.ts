@@ -18,7 +18,6 @@ export type GrupoIntegracion =
   | 'correo'
   | 'mensajeria'
   | 'canales_venta'
-  | 'inteligencia'
   | 'administracion'
 
 export const ETIQUETAS_GRUPO: Record<GrupoIntegracion, string> = {
@@ -27,7 +26,6 @@ export const ETIQUETAS_GRUPO: Record<GrupoIntegracion, string> = {
   correo: 'Correo',
   mensajeria: 'Mensajería con huéspedes',
   canales_venta: 'Canales de venta (Booking, Expedia)',
-  inteligencia: 'Asistente de IA',
   administracion: 'Facturación, divisas y firma',
 }
 
@@ -37,7 +35,6 @@ export const ORDEN_GRUPOS: readonly GrupoIntegracion[] = [
   'correo',
   'mensajeria',
   'canales_venta',
-  'inteligencia',
   'administracion',
 ]
 
@@ -298,23 +295,6 @@ export const INTEGRACIONES: readonly Integracion[] = [
     limitacion:
       'Booking y Expedia NO dan API a un hotel suelto: sólo a Connectivity Partners. Con iCal se LEE, no se publica disponibilidad, así que NO evita el overbooking. La solución es un channel manager (ADR 0021).',
     probable: false,
-  },
-
-  // ── IA ────────────────────────────────────────────────────────────────────
-  {
-    id: 'ia',
-    nombre: 'Asistente de IA del panel',
-    grupo: 'inteligencia',
-    paraQue: 'El asistente del panel que responde con datos del hotel (ADR 0039). Cualquier API compatible con OpenAI.',
-    interruptor: { variable: 'IA_PROVIDER', valor: 'openai_compatible' },
-    variables: [
-      { nombre: 'IA_BASE_URL', obligatoria: true, secreta: false, ayuda: 'URL de la API.', ejemplo: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-      { nombre: 'IA_API_KEY', obligatoria: true, secreta: true, ayuda: 'Clave del proveedor.' },
-      { nombre: 'IA_MODELO', obligatoria: true, secreta: false, ayuda: 'Nombre del modelo.' },
-    ],
-    siFalta: 'La pantalla del asistente avisa que no está configurado.',
-    pasos: ['Crear una clave en el proveedor elegido.', 'IA_PROVIDER=openai_compatible + las tres variables.'],
-    probable: true,
   },
 
   // ── Administración ────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { metricasDeMes, etiquetaMes, textoOcupacion, textoRevPAR } from '@/lib/d
 import { formatearUSD } from '@/lib/domain/moneda'
 import { INFORMES, rutaDeInforme, mesValido } from '@/lib/domain/informes'
 import { traerUnidades, traerEstadias, traerPagos, traerFacturas } from './datos'
-import { SelectorDeMes, AvisoIncompleto, AbrirAparte, AnalizarConIA } from './_componentes'
+import { SelectorDeMes, AvisoIncompleto, AbrirAparte } from './_componentes'
 import {
   BotonExportar,
   Encabezado,
@@ -33,7 +33,7 @@ export default async function ReportesPage({
 }: {
   searchParams: Promise<{ mes?: string }>
 }) {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
   const sp = await searchParams
   const mes = mesValido(sp.mes, mesActual())
 
@@ -66,10 +66,6 @@ export default async function ReportesPage({
           <BotonExportar href={`/panel/exportar/reportes?mes=${mes}`} titulo="Exportar serie" />
         }
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={`Analizá cómo viene ${etiquetaMes(mes)}: ocupación, facturación y reservas comparadas con el mes anterior. ¿Qué está bien, qué preocupa y qué harías?`} />
-      </div>
-
       <AvisoIncompleto incompleto={incompleto} />
 
       <SelectorDeMes base="/panel/reportes" mes={mes} />

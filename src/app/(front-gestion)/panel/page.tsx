@@ -25,8 +25,6 @@ import { resumenPagos, type Pago } from '@/lib/domain/pagos'
 import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
 import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
-import { ConsultasRapidasIA } from './_components/consultas-rapidas-ia'
-import { iaActiva } from '@/lib/ia/proveedor'
 import {
   Encabezado,
   EstadoUnidad,
@@ -38,14 +36,6 @@ import {
   botonClases,
   Pagina,
 } from './_components/ui'
-
-/**
- * Las consultas rápidas de IA (`ia/rapidas.ts`) son Server Actions de esta
- * página y heredan su límite. La cadena de proveedores tiene un plazo propio de
- * 90 s (`lib/ia/proveedor.ts`): sin declarar esto, la plataforma cortaba antes
- * con su límite por omisión y un error genérico en inglés.
- */
-export const maxDuration = 120
 
 interface EstadiaDia {
   periodo: string
@@ -484,8 +474,6 @@ export default async function DashboardPage() {
         }
       />
 
-      {/* El asistente de IA en un clic, para quien lo usa y si está configurado. */}
-      {puede('ia') && iaActiva() && <ConsultasRapidasIA />}
 
       {atrasados.length > 0 && (
         <Mensaje tono="error">

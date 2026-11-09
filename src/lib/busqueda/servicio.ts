@@ -131,27 +131,15 @@ function filas<T>(contexto: string) {
   }
 }
 
-export interface OpcionesBusqueda {
-  /**
-   * No buscar personas (huéspedes ni usuarios) y no leer el nombre del huésped
-   * de las reservas. Lo usa el asistente de IA: lo que encuentra viaja a un
-   * tercero y los datos personales no salen del sistema (ADR 0039).
-   */
-  sinPersonas?: boolean
-}
-
 export async function buscarGlobal(
   supabase: Awaited<ReturnType<typeof crearClienteServidor>>,
   rol: Rol,
   qCrudo: string | undefined,
   tope: number = TOPE_BUSQUEDA,
-  opciones: OpcionesBusqueda = {},
 ): Promise<ResultadoBusqueda> {
   const termino = terminoBuscado(qCrudo)
   const ambitos = ambitosPara(rol)
-  const personas = ['huespedes', 'usuarios']
-  const puede = (a: string) =>
-    ambitos.includes(a as never) && !(opciones.sinPersonas && personas.includes(a))
+  const puede = (a: string) => ambitos.includes(a as never)
 
   const [huespedesExactos, agencias, proveedores, unidades, tipos_unidad, productos, promociones, usuarios] =
     termino
@@ -274,11 +262,7 @@ export async function buscarGlobal(
     termino && puede('reservas')
       ? await supabase
           .from('reservas')
-          .select(
-            opciones.sinPersonas
-              ? 'id, codigo, estado, estadias(periodo)'
-              : 'id, codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre), estadias(periodo)',
-          )
+          .select('id, codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre), estadias(periodo)')
           .or(filtroReservas)
           .limit(tope)
           .then(filas<ReservaHit>('reservas'))

@@ -143,20 +143,6 @@ const SONDAS: Record<string, (env: Entorno) => Promise<ResultadoSonda>> = {
     return { ok: true, detalle: `Bot @${d.result?.username ?? '?'}. ${url ? `Webhook: ${url}` : 'Todavía sin webhook: apretá «Conectar el bot».'}` }
   },
 
-  async ia(env) {
-    const base = v(env, 'IA_BASE_URL')
-    const clave = v(env, 'IA_API_KEY')
-    if (!base || !clave) return { ok: false, detalle: 'Faltan IA_BASE_URL o IA_API_KEY.' }
-    const r = await obtener(`${base.replace(/\/+$/, '')}/models`, { Authorization: `Bearer ${clave}` })
-    if (!r.ok) return { ok: false, detalle: `El proveedor de IA respondió ${r.status}.` }
-    const modelos = ((r.datos as { data?: { id: string }[] } | null)?.data ?? []).map((m) => m.id.replace(/^models\//, ''))
-    const modelo = v(env, 'IA_MODELO')
-    if (modelo && modelos.length > 0 && !modelos.includes(modelo)) {
-      return { ok: false, detalle: `La clave es válida pero el modelo «${modelo}» no está entre los disponibles.` }
-    }
-    return { ok: true, detalle: `Clave válida${modelo ? `, modelo ${modelo}` : ''}.` }
-  },
-
   async cotizacion(env) {
     const url = v(env, 'DOLARAPI_URL') ?? 'https://dolarapi.com/v1/dolares/oficial'
     const r = await obtener(url)
