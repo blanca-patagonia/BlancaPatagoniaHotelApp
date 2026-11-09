@@ -77,7 +77,6 @@ describe('seccionesQueCoinciden', () => {
   it('housekeeping no llega a las secciones de plata', () => {
     const areas = seccionesQueCoinciden('housekeeping', 'pago').map((s) => s.area)
     expect(areas).not.toContain('reservas')
-    expect(areas).not.toContain('agencias')
   })
 
   it('no busca con menos de dos caracteres: traería medio sistema', () => {

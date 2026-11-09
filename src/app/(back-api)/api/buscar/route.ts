@@ -4,7 +4,6 @@ import { buscarGlobal } from '@/lib/busqueda/servicio'
 import { formatoFechaCorta, parsearPeriodo } from '@/lib/fechas'
 import { nombreCompleto } from '@/lib/domain/huespedes'
 import { ETIQUETAS_ESTADO_RESERVA } from '@/lib/domain/reservas'
-import { ETIQUETAS_AMBITO } from '@/lib/domain/busqueda'
 
 /**
  * Búsqueda global en vivo: `GET /api/buscar?q=`.
@@ -76,12 +75,6 @@ export async function GET(req: Request) {
         detalle: resultado.huespedesAproximados
           ? '¿Quisiste decir…? (parecido, no exacto)'
           : [h.email, h.doc_numero].filter(Boolean).join(' · ') || 'sin datos de contacto',
-      })),
-      agencias: resultado.agencias.map((a) => ({
-        id: `agencia-${a.id}`,
-        href: `/panel/agencias/${a.id}`,
-        titulo: a.nombre,
-        detalle: ETIQUETAS_AMBITO.agencias,
       })),
       unidades: resultado.unidades.map((u) => ({
         id: `unidad-${u.id}`,

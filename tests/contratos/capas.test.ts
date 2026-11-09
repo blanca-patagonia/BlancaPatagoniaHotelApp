@@ -31,12 +31,6 @@ const SRC = join(RAIZ, 'src')
 const CRUCES_PERMITIDOS: Record<string, string> = {
   '(front-gestion)/login/loading.tsx → (front-publico)/_publico/esqueleto.tsx':
     'El login tiene la estética del sitio público: usa su mismo esqueleto de carga.',
-  '(front-publico)/portal/[token]/page.tsx → (front-gestion)/panel/_components/subir-foto.tsx':
-    'El portal de socios es una pantalla de trabajo y reutiliza el kit del panel.',
-  '(front-publico)/portal/[token]/page.tsx → (front-gestion)/panel/_components/foto-adjunta.tsx':
-    'Ídem: mismo componente de foto adjunta que ve el staff.',
-  '(front-publico)/portal/[token]/page.tsx → (front-gestion)/panel/_components/boton-envio.tsx':
-    'Ídem: el botón que bloquea el doble envío.',
   '(front-publico)/reservar/factura/[token]/page.tsx → (front-gestion)/panel/reservas/[id]/factura/boton-imprimir.tsx':
     'El huésped imprime su factura con el mismo botón que usa recepción.',
 }

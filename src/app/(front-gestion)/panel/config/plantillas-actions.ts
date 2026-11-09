@@ -56,7 +56,7 @@ export async function guardarPlantilla(
   formData: FormData,
 ): Promise<EstadoPlantilla> {
   // `requerirRol` es para cuando una acción es MÁS restrictiva que su área
-  // (agencias, mantenimiento — ver el docblock de esa función); acá no hace
+  // (mantenimiento — ver el docblock de esa función); acá no hace
   // falta, `config` ya es admin+gerencia en `lib/domain/permisos.ts`, así que
   // usar `requerirAcceso` evita mantener la misma regla en dos lugares.
   const sesion = await requerirAcceso('config')

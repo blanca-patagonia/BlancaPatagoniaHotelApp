@@ -44,7 +44,6 @@ export default async function BuscarPage({
     reservas,
     huespedes,
     huespedesAproximados,
-    agencias,
     unidades,
     tipos_unidad,
     productos,
@@ -242,27 +241,6 @@ export default async function BuscarPage({
                         {[h.email, h.doc_numero].filter(Boolean).join(' · ') || 'sin datos de contacto'}
                       </span>
                     </span>
-                    <Icono nombre="siguiente" tam={16} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Tarjeta>
-        )}
-
-        {agencias.length > 0 && (
-          <Tarjeta
-            titulo={ETIQUETAS_AMBITO.agencias}
-            descripcion={`${agencias.length} ${agencias.length === 1 ? 'encontrada' : 'encontradas'}`}
-          >
-            <ul>
-              {agencias.map((a) => (
-                <li key={a.id} className="border-t border-stone-100 first:border-0">
-                  <Link
-                    href={`/panel/agencias/${a.id}`}
-                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
-                  >
-                    <span className="min-w-0 flex-1 font-medium text-stone-800">{a.nombre}</span>
                     <Icono nombre="siguiente" tam={16} />
                   </Link>
                 </li>

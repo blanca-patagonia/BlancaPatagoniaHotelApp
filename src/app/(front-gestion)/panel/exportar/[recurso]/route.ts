@@ -37,7 +37,7 @@ import {
 } from '@/lib/domain/reservas'
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
 import { traerEstadias, traerUnidades } from '../../reportes/datos'
-import { busquedaHuespedes, busquedaOrdenes, contiene } from '../busquedas'
+import { busquedaHuespedes, busquedaOrdenes } from '../busquedas'
 
 /**
  * Punto único de exportación a CSV del panel.
@@ -423,35 +423,6 @@ const RECURSOS: Record<string, Definicion> = {
       (c, p) => {
         const t = termino(p)
         return t ? c.or(busquedaHuespedes(t)) : c
-      },
-    ),
-  },
-
-  agencias: {
-    area: 'agencias',
-    archivo: 'agencias',
-    generar: simple<{
-      nombre: string
-      tipo: string
-      cuit: string | null
-      email: string | null
-      descuento_pct: number
-      activo: boolean
-    }>(
-      'agencias',
-      'nombre, tipo, cuit, email, descuento_pct, activo',
-      { columna: 'nombre' },
-      [
-        { titulo: 'Nombre', valor: (a) => a.nombre },
-        { titulo: 'Tipo', valor: (a) => a.tipo },
-        { titulo: 'CUIT', valor: (a) => a.cuit ?? '' },
-        { titulo: 'Email', valor: (a) => a.email ?? '' },
-        { titulo: 'Descuento %', valor: (a) => decimal(a.descuento_pct) },
-        { titulo: 'Activa', valor: (a) => SI_NO(a.activo) },
-      ],
-      (c, p) => {
-        const t = termino(p)
-        return t ? c.ilike('nombre', contiene(t)) : c
       },
     ),
   },

@@ -9,12 +9,6 @@ import { transicionesPosibles, ETIQUETAS_ESTADO_RESERVA } from '@/lib/domain/res
 import { type Ocupantes } from '@/lib/domain/ocupantes'
 import { cargoDeCancelacion } from '@/lib/reservas/cancelacion'
 import { cotizarEstadia } from '@/lib/pricing/cotizar'
-import {
-  pagadoPorReserva,
-  pagoAgenciaVencido,
-  vencimientoPagoAgencia,
-  type TipoMovimiento,
-} from '@/lib/domain/cuentas'
 import { parsearPeriodo, diasEntre, hoyISO } from '@/lib/fechas'
 import { estadoDeCobro } from '@/lib/reservas/cobro'
 import { motivoNoFacturable, ALICUOTA_ALOJAMIENTO } from '@/lib/domain/facturacion'
@@ -100,7 +94,7 @@ export default async function DetalleReservaPage({
   const { data, error: eReserva } = await supabase
     .from('reservas')
     .select(
-      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, agencia_id, huesped_id, pago_desde_exterior, tarjeta_ultimos4, tarjeta_marca, tarjeta_vencimiento, tarjeta_verificacion, tarjeta_verificada_en, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip, residente_exterior), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
+      'id, codigo, estado, total, subtotal, total_neto, iva, descuento_pct, canal, tarifa_tipo, notas, plan, garantia, segmento, voucher, huesped_id, pago_desde_exterior, tarjeta_ultimos4, tarjeta_marca, tarjeta_vencimiento, tarjeta_verificacion, tarjeta_verificada_en, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, doc_numero, vip, residente_exterior), estadias(periodo, precio_noche, huespedes, adultos, menores, bebes, camas_extra, cunas, no_mover, unidad:unidades(nombre, tipo_unidad_id, tipo:tipos_unidad(nombre, capacidad_max)))',
     )
     .eq('id', id)
     .maybeSingle()
@@ -175,7 +169,7 @@ export default async function DetalleReservaPage({
     residenteExterior: Boolean(reserva.huesped?.residente_exterior),
     pagoDesdeExterior: reserva.pago_desde_exterior,
   }
-  const exento = !reserva.agencia_id && exentoDeIva(condicionExencion)
+  const exento = exentoDeIva(condicionExencion)
   const motivoExencion = motivoSinExencion(condicionExencion)
 
   /*
@@ -234,11 +228,6 @@ export default async function DetalleReservaPage({
     en un solo `Promise.all`: antes eran siete viajes a la base uno detrás de
     otro en la pantalla que recepción más abre.
   */
-  // Pago vencido de la agencia (pedido del dueño del hotel, 2026-09): abona un
-  // mes antes del check-in. Sólo aplica a una reserva DE agencia y sólo
-  // mientras siga vigente —una cancelada no genera reclamo—, así que la
-  // consulta extra se hace nada más que para esa minoría de fichas.
-  const aplicaPagoAgencia = Boolean(reserva.agencia_id && periodo && reserva.estado !== 'cancelada')
   // Unidades a las que se puede mudar la reserva. Solo se consulta si el estado
   // lo permite: para un check-out o una cancelación la lista no tendría sentido.
   // La unidad actual no aparece —está ocupada por esta misma reserva—, que es
@@ -248,7 +237,6 @@ export default async function DetalleReservaPage({
     ,
     cargo,
     { data: pagosData, error: ePagos },
-    movsAgencia,
     cobroEnLinea,
     { data: consumosData, error: eConsumos },
     { data: productosData, error: eProductos },
@@ -276,9 +264,6 @@ export default async function DetalleReservaPage({
       .select('id, medio, tipo, monto, estado, creado_en, moneda, monto_cobrado, cupon, ultimos4, tarjeta_marca')
       .eq('reserva_id', id)
       .order('creado_en'),
-    aplicaPagoAgencia
-      ? supabase.from('movimientos_cuenta').select('tipo, monto, reserva_id').eq('reserva_id', id)
-      : Promise.resolve({ data: [], error: null }),
     // Estado de cobro consolidado (alojamiento + consumos) y links de pago vivos.
     // Es la misma lectura que usa el portal público, para que el huésped y
     // recepción no vean saldos distintos.
@@ -307,26 +292,6 @@ export default async function DetalleReservaPage({
   // Si esta lectura falla, la ficha mostraría "sin pagos" en una reserva que sí
   // cobró: es el mismo riesgo que la alerta de overbooking del dashboard.
   const fallaPagos = Boolean(ePagos)
-
-  let avisoPagoAgenciaVencido: { vencimiento: string; totalPagado: number } | null = null
-  if (aplicaPagoAgencia && periodo) {
-    if (movsAgencia.error) registrarFalla(movsAgencia.error, 'reservas:pago_agencia')
-    const totalPagadoAgencia =
-      pagadoPorReserva(
-        (movsAgencia.data ?? []) as { tipo: TipoMovimiento; monto: number; reserva_id: string | null }[],
-      ).get(id) ?? 0
-    if (
-      pagoAgenciaVencido(
-        { checkIn: periodo.desde, totalReserva: Number(reserva.total), totalPagado: totalPagadoAgencia },
-        hoyISO(),
-      )
-    ) {
-      avisoPagoAgenciaVencido = {
-        vencimiento: vencimientoPagoAgencia(periodo.desde),
-        totalPagado: totalPagadoAgencia,
-      }
-    }
-  }
 
   const senia = seniaSugerida(Number(reserva.total), noches)
 
@@ -396,8 +361,6 @@ export default async function DetalleReservaPage({
         fallaCuenta={fallaCuenta}
         estado={reserva.estado}
         saldo={resumen.saldo}
-        totalReserva={Number(reserva.total)}
-        avisoPagoAgenciaVencido={avisoPagoAgenciaVencido}
       />
 
       {/*

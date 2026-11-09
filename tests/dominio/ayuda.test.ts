@@ -20,7 +20,6 @@ describe('ayuda · la guía no promete lo que el rol no puede hacer', () => {
   it('housekeeping no ve facturación ni cobranzas', () => {
     const areas = guiaPara('housekeeping').map((c) => c.area)
     expect(areas).not.toContain('reservas')
-    expect(areas).not.toContain('agencias')
     expect(areas).not.toContain('usuarios')
   })
 

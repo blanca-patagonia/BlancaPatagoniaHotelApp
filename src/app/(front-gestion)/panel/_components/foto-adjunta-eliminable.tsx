@@ -3,7 +3,7 @@ import { BotonEnvio } from './boton-envio'
 
 /**
  * Una foto/documento del bucket junto con su botón de borrado, para no repetir
- * el mismo envoltorio en mantenimiento, proveedores y agencias.
+ * el mismo envoltorio en mantenimiento.
  *
  * `camposOcultos` lleva el resto de los campos que la acción necesita además
  * de `ruta` (el id de la orden, del proveedor, del movimiento…) — cada módulo

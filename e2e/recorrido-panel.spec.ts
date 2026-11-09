@@ -87,7 +87,7 @@ test('todas las pantallas del panel cargan sin errores (admin)', async ({ page }
   for (const ruta of rutas) await revisar(page, ruta, fallas)
 
   // Las fichas de detalle: se entra a la primera de cada listado, si hay datos.
-  for (const listado of ['/panel/reservas', '/panel/huespedes', '/panel/agencias']) {
+  for (const listado of ['/panel/reservas', '/panel/huespedes']) {
     await page.goto(listado)
     const enlace = page.locator(`main a[href^="${listado}/"]`).filter({ hasNotText: /Nuev|Exportar/ }).first()
     const href = await enlace.getAttribute('href').catch(() => null)

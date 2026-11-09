@@ -209,7 +209,7 @@ export async function fusionarHuespedes(formData: FormData): Promise<void> {
  * pagos o facturas — `huespedes` tiene `on delete restrict` desde `reservas`
  * (migración 0005) y esos comprobantes son del contador, con su propia
  * retención fiscal. Es la misma baja lógica que ya usa este proyecto en vez de
- * un DELETE físico (agencias, proveedores, tarifas — migración 0061).
+ * un DELETE físico (tarifas, pagos — migración 0061).
  *
  * Se bloquea si tiene una reserva que todavía ocupa inventario (pendiente,
  * confirmada, pagada o in_house): recepción necesita el nombre y el contacto

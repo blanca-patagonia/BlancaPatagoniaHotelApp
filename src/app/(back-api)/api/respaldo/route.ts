@@ -22,7 +22,7 @@ import { TABLAS_RESPALDO, nombreArchivo, ordenDeLectura } from '@/lib/domain/res
  * ── Por qué solo admin ──────────────────────────────────────────────────────
  *
  * El archivo contiene el nombre, el email y el teléfono de **todos** los huéspedes
- * que pasaron por el hotel, más los datos de agencias y proveedores. Es la
+ * que pasaron por el hotel, más los datos de configuración. Es la
  * concentración de datos personales más grande que el sistema puede producir en un
  * solo archivo. Recepción no necesita eso para trabajar.
  *
@@ -72,11 +72,11 @@ export async function GET() {
   const problemas: string[] = []
 
   for (const definicion of TABLAS_RESPALDO) {
-    const { tabla, columnas } = definicion
+    const { tabla } = definicion
     const { filas, truncado, error } = await traerTodo<Record<string, unknown>>(
       (desde, hasta) => {
         // Orden fijo: sin él, dos tramos pueden repetir una fila y saltear otra.
-        let consulta = supabase.from(tabla).select(columnas ?? '*')
+        let consulta = supabase.from(tabla).select('*')
         for (const columna of ordenDeLectura(definicion)) consulta = consulta.order(columna)
         return consulta.range(desde, hasta) as never
       },

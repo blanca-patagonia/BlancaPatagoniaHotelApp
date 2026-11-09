@@ -16,20 +16,12 @@ export const MENSAJES_FICHA_RESERVA: Record<string, string> = {
   sin_consumir: MENSAJES_NO_FACTURABLE.sin_consumir,
   anulada: MENSAJES_NO_FACTURABLE.anulada,
   ya_facturada: MENSAJES_NO_FACTURABLE.ya_facturada,
-  cuit: 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped o de la agencia.',
+  cuit: 'Para emitir una factura A hace falta un CUIT válido del receptor. Cargalo en la ficha del huésped.',
   cae:
     'El proveedor de facturación rechazó el comprobante. Revisá los importes y volvé a facturar: el número de comprobante ya reservado es el mismo —no se gasta uno nuevo— así que reintentar es seguro.',
   // Escrituras que la base puede rechazar. Antes fallaban en silencio: la
   // pantalla recargaba igual y no había forma de saber que no se había guardado.
   estado: 'No se pudo guardar el estado nuevo. La reserva quedó como estaba.',
-  /*
-    El slug `agencia` se quitó con la migración 0084.
-
-    Existía para el caso «la reserva se creó pero no se pudo vincular con la
-    agencia», que era posible porque el vínculo se guardaba en un `update`
-    aparte. Ahora viaja dentro de `crear_reserva`, así que o se crean las dos
-    cosas o no se crea ninguna: el mensaje ya no puede ocurrir (P1-7).
-  */
   puntos: 'Se registró el check-out, pero no se pudieron acreditar los puntos de fidelidad. Cargalos a mano desde la ficha del huésped.',
   checkin_inmediato: 'La reserva se creó, pero no se pudo marcar el check-in. Hacelo a mano cambiando el estado a "In house" acá abajo.',
   saldada: 'Se registró el pago, pero la reserva no quedó marcada como pagada. Revisá el estado antes de seguir.',
@@ -50,8 +42,6 @@ export const MENSAJES_FICHA_RESERVA: Record<string, string> = {
   lectura_reserva: 'No se pudieron leer los datos de la reserva. No se emitió ninguna factura.',
   lectura_consumos:
     'No se pudieron leer los consumos, así que no se emitió la factura: habría salido por menos de lo que se consumió, y una vez emitida no se corrige.',
-  lectura_agencia_fiscal:
-    'No se pudieron leer los datos fiscales de la agencia, así que no se emitió la factura: habría salido con la condición y el CUIT equivocados.',
   total: 'El cambio se hizo, pero no se pudo recalcular el precio. La reserva quedó con el total anterior.',
   repro: 'No se pudo reprogramar la estadía.',
   repro_lectura: 'No se pudieron leer los datos para reprogramar. No se cambió nada — probá de nuevo.',

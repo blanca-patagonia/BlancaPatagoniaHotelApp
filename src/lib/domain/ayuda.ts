@@ -279,22 +279,6 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
-    area: 'agencias',
-    resumen: 'Agencias y empresas con convenio, y lo que nos deben.',
-    pasos: [
-      {
-        titulo: 'El descuento del convenio',
-        detalle:
-          'Lo que cargues como descuento se aplica solo a las reservas de esa cuenta: pagan tarifa neta en lugar de la de mostrador.',
-      },
-      {
-        titulo: 'Cargos y pagos',
-        detalle:
-          'Un cargo es lo que la agencia nos debe; un pago es lo que nos deposita. El saldo lo calcula el sistema, no hace falta llevarlo aparte.',
-      },
-    ],
-  },
-  {
     area: 'respaldos',
     resumen: 'Cómo bajar una copia de los datos, y quién se ocupa de los backups.',
     pasos: [

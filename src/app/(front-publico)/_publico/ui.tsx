@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 /*
-  Componentes del portal público (huésped, agencia, proveedor).
+  Componentes del portal público (huésped).
 
   Por qué son distintos de los del panel: cambia quién está del otro lado. El
   staff usa el sistema todos los días y tiene sesión iniciada; acá entra alguien

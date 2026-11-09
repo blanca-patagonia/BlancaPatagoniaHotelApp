@@ -64,7 +64,6 @@ export interface EstadoNuevaReserva {
     email?: string
     doc_numero?: string
     canal?: string
-    agencia_id?: string
     /* Desglose de ocupantes y condiciones comerciales (paso 6). */
     adultos?: string
     menores?: string
@@ -108,8 +107,6 @@ export async function crearReservaAction(
   const huespedIdElegido = String(formData.get('huesped_id') ?? '').trim()
   const docNumero = String(formData.get('doc_numero') ?? '').trim()
 
-  const agenciaId = String(formData.get('agencia_id') ?? '')
-
   // ── Desglose de ocupantes y condiciones comerciales (paso 6) ───────────────
   const entero = (clave: string, porDefecto = 0) => {
     const n = Number(formData.get(clave))
@@ -143,7 +140,6 @@ export async function crearReservaAction(
     email,
     doc_numero: docNumero,
     canal,
-    agencia_id: agenciaId,
     adultos: String(ocupantes.adultos),
     menores: String(ocupantes.menores),
     bebes: String(ocupantes.bebes),
@@ -200,9 +196,8 @@ export async function crearReservaAction(
 
   const supabase = await crearClienteServidor()
 
-  // Con convenio siempre corresponde tarifa NETA, sea cual sea el canal por el
-  // que entró la reserva: es lo que define el acuerdo con la agencia.
-  const tarifaTipo: TarifaTipo = agenciaId ? 'neto' : (CANAL_TARIFA[canal] ?? 'rack')
+  // El canal por el que entró la reserva define la tarifa (ADR 0004).
+  const tarifaTipo: TarifaTipo = CANAL_TARIFA[canal] ?? 'rack'
 
   /*
     Se cotiza ANTES de tocar la tabla de huéspedes.
@@ -293,16 +288,13 @@ export async function crearReservaAction(
     estado: 'confirmada',
     ocupantes,
     noMover,
-    // En la misma transacción que la reserva (migración 0083). Ver abajo.
-    agenciaId: agenciaId || null,
     promocionId,
     comercial: {
       plan,
       garantia,
       segmento,
       voucher,
-      // El descuento del convenio de la agencia ya está aplicado en la cotización
-      // neta; éste es el adicional que carga recepción.
+      // Descuento adicional que carga recepción, sobre la tarifa cotizada.
       descuentoPct,
     },
   })
@@ -322,21 +314,6 @@ export async function crearReservaAction(
     }
     return { error: res.error, valores }
   }
-
-  /*
-    El vínculo con la agencia ya viajó en la llamada de arriba.
-
-    Hasta la migración 0084 se guardaba con un `update` aparte, con este
-    razonamiento: «el helper de alta atómica es compartido con el portal público,
-    donde no existe el concepto de convenio». El razonamiento estaba bien y la
-    conclusión mal — el parámetro puede ser opcional, y el portal simplemente no
-    lo manda—, porque si ese segundo paso fallaba la reserva quedaba **creada y
-    sin agencia**: sin saber a quién facturarle, con qué tarifa ni qué cuenta
-    corriente debitar (auditoría 2026-09, P1-7).
-
-    Es el mismo movimiento que la 0039 hizo con el desglose de ocupación, que
-    dejó escrito el argumento y no alcanzó a este campo.
-  */
 
   // Check-in inmediato (patrón QloApps: marcar "In Progress" al confirmar el
   // alta de mostrador). Es una escritura ACCESORIA sobre una reserva que ya

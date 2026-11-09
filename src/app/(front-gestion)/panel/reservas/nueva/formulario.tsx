@@ -66,12 +66,6 @@ function borrarBorrador(clave: string): void {
  */
 const SIN_CAMBIOS = () => () => {}
 
-export interface OpcionAgencia {
-  id: string
-  nombre: string
-  descuento_pct: number
-}
-
 export interface OpcionPromocion {
   id: string
   codigo: string
@@ -112,7 +106,6 @@ export interface HuespedFijo {
 export function FormularioReserva({
   opciones,
   unidadesPorTipo,
-  agencias,
   promociones,
   checkIn,
   checkOut,
@@ -124,7 +117,6 @@ export function FormularioReserva({
   huespedFijo?: HuespedFijo | null
   opciones: OpcionTipo[]
   unidadesPorTipo: Record<string, OpcionUnidad[]>
-  agencias: OpcionAgencia[]
   promociones: OpcionPromocion[]
   checkIn: string
   checkOut: string
@@ -412,23 +404,6 @@ export function FormularioReserva({
               <option value="web">Web (rack)</option>
               <option value="booking">Booking (neto)</option>
               <option value="expedia">Expedia (neto)</option>
-            </select>
-          </Campo>
-
-          {/* Si la reserva entra por convenio, la agencia es la que factura: de
-              ella salen la tarifa neta y la letra del comprobante (ADR 0012). */}
-          <Campo
-            etiqueta="Agencia / empresa"
-            ayuda="Con convenio siempre se aplica tarifa neta, sea cual sea el canal."
-          >
-            <select name="agencia_id" key={`agencia_id-${v.agencia_id ?? ''}`} defaultValue={v.agencia_id ?? ''} className={CAMPO}>
-              <option value="">Sin convenio (huésped directo)</option>
-              {agencias.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre}
-                  {a.descuento_pct > 0 ? ` · ${a.descuento_pct}% dto.` : ''}
-                </option>
-              ))}
             </select>
           </Campo>
         </div>

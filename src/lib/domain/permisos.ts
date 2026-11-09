@@ -17,7 +17,6 @@ export const AREAS = [
   'mantenimiento',
   'objetos_perdidos',
   'avisos',
-  'agencias',
   'canales',
   'auditoria',
   'errores',
@@ -42,7 +41,6 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   mantenimiento: 'Mantenimiento',
   objetos_perdidos: 'Objetos perdidos',
   avisos: 'Avisos',
-  agencias: 'Agencias',
   canales: 'Canales de venta',
   auditoria: 'Auditoría',
   errores: 'Errores del sistema',
@@ -65,7 +63,7 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   admin: [...AREAS],
   gerencia: [
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
-    'mantenimiento', 'objetos_perdidos', 'avisos', 'agencias',
+    'mantenimiento', 'objetos_perdidos', 'avisos',
     'canales', 'reportes', 'config',
     // Gerencia ve los errores del sistema porque es quien decide si hay que
     // llamar a alguien. La política RLS de `errores` (migración 0068) declara
@@ -89,7 +87,7 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   // atiende quien está en el mostrador, no gerencia. Es trabajo diario.
   recepcion: [
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'objetos_perdidos',
-    'avisos', 'agencias', 'canales',
+    'avisos', 'canales',
     /*
       Recepción entra al registro de envíos porque es quien atiende el «no me
       llegó nada». Mirar si el correo salió, rebotó o nunca se intentó es parte
@@ -153,8 +151,8 @@ export function puedeAcceder(rol: Rol, area: Area): boolean {
 /**
  * ¿Es de la dirección del hotel (admin o gerencia)?
  *
- * Para las acciones MÁS restrictivas que el área: recepción entra a agencias,
- * canales y notificaciones, pero algunas operaciones de esas pantallas son
+ * Para las acciones MÁS restrictivas que el área: recepción entra a canales
+ * y notificaciones, pero algunas operaciones de esas pantallas son
  * sólo de la dirección. La regla estaba escrita a mano 22 veces, en dos formas
  * (`=== … || ===` y `!== … && !==`); una sola definición evita que una se
  * corrija y la otra no.

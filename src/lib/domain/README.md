@@ -54,7 +54,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `exencion-iva.ts` | Exención de IVA al turista del exterior — se deriva, no se tilda (ADR 0024) |
 | `libro-ventas.ts` | Libro de ventas del mes: facturas y notas de crédito (en negativo), neto gravado y exento |
 | `cuentas.ts` | Cuentas corrientes de agencias y empresas |
-| `antiguedad.ts` | Antigüedad de saldos |
 
 ## Canales de venta (Booking y otros)
 
@@ -92,7 +91,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `plantillas.ts` | Plantillas de mensajes al huésped |
 | `notificaciones.ts` | Bandeja de salida de avisos |
 | `entregas.ts` | Estados de entrega de un correo (`enviada` ≠ `entregada`) |
-| `comercial.ts` | Pipeline comercial de agencias y empresas |
 
 ## Informes
 

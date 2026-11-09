@@ -27,7 +27,7 @@ export function archivoInvalido(archivo: File): string | null {
 
 /**
  * Sube un archivo a una carpeta del bucket. `carpeta` es el prefijo de primer
- * nivel por módulo (`mantenimiento`, `housekeeping`, `proveedores`, `agencias`)
+ * nivel por módulo (`mantenimiento`, `housekeeping`)
  * seguido del id de la entidad, así cada módulo queda separado sin necesitar
  * buckets ni políticas propias.
  */

@@ -32,8 +32,3 @@ export function busquedaOrdenes(termino: string): string {
   const p = patronOr(termino)
   return `titulo.ilike.${p},descripcion.ilike.${p}`
 }
-
-/** Patrón de un `.ilike()` suelto (agencias). */
-export function contiene(termino: string): string {
-  return `%${termino}%`
-}

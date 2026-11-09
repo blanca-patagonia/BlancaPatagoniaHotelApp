@@ -19,7 +19,6 @@ export type AccionLimitada =
   | 'webhook_pago'
   | 'webhook_email'
   | 'webhook_canal_externo'
-  | 'comprobante_agencia'
   | 'payway_ejecutar_pago'
   | 'pago_portal'
   | 'registro_firma_rechazada'
@@ -162,23 +161,6 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     motivo: 'Martilleo del webhook de correo por parte de quien no tiene el secreto.',
   },
 
-
-  /*
-    Subida de comprobante de pago desde el portal del socio, sin sesión de
-    staff: el token de la URL es la única credencial. Sin techo, quien lo tenga
-    podría llenar el bucket privado de archivos (cada uno pesa hasta 4 MB) y
-    ensuciar la cuenta corriente con filas de «pago pendiente» sin comprobante
-    real detrás.
-
-    Diez por hora deja margen de sobra para el caso legítimo más intenso: una
-    agencia que liquida el mes y sube el comprobante de varias reservas
-    seguidas. Un script que quisiera llenar el bucket necesitaría cientos.
-  */
-  comprobante_agencia: {
-    maximo: 10,
-    minutos: 60,
-    motivo: 'El bucket privado y la cuenta corriente, desde un enlace sin sesión de staff.',
-  },
 
   /*
     Ejecutar un pago con Payway (`/pago-payway/[reservaId]`), sin sesión de

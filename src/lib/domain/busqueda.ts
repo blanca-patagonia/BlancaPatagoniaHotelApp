@@ -24,7 +24,6 @@ import type { Rol } from './roles'
 export const AMBITOS = [
   'reservas',
   'huespedes',
-  'agencias',
   'unidades',
   'tipos_unidad',
   'productos',
@@ -38,7 +37,6 @@ export type Ambito = (typeof AMBITOS)[number]
 const AREA_DEL_AMBITO: Record<Ambito, Area> = {
   reservas: 'reservas',
   huespedes: 'huespedes',
-  agencias: 'agencias',
   unidades: 'config',
   tipos_unidad: 'config',
   productos: 'punto_venta',
@@ -49,7 +47,6 @@ const AREA_DEL_AMBITO: Record<Ambito, Area> = {
 export const ETIQUETAS_AMBITO: Record<Ambito, string> = {
   reservas: 'Reservas',
   huespedes: 'Huéspedes',
-  agencias: 'Agencias y empresas',
   unidades: 'Habitaciones y cabañas',
   tipos_unidad: 'Tipos de alojamiento',
   productos: 'Productos y servicios',

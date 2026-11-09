@@ -3,7 +3,7 @@ import { hayDB } from '../apoyo/db'
 import { nuevoContexto, limpiar, destinoDe, formulario, type Contexto } from './entorno'
 
 /**
- * `eliminarFotoOrden`, `eliminarFotoProveedor` y `eliminarComprobantePagoAgencia`
+ * `eliminarFotoOrden`
  * (auditoría QA/UX 2026-10): `eliminarAdjunto` existía desde la migración 0099
  * y nadie lo llamaba — una foto equivocada, o con datos personales de un
  * huésped de fondo, quedaba para siempre. Lo que se prueba acá es la lógica de
@@ -95,94 +95,6 @@ describe.skipIf(!hayDB)('Server Actions · eliminar fotos adjuntas', () => {
     )
 
     expect(destino).toBe(`/panel/mantenimiento/${ordenId}?error=foto_eliminar`)
-    expect(rutasEliminadas).toEqual([])
-  })
-
-  it('eliminarComprobantePagoAgencia limpia la columna sin borrar el movimiento', async () => {
-    const { eliminarComprobantePagoAgencia } = await import('@/app/(front-gestion)/panel/agencias/actions')
-
-    const { data: agencia } = await ctx.db
-      .from('agencias')
-      .insert({ nombre: `Agencia test ${ctx.sufijo}` })
-      .select('id')
-      .single()
-    const agenciaId = (agencia as { id: string }).id
-    ctx.aBorrar.push({ tabla: 'agencias', id: agenciaId })
-
-    const { data: mov } = await ctx.db
-      .from('movimientos_cuenta')
-      .insert({
-        agencia_id: agenciaId,
-        tipo: 'pago',
-        monto: 100,
-        moneda: 'USD',
-        concepto: 'Seña',
-        comprobante_ruta: 'agencias/comprobante.jpg',
-      })
-      .select('id')
-      .single()
-    const movimientoId = (mov as { id: string }).id
-    ctx.aBorrar.push({ tabla: 'movimientos_cuenta', id: movimientoId })
-
-    const destino = await destinoDe(() =>
-      eliminarComprobantePagoAgencia(
-        formulario({ agencia_id: agenciaId, movimiento_id: movimientoId, ruta: 'agencias/comprobante.jpg' }),
-      ),
-    )
-
-    expect(destino).toBe(`/panel/agencias/${agenciaId}?ok=comprobante_eliminado`)
-
-    const { data: actual } = await ctx.db
-      .from('movimientos_cuenta')
-      .select('comprobante_ruta, monto, concepto')
-      .eq('id', movimientoId)
-      .single()
-    const fila = actual as { comprobante_ruta: string | null; monto: number; concepto: string }
-    expect(fila.comprobante_ruta).toBeNull()
-    // El movimiento de dinero en sí queda intacto: sólo se borró el archivo.
-    expect(Number(fila.monto)).toBe(100)
-    expect(fila.concepto).toBe('Seña')
-  })
-
-  it('no toca el movimiento si la ruta ya no coincide (comprobante reemplazado entre tanto)', async () => {
-    const { eliminarComprobantePagoAgencia } = await import('@/app/(front-gestion)/panel/agencias/actions')
-
-    const { data: agencia } = await ctx.db
-      .from('agencias')
-      .insert({ nombre: `Agencia test 2 ${ctx.sufijo}` })
-      .select('id')
-      .single()
-    const agenciaId = (agencia as { id: string }).id
-    ctx.aBorrar.push({ tabla: 'agencias', id: agenciaId })
-
-    const { data: mov } = await ctx.db
-      .from('movimientos_cuenta')
-      .insert({
-        agencia_id: agenciaId,
-        tipo: 'pago',
-        monto: 50,
-        moneda: 'USD',
-        comprobante_ruta: 'agencias/vigente.jpg',
-      })
-      .select('id')
-      .single()
-    const movimientoId = (mov as { id: string }).id
-    ctx.aBorrar.push({ tabla: 'movimientos_cuenta', id: movimientoId })
-
-    // Pide borrar una ruta vieja, no la que la fila tiene hoy.
-    await destinoDe(() =>
-      eliminarComprobantePagoAgencia(
-        formulario({ agencia_id: agenciaId, movimiento_id: movimientoId, ruta: 'agencias/vencida.jpg' }),
-      ),
-    )
-
-    const { data: actual } = await ctx.db
-      .from('movimientos_cuenta')
-      .select('comprobante_ruta')
-      .eq('id', movimientoId)
-      .single()
-    expect((actual as { comprobante_ruta: string | null }).comprobante_ruta).toBe('agencias/vigente.jpg')
-    // Y del bucket no se borra nada: la ruta no era la de esta fila.
     expect(rutasEliminadas).toEqual([])
   })
 })

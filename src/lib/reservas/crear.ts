@@ -52,17 +52,6 @@ export interface ParamsReserva {
   unidadId?: string
 
   /**
-   * Agencia con convenio, si la reserva es de una.
-   *
-   * Viaja acá y **no** en un `update` posterior (auditoría 2026-09, P1-7). No es
-   * un dato decorativo: decide a quién se le factura, qué tarifa corresponde
-   * —neto de agencia contra rack de mostrador, ADR 0004— y qué cuenta corriente
-   * se debita. Una reserva de agencia sin `agencia_id` es una estadía que el
-   * hotel presta y no le cobra a nadie.
-   */
-  agenciaId?: string | null
-
-  /**
    * Promoción elegida, si hay. Va ANTES de cotizar —no solo al insertar—
    * porque el descuento se calcula sobre el subtotal (`calcularEstadia`,
    * `lib/domain/precios.ts`). Si el id no corresponde a una promoción
@@ -239,11 +228,6 @@ export async function crearReservaEnUnidadLibre(
     p_subtotal: cot.resumen.subtotalNeto,
     p_total_neto: cot.resumen.totalNeto,
     p_iva: cot.resumen.iva,
-
-    // La agencia, en la MISMA transacción (migración 0084). Antes se vinculaba
-    // con un `update` aparte y un fallo ahí dejaba la reserva sin agencia: sin
-    // saber a quién facturarle ni qué cuenta corriente debitar.
-    p_agencia_id: p.agenciaId ?? null,
 
     // La promoción, ya validada arriba. `crear_reserva` la acepta desde la
     // 0039 (parámetro #12) — nadie la había usado hasta ahora.

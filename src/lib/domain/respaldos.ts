@@ -32,15 +32,6 @@ export interface TablaRespaldo {
   /** Contiene datos personales: obliga a tratar el archivo con cuidado. */
   datosPersonales: boolean
   /**
-   * Columnas a exportar, cuando el staff NO puede leer la tabla entera.
-   *
-   * `agencias` tiene el `select` revocado a nivel tabla y
-   * repuesto columna por columna sin el `token` (migración 0060). Con `*` la
-   * lectura fallaba por permiso, el respaldo salía SIN esas dos tablas y el
-   * aviso decía —falsamente— que habían superado el tope de filas.
-   */
-  columnas?: string
-  /**
    * Columnas que identifican cada fila, para leerla en un orden fijo. Por
    * omisión `id`.
    *
@@ -57,9 +48,6 @@ export function ordenDeLectura(t: TablaRespaldo): readonly string[] {
   return t.orden ?? ['id']
 }
 
-/** Las columnas legibles por `authenticated` según la 0060 (sin `token`). */
-const COLUMNAS_AGENCIAS =
-  'id, nombre, tipo, cuit, email, telefono, descuento_pct, activo, creado_en, condicion_iva, etapa, notas_comerciales'
 
 /**
  * Qué se exporta y por qué.
@@ -123,12 +111,6 @@ export const TABLAS_RESPALDO: readonly TablaRespaldo[] = [
     porQue: 'Descuentos vigentes y su vigencia.',
     datosPersonales: false,
   },
-  {
-    tabla: 'agencias',
-    porQue: 'Los convenios comerciales y sus descuentos.',
-    datosPersonales: true,
-    columnas: COLUMNAS_AGENCIAS,
-  },
 
   // ── Operación ──
   {
@@ -173,11 +155,6 @@ export const TABLAS_RESPALDO: readonly TablaRespaldo[] = [
     porQue:
       'Las correcciones de las facturas, también con valor fiscal. Sin ellas, las facturas restauradas suman más de lo que el hotel vendió.',
     datosPersonales: true,
-  },
-  {
-    tabla: 'movimientos_cuenta',
-    porQue: 'La cuenta corriente de las agencias.',
-    datosPersonales: false,
   },
   {
     tabla: 'canal_reservas',

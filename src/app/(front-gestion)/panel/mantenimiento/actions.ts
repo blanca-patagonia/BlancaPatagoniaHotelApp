@@ -206,7 +206,7 @@ export async function editarPlanPreventivo(formData: FormData): Promise<void> {
  * Da de baja un plan preventivo (baja lógica: `activo = false`).
  *
  * No se borra la fila: es el mismo criterio que ya usa el resto del sistema
- * para lo que tiene historial (huéspedes, agencias…), y acá además evita que
+ * para lo que tiene historial (huéspedes…), y acá además evita que
  * una orden ya generada por este plan se quede apuntando a nada.
  */
 export async function eliminarPlanPreventivo(formData: FormData): Promise<void> {
@@ -361,7 +361,7 @@ export async function eliminarFotoOrden(formData: FormData): Promise<void> {
     Sólo se borra un archivo que de verdad era de esta entidad. La ruta viene
     del formulario y el borrado del bucket va con `service_role`: sin esta
     guarda, cualquiera con acceso al módulo podía borrar CUALQUIER archivo del
-    bucket (por ejemplo, el comprobante de pago de una agencia) mandando su ruta.
+    bucket (por ejemplo, el comprobante de un pago) mandando su ruta.
   */
   if (!previas.includes(ruta)) redirect(`/panel/mantenimiento/${ordenId}?error=foto_eliminar`)
   const fotos = previas.filter((f) => f !== ruta)
