@@ -40,6 +40,7 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `cobro.ts` | Cobro en línea: conversión y medios de pago |
 | `pagos.ts` | Resumen de pagos y estado según lo cobrado |
 | `garantia-tarjeta.ts` | Si una garantía de tarjeta sirve para cobrar (ADR 0025) |
+| `servicio.ts` | Cuándo se le puede cargar un consumo a una reserva (la cuenta se cierra con la factura) |
 | `consumos.ts` | Consumos y cuenta consolidada |
 | `folios.ts` | Folios A/B de la cuenta del huésped |
 | `departamentos.ts` | Jerarquía de departamentos de la cuenta |
@@ -60,11 +61,7 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 |---|---|
 | `housekeeping.ts` | Prioridad de limpieza de las unidades |
 | `inventario.ts` | Stock y reposición |
-| `lista-compras.ts` | Lista de compras de cocina |
-| `servicio.ts` | Servicio de cocina: quiénes desayunan |
-| `cierre-diario.ts` | Cierre del día (*night audit*) |
 | `hotel.ts` | Datos operativos del hotel que todavía no están en la base |
-| `respaldos.ts` | Exportación de datos operativos (no es un backup de Postgres) |
 | `crons.ts` | Tareas programadas y su tolerancia de atraso |
 
 ## Huéspedes, socios y comunicación
@@ -109,7 +106,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `busqueda.ts` | Búsqueda global por rol |
 | `ayuda.ts` | Contenido de la sección de Ayuda |
 | `cuenta.ts` | «Mi cuenta» y el mínimo de contraseña |
-| `pwa.ts` | Qué cachea la app instalable — lista blanca (ADR 0028) |
 
 ## Utilidades transversales
 

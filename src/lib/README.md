@@ -36,7 +36,6 @@ falla si aparece uno sin listar.
 | `busqueda/` | Consulta del buscador global |
 | `catalogo/` | Catálogo público cacheado |
 | `i18n/` | Diccionarios del portal en cinco idiomas |
-| `pwa/` | Ícono de la aplicación instalable |
 
 ## Archivos sueltos (utilidades que usa todo el sistema)
 

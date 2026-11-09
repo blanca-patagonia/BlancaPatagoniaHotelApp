@@ -4,15 +4,13 @@
  * Por qué existe. El menú listaba las áreas al mismo nivel visual, en una
  * columna plana. Para quien ya conoce el sistema da igual; para alguien que
  * entra a recepción por primera vez, encontrar «Housekeeping» entre
- * «Servicio» y «Reportes» obliga a leer la lista entera, y eso se paga todos
+ * «Reportes» y «Auditoría» obliga a leer la lista entera, y eso se paga todos
  * los días. Agrupar convierte una búsqueda lineal en dos saltos: primero el
  * grupo, después el ítem.
  *
  * El criterio de agrupación es **por momento de uso**, no por parecido temático:
  *
  *  · `Operación` — lo que se toca con un huésped enfrente o al teléfono.
- *  · `Unidades` — el estado físico de la casa, que mira otra gente y en otro
- *    momento del día (housekeeping, más cocina).
  *  · `Administración` — lo que mira gerencia y lo que se configura una vez.
  *
  * `Ayuda` queda fuera de todo grupo, al final: no compite con el trabajo y se
@@ -21,7 +19,7 @@
  *
  * Este módulo es puro y **no decide permisos**: recibe las áreas que el rol ya
  * puede ver (`areasDe`) y solo las ordena. Un grupo sin áreas visibles no se
- * dibuja, así que housekeeping —que ve tres áreas— no termina con cuatro
+ * dibuja, así que housekeeping —que ve pocas áreas— no termina con
  * encabezados vacíos.
  */
 
@@ -42,9 +40,8 @@ export interface GrupoNavegacion {
  * silencio del menú.
  */
 export const GRUPOS: readonly GrupoNavegacion[] = [
-  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
-  { titulo: 'Unidades', areas: ['housekeeping', 'servicio'] },
-  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
+  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes', 'housekeeping'] },
+  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'errores', 'config', 'usuarios'] },
   { titulo: null, areas: ['ayuda'] },
 ]
 
@@ -89,7 +86,6 @@ export function agruparAreas(visibles: readonly Area[]): GrupoNavegacion[] {
 export const RUTA_AREA: Record<Area, string> = {
   dashboard: '/panel',
   ocupacion: '/panel/ocupacion',
-  servicio: '/panel/servicio',
   reservas: '/panel/reservas',
   punto_venta: '/panel/punto-venta',
   huespedes: '/panel/huespedes',
@@ -99,6 +95,5 @@ export const RUTA_AREA: Record<Area, string> = {
   reportes: '/panel/reportes',
   config: '/panel/config',
   usuarios: '/panel/usuarios',
-  respaldos: '/panel/respaldos',
   ayuda: '/panel/ayuda',
 }

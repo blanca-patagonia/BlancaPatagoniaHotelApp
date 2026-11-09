@@ -221,68 +221,6 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
-    area: 'servicio',
-    resumen: 'La lista de desayuno del día, lo vendido y la lista de compras de cocina.',
-    pasos: [
-      {
-        titulo: 'Lista de desayuno',
-        detalle:
-          'Quién desayuna hoy y cuántos cubiertos preparar, por habitación. Se arma sola con quién durmió anoche: el que llega hoy no entra, el que se va hoy sí. Se imprime con el botón de arriba.',
-      },
-      {
-        titulo: 'Desayuno extra vendido',
-        detalle:
-          'Si alguien pagó un desayuno suelto para hoy —llegó a la mañana antes del check-in, por ejemplo— aparece marcado como "extra" en la misma lista, para que la cocina no prepare un cubierto de menos.',
-      },
-      {
-        titulo: 'Consumos vendidos',
-        detalle:
-          'Lo que salió del frigobar y de la cocina en el rango de fechas elegido, total y por categoría. Sirve para reponer stock y para el arqueo.',
-      },
-      {
-        titulo: 'Lista de compras',
-        detalle:
-          'El botón "Lista de compras" abre una hoja aparte para ir anotando, con el tiempo, qué hay que comprarle al supermercado para el restaurante: artículo, cantidad, precio estimado y una nota. Se tilda "comprado" con el casillero, sin tener que tocar el resto de la fila.',
-      },
-      {
-        titulo: 'Imprimir la lista de compras',
-        detalle:
-          'El papel muestra casilleros en blanco para lo que todavía no está tildado en el sistema —para marcarlos a mano en el súper— y ya tildado lo que se cargó como comprado antes de imprimir, con el total estimado de lo que falta al final.',
-      },
-    ],
-  },
-  {
-    area: 'respaldos',
-    resumen: 'Cómo bajar una copia de los datos, y quién se ocupa de los backups.',
-    pasos: [
-      {
-        titulo: 'Son dos cosas distintas',
-        detalle:
-          'El backup completo de la base lo hace automáticamente la empresa donde está alojado el sistema. Este sistema NO lo puede disparar ni comprobar: no existe forma de pedirlo desde acá, y un botón que dijera que sí estaría mintiendo.',
-      },
-      {
-        titulo: 'Lo que sí podés hacer',
-        detalle:
-          'Bajar un archivo con todas las reservas, los huéspedes, los pagos, las facturas y el tarifario. Se guarda donde quieras —un pendrive, la nube, el correo— y se puede abrir para comprobar que está. Es la respuesta a «si esto se cae, ¿tengo mis reservas?».',
-      },
-      {
-        titulo: 'Cada cuánto',
-        detalle:
-          'Una vez por semana. La pantalla avisa cuando pasaron más de siete días y avisa más fuerte pasado el mes: con un mes de hueco, rehacer las reservas de memoria ya no es posible.',
-      },
-      {
-        titulo: 'El archivo es confidencial',
-        detalle:
-          'Tiene el nombre, el email y el teléfono de todos los huéspedes que pasaron por el hotel. Guardalo como guardarías el libro de pasajeros: no lo dejes en una carpeta compartida ni lo mandes por correo sin pensarlo.',
-      },
-      {
-        titulo: 'Solo administración exporta',
-        detalle:
-          'Gerencia puede ver cuándo fue la última vez —para controlar que se esté haciendo— pero no puede bajar el archivo. Es por lo del punto anterior.',
-      },
-    ],
-  },
-  {
     area: 'punto_venta',
     resumen: 'Cargar frigobar, room service y extras a la habitación.',
     pasos: [

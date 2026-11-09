@@ -38,7 +38,6 @@ import { BuscadorGlobal } from './buscador-global'
 const ICONO_AREA: Record<Area, NombreIcono> = {
   dashboard: 'inicio',
   ocupacion: 'ocupacion',
-  servicio: 'reportes',
   reservas: 'reservas',
   punto_venta: 'objetos',
   huespedes: 'huespedes',
@@ -50,7 +49,6 @@ const ICONO_AREA: Record<Area, NombreIcono> = {
   reportes: 'reportes',
   config: 'config',
   usuarios: 'usuarios',
-  respaldos: 'descargar',
   ayuda: 'ayuda',
 }
 

@@ -158,8 +158,6 @@ function termino(params: URLSearchParams): string | null {
   return terminoBusqueda(params.get('q') ?? undefined)
 }
 
-const SI_NO = (v: boolean) => (v ? 'Sí' : 'No')
-
 interface FilaReserva {
   codigo: string
   estado: EstadoReserva
@@ -426,31 +424,6 @@ const RECURSOS: Record<string, Definicion> = {
     ),
   },
 
-  'lista-compras': {
-    area: 'servicio',
-    archivo: 'lista-compras',
-    generar: simple<{
-      nombre: string
-      cantidad: string
-      precio_estimado: number | string | null
-      comprado: boolean
-      nota: string
-    }>(
-      'lista_compras_cocina',
-      'nombre, cantidad, precio_estimado, comprado, nota',
-      { columna: 'nombre' },
-      [
-        { titulo: 'Artículo', valor: (i) => i.nombre },
-        { titulo: 'Cantidad', valor: (i) => i.cantidad },
-        {
-          titulo: 'Precio estimado ARS',
-          valor: (i) => decimal(i.precio_estimado),
-        },
-        { titulo: 'Comprado', valor: (i) => SI_NO(i.comprado) },
-        { titulo: 'Nota', valor: (i) => i.nota },
-      ],
-    ),
-  },
 }
 
 /**

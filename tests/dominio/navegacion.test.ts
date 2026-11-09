@@ -78,6 +78,6 @@ describe('agruparAreas', () => {
     // admin sigue viendo un menú con varios grupos.
     const grupos = agruparAreas(areasDe('admin'))
     for (const g of grupos) expect(g.areas.length, `grupo ${g.titulo}`).toBeGreaterThan(0)
-    expect(grupos.length).toBeGreaterThan(3)
+    expect(grupos.length).toBeGreaterThan(1)
   })
 })

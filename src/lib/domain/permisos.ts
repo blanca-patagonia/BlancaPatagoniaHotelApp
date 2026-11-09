@@ -9,7 +9,6 @@ import type { Rol } from './roles'
 export const AREAS = [
   'dashboard',
   'ocupacion',
-  'servicio',
   'punto_venta',
   'reservas',
   'huespedes',
@@ -19,7 +18,6 @@ export const AREAS = [
   'reportes',
   'config',
   'usuarios',
-  'respaldos',
   'ayuda',
 ] as const
 
@@ -28,7 +26,6 @@ export type Area = (typeof AREAS)[number]
 export const ETIQUETAS_AREA: Record<Area, string> = {
   dashboard: 'Inicio',
   ocupacion: 'Ocupación',
-  servicio: 'Servicio de cocina',
   punto_venta: 'Punto de venta',
   reservas: 'Reservas',
   huespedes: 'Huéspedes',
@@ -38,7 +35,6 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   reportes: 'Reportes',
   config: 'Configuración',
   usuarios: 'Usuarios',
-  respaldos: 'Respaldos',
   ayuda: 'Ayuda',
 }
 
@@ -52,21 +48,16 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
 export const PERMISOS: Record<Rol, readonly Area[]> = {
   admin: [...AREAS],
   gerencia: [
-    'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
+    'dashboard', 'ocupacion', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
     'reportes', 'config',
     // Gerencia ve los errores del sistema porque es quien decide si hay que
     // llamar a alguien. La política RLS de `errores` (migración 0068) declara
     // los mismos dos roles: si acá se agregara uno más, vería la pantalla vacía.
     'errores',
-    // Gerencia **ve** el estado de los respaldos —saber que hace 40 días que nadie
-    // exporta es información de gestión— pero **no puede exportar**: eso lo
-    // restringe la propia pantalla y el endpoint, porque el archivo concentra los
-    // datos personales de todos los huéspedes del hotel.
-    'respaldos',
     'ayuda',
   ],
   recepcion: [
-    'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes',
+    'dashboard', 'ocupacion', 'punto_venta', 'reservas', 'huespedes',
     'ayuda',
   ],
   housekeeping: [
@@ -104,7 +95,6 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
  */
 export const AREAS_OCULTAS: readonly Area[] = [
   'auditoria',
-  'respaldos',
 ]
 
 export function estaOculta(area: Area): boolean {
