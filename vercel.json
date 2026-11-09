@@ -12,10 +12,6 @@
     {
       "path": "/api/cron/notificaciones",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/recordatorios",
-      "schedule": "0 12 * * *"
     }
   ]
 }

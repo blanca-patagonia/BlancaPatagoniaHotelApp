@@ -9,9 +9,6 @@ export const CRONS = {
   notificaciones: { etiqueta: 'Envío de avisos', toleranciaMin: 30 },
   salud: { etiqueta: 'Chequeo de salud', toleranciaMin: 60 },
   mantenimiento: { etiqueta: 'Mantenimiento diario (expirar reservas, purgas)', toleranciaMin: 26 * 60 },
-  recordatorios: { etiqueta: 'Recordatorios a huéspedes', toleranciaMin: 26 * 60 },
-  canales: { etiqueta: 'Sincronización con canales', toleranciaMin: 26 * 60 },
-  ari: { etiqueta: 'Publicación de disponibilidad', toleranciaMin: 26 * 60 },
 } as const
 
 export type NombreCron = keyof typeof CRONS

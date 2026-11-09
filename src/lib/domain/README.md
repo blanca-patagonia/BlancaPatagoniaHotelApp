@@ -28,7 +28,7 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `vistas-reservas.ts` | Las vistas operativas del listado de reservas |
 | `temporadas.ts` | Calendario de temporadas (`[desde, hasta)`) |
 | `unidades.ts` | Tipos del inventario de habitaciones y cabañas |
-| `recordatorios.ts` | Cuándo sale cada recordatorio y `DIAS_EXPIRACION` |
+| `expiracion.ts` | Cuántos días retiene la unidad una reserva pendiente (`DIAS_EXPIRACION`) |
 
 ## Precios, cobros y cuenta del huésped
 
@@ -77,7 +77,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `encuestas.ts` | Encuestas y NPS |
 | `plantillas.ts` | Plantillas de mensajes al huésped |
 | `notificaciones.ts` | Bandeja de salida de avisos |
-| `entregas.ts` | Estados de entrega de un correo (`enviada` ≠ `entregada`) |
 
 ## Informes
 

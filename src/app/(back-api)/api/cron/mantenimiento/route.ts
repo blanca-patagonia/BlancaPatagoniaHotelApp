@@ -2,7 +2,7 @@ import { anotarCorrida } from '@/lib/crons'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { comparacionConstante } from '@/lib/integraciones/firma-webhook'
 import { registrarError, registrarInfo } from '@/lib/registro'
-import { DIAS_EXPIRACION } from '@/lib/domain/recordatorios'
+import { DIAS_EXPIRACION } from '@/lib/domain/expiracion'
 
 /**
  * Tareas de mantenimiento diarias: `POST /api/cron/mantenimiento`.
@@ -41,7 +41,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /*
-  Los días de expiración salen de `lib/domain/recordatorios.ts` y no se declaran
+  Los días de expiración salen de `lib/domain/expiracion.ts` y no se declaran
   acá.
 
   Es el mismo número que decide **cuándo se avisa** que la reserva está por

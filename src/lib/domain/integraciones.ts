@@ -161,12 +161,11 @@ export const INTEGRACIONES: readonly Integracion[] = [
     id: 'resend',
     nombre: 'Correo (Resend)',
     grupo: 'correo',
-    paraQue: 'Confirmaciones de reserva, recordatorios y encuestas por correo.',
+    paraQue: 'Confirmaciones de reserva, avisos de pago y encuestas por correo.',
     interruptor: { variable: 'EMAIL_PROVIDER', valor: 'resend' },
     variables: [
       { nombre: 'RESEND_API_KEY', obligatoria: true, secreta: true, ayuda: 're_… con permiso de envío.' },
       { nombre: 'EMAIL_FROM', obligatoria: true, secreta: false, ayuda: 'Remitente de un dominio VERIFICADO en Resend.', ejemplo: 'Blanca Patagonia <reservas@blancapatagonia.com>' },
-      { nombre: 'RESEND_WEBHOOK_SECRET', obligatoria: false, secreta: true, ayuda: 'whsec_… del webhook. Sin ella no se ven los rebotes.' },
     ],
     siFalta: 'Los correos se escriben en el log del servidor y no salen (en producción el sistema no arranca: ADR 0018).',
     pasos: [
@@ -174,7 +173,6 @@ export const INTEGRACIONES: readonly Integracion[] = [
       'API Keys → crear una.',
       'EMAIL_PROVIDER=resend.',
     ],
-    webhook: { ruta: '/api/webhooks/email/resend', nota: 'Eventos: email.delivered, email.bounced, email.complained, email.opened.' },
     probable: true,
   },
 

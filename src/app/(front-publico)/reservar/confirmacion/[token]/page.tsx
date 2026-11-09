@@ -10,7 +10,7 @@ import { textos, rellenar, idiomaValido, fechaCortaEn, type Diccionario } from '
 import { Mensaje, Tarjeta, botonPublico } from '../../../_publico/ui'
 import { Aviso, Marco } from '../../../_publico/marco'
 import { HORA_CHECK_IN, HORA_CHECK_OUT } from '@/lib/domain/hotel'
-import { DIAS_EXPIRACION } from '@/lib/domain/recordatorios'
+import { DIAS_EXPIRACION } from '@/lib/domain/expiracion'
 import { registrarFalla } from '@/lib/acciones'
 
 interface Reserva {

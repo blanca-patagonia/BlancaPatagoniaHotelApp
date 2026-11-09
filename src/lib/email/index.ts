@@ -25,19 +25,6 @@ export interface MensajeEmail {
   cuerpo: string
   /** Variante HTML del mismo mensaje (Fase 5). Opcional: un proveedor puede ignorarla. */
   cuerpoHtml?: string
-  /**
-   * Clave de idempotencia propia (bandeja de mensajes, ADR 0043).
-   *
-   * ⚠️ Sin ella se usa `destinatario:asunto`, que sirve para los avisos —cada
-   * evento tiene su asunto— pero NO para una conversación: dos respuestas al
-   * mismo huésped en el mismo hilo («Re: Consulta») tienen igual asunto, y
-   * Resend devolvería el id de la primera sin mandar la segunda.
-   */
-  claveIdempotencia?: string
-  /** Cabeceras extra. La bandeja manda `In-Reply-To`/`References` para hilar. */
-  cabeceras?: Record<string, string>
-  /** A dónde responde el huésped, si no es el remitente. */
-  responderA?: string
 }
 
 export interface ResultadoEnvio {
@@ -45,12 +32,8 @@ export interface ResultadoEnvio {
   /** Detalle para mostrar en pantalla (motivo del rechazo o confirmación). */
   detalle: string
   /**
-   * Id que le dio el proveedor al mensaje.
-   *
-   * Es con lo que el webhook de entrega (`/api/webhooks/email/[proveedor]`) casa
-   * el evento contra la fila de la bandeja: sin él, un rebote no tiene a qué
-   * imputarse y el estado se queda en `enviada` para siempre — que es
-   * indistinguible de «salió bien y todavía no informaron».
+   * Id que le dio el proveedor al mensaje. Se guarda en la fila de la bandeja
+   * de salida para poder rastrear el envío del lado del proveedor.
    *
    * Opcional porque el proveedor de consola no manda nada y no tiene ninguno.
    */
