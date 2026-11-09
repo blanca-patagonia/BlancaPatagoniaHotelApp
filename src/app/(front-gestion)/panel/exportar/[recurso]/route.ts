@@ -39,11 +39,6 @@ import { esNotaDeCredito, nombreDeComprobante, numeroVisible } from '@/lib/domai
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
 import { traerEstadias, traerUnidades } from '../../reportes/datos'
 import { busquedaHuespedes, busquedaOrdenes, busquedaProveedores, contiene } from '../busquedas'
-import {
-  CATEGORIAS_GASTO,
-  ETIQUETAS_CATEGORIA_GASTO,
-  type CategoriaGasto,
-} from '@/lib/domain/gastos'
 
 /**
  * Punto único de exportación a CSV del panel.
@@ -459,40 +454,6 @@ const RECURSOS: Record<string, Definicion> = {
       (c, p) => {
         const t = termino(p)
         return t ? c.ilike('nombre', contiene(t)) : c
-      },
-    ),
-  },
-
-  gastos: {
-    area: 'conciliacion',
-    archivo: 'gastos-operativos',
-    generar: simple<{
-      fecha: string
-      categoria: string
-      descripcion: string
-      monto: number | string
-      moneda: string
-    }>(
-      'gastos_operativos',
-      'fecha, categoria, descripcion, monto, moneda',
-      { columna: 'fecha', descendente: true },
-      [
-        { titulo: 'Fecha', valor: (g) => g.fecha },
-        {
-          titulo: 'Categoría',
-          valor: (g) => ETIQUETAS_CATEGORIA_GASTO[g.categoria as CategoriaGasto] ?? g.categoria,
-        },
-        { titulo: 'Descripción', valor: (g) => g.descripcion },
-        { titulo: 'Monto', valor: (g) => decimal(g.monto) },
-        { titulo: 'Moneda', valor: (g) => g.moneda },
-      ],
-      (c, p) => {
-        // Los mismos filtros que la pantalla: categoría y búsqueda en la descripción.
-        const categoria = deLista(CATEGORIAS_GASTO, p.get('categoria'))
-        const t = termino(p)
-        let filtrada = categoria ? c.eq('categoria', categoria) : c
-        if (t) filtrada = filtrada.ilike('descripcion', contiene(t))
-        return filtrada
       },
     ),
   },

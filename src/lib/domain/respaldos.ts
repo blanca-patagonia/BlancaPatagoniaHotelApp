@@ -203,11 +203,6 @@ export const TABLAS_RESPALDO: readonly TablaRespaldo[] = [
     datosPersonales: false,
   },
   {
-    tabla: 'gastos_operativos',
-    porQue: 'Los gastos sin factura de proveedor (caja chica, servicios). No están en ningún otro lado.',
-    datosPersonales: false,
-  },
-  {
     tabla: 'canal_reservas',
     porQue: 'Lo que llegó de Booking, incluido lo que todavía no se importó.',
     datosPersonales: true,

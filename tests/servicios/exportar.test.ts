@@ -84,17 +84,6 @@ describe('exportar: los filtros de la pantalla viajan al archivo', () => {
     expect(condicion).toContain('doc_numero.ilike')
   })
 
-  it('gastos: categoría y búsqueda, con el patrón SIN comillas literales', async () => {
-    await exportar('gastos', '?categoria=servicios&q=luz')
-    expect(metodos('gastos_operativos', 'eq')).toEqual([['categoria', 'servicios']])
-    expect(metodos('gastos_operativos', 'ilike')).toEqual([['descripcion', '%luz%']])
-  })
-
-  it('gastos: una categoría inventada no filtra por algo que no existe', async () => {
-    await exportar('gastos', '?categoria=cualquiera')
-    expect(metodos('gastos_operativos', 'eq')).toEqual([])
-  })
-
   it('comprobantes: la vista «sin imputar»', async () => {
     await exportar('comprobantes', '?vista=sin_imputar')
     expect(metodos('comprobantes_recibidos', 'is')).toEqual([['movimiento_id', null]])
@@ -104,17 +93,6 @@ describe('exportar: los filtros de la pantalla viajan al archivo', () => {
     await exportar('huespedes')
     const ordenes = metodos('huespedes', 'order').map((a) => a[0])
     expect(ordenes.at(-1)).toBe('id')
-  })
-})
-
-describe('exportar: formato para Excel en es-AR', () => {
-  it('los importes salen con coma decimal', async () => {
-    respuestas.gastos_operativos = {
-      data: [{ fecha: '2026-09-01', categoria: 'servicios', descripcion: 'Luz', monto: '1234.5', moneda: 'ARS' }],
-    }
-    const { res, texto } = await exportar('gastos')
-    expect(res.headers.get('Content-Type')).toContain('text/csv')
-    expect(texto.split('\r\n')[1]).toMatch(/^2026-09-01;Servicios[^;]*;Luz;1234,50;ARS$/)
   })
 })
 

@@ -28,7 +28,6 @@ falla si aparece uno sin listar.
 | `pricing/` | Cotización de una estadía contra las tarifas cargadas |
 | `payments/` | Pasarelas de pago: MercadoPago, Stripe, Payway y el simulador (ADR 0027) |
 | `facturacion/` | Facturación electrónica y datos del hotel como emisor |
-| `conciliacion/` | Extractos del banco y de MercadoPago (ADR 0030) |
 | `divisas/` | Cotización del dólar, con su cadena de respaldo |
 | `canales/` | Booking y otros canales: CSV, iCal, reseñas y publicación (ADR 0021/0032) |
 | `email/` | Envío de correo: consola o Resend |

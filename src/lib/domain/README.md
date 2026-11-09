@@ -56,8 +56,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `comprobante-qr.ts` | Lectura del QR de una factura recibida (ADR 0031) |
 | `cuentas.ts` | Cuentas corrientes de agencias y empresas |
 | `antiguedad.ts` | Antigüedad de saldos |
-| `conciliacion.ts` | Conciliación bancaria y de pasarelas (ADR 0030) |
-| `gastos.ts` | Gastos operativos sin factura de proveedor |
 
 ## Canales de venta (Booking y otros)
 

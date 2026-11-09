@@ -39,7 +39,6 @@ export type NombreIcono =
   | 'ayuda'
   | 'divisas'
   | 'canales'
-  | 'conciliacion'
 
 /** Trazos de cada icono (todo dentro de un viewBox 0 0 24 24). */
 const TRAZOS: Record<NombreIcono, string[]> = {
@@ -113,12 +112,6 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     reusar `divisas`: son cosas distintas y el menú las muestra juntas, en
     Administración, donde dos iconos iguales serían un error de lectura.
   */
-  conciliacion: [
-    'M3.5 8.5h13',
-    'M13 5l3.5 3.5L13 12',
-    'M20.5 15.5h-13',
-    'M11 12l-3.5 3.5L11 19',
-  ],
   divisas: [
     'M2.5 7.5h13v7h-13z',
     'M9 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',

@@ -106,10 +106,9 @@ describe('TABLAS_RESPALDO', () => {
     expect(nombres.indexOf('facturas')).toBeLessThan(nombres.indexOf('notas_credito'))
   })
 
-  it('incluye los comprobantes de proveedores y los gastos, que no están en otro lado', () => {
+  it('incluye los comprobantes de proveedores, que no están en otro lado', () => {
     const nombres = TABLAS_RESPALDO.map((t) => t.tabla)
     expect(nombres).toContain('comprobantes_recibidos')
-    expect(nombres).toContain('gastos_operativos')
     expect(nombres.indexOf('movimientos_proveedor')).toBeLessThan(
       nombres.indexOf('comprobantes_recibidos'),
     )
