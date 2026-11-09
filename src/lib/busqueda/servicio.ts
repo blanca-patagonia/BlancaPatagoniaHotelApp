@@ -50,12 +50,6 @@ export interface AgenciaHit {
   tipo?: string
 }
 
-export interface ProveedorHit {
-  id: string
-  nombre: string
-  rubro?: string
-}
-
 export interface UnidadHit {
   id: string
   nombre: string
@@ -103,7 +97,6 @@ export interface ResultadoBusqueda {
   reservas: ReservaHit[]
   huespedes: HuespedHit[]
   agencias: AgenciaHit[]
-  proveedores: ProveedorHit[]
   unidades: UnidadHit[]
   tipos_unidad: TipoUnidadHit[]
   productos: ProductoHit[]
@@ -141,7 +134,7 @@ export async function buscarGlobal(
   const ambitos = ambitosPara(rol)
   const puede = (a: string) => ambitos.includes(a as never)
 
-  const [huespedesExactos, agencias, proveedores, unidades, tipos_unidad, productos, promociones, usuarios] =
+  const [huespedesExactos, agencias, unidades, tipos_unidad, productos, promociones, usuarios] =
     termino
       ? await Promise.all([
           puede('huespedes')
@@ -161,14 +154,6 @@ export async function buscarGlobal(
                 .ilike('nombre', `%${termino}%`)
                 .limit(tope)
                 .then(filas<AgenciaHit>('agencias'))
-            : Promise.resolve([]),
-          puede('proveedores')
-            ? supabase
-                .from('proveedores')
-                .select('id, nombre, rubro')
-                .ilike('nombre', `%${termino}%`)
-                .limit(tope)
-                .then(filas<ProveedorHit>('proveedores'))
             : Promise.resolve([]),
           puede('unidades')
             ? supabase
@@ -284,7 +269,6 @@ export async function buscarGlobal(
     reservas.length +
     huespedes.length +
     agencias.length +
-    proveedores.length +
     unidades.length +
     tipos_unidad.length +
     productos.length +
@@ -302,7 +286,6 @@ export async function buscarGlobal(
     huespedes,
     huespedesAproximados,
     agencias,
-    proveedores,
     unidades,
     tipos_unidad,
     productos,

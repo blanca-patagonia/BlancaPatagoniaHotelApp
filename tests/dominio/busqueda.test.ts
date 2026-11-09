@@ -20,12 +20,12 @@ describe('búsqueda global · qué puede buscar cada rol', () => {
     expect(puedeBuscar('housekeeping', 'reservas')).toBe(false)
   })
 
-  it('recepción busca huéspedes, reservas y agencias, pero no proveedores', () => {
+  it('recepción busca huéspedes, reservas y agencias, pero no usuarios', () => {
     const a = ambitosPara('recepcion')
     expect(a).toContain('reservas')
     expect(a).toContain('huespedes')
     expect(a).toContain('agencias')
-    expect(a).not.toContain('proveedores')
+    expect(a).not.toContain('usuarios')
   })
 
   it('el administrador busca en todos los ámbitos', () => {

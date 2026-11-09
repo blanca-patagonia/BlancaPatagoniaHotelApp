@@ -42,7 +42,6 @@ const FILAS: Record<string, Record<string, unknown>[]> = {
     { id: 'h-2', apellido: 'Pérez', nombre: 'Luis', email: null, doc_numero: null },
   ],
   agencias: [{ id: 'a-1', nombre: 'Patagonia Travel', tipo: 'agencia' }],
-  proveedores: [{ id: 'p-1', nombre: 'Lavadero del Sur', rubro: 'lavandería' }],
   reservas: [{ id: 'r-1', codigo: 'BP-0001', estado: 'confirmada', huesped: null, estadias: [] }],
 }
 
@@ -148,9 +147,9 @@ describe('buscarGlobal · qué NO llega a la base', () => {
 })
 
 describe('buscarGlobal · autorización por rol', () => {
-  it('housekeeping no consulta ninguna de las cuatro tablas', async () => {
-    // Housekeeping no tiene `reservas`, `huespedes`, `agencias` ni
-    // `proveedores` en `PERMISOS`. El cliente falso devuelve filas para todas,
+  it('housekeeping no consulta ninguna de las tablas', async () => {
+    // Housekeeping no tiene `reservas`, `huespedes` ni `agencias`
+    // en `PERMISOS`. El cliente falso devuelve filas para todas,
     // así que si alguna consulta se colara, aparecería en el resultado.
     const { resultado, tablas } = await buscar('housekeeping', 'perez')
     expect(tablas).toEqual([])
@@ -158,27 +157,23 @@ describe('buscarGlobal · autorización por rol', () => {
     expect(resultado.huespedes).toEqual([])
     expect(resultado.reservas).toEqual([])
     expect(resultado.agencias).toEqual([])
-    expect(resultado.proveedores).toEqual([])
   })
 
-  it('recepción busca huéspedes y agencias pero nunca proveedores', async () => {
-    // Recepción no entra a Proveedores. El dato de un proveedor —qué se le
-    // compra, a quién— no es parte del mostrador.
-    const { resultado, tablas } = await buscar('recepcion', 'sur')
+  it('recepción busca huéspedes y agencias pero nunca usuarios', async () => {
+    // Los usuarios del sistema no son parte del mostrador.
+    const { tablas } = await buscar('recepcion', 'sur')
     expect(tablas).toContain('huespedes')
     expect(tablas).toContain('agencias')
     expect(tablas).toContain('reservas')
-    expect(tablas).not.toContain('proveedores')
-    expect(resultado.proveedores).toEqual([])
+    expect(tablas).not.toContain('perfiles')
   })
 
-  it('admin consulta los nueve ámbitos', async () => {
-    const { resultado, tablas } = await buscar('admin', 'sur')
+  it('admin consulta los ocho ámbitos', async () => {
+    const { tablas } = await buscar('admin', 'sur')
     expect(new Set(tablas)).toEqual(
       new Set([
         'huespedes',
         'agencias',
-        'proveedores',
         'reservas',
         'unidades',
         'tipos_unidad',
@@ -187,12 +182,11 @@ describe('buscarGlobal · autorización por rol', () => {
         'perfiles',
       ]),
     )
-    expect(resultado.proveedores).toHaveLength(1)
   })
 
   it('los ámbitos informados son exactamente los que el rol tiene permitidos', async () => {
     // La pantalla los muestra como encabezados. Si dijera un ámbito que no
-    // consultó, el usuario leería «Proveedores: sin resultados» y concluiría
+    // consultó, el usuario leería «Agencias: sin resultados» y concluiría
     // que no hay ninguno, cuando lo que pasa es que no tiene permiso.
     for (const rol of ['admin', 'gerencia', 'recepcion', 'housekeeping'] as const) {
       const { resultado } = await buscar(rol, 'sur')
@@ -308,7 +302,6 @@ describe('buscarGlobal · tope y total', () => {
       resultado.reservas.length +
         resultado.huespedes.length +
         resultado.agencias.length +
-        resultado.proveedores.length +
         resultado.unidades.length +
         resultado.tipos_unidad.length +
         resultado.productos.length +

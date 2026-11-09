@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
  *
  * ── Por qué este endpoint existe ────────────────────────────────────────────
  *
- * Las cuatro tareas que dispara son funciones de Postgres que sólo corría
+ * Las tres tareas que dispara son funciones de Postgres que sólo corría
  * pg_cron (migración 0027), programado dentro de un bloque que **se traga el
  * fallo**: si la extensión no quedó activa, nada protesta y las tareas no
  * corren. La más cara es `expirar_reservas_pendientes`, que es la que libera
@@ -96,7 +96,7 @@ describe('cron de mantenimiento', () => {
     expect((await POST(await pedido())).status).toBe(401)
   })
 
-  it('con el secreto correcto corre las cuatro funciones de Postgres', async () => {
+  it('con el secreto correcto corre las tres funciones de Postgres', async () => {
     const { POST } = await import('@/app/(back-api)/api/cron/mantenimiento/route')
 
     const r = await POST(await pedido(`Bearer ${SECRETO}`))
@@ -104,7 +104,6 @@ describe('cron de mantenimiento', () => {
     expect(r.status).toBe(200)
     expect(llamadas.map((l) => l.rpc)).toEqual([
       'expirar_reservas_pendientes',
-      'vencer_comprobantes_proveedor',
       'generar_mantenimiento_preventivo',
       // La que nunca se había programado: sin ella la tabla `errores` crece sin techo.
       'purgar_errores',
@@ -125,14 +124,14 @@ describe('cron de mantenimiento', () => {
     único de las cinco que le cuesta plata al hotel.
   */
   it('una tarea que falla no frena a las otras', async () => {
-    fallan.add('vencer_comprobantes_proveedor')
+    fallan.add('generar_mantenimiento_preventivo')
     const { POST } = await import('@/app/(back-api)/api/cron/mantenimiento/route')
 
     const r = await POST(await pedido(`Bearer ${SECRETO}`))
     const cuerpo = (await r.json()) as { ok: boolean; fallidas: string[]; hechas: Record<string, number> }
 
-    expect(llamadas, 'la tarea que falló cortó las siguientes').toHaveLength(4)
-    expect(cuerpo.fallidas).toEqual(['vencer_comprobantes_proveedor'])
+    expect(llamadas, 'la tarea que falló cortó las siguientes').toHaveLength(3)
+    expect(cuerpo.fallidas).toEqual(['generar_mantenimiento_preventivo'])
     expect(cuerpo.hechas.purgar_errores, 'la tarea posterior no llegó a correr').toBe(1)
     // 500 para que Vercel lo marque y lo reintente: las que sí corrieron son
     // idempotentes, así que reintentar no duplica nada.
@@ -141,15 +140,15 @@ describe('cron de mantenimiento', () => {
   })
 
   it('una tarea que LANZA en vez de devolver { error } tampoco frena a las demás', async () => {
-    lanzan.add('vencer_comprobantes_proveedor')
+    lanzan.add('generar_mantenimiento_preventivo')
     const { POST } = await import('@/app/(back-api)/api/cron/mantenimiento/route')
 
     const r = await POST(await pedido(`Bearer ${SECRETO}`))
     const cuerpo = (await r.json()) as { fallidas: string[]; hechas: Record<string, number> }
 
-    expect(cuerpo.fallidas).toEqual(['vencer_comprobantes_proveedor'])
-    // Las cuatro funciones de Postgres se intentaron igual, pese a la excepción.
-    expect(llamadas).toHaveLength(4)
+    expect(cuerpo.fallidas).toEqual(['generar_mantenimiento_preventivo'])
+    // Las tres funciones de Postgres se intentaron igual, pese a la excepción.
+    expect(llamadas).toHaveLength(3)
     expect(cuerpo.hechas.purgar_errores).toBe(1)
     expect(r.status).toBe(500)
   })
@@ -164,6 +163,6 @@ describe('cron de mantenimiento', () => {
     )
 
     expect(r.status).toBe(200)
-    expect(llamadas).toHaveLength(4)
+    expect(llamadas).toHaveLength(3)
   })
 })

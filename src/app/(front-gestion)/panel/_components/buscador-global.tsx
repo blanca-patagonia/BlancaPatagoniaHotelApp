@@ -52,7 +52,6 @@ interface RespuestaBusqueda {
   reservas: Opcion[]
   huespedes: Opcion[]
   agencias: Opcion[]
-  proveedores: Opcion[]
 }
 
 interface Grupo {
@@ -71,7 +70,6 @@ function grupos(r: RespuestaBusqueda | null): Grupo[] {
     { titulo: 'Reservas', opciones: r.reservas },
     { titulo: 'Huéspedes', opciones: r.huespedes },
     { titulo: 'Agencias y empresas', opciones: r.agencias },
-    { titulo: 'Proveedores', opciones: r.proveedores },
   ].filter((g) => g.opciones.length > 0)
 }
 

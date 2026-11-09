@@ -295,47 +295,6 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
-    area: 'proveedores',
-    resumen: 'A quiénes les compramos y cuánto les debemos.',
-    pasos: [
-      {
-        titulo: 'Cargar una factura',
-        detalle:
-          'Registrá el comprobante con su vencimiento. De esa fecha sale el informe de qué hay que pagar primero.',
-      },
-      {
-        titulo: 'La moneda del comprobante',
-        detalle:
-          'Cargá el importe tal como figura en el papel y elegí la moneda al lado. El saldo del proveedor se lleva en dólares, así que el sistema convierte solo con la cotización del día y guarda las dos cosas. Antes había que hacer la cuenta a mano, y una factura en pesos cargada como dólares multiplicaba la deuda por mil.',
-      },
-      {
-        titulo: 'Sacarle una foto a la factura',
-        detalle:
-          'En "Comprobantes recibidos" apretás "Sacar foto", el teléfono abre la cámara y se lee el código QR que toda factura electrónica trae desde 2021. Los datos entran solos: CUIT, número, fecha, importe y CAE. No es que el sistema "lea" la factura adivinando: son los datos que el proveedor le informó a ARCA.',
-      },
-      {
-        titulo: 'La foto no se guarda',
-        detalle:
-          'El código se lee en el mismo teléfono y al sistema viaja sólo el texto del QR. La imagen no se sube ni queda archivada en ninguna parte.',
-      },
-      {
-        titulo: 'Cargar es una cosa; imputar es otra',
-        detalle:
-          'Escanear la factura la registra. Recién cuando apretás "Imputar" pasa a la cuenta corriente del proveedor y suma a lo que el hotel debe. Es a propósito: una factura puede llegar con un error o corresponder a otro lado, y no todo lo que alguien apunta con la cámara tiene que entrar al libro mayor.',
-      },
-      {
-        titulo: 'Escanear dos veces no duplica',
-        detalle:
-          'Si la primera foto sale movida y volvés a intentar, el sistema reconoce que es el mismo comprobante y avisa en vez de cargarlo de nuevo.',
-      },
-      {
-        titulo: 'Bajarlo a Excel',
-        detalle:
-          'El botón "Bajar a Excel (CSV)" arma el archivo con todos los comprobantes del filtro, listo para abrir en Excel o mandarle al contador. Incluye si cada uno se leyó del QR o se cargó a mano.',
-      },
-    ],
-  },
-  {
     area: 'respaldos',
     resumen: 'Cómo bajar una copia de los datos, y quién se ocupa de los backups.',
     pasos: [
@@ -655,7 +614,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Elegir el rol',
         detalle:
-          'Recepción no ve facturación ni proveedores; housekeeping ve solo su trabajo. Dar de más es el error más caro de deshacer.',
+          'Recepción no ve facturación ni configuración; housekeeping ve solo su trabajo. Dar de más es el error más caro de deshacer.',
       },
     ],
   },

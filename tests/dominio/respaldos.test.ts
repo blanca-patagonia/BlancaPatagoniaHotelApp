@@ -106,14 +106,6 @@ describe('TABLAS_RESPALDO', () => {
     expect(nombres.indexOf('facturas')).toBeLessThan(nombres.indexOf('notas_credito'))
   })
 
-  it('incluye los comprobantes de proveedores, que no están en otro lado', () => {
-    const nombres = TABLAS_RESPALDO.map((t) => t.tabla)
-    expect(nombres).toContain('comprobantes_recibidos')
-    expect(nombres.indexOf('movimientos_proveedor')).toBeLessThan(
-      nombres.indexOf('comprobantes_recibidos'),
-    )
-  })
-
   it('cada tabla se lee con un orden fijo', () => {
     // La lectura va en tramos de mil: sin orden, dos tramos pueden pisarse.
     for (const t of TABLAS_RESPALDO) expect(ordenDeLectura(t).length).toBeGreaterThan(0)

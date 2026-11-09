@@ -45,7 +45,6 @@ export default async function BuscarPage({
     huespedes,
     huespedesAproximados,
     agencias,
-    proveedores,
     unidades,
     tipos_unidad,
     productos,
@@ -264,30 +263,6 @@ export default async function BuscarPage({
                     className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
                   >
                     <span className="min-w-0 flex-1 font-medium text-stone-800">{a.nombre}</span>
-                    <Icono nombre="siguiente" tam={16} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Tarjeta>
-        )}
-
-        {proveedores.length > 0 && (
-          <Tarjeta
-            titulo={ETIQUETAS_AMBITO.proveedores}
-            descripcion={`${proveedores.length} ${proveedores.length === 1 ? 'encontrado' : 'encontrados'}`}
-          >
-            <ul>
-              {proveedores.map((p) => (
-                <li key={p.id} className="border-t border-stone-100 first:border-0">
-                  <Link
-                    href={`/panel/proveedores/${p.id}`}
-                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="font-medium text-stone-800">{p.nombre}</span>
-                      {p.rubro && <span className="block text-sm text-stone-500">{p.rubro}</span>}
-                    </span>
                     <Icono nombre="siguiente" tam={16} />
                   </Link>
                 </li>

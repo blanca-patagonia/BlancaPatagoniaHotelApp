@@ -14,7 +14,6 @@ import {
   inicioDelDiaHotel,
   fechaHoraHotel,
 } from '@/lib/fechas'
-import { porVencer, type ComprobanteDeuda } from '@/lib/domain/antiguedad'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { areasDe, esDireccion, estaOculta, type Area } from '@/lib/domain/permisos'
 import { cronsAtrasados } from '@/lib/domain/crons'
@@ -246,7 +245,6 @@ export default async function DashboardPage() {
     { count: objetosGuardados, error: eObjetos },
     { count: conflictosCanal, error: eConflictos },
     { data: stockBajo, error: eStock },
-    { data: comprobantes, error: eComprobantes },
     { count: avisosFijados, error: eAvisos },
     { cantidad: consumosSinFacturar, error: eConsumosSinFacturar },
     { cantidad: saldosPendientes, error: eSaldosPendientes },
@@ -301,11 +299,6 @@ export default async function DashboardPage() {
           .select('*', { count: 'exact', head: true })
           .eq('estado', 'guardado'),
     supabase.from('productos_servicios').select('nombre, stock, stock_minimo').eq('activo', true),
-    supabase
-      .from('movimientos_proveedor')
-      .select('tipo, monto, estado, vencimiento')
-      .eq('tipo', 'cargo')
-      .in('estado', ['pendiente', 'vencido']),
     // Avisos fijados por el equipo: son los que alguien marcó a propósito
     // como «esto hay que verlo», a diferencia del resto del tablón que se lee
     // por orden cronológico.
@@ -335,7 +328,6 @@ export default async function DashboardPage() {
   registrarFalla(eObjetos, 'dashboard:objetos_guardados')
   registrarFalla(eConflictos, 'dashboard:conflictos_canal')
   registrarFalla(eStock, 'dashboard:stock_bajo')
-  registrarFalla(eComprobantes, 'dashboard:comprobantes_proveedor')
   registrarFalla(eAvisos, 'dashboard:avisos_fijados')
   registrarFalla(eConsumosSinFacturar, 'dashboard:consumos_sin_facturar')
   registrarFalla(eSaldosPendientes, 'dashboard:saldos_pendientes')
@@ -370,11 +362,6 @@ export default async function DashboardPage() {
     (stockBajo ?? []) as { stock: number | null; stock_minimo: number | null; nombre: string }[],
   )
 
-  // Facturas de proveedores que vencen esta semana (o ya vencieron).
-  const comprobantesVivos = (comprobantes ?? []) as ComprobanteDeuda[]
-  const vencenPronto = porVencer(comprobantesVivos, hoy, 7).length
-  const yaVencidos = comprobantesVivos.filter((c) => c.estado === 'vencido').length
-
   const areas = areasDe(sesion.rol)
   const puede = (a: Area) => areas.includes(a)
 
@@ -387,20 +374,6 @@ export default async function DashboardPage() {
     vence, y el dinero antes que un paraguas olvidado.
   */
   const pendientes: { href: string; icono: NombreIcono; cantidad: number; texto: string }[] = [
-    {
-      area: 'proveedores' as Area,
-      href: '/panel/proveedores',
-      icono: 'proveedores' as NombreIcono,
-      cantidad: yaVencidos,
-      texto: yaVencidos === 1 ? 'factura de proveedor vencida' : 'facturas de proveedor vencidas',
-    },
-    {
-      area: 'proveedores' as Area,
-      href: '/panel/proveedores',
-      icono: 'proveedores' as NombreIcono,
-      cantidad: vencenPronto,
-      texto: 'por vencer esta semana',
-    },
     {
       area: 'reservas' as Area,
       href: '/panel/reservas',
@@ -555,28 +528,14 @@ export default async function DashboardPage() {
       {((mantPendiente ?? 0) > 0 ||
         (objetosGuardados ?? 0) > 0 ||
         faltantes.length > 0 ||
-        vencenPronto > 0 ||
-        yaVencidos > 0 ||
         eConflictos ||
-        eStock ||
-        eComprobantes) && (
+        eStock) && (
         <div className="mt-4 flex flex-wrap gap-2">
-          {(eStock || eComprobantes) && puede('proveedores') && (
+          {eStock && puede('config') && (
             <span className="inline-flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 ring-1 ring-stone-200">
               <Icono nombre="alerta" tam={16} />
-              No se pudo revisar el stock ni los vencimientos de proveedores en este momento
+              No se pudo revisar el stock en este momento
             </span>
-          )}
-          {(vencenPronto > 0 || yaVencidos > 0) && puede('proveedores') && (
-            <Link
-              href="/panel/proveedores"
-              className="inline-flex items-center gap-2 rounded-xl bg-lenga-50 px-3 py-2 text-sm text-lenga-900 ring-1 ring-lenga-200 transition hover:bg-lenga-100"
-            >
-              <Icono nombre="proveedores" tam={16} />
-              {yaVencidos > 0 && `${yaVencidos} factura(s) vencida(s)`}
-              {yaVencidos > 0 && vencenPronto > 0 && ' · '}
-              {vencenPronto > 0 && `${vencenPronto} vence(n) esta semana`}
-            </Link>
           )}
           {(mantPendiente ?? 0) > 0 && puede('mantenimiento') && (
             <Link

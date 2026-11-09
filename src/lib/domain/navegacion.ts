@@ -13,7 +13,7 @@
  *  · `Operación` — lo que se toca con un huésped enfrente o al teléfono.
  *  · `Unidades` — el estado físico de la casa, que mira otra gente y en otro
  *    momento del día (housekeeping y mantenimiento, más cocina).
- *  · `Comercial` — lo que se hace con terceros: agencias, proveedores, contratos.
+ *  · `Comercial` — lo que se hace con terceros: agencias y canales de venta.
  *  · `Equipo` — comunicación interna.
  *  · `Administración` — lo que mira gerencia y lo que se configura una vez.
  *
@@ -46,7 +46,7 @@ export interface GrupoNavegacion {
 export const GRUPOS: readonly GrupoNavegacion[] = [
   { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
-  { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'canales'] },
+  { titulo: 'Comercial', areas: ['agencias', 'canales'] },
   // El registro de envíos va en Equipo, junto al tablón: las dos responden la
   // misma pregunta —«¿esto se avisó?»— desde los dos lados, el interno y el que
   // salió al huésped.
@@ -105,7 +105,6 @@ export const RUTA_AREA: Record<Area, string> = {
   objetos_perdidos: '/panel/objetos-perdidos',
   avisos: '/panel/avisos',
   agencias: '/panel/agencias',
-  proveedores: '/panel/proveedores',
   canales: '/panel/canales',
   auditoria: '/panel/auditoria',
   errores: '/panel/errores',

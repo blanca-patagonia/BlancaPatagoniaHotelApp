@@ -2,7 +2,7 @@
 /**
  * Verifica y limpia datos de prueba con prefijos QA/ZZZ/TEST.
  *
- * La tarea #22 limpió huéspedes, reservas, agencias y proveedores,
+ * La tarea #22 limpió huéspedes, reservas, agencias,
  * pero el otro Claude encontró un tipo "QA Verif Tipo" que quedó.
  * Este script busca exhaustivamente en todas las tablas con datos
  * de prueba potenciales.
@@ -59,11 +59,6 @@ const busquedas = [
   },
   {
     tabla: 'agencias',
-    campos: 'id, nombre',
-    filtro: 'or(nombre.ilike.%QA%,nombre.ilike.%ZZZ%,nombre.ilike.%TEST%)',
-  },
-  {
-    tabla: 'proveedores',
     campos: 'id, nombre',
     filtro: 'or(nombre.ilike.%QA%,nombre.ilike.%ZZZ%,nombre.ilike.%TEST%)',
   },
@@ -131,7 +126,6 @@ const orden = [
   'productos_servicios',
   'promociones',
   'agencias',
-  'proveedores',
   'tipos_unidad',       // al final porque unidades depende de esto
 ]
 

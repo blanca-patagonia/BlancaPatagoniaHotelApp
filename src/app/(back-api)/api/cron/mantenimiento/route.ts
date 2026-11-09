@@ -9,7 +9,7 @@ import { DIAS_EXPIRACION } from '@/lib/domain/recordatorios'
  *
  * ── El problema que resuelve ────────────────────────────────────────────────
  *
- * Las cuatro tareas son funciones de Postgres que existen desde
+ * Las tres tareas son funciones de Postgres que existen desde
  * hace fases y **las dispara únicamente pg_cron** (migración 0027), programado
  * dentro de un `do $$ ... exception when others` que **se traga el fallo**: si
  * la extensión no quedó activa, la migración no protesta y las tareas
@@ -31,7 +31,7 @@ import { DIAS_EXPIRACION } from '@/lib/domain/recordatorios'
  * `lib/registro.ts`— así que «se expiraron 3 reservas» y «la expiración falló»
  * son dos cosas que se ven en `/panel/errores`.
  *
- * ⚠️ **Convivir con pg_cron es seguro**: las cuatro son idempotentes. Expirar dos
+ * ⚠️ **Convivir con pg_cron es seguro**: las tres son idempotentes. Expirar dos
  * veces no expira de más —la segunda corrida no encuentra nada vencido— y purgar
  * dos veces borra lo mismo. Si en el proyecto hosted pg_cron está activo, esto es
  * una red; si no lo está, es el único camino.
@@ -67,11 +67,6 @@ const TAREAS: readonly Tarea[] = [
     rpc: 'expirar_reservas_pendientes',
     args: { p_dias: DIAS_EXPIRACION },
     unidad: 'reservas liberadas',
-  },
-  {
-    nombre: 'vencer_comprobantes_proveedor',
-    rpc: 'vencer_comprobantes_proveedor',
-    unidad: 'comprobantes vencidos',
   },
   {
     nombre: 'generar_mantenimiento_preventivo',

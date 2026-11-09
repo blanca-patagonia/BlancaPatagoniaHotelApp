@@ -98,31 +98,6 @@ describe.skipIf(!hayDB)('Server Actions · eliminar fotos adjuntas', () => {
     expect(rutasEliminadas).toEqual([])
   })
 
-  it('eliminarFotoProveedor saca la ruta del arreglo y borra del bucket', async () => {
-    const { eliminarFotoProveedor } = await import('@/app/(front-gestion)/panel/proveedores/actions')
-
-    const { data } = await ctx.db
-      .from('proveedores')
-      .insert({ nombre: `Proveedor test ${ctx.sufijo}`, fotos: ['proveedores/habilitacion.pdf'] })
-      .select('id')
-      .single()
-    const proveedorId = (data as { id: string }).id
-    ctx.aBorrar.push({ tabla: 'proveedores', id: proveedorId })
-
-    const destino = await destinoDe(() =>
-      eliminarFotoProveedor(formulario({ proveedor_id: proveedorId, ruta: 'proveedores/habilitacion.pdf' })),
-    )
-
-    expect(destino).toBe(`/panel/proveedores/${proveedorId}?ok=foto_eliminada`)
-
-    const { data: actual } = await ctx.db
-      .from('proveedores')
-      .select('fotos')
-      .eq('id', proveedorId)
-      .single()
-    expect((actual as { fotos: string[] }).fotos).toEqual([])
-  })
-
   it('eliminarComprobantePagoAgencia limpia la columna sin borrar el movimiento', async () => {
     const { eliminarComprobantePagoAgencia } = await import('@/app/(front-gestion)/panel/agencias/actions')
 

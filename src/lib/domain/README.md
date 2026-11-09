@@ -53,7 +53,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `wsfev1.ts` | Traducción del comprobante al formato WSFEv1 de ARCA |
 | `exencion-iva.ts` | Exención de IVA al turista del exterior — se deriva, no se tilda (ADR 0024) |
 | `libro-ventas.ts` | Libro de ventas del mes: facturas y notas de crédito (en negativo), neto gravado y exento |
-| `comprobante-qr.ts` | Lectura del QR de una factura recibida (ADR 0031) |
 | `cuentas.ts` | Cuentas corrientes de agencias y empresas |
 | `antiguedad.ts` | Antigüedad de saldos |
 

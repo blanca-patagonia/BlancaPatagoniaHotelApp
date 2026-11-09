@@ -18,7 +18,6 @@ export const AREAS = [
   'objetos_perdidos',
   'avisos',
   'agencias',
-  'proveedores',
   'canales',
   'auditoria',
   'errores',
@@ -44,7 +43,6 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   objetos_perdidos: 'Objetos perdidos',
   avisos: 'Avisos',
   agencias: 'Agencias',
-  proveedores: 'Proveedores',
   canales: 'Canales de venta',
   auditoria: 'Auditoría',
   errores: 'Errores del sistema',
@@ -68,7 +66,7 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   gerencia: [
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'agencias',
-    'proveedores', 'canales', 'reportes', 'config',
+    'canales', 'reportes', 'config',
     // Gerencia ve los errores del sistema porque es quien decide si hay que
     // llamar a alguien. La política RLS de `errores` (migración 0068) declara
     // los mismos dos roles: si acá se agregara uno más, vería la pantalla vacía.

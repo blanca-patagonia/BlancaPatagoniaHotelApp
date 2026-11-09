@@ -4,11 +4,11 @@ import { join } from 'node:path'
 import { TABLAS_RESPALDO } from '@/lib/domain/respaldos'
 
 /**
- * Contrato: las columnas que exporta el respaldo para `agencias` y
- * `proveedores` son exactamente las que la migración 0060 le deja leer al
- * staff. Con `select *` la lectura fallaba por permiso y el respaldo salía sin
- * esas tablas; con una columna de más, fallaría igual; con el `token`, se
- * filtraría una credencial de socio.
+ * Contrato: las columnas que exporta el respaldo para `agencias` son
+ * exactamente las que la migración 0060 le deja leer al staff. Con `select *`
+ * la lectura fallaba por permiso y el respaldo salía sin esa tabla; con una
+ * columna de más, fallaría igual; con el `token`, se filtraría una credencial
+ * de socio.
  */
 const M0060 = readFileSync(
   join(process.cwd(), 'supabase', 'migrations', '0060_tokens_de_socio_fuera_del_alcance_del_staff.sql'),
@@ -21,8 +21,8 @@ function concedidas(tabla: string): string[] {
   return m[1].split(',').map((c) => c.trim()).filter(Boolean).sort()
 }
 
-describe('contrato: el respaldo exporta sólo las columnas legibles de los socios', () => {
-  for (const tabla of ['agencias', 'proveedores']) {
+describe('contrato: el respaldo exporta sólo las columnas legibles de las agencias', () => {
+  for (const tabla of ['agencias']) {
     it(`${tabla}: mismas columnas que la 0060, y nunca el token`, () => {
       const definicion = TABLAS_RESPALDO.find((t) => t.tabla === tabla)
       expect(definicion?.columnas, `${tabla} necesita lista de columnas`).toBeDefined()

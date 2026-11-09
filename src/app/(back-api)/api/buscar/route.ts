@@ -83,12 +83,6 @@ export async function GET(req: Request) {
         titulo: a.nombre,
         detalle: ETIQUETAS_AMBITO.agencias,
       })),
-      proveedores: resultado.proveedores.map((p) => ({
-        id: `proveedor-${p.id}`,
-        href: `/panel/proveedores/${p.id}`,
-        titulo: p.nombre,
-        detalle: p.rubro || ETIQUETAS_AMBITO.proveedores,
-      })),
       unidades: resultado.unidades.map((u) => ({
         id: `unidad-${u.id}`,
         href: `/panel/config/unidades`,

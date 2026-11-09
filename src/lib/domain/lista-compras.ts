@@ -3,8 +3,7 @@
  *
  * Qué es y qué no es: una lista de trabajo para ir anotando, con el tiempo,
  * qué hay que comprarle al supermercado para el restaurante — no el catálogo
- * de venta al huésped (`productos_servicios`) ni un gasto ya facturado
- * (`movimientos_proveedor`). El precio es una estimación para presupuestar la
+ * de venta al huésped (`productos_servicios`) ni un gasto ya facturado. El precio es una estimación para presupuestar la
  * compra, no un importe fiscal: por eso puede faltar, y por eso no se valida
  * como los importes de `pagos`/`facturas`.
  */

@@ -84,11 +84,6 @@ describe('exportar: los filtros de la pantalla viajan al archivo', () => {
     expect(condicion).toContain('doc_numero.ilike')
   })
 
-  it('comprobantes: la vista «sin imputar»', async () => {
-    await exportar('comprobantes', '?vista=sin_imputar')
-    expect(metodos('comprobantes_recibidos', 'is')).toEqual([['movimiento_id', null]])
-  })
-
   it('el orden siempre termina en id, para que los tramos de mil no se pisen', async () => {
     await exportar('huespedes')
     const ordenes = metodos('huespedes', 'order').map((a) => a[0])

@@ -34,7 +34,7 @@ export interface TablaRespaldo {
   /**
    * Columnas a exportar, cuando el staff NO puede leer la tabla entera.
    *
-   * `agencias` y `proveedores` tienen el `select` revocado a nivel tabla y
+   * `agencias` tiene el `select` revocado a nivel tabla y
    * repuesto columna por columna sin el `token` (migración 0060). Con `*` la
    * lectura fallaba por permiso, el respaldo salía SIN esas dos tablas y el
    * aviso decía —falsamente— que habían superado el tope de filas.
@@ -60,7 +60,6 @@ export function ordenDeLectura(t: TablaRespaldo): readonly string[] {
 /** Las columnas legibles por `authenticated` según la 0060 (sin `token`). */
 const COLUMNAS_AGENCIAS =
   'id, nombre, tipo, cuit, email, telefono, descuento_pct, activo, creado_en, condicion_iva, etapa, notas_comerciales'
-const COLUMNAS_PROVEEDORES = 'id, nombre, rubro, cuit, email, telefono, activo, creado_en'
 
 /**
  * Qué se exporta y por qué.
@@ -130,12 +129,6 @@ export const TABLAS_RESPALDO: readonly TablaRespaldo[] = [
     datosPersonales: true,
     columnas: COLUMNAS_AGENCIAS,
   },
-  {
-    tabla: 'proveedores',
-    porQue: 'A quién le debe el hotel.',
-    datosPersonales: true,
-    columnas: COLUMNAS_PROVEEDORES,
-  },
 
   // ── Operación ──
   {
@@ -184,16 +177,6 @@ export const TABLAS_RESPALDO: readonly TablaRespaldo[] = [
   {
     tabla: 'movimientos_cuenta',
     porQue: 'La cuenta corriente de las agencias.',
-    datosPersonales: false,
-  },
-  {
-    tabla: 'movimientos_proveedor',
-    porQue: 'Las cuentas por pagar.',
-    datosPersonales: false,
-  },
-  {
-    tabla: 'comprobantes_recibidos',
-    porQue: 'Las facturas de proveedores cargadas por su QR, con CAE: el respaldo del gasto ante el contador.',
     datosPersonales: false,
   },
   {

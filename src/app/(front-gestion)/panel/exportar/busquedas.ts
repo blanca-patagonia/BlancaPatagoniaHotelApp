@@ -27,19 +27,13 @@ export function condicionNombre(termino: string): string {
   return `apellido.ilike.${p},nombre.ilike.${p}`
 }
 
-/** Proveedores: nombre o rubro. Para `.or()`. */
-export function busquedaProveedores(termino: string): string {
-  const p = patronOr(termino)
-  return `nombre.ilike.${p},rubro.ilike.${p}`
-}
-
 /** Órdenes de mantenimiento: título o descripción. Para `.or()`. */
 export function busquedaOrdenes(termino: string): string {
   const p = patronOr(termino)
   return `titulo.ilike.${p},descripcion.ilike.${p}`
 }
 
-/** Patrón de un `.ilike()` suelto (agencias, gastos, comprobantes). */
+/** Patrón de un `.ilike()` suelto (agencias). */
 export function contiene(termino: string): string {
   return `%${termino}%`
 }
