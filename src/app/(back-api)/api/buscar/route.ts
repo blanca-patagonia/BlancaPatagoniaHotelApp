@@ -96,7 +96,7 @@ export async function GET(req: Request) {
       })),
       productos: resultado.productos.map((p) => ({
         id: `producto-${p.id}`,
-        href: `/panel/punto_venta`,
+        href: `/panel/punto-venta`,
         titulo: p.nombre,
         detalle: [p.departamento?.nombre, `USD ${Number(p.precio).toFixed(2)}`]
           .filter(Boolean)
