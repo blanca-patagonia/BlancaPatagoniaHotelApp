@@ -21,8 +21,8 @@ import {
  * Antes todos los informes vivían en esta única pantalla, con **un solo filtro
  * de mes** para los seis. El hotel pidió poder usar varios a la vez sin cerrar
  * ninguno —en WinPAX las ventanas son modales— y acá el problema equivalente
- * era ése: no se podía mirar la venta por categoría de agosto al lado de la
- * rentabilidad por canal de septiembre.
+ * era ése: no se podía mirar la venta por categoría de agosto al lado de
+ * la facturación de septiembre.
  *
  * Ahora cada informe tiene su propia dirección y sus propios filtros. Esta
  * pantalla queda como punto de partida: los tres indicadores del mes de un

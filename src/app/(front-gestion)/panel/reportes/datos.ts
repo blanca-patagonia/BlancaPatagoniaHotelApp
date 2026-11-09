@@ -221,34 +221,3 @@ export async function traerEncuestas(): Promise<
   )
 }
 
-export interface FilaResumenCanal {
-  canal: string
-  reservas_totales: number
-  reservas_vendidas: number
-  bruto: number | string
-  noches: number
-  comision_informada: number | string
-  sin_comision_informada: number
-}
-
-/**
- * Rentabilidad por canal del mes, desde la vista `resumen_canal_mes` (0055).
- *
- * NO sale de las reservas cargadas en memoria por dos razones: esa agregación
- * depende del techo de 1000 filas, y la comisión vive en `canal_cargos`, que no
- * está en aquella consulta. La vista imputa por fecha de **salida**, que es
- * cuando se consume la estadía y el criterio con el que el canal factura.
- */
-export async function traerRentabilidadCanal(
-  mes: string,
-): Promise<{ filas: FilaResumenCanal[]; error: string | null }> {
-  const supabase = await crearClienteServidor()
-  const { data, error } = await supabase
-    .from('resumen_canal_mes')
-    .select(
-      'canal, reservas_totales, reservas_vendidas, bruto, noches, comision_informada, sin_comision_informada',
-    )
-    .eq('mes', `${mes}-01`)
-
-  return { filas: (data ?? []) as unknown as FilaResumenCanal[], error: error?.message ?? null }
-}

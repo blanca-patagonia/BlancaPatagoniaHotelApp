@@ -38,16 +38,9 @@ describe('configuración de los límites', () => {
   it('la reserva pública es el límite más ajustado de las entradas de escritura', () => {
     // Cada reserva pendiente bloquea una unidad por 5 días y el hotel tiene 15:
     // es la acción donde un script hace daño real más rápido.
-    for (const a of ['ical', 'webhook_pago', 'login'] as AccionLimitada[]) {
+    for (const a of ['webhook_pago', 'login'] as AccionLimitada[]) {
       expect(LIMITES.reserva_publica.maximo).toBeLessThan(LIMITES[a].maximo)
     }
-  })
-
-  it('el feed iCal tolera a las tres OTAs sondeando todos los tipos cada hora', () => {
-    // 11 tipos de unidad × 3 canales = 33 lecturas legítimas por hora. Un techo
-    // por debajo de eso cortaría la sincronización, que es el daño que el feed
-    // viene a evitar.
-    expect(LIMITES.ical.maximo).toBeGreaterThan(33)
   })
 })
 

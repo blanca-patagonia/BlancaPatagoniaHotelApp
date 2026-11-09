@@ -16,14 +16,12 @@ export type GrupoIntegracion =
   | 'sistema'
   | 'pagos'
   | 'correo'
-  | 'canales_venta'
   | 'administracion'
 
 export const ETIQUETAS_GRUPO: Record<GrupoIntegracion, string> = {
   sistema: 'Base del sistema',
   pagos: 'Cobros',
   correo: 'Correo',
-  canales_venta: 'Canales de venta (Booking, Expedia)',
   administracion: 'Facturación, divisas y firma',
 }
 
@@ -31,7 +29,6 @@ export const ORDEN_GRUPOS: readonly GrupoIntegracion[] = [
   'sistema',
   'pagos',
   'correo',
-  'canales_venta',
   'administracion',
 ]
 
@@ -179,27 +176,6 @@ export const INTEGRACIONES: readonly Integracion[] = [
     ],
     webhook: { ruta: '/api/webhooks/email/resend', nota: 'Eventos: email.delivered, email.bounced, email.complained, email.opened.' },
     probable: true,
-  },
-
-  // ── Canales de venta ──────────────────────────────────────────────────────
-  {
-    id: 'booking',
-    nombre: 'Booking y Expedia',
-    grupo: 'canales_venta',
-    paraQue: 'Traer las reservas de las OTAs y publicarles la disponibilidad.',
-    interruptor: { variable: 'CANAL_PROVIDER', valor: 'booking-ical' },
-    variables: [
-      { nombre: 'BOOKING_ICAL_FEEDS', obligatoria: false, secreta: true, ayuda: 'Pares CODIGO_TIPO=url de los calendarios iCal que exporta el extranet.', ejemplo: 'DBL=https://admin.booking.com/…/ical.ics' },
-    ],
-    siFalta: 'Las reservas de Booking se cargan a mano o por el informe CSV.',
-    pasos: [
-      'Extranet de Booking → Tarifas y disponibilidad → Sincronizar calendarios → Exportar: copiar el link de cada tipo.',
-      'CANAL_PROVIDER=booking-ical.',
-      'Para evitar el overbooking de verdad: contratar un channel manager y conectarlo desde Canales de venta → Externos (ADR 0035).',
-    ],
-    limitacion:
-      'Booking y Expedia NO dan API a un hotel suelto: sólo a Connectivity Partners. Con iCal se LEE, no se publica disponibilidad, así que NO evita el overbooking. La solución es un channel manager (ADR 0021).',
-    probable: false,
   },
 
   // ── Administración ────────────────────────────────────────────────────────

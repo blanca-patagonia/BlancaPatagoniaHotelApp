@@ -11,8 +11,7 @@ import { puedeAcceder } from '@/lib/domain/permisos'
 /**
  * Da de alta un tipo de alojamiento (categoría comercial, no una unidad física).
  *
- * `codigo` es la clave que ya usan `lib/domain/catalogo.ts` (el mapa `FOTOS`) y
- * los mapeos de canal (`canal_tipos`, `canal_mapeos_columnas`): una vez creado
+ * `codigo` es la clave que ya usan `lib/domain/catalogo.ts` (el mapa `FOTOS`): una vez creado
  * no se ofrece editarlo desde acá — ver `editarTipoUnidad`, que a propósito no
  * lo toca —, así que tiene que quedar bien desde el alta.
  */
@@ -92,8 +91,7 @@ export async function crearTipoUnidad(
  * Edita nombre, descripción y capacidad de un tipo YA existente.
  *
  * No recibe `codigo`: cambiarlo rompería en silencio el mapa `FOTOS` de
- * `lib/domain/catalogo.ts` (que indexa por código) y los mapeos de canal, que
- * también lo usan como clave estable. Si el hotel necesita cambiar un código,
+ * `lib/domain/catalogo.ts` (que indexa por código). Si el hotel necesita cambiar un código,
  * es una migración — igual que hizo la 0106 al renombrar el inventario —, no
  * un campo de este formulario.
  */

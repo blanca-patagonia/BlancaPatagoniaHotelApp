@@ -16,7 +16,7 @@
  * en una y falta en la otra.
  */
 
-export type IdInforme = 'ocupacion' | 'categorias' | 'canales' | 'satisfaccion' | 'estados' | 'facturacion'
+export type IdInforme = 'ocupacion' | 'categorias' | 'satisfaccion' | 'estados' | 'facturacion'
 
 export interface Informe {
   id: IdInforme
@@ -47,13 +47,6 @@ export const INFORMES: readonly Informe[] = [
     titulo: 'Venta por categoría',
     descripcion: 'Noches, ingreso, ADR y ocupación de cada tipo de habitación y cabaña.',
     pregunta: '¿Qué tipo de alojamiento nos deja más plata?',
-    porMes: true,
-  },
-  {
-    id: 'canales',
-    titulo: 'Rentabilidad por canal',
-    descripcion: 'Bruto, comisión y neto de cada canal, más el ranking histórico por origen.',
-    pregunta: '¿Qué nos deja cada canal después de su comisión?',
     porMes: true,
   },
   {

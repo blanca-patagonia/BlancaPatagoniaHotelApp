@@ -15,10 +15,8 @@ export type AccionLimitada =
   | 'login'
   | 'encuesta'
   | 'recuperar_password'
-  | 'ical'
   | 'webhook_pago'
   | 'webhook_email'
-  | 'webhook_canal_externo'
   | 'payway_ejecutar_pago'
   | 'pago_portal'
   | 'registro_firma_rechazada'
@@ -93,23 +91,6 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
   },
 
   /*
-    El feed iCal de salida. No filtra datos personales —el archivo dice «ocupado» y
-    nada más— pero cada lectura recorre un año de estadías, así que sin techo la URL
-    es un amplificador gratis para cualquiera que la tenga.
-
-    El techo es alto a propósito. El hotel tiene 11 tipos de unidad, y si Booking,
-    Airbnb y Expedia sondean cada uno todos los feeds una vez por hora son 33
-    lecturas legítimas: un límite ajustado cortaría la sincronización, que es
-    justamente el daño que este feed viene a evitar. Ciento veinte deja margen de
-    sobra y sigue cortando un bucle, que haría miles.
-  */
-  ical: {
-    maximo: 120,
-    minutos: 60,
-    motivo: 'Cada lectura recorre un año de estadías.',
-  },
-
-  /*
     El webhook de pagos, y **solo cuando la firma no valida**.
 
     Esta distinción es la decisión importante del límite, no el número. Un
@@ -132,15 +113,6 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     maximo: 20,
     minutos: 60,
     motivo: 'Martilleo del webhook de pagos por parte de quien no tiene el secreto.',
-  },
-
-  // Mismo criterio que webhook_pago: se cuenta DESPUÉS de rechazar el token,
-  // nunca antes, para no bloquear una racha de reservas legítimas de un
-  // channel manager real (Fase 7, preparación).
-  webhook_canal_externo: {
-    maximo: 20,
-    minutos: 60,
-    motivo: 'Martilleo del webhook de canales externos por parte de quien no tiene el token.',
   },
 
   /*

@@ -53,19 +53,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `wsfev1.ts` | Traducción del comprobante al formato WSFEv1 de ARCA |
 | `exencion-iva.ts` | Exención de IVA al turista del exterior — se deriva, no se tilda (ADR 0024) |
 | `libro-ventas.ts` | Libro de ventas del mes: facturas y notas de crédito (en negativo), neto gravado y exento |
-| `cuentas.ts` | Cuentas corrientes de agencias y empresas |
-
-## Canales de venta (Booking y otros)
-
-| Módulo | Qué decide |
-|---|---|
-| `canales.ts` | Reservas que llegan de un canal externo |
-| `canales-cobro.ts` | Quién cobra una reserva del canal y si ya se cobró |
-| `canales-costos.ts` | Lo que le cuesta al hotel vender por un canal (ADR 0023) |
-| `canal-externo.ts` | Payload del webhook de un channel manager (ADR 0035) |
-| `ari.ts` | Disponibilidad y tarifas que se publican al canal (ADR 0032) |
-| `resenas-canal.ts` | Ligar una reseña del canal con su reserva |
-| `mapeo-columnas.ts` | Mapeo manual de columnas de un informe importado |
 
 ## Operación del hotel
 
@@ -98,7 +85,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 |---|---|
 | `metricas.ts` | Ocupación, ADR y RevPAR por mes — la única definición del sistema |
 | `metricas-categoria.ts` | Venta por categoría de alojamiento |
-| `metricas-canal.ts` | Rentabilidad por canal |
 | `metricas-facturacion.ts` | Facturación por período |
 | `informes.ts` | Catálogo de informes de gestión |
 

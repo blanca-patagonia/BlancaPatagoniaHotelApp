@@ -156,11 +156,6 @@ export const TABLAS_RESPALDO: readonly TablaRespaldo[] = [
       'Las correcciones de las facturas, también con valor fiscal. Sin ellas, las facturas restauradas suman más de lo que el hotel vendió.',
     datosPersonales: true,
   },
-  {
-    tabla: 'canal_reservas',
-    porQue: 'Lo que llegó de Booking, incluido lo que todavía no se importó.',
-    datosPersonales: true,
-  },
 ]
 
 /** Cuántas tablas del respaldo contienen datos personales. */

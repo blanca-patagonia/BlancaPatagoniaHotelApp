@@ -29,7 +29,6 @@ falla si aparece uno sin listar.
 | `payments/` | Pasarelas de pago: MercadoPago, Stripe, Payway y el simulador (ADR 0027) |
 | `facturacion/` | Facturación electrónica y datos del hotel como emisor |
 | `divisas/` | Cotización del dólar, con su cadena de respaldo |
-| `canales/` | Booking y otros canales: CSV, iCal, reseñas y publicación (ADR 0021/0032) |
 | `email/` | Envío de correo: consola o Resend |
 | `notificaciones/` | Bandeja de salida de avisos y recordatorios |
 | `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks, pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
