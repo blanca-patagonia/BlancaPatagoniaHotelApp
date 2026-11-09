@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
  * el alias `@/` ni resuelve extensiones: un `import … from '@/lib/x'` o un
  * `from './y'` sin `.ts` adentro de esos archivos hace explotar el comando, y NADA
  * más del sistema lo nota —la app compila, los tests pasan, el build sale verde—.
- * Se descubriría el día que alguien lo corre para conectar WhatsApp.
+ * Se descubriría el día que alguien lo corre para cargar una clave.
  *
  * Por eso esos archivos, además, no importan `server-only`, ni `next`, ni nada de
  * `node_modules` que Node no pueda cargar solo: la regla es «sin imports», salvo
@@ -46,7 +46,7 @@ describe('los scripts de terminal cargan TypeScript sin compilar', () => {
   it('cargan al menos el catálogo, las pruebas y la conexión', () => {
     const nombres = alcanzables().map((f) => f.replace(RAIZ, ''))
     expect(nombres).toEqual(
-      expect.arrayContaining(['src/lib/domain/integraciones.ts', 'src/lib/integraciones/sondas.ts', 'src/lib/integraciones/meta.ts']),
+      expect.arrayContaining(['src/lib/domain/integraciones.ts', 'src/lib/integraciones/sondas.ts']),
     )
   })
 

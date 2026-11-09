@@ -274,13 +274,6 @@ export default async function NotificacionesPage({
             ))}
           </ul>
 
-          <p className="mb-5 rounded-xl bg-stone-50 px-3.5 py-3 text-sm text-stone-600 ring-1 ring-stone-200">
-            <strong className="text-stone-800">WhatsApp:</strong>{' '}
-            {diagnostico.whatsapp.activo
-              ? `activo con «${diagnostico.whatsapp.proveedor}». Las confirmaciones y los recordatorios de llegada salen por ahí cuando el huésped tiene teléfono cargado.`
-              : 'no está configurado, así que todo sale por correo. No es una falla: es el respaldo, y funciona.'}
-          </p>
-
           <PruebaDeCorreo sugerido={sesion.email ?? ''} />
         </Tarjeta>
       )}

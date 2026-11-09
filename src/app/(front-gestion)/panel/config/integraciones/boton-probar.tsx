@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { conectarBotTelegram, probar, type EstadoPrueba } from './actions'
+import { probar, type EstadoPrueba } from './actions'
 import { botonClases } from '../../_components/ui'
 
 function Resultado({ estado }: { estado: EstadoPrueba }) {
@@ -27,19 +27,6 @@ export function BotonProbar({ id }: { id: string }) {
       <input type="hidden" name="id" value={id} />
       <button type="submit" disabled={probando} className={botonClases('secundario', 'w-full sm:w-auto')}>
         {probando ? 'Probando…' : 'Probar la conexión'}
-      </button>
-      <Resultado estado={estado} />
-    </form>
-  )
-}
-
-/** Registra el webhook del bot en Telegram. */
-export function BotonConectarTelegram() {
-  const [estado, accion, conectando] = useActionState<EstadoPrueba, FormData>(conectarBotTelegram, {})
-  return (
-    <form action={accion}>
-      <button type="submit" disabled={conectando} className={botonClases('primario', 'w-full sm:w-auto')}>
-        {conectando ? 'Conectando…' : 'Conectar el bot'}
       </button>
       <Resultado estado={estado} />
     </form>

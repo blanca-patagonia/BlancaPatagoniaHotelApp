@@ -4,20 +4,18 @@
  * guarda en `.env.local` (ADR 0044).
  *
  *   npm run configurar              → menú con todas las integraciones
- *   npm run configurar -- whatsapp  → directo a una (id del catálogo)
+ *   npm run configurar -- resend  → directo a una (id del catálogo)
  *
  * Qué hace, en orden:
  *   1. Muestra qué ya está cargado y pregunta SÓLO lo que falta.
- *   2. Las claves que INVENTA el hotel (token de verificación de Meta, secreto
- *      de Telegram…) las genera solo: no hace falta abrir `openssl`.
+ *   2. Las claves que INVENTA el hotel (secretos de webhook) las genera solo: no
+ *      hace falta abrir `openssl`.
  *   3. Lo que escribís no se ve en pantalla si es una clave.
  *   4. Prueba la conexión con el proveedor (consulta de sólo lectura) ANTES de
  *      guardar, y si falla pregunta si guardar igual: una clave mal pegada es el
  *      error más común y es mejor enterarse ahora.
  *   5. Guarda en `.env.local` (copia de seguridad en `.env.local.bak`), con
  *      permiso sólo para quien lo creó.
- *   6. Ofrece conectar el canal (registrar el webhook en Meta / Telegram /
- *      Resend) si el sistema ya tiene una dirección pública.
  *
  * ⚠️ Es para correr en TU terminal (`! npm run configurar` desde Claude Code, o
  * en una terminal normal): las claves se escriben acá y no pasan por ningún chat.
@@ -36,18 +34,13 @@ import {
   ETIQUETAS_ESTADO_INTEGRACION,
   INTEGRACIONES,
   diagnosticar,
-  urlPublicaValida,
-  urlWebhook,
 } from '../src/lib/domain/integraciones.ts'
-import { probarIntegracion, tieneSonda, conectarTelegram } from '../src/lib/integraciones/sondas.ts'
-import { conectarInstagram, conectarMessenger, conectarWhatsApp, crearWebhookDeCorreo } from '../src/lib/integraciones/meta.ts'
+import { probarIntegracion, tieneSonda } from '../src/lib/integraciones/sondas.ts'
 
 const ARCHIVO = process.env.ENV_ARCHIVO ?? join(process.cwd(), '.env.local')
 
 /** Variables que inventa el hotel: se ofrecen generadas. Valor = bytes. */
 const GENERABLES = {
-  META_WEBHOOK_VERIFY_TOKEN: 16,
-  TELEGRAM_WEBHOOK_SECRET: 24,
   CRON_SECRET: 32,
   PAYWAY_INTERNAL_SECRET: 32,
 }
@@ -210,44 +203,6 @@ async function configurar(i, entorno) {
   } else if (Object.keys(nuevas).length === 0) {
     console.log('\nNo había nada nuevo para guardar.')
   }
-
-  await conectar(i, merged, entorno)
-}
-
-/** Registra el webhook del lado del proveedor, si se puede. */
-async function conectar(i, merged, entorno) {
-  const conectable = ['whatsapp', 'instagram', 'messenger', 'telegram', 'resend'].includes(i.id)
-  if (!conectable) return
-  const d = diagnosticar(i, merged)
-  if (d.estado === 'sin_configurar' || d.estado === 'incompleta') return
-
-  const sitio = merged.NEXT_PUBLIC_SITE_URL
-  const pub = urlPublicaValida(sitio)
-  if (!pub.valida) {
-    console.log(`\nPara conectar el canal falta una dirección pública: ${pub.motivo}`)
-    console.log('Cuando la tengas, volvé a correr este comando o apretá «Conectar» en la bandeja.')
-    return
-  }
-  if (!(await confirmar('\n¿Le aviso ahora al proveedor a dónde mandar los mensajes (conectar el canal)?', true))) return
-
-  if (i.id === 'resend') {
-    const r = await crearWebhookDeCorreo(merged, urlWebhook(sitio, '/api/webhooks/email/resend'))
-    console.log(`  ${r.ok ? '✓' : '✗'} ${r.detalle}`)
-    if (r.ok && r.secreto) {
-      guardarEnv({ RESEND_WEBHOOK_SECRET: r.secreto })
-      entorno.set('RESEND_WEBHOOK_SECRET', r.secreto)
-      console.log('  ✓ El secreto del webhook se guardó en .env.local (reiniciá el sistema para que lo lea).')
-    }
-    return
-  }
-  if (i.id === 'telegram') {
-    const r = await conectarTelegram(merged, urlWebhook(sitio, '/api/webhooks/telegram'))
-    console.log(`  ${r.ok ? '✓' : '✗'} ${r.detalle}`)
-    return
-  }
-  const url = urlWebhook(sitio, '/api/webhooks/meta')
-  const r = await { whatsapp: conectarWhatsApp, instagram: conectarInstagram, messenger: conectarMessenger }[i.id](merged, url)
-  for (const p of r.pasos) console.log(`  ${p.ok === true ? '✓' : p.ok === false ? '✗' : '·'} ${p.titulo}. ${p.detalle}`)
 }
 
 // ── Menú ─────────────────────────────────────────────────────────────────────

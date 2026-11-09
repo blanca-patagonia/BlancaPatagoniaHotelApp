@@ -363,7 +363,7 @@ interface ReservaParaAvisar {
   codigo: string
   tarifa_tipo: string
   huesped_id: string | null
-  huesped: { nombre: string; email: string | null; telefono: string | null } | null
+  huesped: { nombre: string; email: string | null } | null
   // ⚠️ PostgREST tipa el embed como arreglo aunque la relación sea a-uno.
   estadia: { check_in: string; check_out: string; unidad: { tipo_unidad_id: string } | null }[] | null
 }
@@ -392,7 +392,6 @@ async function avisarDelFinal(
     reservaId,
     huespedId: r.huesped_id,
     email: r.huesped?.email ?? null,
-    telefono: r.huesped?.telefono ?? null,
     nombre: r.huesped?.nombre ?? '',
     codigo: r.codigo,
   }
@@ -438,7 +437,7 @@ export async function cambiarEstadoReserva(formData: FormData): Promise<void> {
     .from('reservas')
     .select(
       `estado, total, codigo, tarifa_tipo, huesped_id,
-       huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono),
+       huesped:huespedes!reservas_huesped_id_fkey(nombre, email),
        estadia:estadias(check_in, check_out, unidad:unidades(tipo_unidad_id))`,
     )
     .eq('id', id)

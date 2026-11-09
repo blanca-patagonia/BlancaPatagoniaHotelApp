@@ -1,5 +1,5 @@
 /**
- * Pruebas de conexión de las integraciones (ADR 0043).
+ * Pruebas de conexión de las integraciones.
  *
  * Cada prueba es una consulta de SOLO LECTURA contra el proveedor —quién soy,
  * qué dominio tengo, cuál es mi número—: confirma que la clave es válida sin
@@ -11,8 +11,8 @@
  * entorno como parámetro por lo mismo.
  *
  * Ninguna respuesta incluye el valor de una clave: sólo si sirvió y, cuando
- * ayuda, a QUÉ cuenta pertenece (el nombre del bot, el número de WhatsApp, el
- * dominio de correo), que es lo que permite darse cuenta de que se pegó la
+ * ayuda, a QUÉ cuenta pertenece (la cuenta de Mercado Pago, el dominio de
+ * correo), que es lo que permite darse cuenta de que se pegó la
  * clave de otra cuenta.
  */
 
@@ -23,7 +23,6 @@ export interface ResultadoSonda {
 
 type Entorno = Record<string, string | undefined>
 
-const GRAPH = 'v21.0'
 const TIMEOUT = 8_000
 
 function v(env: Entorno, nombre: string): string | undefined {
@@ -37,24 +36,18 @@ async function obtener(url: string, cabeceras: Record<string, string> = {}): Pro
   return { ok: r.ok, status: r.status, datos }
 }
 
-function errorMeta(datos: unknown, status: number): string {
-  const e = (datos as { error?: { code?: number; message?: string } } | null)?.error
-  if (e?.code === 190) return 'El token venció o fue revocado.'
-  return `Meta respondió ${status}${e?.message ? `: ${e.message.slice(0, 160)}` : ''}.`
-}
-
 const SONDAS: Record<string, (env: Entorno) => Promise<ResultadoSonda>> = {
   async supabase(env) {
     const url = v(env, 'NEXT_PUBLIC_SUPABASE_URL')
     const clave = v(env, 'SUPABASE_SERVICE_ROLE_KEY')
     if (!url || !clave) return { ok: false, detalle: 'Faltan la URL o la clave secreta.' }
-    const r = await obtener(`${url.replace(/\/+$/, '')}/rest/v1/crm_bandejas?select=canal&limit=1`, {
+    const r = await obtener(`${url.replace(/\/+$/, '')}/rest/v1/tipos_unidad?select=id&limit=1`, {
       apikey: clave,
       Authorization: `Bearer ${clave}`,
     })
     if (r.ok) return { ok: true, detalle: 'La base responde y la clave secreta es válida.' }
     if (r.status === 401) return { ok: false, detalle: 'La clave secreta no es válida. ¿Es la del protocolo S3 del Storage? Esa no sirve.' }
-    if (r.status === 404) return { ok: false, detalle: 'La base responde pero le faltan migraciones (no existe la bandeja). Aplicá las migraciones pendientes.' }
+    if (r.status === 404) return { ok: false, detalle: 'La base responde pero le faltan migraciones (no existe el catálogo). Aplicá las migraciones pendientes.' }
     return { ok: false, detalle: `La base respondió ${r.status}.` }
   },
 
@@ -85,7 +78,7 @@ const SONDAS: Record<string, (env: Entorno) => Promise<ResultadoSonda>> = {
       // Una clave «sólo envío» no puede listar dominios: es válida pero acotada.
       return r.status === 401
         ? { ok: false, detalle: 'Resend rechazó la clave.' }
-        : { ok: true, detalle: 'La clave es válida pero de «sólo envío»: para recibir correos en la bandeja hace falta una con acceso completo.' }
+        : { ok: true, detalle: 'La clave es válida pero de «sólo envío»: alcanza para mandar correos.' }
     }
     if (!r.ok) return { ok: false, detalle: `Resend respondió ${r.status}.` }
     const dominios = ((r.datos as { data?: { name: string; status: string }[] })?.data ?? [])
@@ -95,52 +88,6 @@ const SONDAS: Record<string, (env: Entorno) => Promise<ResultadoSonda>> = {
     if (!propio) return { ok: false, detalle: `El dominio de EMAIL_FROM (${remitente}) no está cargado en Resend.` }
     if (propio.status !== 'verified') return { ok: false, detalle: `El dominio ${remitente} está en Resend pero todavía no verificado (${propio.status}). Revisá los registros DNS.` }
     return { ok: true, detalle: `Dominio ${remitente} verificado.` }
-  },
-
-  async whatsapp(env) {
-    const token = v(env, 'WHATSAPP_TOKEN')
-    const numero = v(env, 'WHATSAPP_PHONE_NUMBER_ID')
-    if (!token || !numero) return { ok: false, detalle: 'Faltan WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID.' }
-    const r = await obtener(
-      `https://graph.facebook.com/${GRAPH}/${encodeURIComponent(numero)}?fields=display_phone_number,verified_name,quality_rating`,
-      { Authorization: `Bearer ${token}` },
-    )
-    if (!r.ok) return { ok: false, detalle: errorMeta(r.datos, r.status) }
-    const d = r.datos as { display_phone_number?: string; verified_name?: string; quality_rating?: string }
-    return { ok: true, detalle: `Número ${d.display_phone_number ?? '?'} (${d.verified_name ?? 'sin nombre verificado'}), calidad ${d.quality_rating ?? '?'}.` }
-  },
-
-  async instagram(env) {
-    const token = v(env, 'INSTAGRAM_ACCESS_TOKEN')
-    if (!token) return { ok: false, detalle: 'Falta INSTAGRAM_ACCESS_TOKEN.' }
-    const r = await obtener(`https://graph.instagram.com/${GRAPH}/me?fields=user_id,username`, { Authorization: `Bearer ${token}` })
-    if (!r.ok) return { ok: false, detalle: errorMeta(r.datos, r.status) }
-    const d = r.datos as { username?: string; user_id?: string }
-    const id = v(env, 'INSTAGRAM_ACCOUNT_ID')
-    const distinto = id && d.user_id && id !== d.user_id ? ` ⚠️ INSTAGRAM_ACCOUNT_ID (${id}) no coincide con la cuenta del token (${d.user_id}).` : ''
-    return { ok: true, detalle: `Cuenta @${d.username ?? '?'}.${distinto}` }
-  },
-
-  async messenger(env) {
-    const token = v(env, 'MESSENGER_PAGE_TOKEN')
-    if (!token) return { ok: false, detalle: 'Falta MESSENGER_PAGE_TOKEN.' }
-    const r = await obtener(`https://graph.facebook.com/${GRAPH}/me?fields=id,name`, { Authorization: `Bearer ${token}` })
-    if (!r.ok) return { ok: false, detalle: errorMeta(r.datos, r.status) }
-    const d = r.datos as { id?: string; name?: string }
-    const id = v(env, 'MESSENGER_PAGE_ID')
-    const distinto = id && d.id && id !== d.id ? ` ⚠️ MESSENGER_PAGE_ID (${id}) no coincide con la página del token (${d.id}).` : ''
-    return { ok: true, detalle: `Página «${d.name ?? '?'}».${distinto}` }
-  },
-
-  async telegram(env) {
-    const token = v(env, 'TELEGRAM_BOT_TOKEN')
-    if (!token) return { ok: false, detalle: 'Falta TELEGRAM_BOT_TOKEN.' }
-    const r = await obtener(`https://api.telegram.org/bot${token}/getMe`)
-    const d = r.datos as { ok?: boolean; result?: { username?: string } } | null
-    if (!r.ok || !d?.ok) return { ok: false, detalle: 'Telegram rechazó el token.' }
-    const w = await obtener(`https://api.telegram.org/bot${token}/getWebhookInfo`)
-    const url = (w.datos as { result?: { url?: string } } | null)?.result?.url
-    return { ok: true, detalle: `Bot @${d.result?.username ?? '?'}. ${url ? `Webhook: ${url}` : 'Todavía sin webhook: apretá «Conectar el bot».'}` }
   },
 
   async cotizacion(env) {
@@ -168,30 +115,3 @@ export async function probarIntegracion(id: string, env: Entorno): Promise<Resul
   }
 }
 
-/**
- * Registra el webhook del bot de Telegram (`setWebhook`) con el secreto. Es lo
- * único que Telegram necesita: no hay pantalla del otro lado donde pegar la URL.
- */
-export async function conectarTelegram(env: Entorno, urlWebhook: string): Promise<ResultadoSonda> {
-  const token = v(env, 'TELEGRAM_BOT_TOKEN')
-  const secreto = v(env, 'TELEGRAM_WEBHOOK_SECRET')
-  if (!token || !secreto) return { ok: false, detalle: 'Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_WEBHOOK_SECRET.' }
-  if (!/^https:\/\//.test(urlWebhook)) {
-    return { ok: false, detalle: 'Telegram exige una dirección https pública: NEXT_PUBLIC_SITE_URL tiene que ser la del sistema publicado.' }
-  }
-  if (!/^[A-Za-z0-9_-]{1,256}$/.test(secreto)) {
-    return { ok: false, detalle: 'TELEGRAM_WEBHOOK_SECRET sólo admite letras, números, _ y -.' }
-  }
-  try {
-    const r = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: urlWebhook, secret_token: secreto, allowed_updates: ['message', 'edited_message'] }),
-      signal: AbortSignal.timeout(TIMEOUT),
-    })
-    const d = (await r.json().catch(() => null)) as { ok?: boolean; description?: string } | null
-    return d?.ok ? { ok: true, detalle: 'Bot conectado: los mensajes van a entrar a la bandeja.' } : { ok: false, detalle: `Telegram respondió: ${d?.description ?? r.status}.` }
-  } catch (e) {
-    return { ok: false, detalle: `No se pudo conectar: ${e instanceof Error ? e.message : String(e)}.` }
-  }
-}

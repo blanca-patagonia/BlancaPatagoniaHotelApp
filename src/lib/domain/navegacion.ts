@@ -44,19 +44,15 @@ export interface GrupoNavegacion {
  * silencio del menú.
  */
 export const GRUPOS: readonly GrupoNavegacion[] = [
-  // La bandeja va en Operación, al lado de reservas y huéspedes: contestar a
-  // quien pregunta por disponibilidad es parte de vender, no de administrar.
-  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'bandeja', 'punto_venta', 'huespedes'] },
+  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
   { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
   // El registro de envíos va en Equipo, junto al tablón: las dos responden la
   // misma pregunta —«¿esto se avisó?»— desde los dos lados, el interno y el que
   // salió al huésped.
-  { titulo: 'Equipo', areas: ['avisos', 'notificaciones', 'conversaciones'] },
+  { titulo: 'Equipo', areas: ['avisos', 'notificaciones'] },
   // `conciliacion` va en Administración y no en Comercial: no se toca con un
   // tercero enfrente, se mira a fin de mes con el extracto del banco al lado.
-  // `ia` entra justo después de `reportes`: contesta preguntas con los mismos
-  // números que esos informes, así que conviene que aparezca al lado.
   { titulo: 'Administración', areas: ['reportes', 'conciliacion', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
   { titulo: null, areas: ['ayuda'] },
 ]
@@ -110,8 +106,6 @@ export const RUTA_AREA: Record<Area, string> = {
   mantenimiento: '/panel/mantenimiento',
   objetos_perdidos: '/panel/objetos-perdidos',
   avisos: '/panel/avisos',
-  bandeja: '/panel/bandeja',
-  conversaciones: '/panel/conversaciones',
   agencias: '/panel/agencias',
   proveedores: '/panel/proveedores',
   contratos: '/panel/contratos',

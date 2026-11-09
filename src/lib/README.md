@@ -32,9 +32,7 @@ falla si aparece uno sin listar.
 | `divisas/` | Cotización del dólar, con su cadena de respaldo |
 | `canales/` | Booking y otros canales: CSV, iCal, reseñas y publicación (ADR 0021/0032) |
 | `email/` | Envío de correo: consola o Resend |
-| `whatsapp/` | Envío por WhatsApp (opcional) |
 | `notificaciones/` | Bandeja de salida de avisos y recordatorios |
-| `bandeja/` | Bandeja de mensajes con huéspedes: entrada de webhooks, respuesta por cada canal, chat de la web y consultas (ADR 0043) |
 | `firma/` | Firma electrónica de contratos (ADR 0010) |
 | `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks (también la de Meta), pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
 | `conexiones/` | OAuth2 con Mercado Pago y Google |

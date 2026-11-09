@@ -17,9 +17,9 @@ describe('catálogo de integraciones', () => {
     }
   })
 
-  it('una variable compartida tiene el mismo nombre en todas (no hay dos grafías)', () => {
+  it('todas las variables del catálogo tienen un nombre bien formado', () => {
     const nombres = todasLasVariables()
-    expect(nombres).toContain('META_WEBHOOK_VERIFY_TOKEN')
+    expect(nombres).toContain('MERCADOPAGO_ACCESS_TOKEN')
     expect(nombres.every((n) => /^[A-Z][A-Z0-9_]+$/.test(n))).toBe(true)
   })
 })
@@ -46,27 +46,14 @@ describe('diagnosticar', () => {
     expect(d.faltantes).toEqual(['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_WEBHOOK_SECRET'])
   })
 
-  it('una variable COMPARTIDA no «empieza» a las demás: WhatsApp listo no deja a Instagram a medias', () => {
-    const env = { WHATSAPP_TOKEN: 'a', WHATSAPP_PHONE_NUMBER_ID: 'b', META_APP_SECRET: 'c', META_WEBHOOK_VERIFY_TOKEN: 'd' }
-    expect(diagnosticar(integracion('whatsapp'), env).estado).toBe('lista')
-    expect(diagnosticar(integracion('instagram'), env).estado).toBe('sin_configurar')
-    expect(diagnosticar(integracion('messenger'), env).estado).toBe('sin_configurar')
-  })
-
-  it('Instagram acepta su propio secreto en lugar del de Meta', () => {
-    const base = { INSTAGRAM_ACCESS_TOKEN: 'a', META_WEBHOOK_VERIFY_TOKEN: 'b' }
-    expect(diagnosticar(integracion('instagram'), base).faltantes).toEqual(['META_APP_SECRET o INSTAGRAM_APP_SECRET'])
-    expect(diagnosticar(integracion('instagram'), { ...base, INSTAGRAM_APP_SECRET: 'c' }).estado).toBe('lista')
-  })
-
   it('un valor con sólo espacios cuenta como no cargado', () => {
-    expect(diagnosticar(integracion('telegram'), { TELEGRAM_BOT_TOKEN: '  ', TELEGRAM_WEBHOOK_SECRET: 'x' }).faltantes).toEqual(['TELEGRAM_BOT_TOKEN'])
+    expect(diagnosticar(integracion('mercadopago'), { MERCADOPAGO_ACCESS_TOKEN: '  ', MERCADOPAGO_WEBHOOK_SECRET: 'x', PAGO_PROVIDER: 'mercadopago' }).faltantes).toEqual(['MERCADOPAGO_ACCESS_TOKEN'])
   })
 })
 
 describe('urlWebhook', () => {
   it('une sin barras dobles y avisa si falta la dirección del sitio', () => {
-    expect(urlWebhook('https://hotel.com/', '/api/webhooks/meta')).toBe('https://hotel.com/api/webhooks/meta')
+    expect(urlWebhook('https://hotel.com/', '/api/webhooks/pagos')).toBe('https://hotel.com/api/webhooks/pagos')
     expect(urlWebhook(undefined, '/api/x')).toMatch(/NEXT_PUBLIC_SITE_URL/)
   })
 })

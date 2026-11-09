@@ -1,10 +1,8 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { ETIQUETAS_ROL } from '@/lib/domain/roles'
-import { puedeAcceder } from '@/lib/domain/permisos'
 import { PRIMEROS_PASOS, GLOSARIO, guiaPara, tituloCapitulo } from '@/lib/domain/ayuda'
 import { Encabezado, Pagina, Tarjeta, botonClases } from '../_components/ui'
-import { Icono } from '../_components/iconos'
 
 /**
  * Guía de uso del sistema.
@@ -185,55 +183,10 @@ export default async function AyudaPage() {
           </section>
 
           <Tarjeta className="lg:break-inside-avoid">
-            {/*
-              Apilado en pantalla chica y en fila desde `sm`.
-
-              Antes era `flex flex-wrap items-center` con el párrafo en `flex-1`.
-              `flex-1` da base 0, así que el párrafo se deja aplastar por el botón
-              —que no encoge— en vez de forzar el salto de línea: a 360 px quedaba
-              con unos 80 px de ancho y el texto se salía 50 px de la tarjeta.
-              `flex-wrap` no lo salvaba, porque para envolver hace falta que algo
-              no entre, y el párrafo siempre «entra» encogiéndose a cero.
-
-              Apilar es más simple que pelearse con las bases del flex, y en un
-              teléfono es además la forma correcta: el botón a ancho completo se
-              toca mejor.
-            */}
-            <div className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-lenga-50 text-lenga-700 ring-1 ring-lenga-100">
-                <Icono nombre="chat" tam={18} />
-              </span>
-              {/*
-                El botón solo aparece si Conversaciones está encendido.
-
-                `conversaciones` es una de las áreas de `AREAS_OCULTAS`, y estando en
-                esa lista `puedeAcceder` devuelve `false` para TODOS los roles: el
-                `requerirAcceso` de la pantalla rebota a `/panel`. O sea que este
-                botón mandaba a un lugar del que se volvía solo, sin ningún mensaje.
-
-                Al estar atado a `puedeAcceder`, vuelve a aparecer solo el día que se
-                le saque el nombre a esa lista, sin tocar nada acá — que es
-                justamente lo que promete el comentario de `permisos.ts`.
-              */}
-              {puedeAcceder(sesion.rol, 'conversaciones') ? (
-                <>
-                  <p className="min-w-0 flex-1 text-sm text-balance text-stone-600">
-                    ¿Algo no está explicado acá? Dejalo en Conversaciones y se agrega a la guía.
-                  </p>
-                  <Link
-                    href="/panel/conversaciones"
-                    className={botonClases('secundario', 'w-full justify-center sm:w-auto')}
-                  >
-                    Abrir conversaciones
-                  </Link>
-                </>
-              ) : (
-                <p className="min-w-0 flex-1 text-sm text-balance text-stone-600">
-                  ¿Algo no está explicado acá? Avisale a quien administra el sistema y se agrega a
-                  la guía.
-                </p>
-              )}
-            </div>
+            <p className="p-5 text-sm text-balance text-stone-600">
+              ¿Algo no está explicado acá? Avisale a quien administra el sistema y se agrega a la
+              guía.
+            </p>
           </Tarjeta>
         </div>
       </div>

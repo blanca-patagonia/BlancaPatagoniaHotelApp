@@ -1,6 +1,5 @@
 import 'server-only'
 import { obtenerProveedorEmail } from '@/lib/email'
-import { obtenerProveedorWhatsApp, whatsappActivo } from '@/lib/whatsapp'
 
 /**
  * «¿El sistema puede avisar de verdad, o sólo lo anota?»
@@ -38,8 +37,6 @@ export interface Requisito {
 export interface DiagnosticoDeAvisos {
   /** Proveedor de correo elegido, y si manda de verdad. */
   email: { proveedor: string; real: boolean }
-  /** WhatsApp: si el canal se ofrece, y con qué proveedor. */
-  whatsapp: { activo: boolean; proveedor: string; real: boolean }
   requisitos: Requisito[]
   /** `true` si el hotel puede mandar un correo real ahora mismo. */
   puedeMandarCorreo: boolean
@@ -52,9 +49,6 @@ function hay(variable: string | undefined): boolean {
 export function diagnosticarAvisos(): DiagnosticoDeAvisos {
   const email = obtenerProveedorEmail()
   const emailReal = email.esReal()
-
-  const wsp = whatsappActivo()
-  const proveedorWsp = obtenerProveedorWhatsApp()
 
   const requisitos: Requisito[] = [
     {
@@ -102,7 +96,6 @@ export function diagnosticarAvisos(): DiagnosticoDeAvisos {
 
   return {
     email: { proveedor: email.nombre, real: emailReal },
-    whatsapp: { activo: wsp, proveedor: proveedorWsp.nombre, real: proveedorWsp.esReal() },
     requisitos,
     /*
       Los tres que hacen falta para que un correo salga de verdad. El del webhook

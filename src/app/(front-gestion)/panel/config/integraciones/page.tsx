@@ -11,7 +11,7 @@ import {
 } from '@/lib/domain/integraciones'
 import { tieneSonda } from '@/lib/integraciones/sondas'
 import { Encabezado, Etiqueta, Pagina, botonClases, type Tono } from '../../_components/ui'
-import { BotonConectarTelegram, BotonProbar } from './boton-probar'
+import { BotonProbar } from './boton-probar'
 
 /**
  * Integraciones y claves (ADR 0043).
@@ -147,7 +147,6 @@ export default async function IntegracionesPage() {
 
                     <div className="mt-auto flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       {i.probable && tieneSonda(i.id) && d.estado !== 'sin_configurar' && <BotonProbar id={i.id} />}
-                      {i.id === 'telegram' && d.estado === 'lista' && <BotonConectarTelegram />}
                     </div>
                   </article>
                 )

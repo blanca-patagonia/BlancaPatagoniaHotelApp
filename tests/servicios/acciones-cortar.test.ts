@@ -59,12 +59,12 @@ describe('cortarSiFalla', () => {
   })
 
   it('usa & cuando el destino ya trae query string', () => {
-    // Conversaciones redirige a `?canal=…` para no perder el canal abierto. Con
-    // `?` fijo la URL saldría rota y se perdería ese contexto.
+    // Algunas pantallas redirigen con un filtro en la URL (`?canal=…`). Con `?`
+    // fijo la URL saldría rota y se perdería ese contexto.
     const destino = destinoDe(() =>
-      cortarSiFalla({ message: 'boom' }, '/panel/conversaciones?canal=abc', 'mensaje'),
+      cortarSiFalla({ message: 'boom' }, '/panel/reservas?canal=abc', 'mensaje'),
     )
-    expect(destino).toBe('/panel/conversaciones?canal=abc&error=mensaje')
+    expect(destino).toBe('/panel/reservas?canal=abc&error=mensaje')
   })
 
   it('manda el mensaje real de la base al log del servidor, no a la URL', () => {

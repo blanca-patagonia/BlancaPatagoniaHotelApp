@@ -12,7 +12,6 @@ import type { ClienteServicio } from '@/lib/supabase/admin'
 
 vi.mock('@/lib/acciones', () => ({ registrarFalla: vi.fn() }))
 vi.mock('@/lib/email', () => ({ enviarPlantilla: vi.fn() }))
-vi.mock('@/lib/whatsapp', () => ({ whatsappActivo: () => false, enviarPorWhatsApp: vi.fn() }))
 
 const { encolar } = await import('@/lib/notificaciones')
 

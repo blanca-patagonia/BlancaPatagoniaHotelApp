@@ -3,9 +3,7 @@ import type { ClienteServicio } from '@/lib/supabase/admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
-import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
-import { canalDelAviso, telefonoParaWhatsApp } from '@/lib/domain/whatsapp'
-import { enviarPorWhatsApp, whatsappActivo } from '@/lib/whatsapp'
+import { esInterno, renderizar, type EventoEmail } from '@/lib/domain/plantillas'
 import {
   agotoIntentos,
   claveDeNotificacion,
@@ -46,14 +44,6 @@ export interface PedidoDeNotificacion {
    */
   destinatario?: string | null
   variables: Record<string, string | number>
-  /**
-   * Teléfono del huésped, si se conoce.
-   *
-   * Cuando el hotel tiene WhatsApp enchufado y el evento tiene plantilla
-   * aprobada, el aviso sale por ahí en vez de por correo (ver `canalDelAviso`).
-   * Sin teléfono, todo sigue como antes.
-   */
-  telefono?: string | null
   huespedId?: string | null
   reservaId?: string | null
   /**
@@ -94,35 +84,15 @@ export async function encolar(
   const rol = rolDelAviso(p.evento)
 
   /*
-    Por dónde sale.
-
-    La decisión vive en el dominio (`canalDelAviso`) y devuelve **un solo** canal:
-    mandar el mismo aviso por correo y por WhatsApp le duplica el mensaje al
-    huésped y además rompe la idempotencia, cuya clave no incluye el canal —las
-    dos filas chocarían contra el `unique` y una se descartaría en silencio—.
+    Por dónde sale: un aviso interno va a la cartelera y el del huésped, por
+    correo. Se decide acá, al encolar, y queda guardado en la fila: el despacho
+    no lo recalcula.
   */
-  const canal = canalDelAviso(p.evento, {
-    telefono: p.telefono,
-    whatsappActivo: whatsappActivo(),
-  })
-
-  const destinatario =
-    canal === 'interno'
-      ? rol
-      : canal === 'whatsapp'
-        ? telefonoParaWhatsApp(p.telefono)
-        : p.destinatario
+  const canal = esInterno(p.evento) ? 'interno' : 'email'
+  const destinatario = canal === 'interno' ? rol : p.destinatario
 
   if (!destinatario) {
-    // El motivo nombra el canal: «no tiene email» sobre un aviso que iba a salir
-    // por WhatsApp manda a revisar el campo equivocado.
-    return {
-      ok: false,
-      motivo:
-        canal === 'whatsapp'
-          ? 'El huésped no tiene un teléfono usable para WhatsApp.'
-          : 'El huésped no tiene email cargado.',
-    }
+    return { ok: false, motivo: 'El huésped no tiene email cargado.' }
   }
 
   // Consentimiento. Se consulta acá y no al despachar: si el huésped pidió no
@@ -303,20 +273,10 @@ export async function despachar(
     if (Date.now() - inicio > presupuestoMs) break
     const interno = n.canal === 'interno'
 
-    /*
-      Tres destinos posibles, uno por canal. La fila ya trae decidido cuál: la
-      elección se hizo al encolar (`canalDelAviso`) y **no se rehace acá**.
-
-      Si se recalculara al despachar, un aviso encolado como correo podría salir
-      por WhatsApp porque entre medio alguien configuró el canal —o al revés, si
-      se cayó el token—, y el `destinatario` guardado en la fila sería del canal
-      equivocado: se le mandaría un correo a un número de teléfono.
-    */
+    // Dos destinos posibles, según el canal que quedó decidido al encolar.
     const r: Entrega = interno
       ? await publicarEnCartelera(client, n)
-      : n.canal === 'whatsapp'
-        ? await enviarPorWhatsApp(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
-        : await enviarPlantilla(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
+      : await enviarPlantilla(n.evento as EventoEmail, n.destinatario, n.variables ?? {})
 
     if (r.ok) {
       const ahora = new Date().toISOString()

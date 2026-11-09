@@ -187,7 +187,7 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   const { data: reserva, error: eReserva } = await supabase
     .from('reservas')
     .select(
-      'estado, tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono)',
+      'estado, tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email)',
     )
     .eq('id', id)
     .maybeSingle()
@@ -270,7 +270,6 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   const h = reserva.huesped as unknown as {
     nombre: string
     email: string | null
-    telefono: string | null
   } | null
   await avisarReservaReprogramada(
     crearClienteAdmin(),
@@ -278,7 +277,6 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
       reservaId: id,
       huespedId: reserva.huesped_id as string | null,
       email: h?.email ?? null,
-      telefono: h?.telefono ?? null,
       nombre: h?.nombre ?? '',
       codigo: reserva.codigo as string,
     },

@@ -73,7 +73,7 @@ const SECCIONES: Seccion[] = [
   },
   {
     titulo: 'Integraciones y claves',
-    descripcion: 'Qué servicios externos están conectados (cobros, correo, WhatsApp, Instagram…), qué clave falta y una prueba de cada uno.',
+    descripcion: 'Qué servicios externos están conectados (cobros, correo, cotización…), qué clave falta y una prueba de cada uno.',
     href: '/panel/config/integraciones',
     icono: 'config',
   },
