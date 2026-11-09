@@ -10,14 +10,6 @@ import {
   type Movimiento,
 } from '@/lib/domain/cuentas'
 import {
-  contratosDeEntidad,
-  ETIQUETAS_ESTADO_CONTRATO,
-  estaVigente,
-  motivoNoFirmable,
-  type EstadoContrato,
-  type TipoContrato,
-} from '@/lib/domain/contratos'
-import {
   ETIQUETAS_ESTADO_COMPROBANTE,
   type EstadoComprobante,
 } from '@/lib/domain/antiguedad'
@@ -52,16 +44,6 @@ interface Socio {
   cuit: string | null
 }
 
-interface ContratoRow {
-  id: string
-  tipo: TipoContrato
-  entidad_id: string
-  titulo: string
-  estado: EstadoContrato
-  vigencia_desde: string | null
-  vigencia_hasta: string | null
-}
-
 interface MovRow {
   tipo: 'cargo' | 'pago'
   /** SIEMPRE en USD (migración 0078): es la moneda en la que cierra el saldo. */
@@ -86,14 +68,6 @@ interface ReservaRow {
   estado: string
   total: number | string
   estadias: { periodo: string }[] | null
-}
-
-const TONO_ESTADO: Record<EstadoContrato, string> = {
-  borrador: 'bg-stone-100 text-stone-600',
-  enviado: 'bg-lago-50 text-lago-800 ring-1 ring-lago-200',
-  firmado: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200',
-  rechazado: 'bg-red-50 text-red-700 ring-1 ring-red-200',
-  vencido: 'bg-lenga-50 text-lenga-800 ring-1 ring-lenga-200',
 }
 
 const MENSAJES_ERROR: Record<string, string> = {
@@ -153,22 +127,15 @@ export default async function PortalSocioPage({
   // válido, ni de qué socio era.
   const socio = (agencia ?? proveedor) as Socio | null
   if (!socio) notFound()
-  const tipo: TipoContrato = agencia ? 'agencia' : 'proveedor'
-  const esAgencia = tipo === 'agencia'
+  const esAgencia = Boolean(agencia)
 
   /*
     Movimientos y reservas van por `traerTodo`: el saldo suma el historial
     entero y PostgREST corta en 1000 filas sin avisar. Un socio con años de
     movimientos veía un saldo equivocado, dicho por el hotel.
   */
-  const [{ data: contratosData, error: eContratos }, movsLectura, reservasLectura] =
+  const [movsLectura, reservasLectura] =
     await Promise.all([
-      admin
-        .from('contratos')
-        .select('id, tipo, entidad_id, titulo, estado, vigencia_desde, vigencia_hasta')
-        .eq('tipo', tipo)
-        .eq('entidad_id', socio.id)
-        .order('creado_en', { ascending: false }),
       esAgencia
         ? traerTodo<MovRow>((desde, hasta) =>
             admin
@@ -203,21 +170,11 @@ export default async function PortalSocioPage({
           )
         : Promise.resolve({ filas: [] as ReservaRow[], truncado: false, error: null }),
     ])
-  registrarFalla(eContratos, 'portal:contratos')
   if (movsLectura.error) registrarFalla({ message: movsLectura.error }, 'portal:movimientos')
   if (reservasLectura.error) registrarFalla({ message: reservasLectura.error }, 'portal:reservas')
   // El socio no tiene a quién preguntarle: si el saldo salió de un historial
   // incompleto, la pantalla lo dice en vez de afirmarlo.
   const saldoIncompleto = Boolean(movsLectura.error || movsLectura.truncado)
-
-  // El filtro por entidad ya lo hace la consulta; se vuelve a aplicar la regla
-  // del dominio para que el aislamiento y el ocultamiento de borradores sean
-  // una sola verdad testeada, y no dependan de recordar el `.eq()`.
-  const contratos = contratosDeEntidad(
-    tipo,
-    socio.id,
-    (contratosData ?? []) as ContratoRow[],
-  )
 
   const movs = movsLectura.filas
   const saldo = saldoCuenta(
@@ -244,44 +201,6 @@ export default async function PortalSocioPage({
       { checkIn: r.checkIn, totalReserva: Number(r.total), totalPagado: pagadoPorReservaId.get(r.id) ?? 0 },
       hoy,
     ),
-  )
-
-  /*
-    Las firmas se piden DESPUÉS y acotadas a los contratos de este socio.
-
-    Antes era `admin.from('firmas').select(...)` sin `.eq()` ni `.limit()`: la
-    tabla **entera**, con `service_role`, en cada visita de cualquier socio. Dos
-    problemas:
-
-    · **Funcional y silencioso.** PostgREST corta en 1000 filas sin error
-      (`max_rows`, supabase/config.toml:10). Pasadas las 1000 firmas, a algunos
-      socios les desaparecía el botón «Revisar y firmar» sin que nadie entendiera
-      por qué — el mapa no tenía su contrato.
-    · **De alcance.** Traer todos los tokens de firma del sistema a la memoria de
-      una página pública, cuando se necesitan tres, es una fuga a un `console.log`
-      de distancia.
-
-    Va en una segunda consulta y no en el `Promise.all` porque depende de los
-    contratos: es un viaje más, sobre una lista de a lo sumo unas decenas de ids.
-  */
-  const idsContrato = contratos.map((c) => c.id)
-  const { data: firmasData } = idsContrato.length
-    ? await admin
-        .from('firmas')
-        .select('contrato_id, token, fecha_firma')
-        .in('contrato_id', idsContrato)
-        .is('fecha_firma', null)
-    : { data: [] }
-
-  const firmas = (firmasData ?? []) as {
-    contrato_id: string
-    token: string
-    fecha_firma: string | null
-  }[]
-  // El `.is('fecha_firma', null)` ya deja solo las pendientes; el filtro se
-  // mantiene para que la regla siga siendo evidente al leer esta línea.
-  const tokenPorContrato = new Map(
-    firmas.filter((f) => !f.fecha_firma).map((f) => [f.contrato_id, f.token]),
   )
 
   return (
@@ -477,67 +396,6 @@ export default async function PortalSocioPage({
             </form>
           </section>
         )}
-
-        {/* Contratos */}
-        <section className="rounded-2xl border border-stone-200 bg-white shadow-sm">
-          <header className="border-b border-stone-100 px-5 py-3.5">
-            <h2 className="font-display text-base font-semibold text-stone-900">Contratos</h2>
-            <p className="text-xs text-stone-500">
-              Convenios y acuerdos vigentes con el hotel.
-            </p>
-          </header>
-
-          {contratos.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-stone-400">
-              No hay contratos para mostrar.
-            </p>
-          ) : (
-            <ul>
-              {contratos.map((c) => {
-                const vigente = estaVigente(c, hoy)
-                const firmable = motivoNoFirmable(c, hoy) === null
-                const tokenFirma = tokenPorContrato.get(c.id)
-                return (
-                  <li
-                    key={c.id}
-                    className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-5 py-3 first:border-0"
-                  >
-                    <div className="min-w-40 flex-1">
-                      <p className="font-medium text-stone-800">{c.titulo}</p>
-                      <p className="text-xs text-stone-400">
-                        {c.vigencia_desde || c.vigencia_hasta ? (
-                          <>
-                            {c.vigencia_desde ? formatoFechaCorta(c.vigencia_desde) : '—'}
-                            {' → '}
-                            {c.vigencia_hasta ? formatoFechaCorta(c.vigencia_hasta) : 'sin fin'}
-                          </>
-                        ) : (
-                          'sin fechas de vigencia'
-                        )}
-                        {vigente && ' · vigente'}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TONO_ESTADO[c.estado]}`}
-                    >
-                      {ETIQUETAS_ESTADO_CONTRATO[c.estado]}
-                    </span>
-
-                    {firmable && tokenFirma && (
-                      <a
-                        href={`/firmar/${tokenFirma}`}
-                        className="rounded-lg bg-lago-700 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-lago-800"
-                      >
-                        Revisar y firmar
-                      </a>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </section>
 
         <p className="mt-6 text-center text-xs text-stone-400">
           Este enlace es personal: quien lo tenga puede ver esta información. No lo compartas.

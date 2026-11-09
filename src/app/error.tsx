@@ -5,10 +5,10 @@ import Link from 'next/link'
 
 /**
  * Pantalla de error de las rutas **públicas**: portal de reservas, catálogo,
- * firma de contratos, encuestas y confirmaciones.
+ * encuestas y confirmaciones.
  *
  * Hasta acá el único límite de error era `app/panel/error.tsx`, así que todo lo
- * que ve un huésped quedaba sin cubrir: un fallo en `/firmar/[token]` o en
+ * que ve un huésped quedaba sin cubrir: un fallo en `/encuesta/[token]` o en
  * `/reservar` mostraba la pantalla por defecto de Next, en inglés y con aspecto
  * de sistema roto.
  *

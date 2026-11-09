@@ -221,7 +221,6 @@ const RECURSOS: Record<string, Definicion> = {
           plan: params.get('plan') ?? undefined,
           garantia: params.get('garantia') ?? undefined,
           segmento: params.get('segmento') ?? undefined,
-          contrato: params.get('contrato') ?? undefined,
           unidad: params.get('unidad') ?? undefined,
           tipoUnidad: params.get('tipo') ?? undefined,
           hoy: hoyISO(),

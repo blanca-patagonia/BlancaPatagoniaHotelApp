@@ -46,7 +46,7 @@ export interface GrupoNavegacion {
 export const GRUPOS: readonly GrupoNavegacion[] = [
   { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
   { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
-  { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
+  { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'canales'] },
   // El registro de envíos va en Equipo, junto al tablón: las dos responden la
   // misma pregunta —«¿esto se avisó?»— desde los dos lados, el interno y el que
   // salió al huésped.
@@ -106,7 +106,6 @@ export const RUTA_AREA: Record<Area, string> = {
   avisos: '/panel/avisos',
   agencias: '/panel/agencias',
   proveedores: '/panel/proveedores',
-  contratos: '/panel/contratos',
   canales: '/panel/canales',
   auditoria: '/panel/auditoria',
   errores: '/panel/errores',

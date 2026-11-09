@@ -13,7 +13,7 @@ import { IDIOMAS, esIdioma, idiomaDeReferencia, idiomaPreferido } from '@/lib/i1
  *
  * ⚠️ **La lista es blanca a propósito, y es corto el motivo:** hay URLs públicas
  * que **ya se enviaron por correo** —`/reservar/confirmacion/<token>`,
- * `/firmar/<token>`, `/encuesta/<token>`, `/portal/<token>`— y moverlas bajo un
+ * `/encuesta/<token>`, `/portal/<token>`— y moverlas bajo un
  * prefijo las rompe para todo huésped que todavía tenga ese mail en la bandeja.
  * Con una lista negra, cada ruta nueva entraría sola en el esquema de idiomas y
  * tarde o temprano una con token se colaría.

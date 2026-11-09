@@ -57,11 +57,8 @@ export function ipDeCabeceras(cabeceras: Headers): string | null {
  * La misma resolución, leyendo las cabeceras de la petición en curso.
  *
  * ⚠️ Es **la única** implementación de esto en el proyecto, y tiene que seguir
- * siéndolo. Antes había dos: ésta y `ipDePeticion` en `lib/firma/index.ts`, que
- * había quedado con el bug del primer `x-forwarded-for` que ésta arregló. La
- * copia vieja alimentaba el límite del asistente público —evadible rotando la
- * cabecera— y, peor, la IP que se guarda en `firmas.ip` como constancia de quién
- * firmó un contrato: un dato probatorio que elegía el propio firmante.
+ * siéndolo. Antes había dos copias, y una había quedado con el bug del primer
+ * `x-forwarded-for` que ésta arregló: evadible rotando la cabecera.
  */
 async function ipActual(): Promise<string | null> {
   return ipDeCabeceras(await headers())

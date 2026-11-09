@@ -48,7 +48,6 @@ const ICONO_AREA: Record<Area, NombreIcono> = {
   avisos: 'avisos',
   agencias: 'agencias',
   proveedores: 'proveedores',
-  contratos: 'contratos',
   canales: 'canales',
   auditoria: 'auditoria',
   // Se reusa `alerta` en vez de dibujar un icono nuevo: es exactamente lo que

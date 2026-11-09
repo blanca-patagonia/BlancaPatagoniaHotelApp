@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AREAS, AREAS_OCULTAS, PERMISOS, estaOculta, puedeAcceder, areasDe } from '@/lib/domain/permisos'
+import { AREAS, AREAS_OCULTAS, estaOculta, puedeAcceder, areasDe } from '@/lib/domain/permisos'
 import { ROLES } from '@/lib/domain/roles'
 
 describe('permisos por rol', () => {
@@ -36,18 +36,6 @@ describe('permisos por rol', () => {
     expect(puedeAcceder('recepcion', 'config')).toBe(false)
   })
 
-  it('contratos está asignado solo a admin y gerencia (aunque hoy esté apagado para todos)', () => {
-    // `contratos` está en `AREAS_OCULTAS` (pedido del hotel, 2026-09-14), así
-    // que `puedeAcceder` da `false` para cualquier rol — eso ya lo cubre el
-    // bloque de «áreas apagadas» más abajo. Esto prueba la otra mitad: a quién
-    // quedaría asignada si algún día se vuelve a habilitar sacándola de esa
-    // lista, sin tener que tocar `PERMISOS` para eso.
-    expect(PERMISOS.admin.includes('contratos')).toBe(true)
-    expect(PERMISOS.gerencia.includes('contratos')).toBe(true)
-    expect(PERMISOS.recepcion.includes('contratos')).toBe(false)
-    expect(PERMISOS.housekeeping.includes('contratos')).toBe(false)
-  })
-
   it('solo admin accede a la gestión de usuarios', () => {
     for (const rol of ROLES) {
       expect(puedeAcceder(rol, 'usuarios')).toBe(rol === 'admin')
@@ -57,7 +45,7 @@ describe('permisos por rol', () => {
   describe('áreas apagadas', () => {
     /*
       El hotel decidió no usar auditoría, objetos perdidos ni conversaciones
-      por ahora (más contratos y respaldos, ver el test de arriba). El código
+      por ahora (más respaldos). El código
       sigue entero y se vuelven a habilitar sacándolas de `AREAS_OCULTAS`;
       estos tests fijan que mientras estén ahí queden apagadas para TODOS,
       incluido admin, y que apagarlas no se lleve puesto lo demás.

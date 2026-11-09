@@ -3,8 +3,8 @@ import 'server-only'
 /**
  * Selección de proveedor para las integraciones externas.
  *
- * Por qué existe. Los cinco adaptadores del proyecto (`PaymentProvider`,
- * `EmailProvider`, `FirmaElectronicaProvider`, `FacturacionElectronicaProvider`
+ * Por qué existe. Los adaptadores del proyecto (`PaymentProvider`,
+ * `EmailProvider`, `FacturacionElectronicaProvider`
  * y `AsistenteProvider`) eligen su implementación con el mismo gesto:
  *
  *     process.env.X_PROVIDER ?? 'stub'
@@ -17,9 +17,7 @@ import 'server-only'
  *  · `facturacion` devuelve un CAE simulado de 14 dígitos, con la forma del real,
  *    sobre una factura verdadera. Es un comprobante apócrifo ante AFIP.
  *  · `email` escribe el correo en la consola del servidor. La confirmación de
- *    reserva, el enlace de firma y la encuesta nunca llegan al huésped.
- *  · `firma` registra una aceptación que el propio módulo documenta como **sin
- *    validez legal**.
+ *    reserva y la encuesta nunca llegan al huésped.
  *
  * Un fallo ruidoso al arrancar cuesta un despliegue. Un stub silencioso en
  * producción cuesta facturas mal emitidas que hay que rectificar de a una.
@@ -103,7 +101,7 @@ export function seleccionarProveedor<T>({
  * huésped**, y son varios a la vez. Un huésped de Alemania paga con su tarjeta
  * en dólares por Stripe y uno de Buenos Aires paga en pesos y cuotas por
  * MercadoPago; obligar a elegir una sola dejaría a la mitad de los huéspedes sin
- * poder pagar. Correo, facturación o firma no tienen ese problema: hay un solo
+ * poder pagar. Correo o facturación no tienen ese problema: hay un solo
  * proveedor y punto.
  *
  * La variable se escribe separada por comas: `PAGO_PROVIDER=mercadopago,stripe`.

@@ -19,7 +19,6 @@ export const AREAS = [
   'avisos',
   'agencias',
   'proveedores',
-  'contratos',
   'canales',
   'auditoria',
   'errores',
@@ -46,7 +45,6 @@ export const ETIQUETAS_AREA: Record<Area, string> = {
   avisos: 'Avisos',
   agencias: 'Agencias',
   proveedores: 'Proveedores',
-  contratos: 'Contratos',
   canales: 'Canales de venta',
   auditoria: 'Auditoría',
   errores: 'Errores del sistema',
@@ -70,7 +68,7 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   gerencia: [
     'dashboard', 'ocupacion', 'servicio', 'punto_venta', 'reservas', 'huespedes', 'housekeeping',
     'mantenimiento', 'objetos_perdidos', 'avisos', 'agencias',
-    'proveedores', 'contratos', 'canales', 'reportes', 'config',
+    'proveedores', 'canales', 'reportes', 'config',
     // Gerencia ve los errores del sistema porque es quien decide si hay que
     // llamar a alguien. La política RLS de `errores` (migración 0068) declara
     // los mismos dos roles: si acá se agregara uno más, vería la pantalla vacía.
@@ -138,9 +136,6 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
 export const AREAS_OCULTAS: readonly Area[] = [
   'auditoria',
   'objetos_perdidos',
-  // Pedido del dueño del hotel (2026-09-14): ocultar por ahora, sin borrar
-  // nada (ver el porqué de este mecanismo arriba).
-  'contratos',
   'respaldos',
 ]
 

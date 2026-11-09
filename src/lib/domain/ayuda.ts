@@ -336,22 +336,6 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
-    area: 'contratos',
-    resumen: 'Convenios con firma electrónica.',
-    pasos: [
-      {
-        titulo: 'Redactar y enviar',
-        detalle:
-          'Primero se guarda como borrador y se puede corregir. Al enviarlo a firmar, el texto queda congelado: desde ese momento no se puede cambiar sin invalidar la firma.',
-      },
-      {
-        titulo: 'Cómo firma la otra parte',
-        detalle:
-          'Recibe un enlace propio. No necesita usuario ni contraseña: entra, lee y acepta. Queda registrado cuándo lo hizo.',
-      },
-    ],
-  },
-  {
     area: 'respaldos',
     resumen: 'Cómo bajar una copia de los datos, y quién se ocupa de los backups.',
     pasos: [

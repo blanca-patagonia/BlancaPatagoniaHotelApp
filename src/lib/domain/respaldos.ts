@@ -67,8 +67,7 @@ const COLUMNAS_PROVEEDORES = 'id, nombre, rubro, cuit, email, telefono, activo, 
  *
  * El orden es el de dependencia: los catálogos primero y los movimientos después,
  * de modo que quien tenga que reconstruir la base pueda insertar en este orden sin
- * chocar con claves foráneas. (`contratos` va antes que `reservas`: una reserva
- * puede apuntar a un contrato.) ⚠️ Las columnas de autoría (`creado_por`,
+ * chocar con claves foráneas. ⚠️ Las columnas de autoría (`creado_por`,
  * `emitida_por`, `cargado_por`…) apuntan a `perfiles`, que NO se exporta —son
  * las cuentas del personal, que viven en la autenticación de la plataforma—: al
  * reconstruir hay que crear antes los usuarios o dejar esas columnas en nulo.
@@ -139,11 +138,6 @@ export const TABLAS_RESPALDO: readonly TablaRespaldo[] = [
   },
 
   // ── Operación ──
-  {
-    tabla: 'contratos',
-    porQue: 'Los contratos y su estado de firma.',
-    datosPersonales: true,
-  },
   {
     tabla: 'huespedes',
     porQue: 'El historial de clientes. Es irrecuperable: no está en ningún otro lado.',

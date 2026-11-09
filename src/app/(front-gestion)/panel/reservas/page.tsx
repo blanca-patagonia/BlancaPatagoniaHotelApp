@@ -95,7 +95,6 @@ interface Params {
   plan?: string
   garantia?: string
   segmento?: string
-  contrato?: string
   unidad?: string
   tipo?: string
   /** `sin` muestra los importes sin IVA. Por omisión, con IVA (lo que se cobra). */
@@ -146,10 +145,9 @@ export default async function ReservasPage({
   /** Los importes se muestran sin IVA sólo si se pide. Por omisión, lo que se cobra. */
   const sinImpuestos = sp.impuestos === 'sin'
 
-  // Contrato, habitación y tipo. Son UUID, así que no hay lista contra la que
+  // Habitación y tipo. Son UUID, así que no hay lista contra la que
   // validar: se pasan tal cual y si no existen la consulta devuelve vacío, que es
   // el comportamiento correcto para un id inventado en la URL.
-  const contrato = sp.contrato?.trim() || undefined
   const unidad = sp.unidad?.trim() || undefined
   const tipoUnidad = sp.tipo?.trim() || undefined
 
@@ -164,7 +162,6 @@ export default async function ReservasPage({
     plan,
     garantia,
     segmento,
-    contrato,
     unidad,
     tipoUnidad,
     hoy,
@@ -178,12 +175,10 @@ export default async function ReservasPage({
   // catálogos chicos y ninguno depende del resultado.
   const [
     { data, count, error: eReservas },
-    { data: contratosData, error: eContratos },
     { data: unidadesData, error: eUnidades },
     { data: tiposData, error: eTipos },
   ] = await Promise.all([
     consultaReservas(supabase, filtros, orTermino).range(desde, hasta),
-    supabase.from('contratos').select('id, titulo').order('titulo').limit(200),
     supabase
       .from('unidades')
       .select('id, nombre')
@@ -194,16 +189,14 @@ export default async function ReservasPage({
     supabase.from('tipos_unidad').select('id, nombre').eq('activo', true).order('nombre'),
   ])
   registrarFalla(eReservas, 'reservas:listado')
-  registrarFalla(eContratos, 'reservas:contratos_filtro')
   registrarFalla(eUnidades, 'reservas:unidades_filtro')
   registrarFalla(eTipos, 'reservas:tipos_filtro')
   // El listado principal del módulo: sin esto, una lectura fallida se ve
   // exactamente igual que "todavía no hay reservas" (auditoría QA/UX
   // 2026-09-09, que había cerrado este patrón en ~53 pantallas — este
   // archivo, el más grande del módulo, había quedado afuera de esa pasada).
-  const huboErrorDeLectura = Boolean(eReservas || eContratos || eUnidades || eTipos)
+  const huboErrorDeLectura = Boolean(eReservas || eUnidades || eTipos)
 
-  const contratos = (contratosData ?? []) as { id: string; titulo: string }[]
   const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
   const tipos = (tiposData ?? []) as { id: string; nombre: string }[]
 
@@ -222,7 +215,6 @@ export default async function ReservasPage({
     plan,
     garantia,
     segmento,
-    contrato,
     unidad,
     tipo: tipoUnidad,
     impuestos: sp.impuestos,
@@ -432,10 +424,8 @@ export default async function ReservasPage({
               </option>
             ))}
           </select>
-          {/* ── Habitación, tipo y contrato ─────────────────────────────────
-              Los tres cierran lo que faltaba del listado de WinPAX. El contrato
-              solo aparece si hay alguno cargado: un desplegable vacío ocupa lugar
-              y no ofrece nada. */}
+          {/* ── Habitación y tipo ───────────────────────────────────────────
+              Cierran lo que faltaba del listado de WinPAX. */}
           <select
             name="unidad"
             defaultValue={unidad ?? ''}
@@ -462,21 +452,6 @@ export default async function ReservasPage({
               </option>
             ))}
           </select>
-          {contratos.length > 0 && (
-            <select
-              name="contrato"
-              defaultValue={contrato ?? ''}
-              aria-label="Contrato"
-              className="w-full min-w-0 max-w-full truncate rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-lago-500 focus:outline-none sm:w-auto sm:max-w-56"
-            >
-              <option value="">Todo contrato</option>
-              {contratos.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.titulo}
-                </option>
-              ))}
-            </select>
-          )}
           <button
             type="submit"
             className={botonClases('secundario', 'w-full justify-center sm:w-auto')}

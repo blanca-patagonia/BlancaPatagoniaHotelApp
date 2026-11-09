@@ -114,11 +114,6 @@ describe('TABLAS_RESPALDO', () => {
     )
   })
 
-  it('contratos va antes que reservas (reservas.contrato_id)', () => {
-    const nombres = TABLAS_RESPALDO.map((t) => t.tabla)
-    expect(nombres.indexOf('contratos')).toBeLessThan(nombres.indexOf('reservas'))
-  })
-
   it('cada tabla se lee con un orden fijo', () => {
     // La lectura va en tramos de mil: sin orden, dos tramos pueden pisarse.
     for (const t of TABLAS_RESPALDO) expect(ordenDeLectura(t).length).toBeGreaterThan(0)

@@ -82,7 +82,6 @@ export interface ParamsReserva {
     garantia?: Garantia
     segmento?: Segmento
     voucher?: string
-    contratoId?: string | null
     descuentoPct?: number
   }
 }
@@ -232,7 +231,6 @@ export async function crearReservaEnUnidadLibre(
     // por definición, y pedirlo dos veces sólo habilita que se contradigan.
     p_segmento: c?.segmento ?? segmentoDeCanal(p.canal),
     p_voucher: c?.voucher ?? '',
-    p_contrato_id: c?.contratoId ?? null,
     p_descuento_pct: c?.descuentoPct ?? 0,
 
     // Desglose de importes: sale de la cotización, no se recibe de afuera. Así el

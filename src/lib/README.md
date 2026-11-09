@@ -32,8 +32,7 @@ falla si aparece uno sin listar.
 | `canales/` | Booking y otros canales: CSV, iCal, reseñas y publicación (ADR 0021/0032) |
 | `email/` | Envío de correo: consola o Resend |
 | `notificaciones/` | Bandeja de salida de avisos y recordatorios |
-| `firma/` | Firma electrónica de contratos (ADR 0010) |
-| `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks (también la de Meta), pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
+| `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks, pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
 | `conexiones/` | OAuth2 con Mercado Pago y Google |
 | `storage/` | Fotos operativas en Supabase Storage (ADR 0037) |
 | `asistente/` | Asistente del portal público, por reglas (ADR 0011) |

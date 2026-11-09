@@ -36,8 +36,6 @@ export interface FiltrosReservas {
   plan?: string
   garantia?: string
   segmento?: string
-  /** Contrato que fija la tarifa. La columna existe desde el paso 6. */
-  contrato?: string
   /**
    * Habitación asignada y tipo pedido. Van sobre `estadias`, no sobre `reservas`,
    * y por eso hacen falta las dos: una reserva grupal tiene varias estadías, así
@@ -192,7 +190,6 @@ export function consultaReservas(supabase: Cliente, f: FiltrosReservas, orTermin
   if (f.plan) q = q.eq('plan', f.plan)
   if (f.garantia) q = q.eq('garantia', f.garantia)
   if (f.segmento) q = q.eq('segmento', f.segmento)
-  if (f.contrato) q = q.eq('contrato_id', f.contrato)
 
   // Habitación y tipo van sobre la tabla embebida. Funcionan porque `estadias` se
   // trae con `!inner`: con un embed normal, PostgREST devolvería todas las reservas

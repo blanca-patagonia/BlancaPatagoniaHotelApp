@@ -93,7 +93,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `plantillas.ts` | Plantillas de mensajes al huésped |
 | `notificaciones.ts` | Bandeja de salida de avisos |
 | `entregas.ts` | Estados de entrega de un correo (`enviada` ≠ `entregada`) |
-| `contratos.ts` | Ciclo de vida y firma de contratos (ADR 0010) |
 | `comercial.ts` | Pipeline comercial de agencias y empresas |
 
 ## Informes
