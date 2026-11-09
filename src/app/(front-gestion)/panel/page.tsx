@@ -15,7 +15,7 @@ import {
   fechaHoraHotel,
 } from '@/lib/fechas'
 import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
-import { areasDe, esDireccion, estaOculta, type Area } from '@/lib/domain/permisos'
+import { areasDe, esDireccion, type Area } from '@/lib/domain/permisos'
 import { cronsAtrasados } from '@/lib/domain/crons'
 import { registrarFalla } from '@/lib/acciones'
 import { ESTADOS_FACTURABLES } from '@/lib/domain/facturacion'
@@ -241,10 +241,7 @@ export default async function DashboardPage() {
     { count: reservasActivas, error: eActivas },
     { count: reservasNuevasHoy, error: eNuevasHoy },
     { count: canceladasHoy, error: eCanceladasHoy },
-    { count: mantPendiente, error: eMant },
-    { count: objetosGuardados, error: eObjetos },
     { data: stockBajo, error: eStock },
-    { count: avisosFijados, error: eAvisos },
     { cantidad: consumosSinFacturar, error: eConsumosSinFacturar },
     { cantidad: saldosPendientes, error: eSaldosPendientes },
   ] = await Promise.all([
@@ -278,30 +275,14 @@ export default async function DashboardPage() {
       .select('*', { count: 'exact', head: true })
       .gte('cancelada_en', inicioDelDiaHotel(hoy))
       .lt('cancelada_en', inicioDelDiaHotel(mañana)),
-    supabase
-      .from('ordenes_mantenimiento')
-      .select('*', { count: 'exact', head: true })
-      .in('estado', ['pendiente', 'en_proceso']),
-    // Si el módulo está apagado (`AREAS_OCULTAS`), nadie va a ver este número y la
-    // consulta sería un viaje a la base de más en la pantalla que más se abre.
-    estaOculta('objetos_perdidos')
-      ? Promise.resolve({ count: 0, error: null })
-      : supabase
-          .from('objetos_perdidos')
-          .select('*', { count: 'exact', head: true })
-          .eq('estado', 'guardado'),
     supabase.from('productos_servicios').select('nombre, stock, stock_minimo').eq('activo', true),
-    // Avisos fijados por el equipo: son los que alguien marcó a propósito
-    // como «esto hay que verlo», a diferencia del resto del tablón que se lee
-    // por orden cronológico.
-    supabase.from('avisos').select('*', { count: 'exact', head: true }).eq('fijado', true),
     contarConsumosSinFacturar(supabase, hoy),
     contarSaldosPendientes(supabase, hoy),
   ])
   const atrasados = await atrasadosPendientes
 
   /*
-   * Ninguna de las 12 lecturas de arriba revisaba su `error`: si una fallaba,
+   * Ninguna de las lecturas de arriba revisaba su `error`: si una fallaba,
    * `data`/`count` llegaban en `null`, el `?? 0`/`?? []` de más abajo lo
    * convertía en «no hay nada», y la pantalla lo mostraba idéntico a que
    * estuviera todo en cero. Se loguean todas (accesorio: no corta el render,
@@ -312,10 +293,7 @@ export default async function DashboardPage() {
   registrarFalla(eActivas, 'dashboard:reservas_activas')
   registrarFalla(eNuevasHoy, 'dashboard:reservas_nuevas_hoy')
   registrarFalla(eCanceladasHoy, 'dashboard:canceladas_hoy')
-  registrarFalla(eMant, 'dashboard:mantenimiento_pendiente')
-  registrarFalla(eObjetos, 'dashboard:objetos_guardados')
   registrarFalla(eStock, 'dashboard:stock_bajo')
-  registrarFalla(eAvisos, 'dashboard:avisos_fijados')
   registrarFalla(eConsumosSinFacturar, 'dashboard:consumos_sin_facturar')
   registrarFalla(eSaldosPendientes, 'dashboard:saldos_pendientes')
 
@@ -382,32 +360,11 @@ export default async function DashboardPage() {
           : 'cuentas con consumos sin facturar',
     },
     {
-      area: 'mantenimiento' as Area,
-      href: '/panel/mantenimiento',
-      icono: 'mantenimiento' as NombreIcono,
-      cantidad: mantPendiente ?? 0,
-      texto: mantPendiente === 1 ? 'orden de mantenimiento abierta' : 'órdenes de mantenimiento abiertas',
-    },
-    {
       area: 'config' as Area,
       href: '/panel/config',
       icono: 'config' as NombreIcono,
       cantidad: faltantes.length,
       texto: faltantes.length === 1 ? 'artículo con stock bajo' : 'artículos con stock bajo',
-    },
-    {
-      area: 'objetos_perdidos' as Area,
-      href: '/panel/objetos-perdidos',
-      icono: 'objetos' as NombreIcono,
-      cantidad: objetosGuardados ?? 0,
-      texto: objetosGuardados === 1 ? 'objeto perdido guardado' : 'objetos perdidos guardados',
-    },
-    {
-      area: 'avisos' as Area,
-      href: '/panel/avisos',
-      icono: 'avisos' as NombreIcono,
-      cantidad: avisosFijados ?? 0,
-      texto: avisosFijados === 1 ? 'aviso fijado por el equipo' : 'avisos fijados por el equipo',
     },
   ]
     .filter((p) => p.cantidad > 0 && puede(p.area))
@@ -510,34 +467,13 @@ export default async function DashboardPage() {
         Alertas: aparecen cuando hay algo que atender, O cuando una lectura
         falló y no se puede saber si hay algo que atender.
       */}
-      {((mantPendiente ?? 0) > 0 ||
-        (objetosGuardados ?? 0) > 0 ||
-        faltantes.length > 0 ||
-        eStock) && (
+      {(faltantes.length > 0 || eStock) && (
         <div className="mt-4 flex flex-wrap gap-2">
           {eStock && puede('config') && (
             <span className="inline-flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 ring-1 ring-stone-200">
               <Icono nombre="alerta" tam={16} />
               No se pudo revisar el stock en este momento
             </span>
-          )}
-          {(mantPendiente ?? 0) > 0 && puede('mantenimiento') && (
-            <Link
-              href="/panel/mantenimiento"
-              className="inline-flex items-center gap-2 rounded-xl bg-lenga-50 px-3 py-2 text-sm text-lenga-900 ring-1 ring-lenga-200 transition hover:bg-lenga-100"
-            >
-              <Icono nombre="mantenimiento" tam={16} />
-              {mantPendiente} orden(es) de mantenimiento sin resolver
-            </Link>
-          )}
-          {(objetosGuardados ?? 0) > 0 && puede('objetos_perdidos') && (
-            <Link
-              href="/panel/objetos-perdidos"
-              className="inline-flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 ring-1 ring-stone-200 transition hover:bg-stone-200"
-            >
-              <Icono nombre="objetos" tam={16} />
-              {objetosGuardados} objeto(s) en depósito
-            </Link>
           )}
           {faltantes.length > 0 && puede('config') && (
             <Link
@@ -611,10 +547,9 @@ export default async function DashboardPage() {
           decir nada nuevo, y empujaba abajo del pliegue el estado de las
           unidades, que sí es información.
 
-          Lo único que aportaba eran dos contadores —mantenimiento pendiente y
-          objetos guardados— colgados como insignias. Eso es lo que queda, pero
-          al revés: en vez de un menú con números, una lista de lo que **pide
-          acción**, donde cada línea existe solo si hay algo que hacer. Si no
+          Lo único que aportaba eran contadores colgados como insignias. Eso es
+          lo que queda, pero al revés: en vez de un menú con números, una lista
+          de lo que **pide acción**, donde cada línea existe solo si hay algo que hacer. Si no
           hay nada, lo dice y no ocupa lugar.
         */}
         <Tarjeta

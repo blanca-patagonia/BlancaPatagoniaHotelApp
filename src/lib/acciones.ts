@@ -10,8 +10,8 @@ import { registrarErrorSync } from '@/lib/registro'
  * valor de retorno. En la práctica eso derivó en escrituras cuyo resultado se
  * descartaba:
  *
- *     await supabase.from('avisos').delete().eq('id', id)
- *     redirect('/panel/avisos')
+ *     await supabase.from('huespedes').delete().eq('id', id)
+ *     redirect('/panel/huespedes')
  *
  * Si la base rechaza —por RLS, por un trigger, por un corte—, la pantalla
  * recarga sin cambios y **sin un solo mensaje**. Quien lo usa no puede

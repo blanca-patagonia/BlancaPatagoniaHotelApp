@@ -80,7 +80,7 @@ export default async function DetalleUnidadHousekeepingPage({
   }
   const unidad = unidadData as unknown as UnidadRow
 
-  const [{ data: estadiasData, error: errorEstadias }, { data: ordenesData, error: errorOrdenes }, { data: registrosData, error: errorRegistros }] =
+  const [{ data: estadiasData, error: errorEstadias }, { data: registrosData, error: errorRegistros }] =
     await Promise.all([
       supabase
         .from('estadias')
@@ -88,7 +88,6 @@ export default async function DetalleUnidadHousekeepingPage({
         .eq('unidad_id', unidadId)
         .in('estado', [...ESTADOS_DEL_DIA_HOUSEKEEPING])
         .or(`check_in.eq.${hoy},check_out.eq.${hoy}`),
-      supabase.from('ordenes_mantenimiento').select('id').eq('unidad_id', unidadId).neq('estado', 'resuelta'),
       supabase
         .from('housekeeping_registros')
         .select('id, comentario, fotos, creado_en, mucama:perfiles(nombre)')
@@ -96,12 +95,10 @@ export default async function DetalleUnidadHousekeepingPage({
         .order('creado_en', { ascending: false }),
     ])
   if (errorEstadias) registrarFalla(errorEstadias, 'housekeeping:detalle_unidad_estadias')
-  if (errorOrdenes) registrarFalla(errorOrdenes, 'housekeeping:detalle_unidad_ordenes')
   if (errorRegistros) registrarFalla(errorRegistros, 'housekeeping:detalle_unidad_registros')
 
   const llegaHoy = (estadiasData ?? []).some((e) => e.check_in === hoy)
   const saleHoy = (estadiasData ?? []).some((e) => e.check_out === hoy)
-  const enReparacion = (ordenesData ?? []).length > 0
 
   const prioridad = prioridadDe({
     id: unidad.id,
@@ -112,7 +109,6 @@ export default async function DetalleUnidadHousekeepingPage({
     ocupada: false,
     saleHoy,
     llegaHoy,
-    enReparacion,
   })
 
   const registros = (registrosData ?? []) as unknown as RegistroRow[]
@@ -128,9 +124,9 @@ export default async function DetalleUnidadHousekeepingPage({
 
       {error && <Mensaje tono="error">{mensajeDe(MENSAJES_ERROR, error, 'No se pudo completar la operación.')}</Mensaje>}
       {ok === 'registro' && <Mensaje tono="ok">Registro guardado.</Mensaje>}
-      {(errorEstadias || errorOrdenes) && (
+      {errorEstadias && (
         <Mensaje tono="error">
-          No se pudo leer el contexto completo de la habitación (llegadas/salidas o mantenimiento). La
+          No se pudo leer el contexto completo de la habitación (llegadas y salidas). La
           prioridad que se ve abajo puede no estar actualizada.
         </Mensaje>
       )}
@@ -154,7 +150,6 @@ export default async function DetalleUnidadHousekeepingPage({
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-600 sm:col-span-2">
             {llegaHoy && <span>· Llega hoy</span>}
             {saleHoy && <span>· Sale hoy</span>}
-            {enReparacion && <span className="font-medium text-stone-800">· En reparación</span>}
           </div>
         </div>
       </Tarjeta>

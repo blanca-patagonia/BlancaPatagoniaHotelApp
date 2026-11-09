@@ -30,7 +30,7 @@ describe('encolar: consentimiento', () => {
   it('si no se puede leer la ficha del huésped, NO encola', async () => {
     const { cliente, insert } = clienteQueFalla()
     const r = await encolar(cliente, {
-      evento: 'solicitud_resena',
+      evento: 'encuesta_postcheckout',
       entidadId: 'r1',
       destinatario: 'huesped@ejemplo.com',
       variables: {},

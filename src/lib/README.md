@@ -30,7 +30,7 @@ falla si aparece uno sin listar.
 | `facturacion/` | Facturación electrónica y datos del hotel como emisor |
 | `divisas/` | Cotización del dólar, con su cadena de respaldo |
 | `email/` | Envío de correo: consola o Resend |
-| `notificaciones/` | Bandeja de salida de avisos y recordatorios |
+| `notificaciones/` | Bandeja de salida de avisos al huésped, con reintentos |
 | `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks, pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
 | `conexiones/` | OAuth2 con Mercado Pago y Google |
 | `storage/` | Fotos operativas en Supabase Storage (ADR 0037) |

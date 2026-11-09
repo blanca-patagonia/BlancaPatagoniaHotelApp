@@ -9,14 +9,10 @@ describe('permisos por rol', () => {
     }
   })
 
-  it('housekeeping ve inicio, su área, mantenimiento, avisos y ayuda', () => {
-    // `conversaciones` está en esta lista pero salió por estar en
-    // `AREAS_OCULTAS` (ver el test de «áreas apagadas» más abajo).
+  it('housekeeping ve inicio, su área y ayuda', () => {
     expect(areasDe('housekeeping')).toEqual([
       'dashboard',
       'housekeeping',
-      'mantenimiento',
-      'avisos',
       'ayuda',
     ])
     expect(puedeAcceder('housekeeping', 'reservas')).toBe(false)

@@ -19,26 +19,18 @@ import { formatearUSD } from './moneda'
 /**
  * El catálogo de avisos.
  *
- * ── Los tres grupos, y por qué importan ─────────────────────────────────────
+ * Todos son avisos al huésped sobre algo de su reserva: hablan de algo que él
+ * inició o que le afecta.
  *
- * 1. **Al huésped, sobre su reserva.** Son la mayoría y todos son
- *    transaccionales: hablan de algo que él inició o que le afecta.
- * 2. **Al huésped, comerciales.** Piden opt-in explícito (`acepta_promociones`).
- *    Hoy sólo `solicitud_resena`, que es lo único que le pide un favor al huésped
- *    en vez de informarle algo suyo.
- * 3. **Internos, al hotel.** No van por correo al huésped: aterrizan en la
- *    cartelera de `avisos`, que el staff ya mira. Ver `canal` en la 0086.
- *
- * ⚠️ Agregar un evento acá **obliga** a decidir tres cosas en
- * `lib/domain/notificaciones.ts`: si es inmediato o espera al horario, si es
- * comercial, y si su clave lleva discriminante —o sea, si se manda una vez por
- * entidad o varias—. Los tres tienen test de cobertura: si falta uno, falla.
+ * ⚠️ Agregar un evento acá **obliga** a decidir dos cosas en
+ * `lib/domain/notificaciones.ts`: si es inmediato o espera al horario, y si su
+ * clave lleva discriminante —o sea, si se manda una vez por entidad o varias—.
+ * Los dos tienen test de cobertura: si falta uno, falla.
  */
 export const EVENTOS_EMAIL = [
   // ── Ciclo de la reserva ──
   'confirmacion_reserva',
   'reserva_confirmada',
-  'reserva_por_vencer',
   'reserva_reprogramada',
   'reserva_cancelada',
   'no_show',
@@ -46,42 +38,13 @@ export const EVENTOS_EMAIL = [
   // ── Dinero ──
   'pago_recibido',
   'pago_rechazado',
-  'saldo_pendiente',
 
   // ── Estadía ──
   'recordatorio_checkin',
-  'checkout_proximo',
   'encuesta_postcheckout',
-  'solicitud_resena',
   'cambio_nivel_fidelidad',
-  'mensaje_del_hotel',
 
-  // ── Internos: van a la cartelera del hotel, no al huésped ──
-  'interno_nueva_reserva',
-  'interno_nuevo_pago',
-  'interno_error_sincronizacion',
-  'interno_canal_por_revisar',
-  'interno_reserva_modificada_canal',
-  'interno_discrepancia_factura',
-  'interno_habitacion_lista',
-  'interno_incidente_mantenimiento',
 ] as const
-
-/** Los que aterrizan en la cartelera interna en vez de ir al huésped. */
-export const EVENTOS_INTERNOS = [
-  'interno_nueva_reserva',
-  'interno_nuevo_pago',
-  'interno_error_sincronizacion',
-  'interno_canal_por_revisar',
-  'interno_reserva_modificada_canal',
-  'interno_discrepancia_factura',
-  'interno_habitacion_lista',
-  'interno_incidente_mantenimiento',
-] as const
-
-export function esInterno(evento: EventoEmail): boolean {
-  return (EVENTOS_INTERNOS as readonly string[]).includes(evento)
-}
 
 export type EventoEmail = (typeof EVENTOS_EMAIL)[number]
 
@@ -216,31 +179,6 @@ El saldo se puede abonar antes de llegar o en el mostrador.
     ],
   },
 
-  reserva_por_vencer: {
-    evento: 'reserva_por_vencer',
-    nombre: 'La reserva está por liberarse',
-    /*
-      El aviso que evita la peor sorpresa: una reserva pendiente se libera a los
-      5 días (`expirar_reservas_pendientes`) y hasta ahora eso pasaba en silencio.
-      El huésped creía tener la habitación y se enteraba al llegar.
-    */
-    disparador: '24 horas antes de que la reserva pendiente expire',
-    asunto: 'Tu reserva {{codigo}} se libera mañana',
-    cuerpo: `Hola {{nombre}},
-
-Tu reserva sigue **sin la seña**, así que mañana se libera y la habitación
-vuelve a quedar disponible para otros huéspedes.
-
-· Código: {{codigo}}
-· Llegada: {{check_in}}
-· Seña necesaria: {{sena}}
-
-Si todavía querés la habitación, podés abonar acá: {{enlace}}
-
-Si ya no la necesitás, no hace falta que hagas nada.`,
-    variables: ['nombre', 'codigo', 'check_in', 'sena', 'enlace'],
-  },
-
   reserva_reprogramada: {
     evento: 'reserva_reprogramada',
     nombre: 'Cambio de fechas',
@@ -340,220 +278,6 @@ Podés intentar de nuevo, con la misma tarjeta u otra, acá: {{enlace}}
 
 Si el problema sigue, escribinos y lo resolvemos por otro medio.`,
     variables: ['nombre', 'codigo', 'importe', 'enlace'],
-  },
-
-  saldo_pendiente: {
-    evento: 'saldo_pendiente',
-    nombre: 'Recordatorio de saldo',
-    disparador: 'Unos días antes de la llegada, si queda saldo',
-    asunto: 'Te queda un saldo pendiente para tu estadía ({{codigo}})',
-    cuerpo: `Hola {{nombre}},
-
-Falta poco para tu llegada del {{check_in}} y queda un saldo de {{saldo}}.
-
-Podés abonarlo antes de viajar acá: {{enlace}}
-
-También se puede pagar en el mostrador al llegar; te lo recordamos por si
-preferís tenerlo resuelto.`,
-    variables: ['nombre', 'codigo', 'check_in', 'saldo', 'enlace'],
-  },
-
-  checkout_proximo: {
-    evento: 'checkout_proximo',
-    nombre: 'Check-out próximo',
-    disparador: 'La víspera de la salida',
-    asunto: 'Tu salida es mañana ({{codigo}})',
-    cuerpo: `Hola {{nombre}},
-
-Te recordamos que tu salida es el {{check_out}}, hasta las {{hora_check_out}}.
-
-Si necesitás una salida más tarde, consultanos: según la ocupación del día
-solemos poder darla.
-
-{{aviso_saldo}}`,
-    /*
-      `aviso_saldo` viene vacío cuando no hay nada que cobrar. Es preferible a
-      dos plantillas casi iguales, y a mandar «saldo: 0» —que hace que alguien
-      revise si le están cobrando algo—.
-    */
-    variables: ['nombre', 'codigo', 'check_out', 'hora_check_out'],
-    opcionales: ['aviso_saldo'],
-  },
-
-  solicitud_resena: {
-    evento: 'solicitud_resena',
-    nombre: 'Pedido de reseña',
-    /*
-      ⚠️ El ÚNICO evento comercial del catálogo, y por eso exige
-      `acepta_promociones`.
-
-      Los demás informan algo de la reserva del propio huésped; éste le pide un
-      favor al hotel. La diferencia no es de tono: es la que decide si hace falta
-      opt-in.
-    */
-    disparador: 'Unos días después del check-out, si la encuesta salió bien',
-    asunto: '¿Nos dejarías una reseña?',
-    cuerpo: `Hola {{nombre}},
-
-Nos alegró tenerte en Blanca Patagonia. Si te quedaste con una buena impresión,
-una reseña nos ayuda muchísimo a que otros huéspedes nos encuentren.
-
-{{enlace}}
-
-Son dos minutos, y si preferís no hacerlo no pasa nada.
-
-¡Gracias!`,
-    variables: ['nombre', 'enlace'],
-  },
-
-  mensaje_del_hotel: {
-    evento: 'mensaje_del_hotel',
-    nombre: 'Mensaje del hotel',
-    /*
-      El único cuerpo «libre» del catálogo, y por eso tiene marco fijo: el saludo,
-      la referencia a la reserva y la firma no los escribe nadie a mano. Lo
-      redacta el asistente de IA y una persona lo revisa, lo corrige si hace
-      falta y lo confirma (ADR 0041); recién ahí entra a la bandeja. No es
-      comercial —habla de la estadía del huésped—, así que exige `acepta_avisos`
-      y no `acepta_promociones`.
-    */
-    disparador: 'A mano, desde el asistente: un mensaje puntual sobre la reserva del huésped',
-    asunto: 'Sobre tu reserva {{codigo}} en Blanca Patagonia',
-    cuerpo: `Hola {{nombre}},
-
-{{mensaje}}
-
-Ante cualquier duda, respondé este correo.
-
-Equipo de Blanca Patagonia`,
-    variables: ['nombre', 'codigo', 'mensaje'],
-  },
-
-  /* ────────────────────────── internos: van a la cartelera ──────────── */
-
-  /*
-    ⚠️ Ningún aviso interno lleva el NOMBRE del huésped (ni email ni teléfono).
-    La cartelera la lee el asistente de IA (herramienta `avisos_internos`) y lo
-    que lee sale a un proveedor externo: ADR 0039/0041 prohíben mandarle datos
-    personales. Y el nombre que llega del portal lo escribe un anónimo, así que
-    además es una vía para meterle instrucciones al modelo. El código de reserva
-    alcanza para encontrarla. Lo vigila `tests/contratos/ia-sin-datos-personales.test.ts`.
-  */
-
-  interno_nueva_reserva: {
-    evento: 'interno_nueva_reserva',
-    nombre: 'Interno · reserva nueva',
-    disparador: 'Al entrar una reserva, sea del portal o de un canal',
-    asunto: 'Reserva nueva: {{codigo}}',
-    cuerpo: `{{origen}} · {{codigo}} · {{check_in}} a {{check_out}} · {{total}}`,
-    variables: ['codigo', 'check_in', 'check_out', 'total', 'origen'],
-  },
-
-  interno_nuevo_pago: {
-    evento: 'interno_nuevo_pago',
-    nombre: 'Interno · pago acreditado',
-    disparador: 'Cuando se acredita un pago',
-    asunto: 'Pago acreditado: {{importe}} ({{codigo}})',
-    cuerpo: `{{codigo}} · {{importe}} por {{medio}} · saldo {{saldo}}`,
-    variables: ['codigo', 'importe', 'medio', 'saldo'],
-  },
-
-  interno_error_sincronizacion: {
-    evento: 'interno_error_sincronizacion',
-    nombre: 'Interno · falló la sincronización con el canal',
-    /*
-      El aviso que evita el peor silencio del módulo de canales: si el feed deja
-      de responder, las reservas de Booking no llegan y **el síntoma es que no
-      pasa nada**. Alguien tiene que enterarse el mismo día.
-    */
-    disparador: 'Cuando una corrida de canales falla o rechaza filas',
-    asunto: 'Revisar la sincronización con {{canal}}',
-    cuerpo: `{{canal}} · {{detalle}}
-
-Si esto se repite, las reservas del canal pueden no estar entrando.`,
-    variables: ['canal', 'detalle'],
-  },
-
-  interno_canal_por_revisar: {
-    evento: 'interno_canal_por_revisar',
-    nombre: 'Interno · reservas de canal esperando revisión',
-    /*
-      ⚠️ El cron ATERRIZA, no importa (ver `app/api/cron/canales/route.ts`).
-
-      Eso es deliberado: importar es crear una reserva que ocupa inventario, y
-      hacerlo sin que nadie mire convertiría el choque con el anti-overbooking
-      —el caso más caro que le puede pasar al hotel— en una fila de error que
-      nadie lee.
-
-      Pero el corolario es que una reserva que aterrizó el viernes a la noche
-      **sigue sin importarse hasta que alguien entre a la pantalla de canales**.
-      El KPI se enciende solo; el problema es que hay que estar mirándolo. Este
-      aviso es el que hace que no haga falta.
-    */
-    disparador: 'Cuando el cron aterriza reservas nuevas de un canal',
-    asunto: '{{cantidad}} reserva(s) de {{canal}} esperando importación',
-    cuerpo: `Entraron {{cantidad}} reserva(s) de {{canal}} y están en la zona de recepción, sin importar.
-
-Hasta que se importen, esas fechas NO ocupan inventario en el sistema.{{aviso_conflicto}}`,
-    variables: ['canal', 'cantidad'],
-    /*
-      El aviso de conflicto va sólo cuando lo hay. Ponerlo siempre —«conflictos:
-      0»— haría que se leyera como ruido y se dejara de mirar justo el día que
-      dice otra cosa.
-    */
-    opcionales: ['aviso_conflicto'],
-  },
-
-  interno_reserva_modificada_canal: {
-    evento: 'interno_reserva_modificada_canal',
-    nombre: 'Interno · el canal cambió una reserva ya importada',
-    /*
-      ⚠️ El caso que más caro sale de los tres del módulo de canales.
-
-      El huésped entra a Booking y mueve las fechas. La fila del canal se
-      actualiza —correcto—, pero la reserva del hotel se queda con las fechas
-      viejas y **no hay ningún síntoma**: las dos parecen normales y nada las
-      compara. Se descubre el día que el huésped se presenta.
-
-      El sistema no reprograma solo (0088): mover el período va contra la
-      restricción de exclusión, y el precio no se recotiza solo.
-    */
-    disparador: 'Cuando el canal modifica una entrante que ya se había importado',
-    asunto: '{{cantidad}} reserva(s) de {{canal}} cambiaron después de importarse',
-    cuerpo: `El canal cambió {{cantidad}} reserva(s) que ya están cargadas en el sistema.
-
-⚠️ La reserva del hotel sigue con los datos VIEJOS: hay que corregirla a mano desde la ficha. El sistema no la mueve solo — cambiar las fechas puede chocar con otra estadía, y el precio no se recotiza automáticamente.`,
-    variables: ['canal', 'cantidad'],
-  },
-
-  interno_discrepancia_factura: {
-    evento: 'interno_discrepancia_factura',
-    nombre: 'Interno · diferencia en una factura del canal',
-    disparador: 'Cuando lo facturado no coincide con lo devengado',
-    asunto: 'Diferencia en la factura de {{canal}}',
-    cuerpo: `{{canal}} · devengado {{devengado}} · facturado {{facturado}} · diferencia {{diferencia}}
-
-Revisar antes de pagarla.`,
-    variables: ['canal', 'devengado', 'facturado', 'diferencia'],
-  },
-
-  interno_habitacion_lista: {
-    evento: 'interno_habitacion_lista',
-    nombre: 'Interno · habitación lista',
-    disparador: 'Cuando housekeeping marca la unidad como inspeccionada',
-    asunto: '{{unidad}} lista',
-    cuerpo: `{{unidad}} quedó lista{{para_quien}}.`,
-    variables: ['unidad'],
-    opcionales: ['para_quien'],
-  },
-
-  interno_incidente_mantenimiento: {
-    evento: 'interno_incidente_mantenimiento',
-    nombre: 'Interno · incidente de mantenimiento',
-    disparador: 'Al abrirse una orden urgente',
-    asunto: 'Mantenimiento urgente: {{unidad}}',
-    cuerpo: `{{unidad}} · {{titulo}} · prioridad {{prioridad}}`,
-    variables: ['unidad', 'titulo', 'prioridad'],
   },
 
   cambio_nivel_fidelidad: {

@@ -39,15 +39,6 @@ import { paxQueOcupa, validarOcupantes, type Ocupantes } from '@/lib/domain/ocup
 import { GARANTIAS, PLANES, SEGMENTOS } from '@/lib/domain/reservas'
 import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
 
-/*
-  ⚠️ `avisarNuevaReserva` NO se importa acá, y es deliberado: el alta del
-  mostrador la hace una persona que está mirando la pantalla. Avisarle a la
-  cartelera de lo que acaba de cargar ella misma es ruido, y el ruido es lo que
-  hace que después nadie mire la cartelera. El aviso sale del portal público
-  (`app/reservar/actions.ts`) y del cron de canales, que son los caminos donde
-  entra una reserva sin que haya nadie.
-*/
-
 export interface EstadoNuevaReserva {
   error?: string
   /**

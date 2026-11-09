@@ -41,7 +41,7 @@ interface Encolado {
  * Cliente falso: acepta la cadena de PostgREST y guarda lo que se insertó.
  *
  * Devuelve preferencias que aceptan todo, para que el consentimiento no corte el
- * encolado del evento comercial y el test llegue a mirar sus variables.
+ * encolado y el test llegue a mirar sus variables.
  */
 function clienteFalso(): { client: ClienteServicio; encolados: Encolado[] } {
   const encolados: Encolado[] = []
@@ -53,7 +53,7 @@ function clienteFalso(): { client: ClienteServicio; encolados: Encolado[] } {
           select: () => ({
             eq: () => ({
               maybeSingle: async () => ({
-                data: { acepta_avisos: true, acepta_promociones: true },
+                data: { acepta_avisos: true },
                 error: null,
               }),
             }),
@@ -90,60 +90,6 @@ const ENLACE = 'https://blancapatagonia.test/x/abc'
  * puede comparar contra `EVENTOS_EMAIL` y nombrar el que falte.
  */
 const LLAMADAS: Partial<Record<EventoEmail, (c: ClienteServicio) => Promise<unknown>>> = {
-  interno_nueva_reserva: (c) =>
-    eventos.avisarNuevaReserva(c, {
-      reservaId: HUESPED.reservaId,
-      codigo: HUESPED.codigo,
-      checkIn: '2027-03-10',
-      checkOut: '2027-03-13',
-      total: 300,
-      origen: 'Portal',
-    }),
-  interno_nuevo_pago: (c) =>
-    eventos.avisarPagoInterno(c, {
-      pagoId: 'pago-1',
-      reservaId: HUESPED.reservaId,
-      codigo: HUESPED.codigo,
-      importe: 120,
-      medio: 'MercadoPago',
-      saldo: 180,
-    }),
-  interno_error_sincronizacion: (c) =>
-    eventos.avisarErrorSincronizacion(c, {
-      canal: 'Booking',
-      detalle: 'el feed respondió 502',
-      dia: '2027-03-10',
-    }),
-  interno_canal_por_revisar: (c) =>
-    eventos.avisarCanalPorRevisar(c, {
-      canal: 'Booking',
-      cantidad: 3,
-      dia: '2027-03-10',
-      conflictos: 1,
-    }),
-  interno_reserva_modificada_canal: (c) =>
-    eventos.avisarReservasModificadas(c, { canal: 'Booking', cantidad: 2, dia: '2027-03-10' }),
-  interno_discrepancia_factura: (c) =>
-    eventos.avisarDiscrepanciaFactura(c, {
-      cargoId: 'cargo-1',
-      canal: 'Booking',
-      devengado: 100,
-      facturado: 130,
-    }),
-  interno_habitacion_lista: (c) =>
-    eventos.avisarHabitacionLista(c, {
-      unidadId: 'unidad-1',
-      unidad: 'Habitación 12',
-      dia: '2027-03-10',
-      paraQuien: 'Ana Pérez',
-    }),
-  interno_incidente_mantenimiento: (c) =>
-    eventos.avisarIncidenteMantenimiento(c, {
-      ordenId: 'orden-1',
-      unidad: 'Habitación 12',
-      titulo: 'Pérdida de agua',
-      prioridad: 'urgente',
-    }),
   reserva_confirmada: (c) =>
     eventos.avisarReservaConfirmada(c, HUESPED, {
       checkIn: '2027-03-10',
@@ -171,27 +117,12 @@ const LLAMADAS: Partial<Record<EventoEmail, (c: ClienteServicio) => Promise<unkn
       checkIn: '2027-03-10',
       detalle: 'Se cobra el total de la estadía.',
     }),
-  reserva_por_vencer: (c) =>
-    eventos.avisarReservaPorVencer(c, HUESPED, {
-      checkIn: '2027-03-10',
-      sena: 90,
-      enlace: ENLACE,
-    }),
-  saldo_pendiente: (c) =>
-    eventos.avisarSaldoPendiente(c, HUESPED, {
-      checkIn: '2027-03-10',
-      saldo: 180,
-      enlace: ENLACE,
-    }),
-  checkout_proximo: (c) =>
-    eventos.avisarCheckoutProximo(c, HUESPED, { checkOut: '2027-03-13', saldo: 40 }),
-  solicitud_resena: (c) => eventos.avisarSolicitudResena(c, HUESPED, { enlace: ENLACE }),
 }
 
 /**
  * Eventos que todavía no tienen disparador propio, con el motivo.
  *
- * Los tres se encolan desde su propio flujo, escritos antes de que existiera
+ * Estos se encolan desde su propio flujo, escritos antes de que existiera
  * esta capa. Están acá para que la lista no sea un agujero silencioso: si mañana
  * uno se migra, se saca de acá y el test de cobertura lo exige en `LLAMADAS`.
  */
@@ -199,13 +130,11 @@ const SIN_DISPARADOR: Record<string, string> = {
   confirmacion_reserva:
     'Se encola en app/reservar/actions.ts, dentro del alta pública, con el token de la reserva recién creada.',
   recordatorio_checkin:
-    'Lo encola el cron de recordatorios (lib/notificaciones/recordatorios.ts) y también el botón del listado de reservas, que fuerza la misma corrida.',
+    'Lo encola el botón de recordatorios del listado de reservas (panel/reservas/actions.ts), para quienes llegan mañana.',
   encuesta_postcheckout:
     'Se encola en el check-out, que es el único momento en que existe el token de la encuesta.',
   cambio_nivel_fidelidad:
     'Se encola en el check-out, después de sumar los puntos: sólo se avisa si la estadía hizo cambiar de nivel.',
-  mensaje_del_hotel:
-    'Se encola desde el asistente de IA (panel/ia/acciones.ts, `enviarMensaje`) cuando una persona confirma un mensaje redactado; lo cubre tests/servicios/ia-ejecutar-propuesta.test.ts.',
 }
 
 describe('los disparadores llenan las variables de su plantilla', () => {
@@ -270,28 +199,26 @@ describe('los disparadores llenan las variables de su plantilla', () => {
 })
 
 describe('las claves de idempotencia distinguen lo que se repite', () => {
-  it('los avisos que se repiten llevan discriminante y los que no, no', async () => {
+  it('el mismo aviso sobre la misma reserva se anota una sola vez', async () => {
     /*
-      El caso caro es el de la habitación lista: la misma unidad se limpia todos
-      los días. Sin discriminante, la clave sería `interno_habitacion_lista:<id>`
-      y sólo se avisaría la primera vez en la vida de esa unidad — el resto
-      chocaría contra el `unique` y se descartaría en silencio.
+      La clave sale del evento y de la entidad. Reintentar una acción o
+      reprocesar un webhook produce la misma clave, y la segunda inserción choca
+      con el `unique` de la bandeja de salida en vez de mandar dos correos.
     */
     const { client, encolados } = clienteFalso()
 
-    await eventos.avisarHabitacionLista(client, {
-      unidadId: 'u1',
-      unidad: 'Hab 12',
-      dia: '2027-03-10',
+    await eventos.avisarReservaConfirmada(client, HUESPED, {
+      checkIn: '2027-03-10',
+      checkOut: '2027-03-13',
+      saldo: 180,
     })
-    await eventos.avisarHabitacionLista(client, {
-      unidadId: 'u1',
-      unidad: 'Hab 12',
-      dia: '2027-03-11',
+    await eventos.avisarReservaConfirmada(client, HUESPED, {
+      checkIn: '2027-03-10',
+      checkOut: '2027-03-13',
+      saldo: 180,
     })
 
-    expect(encolados[0].clave).not.toBe(encolados[1].clave)
-    expect(encolados[0].clave).toContain('2027-03-10')
+    expect(encolados[0].clave).toBe(encolados[1].clave)
   })
 
   it('el mismo pago no se avisa dos veces', async () => {
@@ -307,18 +234,6 @@ describe('las claves de idempotencia distinguen lo que se repite', () => {
 })
 
 describe('el canal de cada aviso', () => {
-  it('los internos salen por el canal interno, con el rol como destinatario', async () => {
-    const { client, encolados } = clienteFalso()
-    await eventos.avisarErrorSincronizacion(client, {
-      canal: 'Booking',
-      detalle: 'timeout',
-      dia: '2027-03-10',
-    })
-
-    expect(encolados[0].canal).toBe('interno')
-    expect(encolados[0].destinatario).toBe('gerencia')
-  })
-
   it('los del huésped salen por correo', async () => {
     const { client, encolados } = clienteFalso()
     await eventos.avisarPagoRecibido(client, HUESPED, { pagoId: 'p1', importe: 100, saldo: 0 })

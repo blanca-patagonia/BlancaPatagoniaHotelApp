@@ -15,7 +15,6 @@ import {
 } from '@/lib/fechas'
 import { metricasDeMes, ultimosMeses, type MetricasMes } from '@/lib/domain/metricas'
 import { mesValido } from '@/lib/domain/informes'
-import { deLista } from '@/lib/domain/listas'
 import {
   filasLibroVentas,
   type FacturaLibro,
@@ -37,7 +36,7 @@ import {
 } from '@/lib/domain/reservas'
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
 import { traerEstadias, traerUnidades } from '../../reportes/datos'
-import { busquedaHuespedes, busquedaOrdenes } from '../busquedas'
+import { busquedaHuespedes } from '../busquedas'
 
 /**
  * Punto único de exportación a CSV del panel.
@@ -424,62 +423,6 @@ const RECURSOS: Record<string, Definicion> = {
         const t = termino(p)
         return t ? c.or(busquedaHuespedes(t)) : c
       },
-    ),
-  },
-
-  mantenimiento: {
-    area: 'mantenimiento',
-    archivo: 'ordenes-mantenimiento',
-    generar: simple<{
-      titulo: string
-      descripcion: string | null
-      prioridad: string
-      estado: string
-      creada_en: string
-      unidad: { nombre: string } | null
-    }>(
-      'ordenes_mantenimiento',
-      'titulo, descripcion, prioridad, estado, creada_en, unidad:unidades(nombre)',
-      { columna: 'creada_en', descendente: true },
-      [
-        { titulo: 'Unidad', valor: (o) => o.unidad?.nombre ?? '' },
-        { titulo: 'Título', valor: (o) => o.titulo },
-        { titulo: 'Descripción', valor: (o) => o.descripcion ?? '' },
-        { titulo: 'Prioridad', valor: (o) => o.prioridad },
-        { titulo: 'Estado', valor: (o) => o.estado },
-        { titulo: 'Creada', valor: (o) => (o.creada_en ? fechaDelHotel(o.creada_en) : '') },
-      ],
-      (c, p) => {
-        // Los mismos filtros que la pantalla: estado, prioridad y búsqueda.
-        const estado = deLista(['pendiente', 'en_proceso', 'resuelta'] as const, p.get('estado'))
-        const prioridad = deLista(['baja', 'media', 'alta'] as const, p.get('prioridad'))
-        let filtrada = estado ? c.eq('estado', estado) : c
-        if (prioridad) filtrada = filtrada.eq('prioridad', prioridad)
-        const t = termino(p)
-        if (t) filtrada = filtrada.or(busquedaOrdenes(t))
-        return filtrada
-      },
-    ),
-  },
-
-  'objetos-perdidos': {
-    area: 'objetos_perdidos',
-    archivo: 'objetos-perdidos',
-    generar: simple<{
-      descripcion: string
-      ubicacion: string | null
-      fecha_hallazgo: string
-      estado: string
-    }>(
-      'objetos_perdidos',
-      'descripcion, ubicacion, fecha_hallazgo, estado',
-      { columna: 'fecha_hallazgo', descendente: true },
-      [
-        { titulo: 'Descripción', valor: (o) => o.descripcion },
-        { titulo: 'Ubicación', valor: (o) => o.ubicacion ?? '' },
-        { titulo: 'Hallazgo', valor: (o) => o.fecha_hallazgo },
-        { titulo: 'Estado', valor: (o) => o.estado },
-      ],
     ),
   },
 

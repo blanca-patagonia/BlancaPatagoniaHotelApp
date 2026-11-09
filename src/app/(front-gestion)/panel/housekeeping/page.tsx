@@ -146,9 +146,8 @@ export default async function HousekeepingPage({
         .select('unidad_id, check_in, check_out')
         .in('estado', [...ESTADOS_DEL_DIA_HOUSEKEEPING])
         .or(`check_in.eq.${hoy},check_out.eq.${hoy}`),
-      supabase.from('ordenes_mantenimiento').select('unidad_id').neq('estado', 'resuelta'),
     ])
-  const [{ data }, { data: mucamasData }, { data: estadiasData }, { data: ordenesData }] = lecturas
+  const [{ data }, { data: mucamasData }, { data: estadiasData }] = lecturas
   /*
     Nunca descartar el error de una lectura (regla de la auditoría QA/UX): un
     saldo o una lista vacía por una lectura fallida se ven igual que un dato
@@ -166,11 +165,6 @@ export default async function HousekeepingPage({
     if (e.check_in === hoy) llegaHoy.add(e.unidad_id)
     if (e.check_out === hoy) saleHoy.add(e.unidad_id)
   }
-  const enReparacion = new Set(
-    ((ordenesData ?? []) as { unidad_id: string | null }[])
-      .map((o) => o.unidad_id)
-      .filter((x): x is string => Boolean(x)),
-  )
 
   /** Las unidades en la forma del dominio, para poder priorizarlas y contarlas. */
   const paraDominio: UnidadHousekeeping[] = todas.map((u) => ({
@@ -182,7 +176,6 @@ export default async function HousekeepingPage({
     ocupada: false,
     saleHoy: saleHoy.has(u.id),
     llegaHoy: llegaHoy.has(u.id),
-    enReparacion: enReparacion.has(u.id),
   }))
   const resumen = contadores(paraDominio)
 
@@ -262,7 +255,7 @@ export default async function HousekeepingPage({
           Lo que WinPAX mostraba y acá faltaba: no sólo cuántas están sucias, sino
           cuántas tienen a alguien llegando hoy. Es la diferencia entre una lista de
           estados y un orden de trabajo. */}
-      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
           titulo="Faltan por hacer"
           valor={String(resumen.faltantes)}
@@ -287,13 +280,6 @@ export default async function HousekeepingPage({
           detalle="se desocupan y hay que prepararlas"
           icono="salir"
           tono="alerta"
-        />
-        <Kpi
-          titulo="En reparación"
-          valor={String(enReparacion.size)}
-          detalle="no se limpian hasta resolverlas"
-          icono="mantenimiento"
-          href="/panel/mantenimiento"
         />
       </div>
 

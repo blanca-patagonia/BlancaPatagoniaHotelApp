@@ -1,10 +1,10 @@
 /**
  * Agrupación del menú lateral del panel.
  *
- * Por qué existe. El menú listaba las 18 áreas al mismo nivel visual, en una
+ * Por qué existe. El menú listaba las áreas al mismo nivel visual, en una
  * columna plana. Para quien ya conoce el sistema da igual; para alguien que
- * entra a recepción por primera vez, encontrar «Objetos perdidos» entre
- * «Housekeeping» y «Avisos» obliga a leer la lista entera, y eso se paga todos
+ * entra a recepción por primera vez, encontrar «Housekeeping» entre
+ * «Servicio» y «Reportes» obliga a leer la lista entera, y eso se paga todos
  * los días. Agrupar convierte una búsqueda lineal en dos saltos: primero el
  * grupo, después el ítem.
  *
@@ -12,8 +12,7 @@
  *
  *  · `Operación` — lo que se toca con un huésped enfrente o al teléfono.
  *  · `Unidades` — el estado físico de la casa, que mira otra gente y en otro
- *    momento del día (housekeeping y mantenimiento, más cocina).
- *  · `Equipo` — comunicación interna.
+ *    momento del día (housekeeping, más cocina).
  *  · `Administración` — lo que mira gerencia y lo que se configura una vez.
  *
  * `Ayuda` queda fuera de todo grupo, al final: no compite con el trabajo y se
@@ -44,11 +43,7 @@ export interface GrupoNavegacion {
  */
 export const GRUPOS: readonly GrupoNavegacion[] = [
   { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes'] },
-  { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
-  // El registro de envíos va en Equipo, junto al tablón: las dos responden la
-  // misma pregunta —«¿esto se avisó?»— desde los dos lados, el interno y el que
-  // salió al huésped.
-  { titulo: 'Equipo', areas: ['avisos', 'notificaciones'] },
+  { titulo: 'Unidades', areas: ['housekeeping', 'servicio'] },
   { titulo: 'Administración', areas: ['reportes', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
   { titulo: null, areas: ['ayuda'] },
 ]
@@ -99,12 +94,8 @@ export const RUTA_AREA: Record<Area, string> = {
   punto_venta: '/panel/punto-venta',
   huespedes: '/panel/huespedes',
   housekeeping: '/panel/housekeeping',
-  mantenimiento: '/panel/mantenimiento',
-  objetos_perdidos: '/panel/objetos-perdidos',
-  avisos: '/panel/avisos',
   auditoria: '/panel/auditoria',
   errores: '/panel/errores',
-  notificaciones: '/panel/notificaciones',
   reportes: '/panel/reportes',
   config: '/panel/config',
   usuarios: '/panel/usuarios',

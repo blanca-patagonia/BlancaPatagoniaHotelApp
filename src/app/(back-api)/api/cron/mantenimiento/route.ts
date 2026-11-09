@@ -9,11 +9,11 @@ import { DIAS_EXPIRACION } from '@/lib/domain/expiracion'
  *
  * ── El problema que resuelve ────────────────────────────────────────────────
  *
- * Las tres tareas son funciones de Postgres que existen desde
- * hace fases y **las dispara únicamente pg_cron** (migración 0027), programado
- * dentro de un `do $$ ... exception when others` que **se traga el fallo**: si
- * la extensión no quedó activa, la migración no protesta y las tareas
- * simplemente no corren.
+ * Las dos tareas son funciones de Postgres que **las dispara únicamente
+ * pg_cron** (migración 0027), programado dentro de un
+ * `do $$ ... exception when others` que **se traga el fallo**: si la extensión
+ * no quedó activa, la migración no protesta y las tareas simplemente no
+ * corren.
  *
  * La más cara es `expirar_reservas_pendientes`: es la que libera el inventario
  * que retienen las reservas web sin seña. Sin ella, cada reserva abandonada
@@ -23,7 +23,7 @@ import { DIAS_EXPIRACION } from '@/lib/domain/expiracion'
  * Y `purgar_errores` (0068) directamente **nunca se programó**: la tabla `errores`
  * crece sin techo.
  *
- *  * ── Por qué acá y no otra migración de pg_cron ──────────────────────────────
+ * ── Por qué acá y no otra migración de pg_cron ──────────────────────────────
  *
  * Porque el problema no es el horario, es la **visibilidad**. Vercel Cron falla
  * ruidosamente y deja rastro; pg_cron corre dentro de la base y su fallo no llega
@@ -31,7 +31,7 @@ import { DIAS_EXPIRACION } from '@/lib/domain/expiracion'
  * `lib/registro.ts`— así que «se expiraron 3 reservas» y «la expiración falló»
  * son dos cosas que se ven en `/panel/errores`.
  *
- * ⚠️ **Convivir con pg_cron es seguro**: las tres son idempotentes. Expirar dos
+ * ⚠️ **Convivir con pg_cron es seguro**: las dos son idempotentes. Expirar dos
  * veces no expira de más —la segunda corrida no encuentra nada vencido— y purgar
  * dos veces borra lo mismo. Si en el proyecto hosted pg_cron está activo, esto es
  * una red; si no lo está, es el único camino.
@@ -67,11 +67,6 @@ const TAREAS: readonly Tarea[] = [
     rpc: 'expirar_reservas_pendientes',
     args: { p_dias: DIAS_EXPIRACION },
     unidad: 'reservas liberadas',
-  },
-  {
-    nombre: 'generar_mantenimiento_preventivo',
-    rpc: 'generar_mantenimiento_preventivo',
-    unidad: 'órdenes generadas',
   },
   {
     nombre: 'purgar_errores',

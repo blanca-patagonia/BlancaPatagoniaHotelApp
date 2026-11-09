@@ -43,14 +43,10 @@ const ICONO_AREA: Record<Area, NombreIcono> = {
   punto_venta: 'objetos',
   huespedes: 'huespedes',
   housekeeping: 'housekeeping',
-  mantenimiento: 'mantenimiento',
-  objetos_perdidos: 'objetos',
-  avisos: 'avisos',
   auditoria: 'auditoria',
   // Se reusa `alerta` en vez de dibujar un icono nuevo: es exactamente lo que
   // significa la pantalla y ya está en la paleta.
   errores: 'alerta',
-  notificaciones: 'sobre',
   reportes: 'reportes',
   config: 'config',
   usuarios: 'usuarios',

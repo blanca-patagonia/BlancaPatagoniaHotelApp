@@ -783,14 +783,6 @@ export default async function OcupacionPage({
                               Limpieza de {u.nombre}: {ETIQUETAS_ESTADO_HK[u.estado]}
                             </span>
                           </Link>
-                          <Link
-                            href={`/panel/mantenimiento/nueva?unidad=${u.id}`}
-                            title={`Reportar un desperfecto en ${u.nombre}`}
-                            className="text-stone-400 transition hover:text-lenga-700"
-                          >
-                            <Icono nombre="mantenimiento" tam={14} />
-                            <span className="sr-only">Reportar desperfecto en {u.nombre}</span>
-                          </Link>
                         </span>
                       </div>
                     </td>

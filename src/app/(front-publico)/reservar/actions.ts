@@ -3,7 +3,6 @@
 import { redirect } from 'next/navigation'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { encolar } from '@/lib/notificaciones'
-import { avisarNuevaReserva } from '@/lib/notificaciones/eventos'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { urlDelSitio } from '@/lib/env'
 import { formatoFecha, diasEntre, hoyISO } from '@/lib/fechas'
@@ -316,31 +315,10 @@ export async function crearReservaPublica(
   })
 
   /*
-    Y el hotel se entera.
-
-    Una reserva que entra por la web a las tres de la mañana no la ve nadie hasta
-    que alguien abre el listado. El aviso interno aterriza en la cartelera que el
-    staff ya mira, con el código, las fechas y el total: lo mínimo para saber si
-    hay que hacer algo antes de que llegue.
-
-    `origen` dice de dónde vino, que es lo que distingue esto de lo que el propio
-    mostrador acaba de cargar —eso no se avisa, la persona está ahí—.
-  */
-  await avisarNuevaReserva(admin, {
-    reservaId: nueva.id,
-    codigo: nueva.codigo,
-    checkIn,
-    checkOut,
-    total: Number(nueva.total),
-    origen: 'Portal web',
-  })
-
-  /*
     Pago en el mismo paso.
 
     Si el huésped eligió una pasarela, se abre el cobro de la seña y se lo manda
-    ahí. La reserva YA está creada (`pendiente`) y el aviso al hotel ya salió:
-    si la pasarela falla, no se pierde nada —se cae a la confirmación, que
+    ahí. La reserva YA está creada (`pendiente`) y si la pasarela falla, no se pierde nada —se cae a la confirmación, que
     ofrece «Pagar la seña» con los mismos medios—. Lo que confirma el pago es el
     webhook, no la vuelta del huésped (ADR 0027).
   */

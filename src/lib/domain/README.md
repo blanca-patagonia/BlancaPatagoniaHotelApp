@@ -59,7 +59,6 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | Módulo | Qué decide |
 |---|---|
 | `housekeeping.ts` | Prioridad de limpieza de las unidades |
-| `preventivo.ts` | Mantenimiento preventivo |
 | `inventario.ts` | Stock y reposición |
 | `lista-compras.ts` | Lista de compras de cocina |
 | `servicio.ts` | Servicio de cocina: quiénes desayunan |

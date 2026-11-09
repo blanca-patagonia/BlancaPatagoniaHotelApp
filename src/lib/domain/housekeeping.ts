@@ -49,8 +49,6 @@ export interface UnidadHousekeeping {
   saleHoy: boolean
   /** Alguien llega hoy: la habitación tiene que estar lista. */
   llegaHoy: boolean
-  /** Hay una orden de mantenimiento abierta. */
-  enReparacion: boolean
 }
 
 /* ─────────────────────────────────────────────────────────── prioridad ──── */
@@ -91,7 +89,7 @@ export const MOTIVOS_PRIORIDAD: Record<Prioridad, string> = {
  * 5. El resto → normal.
  */
 export function prioridadDe(u: UnidadHousekeeping): Prioridad {
-  if (u.estado === 'bloqueada' || u.enReparacion) return 'sin_tarea'
+  if (u.estado === 'bloqueada') return 'sin_tarea'
   if (u.estado === 'limpia' || u.estado === 'inspeccionada') return 'sin_tarea'
 
   // A partir de acá está sucia.
@@ -149,7 +147,7 @@ export function contadores(unidades: readonly UnidadHousekeeping[]): ContadoresH
   let urgentes = 0
 
   for (const u of unidades) {
-    if (u.estado === 'bloqueada' || u.enReparacion) {
+    if (u.estado === 'bloqueada') {
       fueraDeServicio++
       continue
     }

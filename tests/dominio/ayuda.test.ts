@@ -26,7 +26,6 @@ describe('ayuda · la guía no promete lo que el rol no puede hacer', () => {
   it('housekeeping igual recibe la guía de su trabajo', () => {
     const areas = guiaPara('housekeeping').map((c) => c.area)
     expect(areas).toContain('housekeeping')
-    expect(areas).toContain('mantenimiento')
   })
 
   it('el administrador ve todos los capítulos de las áreas encendidas', () => {

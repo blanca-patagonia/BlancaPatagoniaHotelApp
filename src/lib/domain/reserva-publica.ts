@@ -13,8 +13,7 @@ export const MAX_NOCHES_PUBLICO = 30
 
 /**
  * Largos máximos de los campos libres. Sin tope, un POST directo guardaba un
- * apellido de casi 1 MB que después viajaba a la ficha, los listados, los CSV
- * y la cartelera del staff.
+ * apellido de casi 1 MB que después viajaba a la ficha, los listados y los CSV.
  */
 export const LARGO_MAXIMO = {
   nombre: 80,

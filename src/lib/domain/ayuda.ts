@@ -221,33 +221,6 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
-    area: 'mantenimiento',
-    resumen: 'Órdenes de trabajo: lo que hay que arreglar y en qué anda.',
-    pasos: [
-      {
-        titulo: 'Cargar un desperfecto',
-        detalle:
-          'Apretá "Crear orden", contá qué pasa y elegí la habitación. Poné prioridad alta solo si impide usarla.',
-      },
-      {
-        titulo: 'Mantenimiento preventivo',
-        detalle:
-          'Los planes generan órdenes solas cada tanto (por ejemplo, revisar calefactores cada 6 meses), para no acordarse cuando ya se rompió.',
-      },
-    ],
-  },
-  {
-    area: 'objetos_perdidos',
-    resumen: 'Lo que los huéspedes se olvidan, hasta que lo reclaman.',
-    pasos: [
-      {
-        titulo: 'Registrar y devolver',
-        detalle:
-          'Cargá qué es y dónde apareció. Cuando alguien lo reclama, apretá "Marcar devuelto" y queda el registro de la entrega.',
-      },
-    ],
-  },
-  {
     area: 'servicio',
     resumen: 'La lista de desayuno del día, lo vendido y la lista de compras de cocina.',
     pasos: [
@@ -346,17 +319,6 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
-    area: 'avisos',
-    resumen: 'La cartelera interna del hotel.',
-    pasos: [
-      {
-        titulo: 'Para qué sirve',
-        detalle:
-          'Un aviso es un anuncio para todos, como el pizarrón de la cocina: se escribe una vez y lo ven todos los que entran al sistema.',
-      },
-    ],
-  },
-  {
     area: 'errores',
     resumen: 'Qué falló, cuándo y en qué pantalla. Sirve para pedir ayuda con datos.',
     pasos: [
@@ -384,47 +346,6 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Se limpia sola',
         detalle:
           'Los errores de más de 90 días se borran automáticamente. Un error de hace tres meses ya no le sirve a nadie y la lista se volvería imposible de leer.',
-      },
-    ],
-  },
-  {
-    area: 'notificaciones',
-    resumen: 'Qué avisos salieron, a quién y en qué estado quedaron.',
-    pasos: [
-      {
-        titulo: 'Para qué es esta pantalla',
-        detalle:
-          'Cada vez que el sistema tiene algo que comunicar —una reserva confirmada, un pago recibido, un recordatorio de llegada— lo anota acá antes de mandarlo. Sirve para responder la pregunta que llega al mostrador todo el tiempo: "no me llegó nada".',
-      },
-      {
-        titulo: 'Los cinco estados',
-        detalle:
-          'Pendiente: todavía no salió, está esperando su turno. Enviada: el proveedor de correo la aceptó. Entregada: el correo del huésped la recibió. Leída: la abrió. Fallida: se intentó varias veces y no se pudo.',
-      },
-      {
-        titulo: '"Enviada" no es "entregada"',
-        detalle:
-          'Entre las dos está el rebote: el proveedor acepta el mensaje mucho antes de saber si la casilla del huésped existe. Si algo quedó en "enviada" y nunca pasó a "entregada", vale la pena revisar la dirección de correo.',
-      },
-      {
-        titulo: 'Que no diga "leída" no significa que no la haya leído',
-        detalle:
-          'La apertura se detecta con una imagen diminuta dentro del correo, y muchos programas de correo las bloquean. O sea: si dice leída, la abrió seguro; si no lo dice, no se sabe.',
-      },
-      {
-        titulo: 'Los avisos internos no salen del sistema',
-        detalle:
-          'Los que dicen "interno" no le llegan a ningún huésped: aparecen en el tablón de Avisos, marcados como "Del sistema", para el rol que corresponda.',
-      },
-      {
-        titulo: 'Reintentar a mano',
-        detalle:
-          'Si algo quedó fallido y ya se arregló el motivo —la dirección estaba mal, el proveedor estuvo caído—, se puede volver a poner en cola. Nunca manda dos veces el mismo aviso por error: cada uno tiene su clave.',
-      },
-      {
-        titulo: 'Frenar un aviso antes de que salga',
-        detalle:
-          'Sólo se puede cancelar lo que está "pendiente": es lo único que todavía no salió. Un aviso ya enviado no vuelve, así que cancelarlo no está permitido —diría que no se mandó algo que sí se mandó—. Lo cancelado se puede volver a encolar más tarde.',
       },
     ],
   },

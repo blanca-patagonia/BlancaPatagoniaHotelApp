@@ -32,7 +32,6 @@ function unidad(over: Partial<UnidadHousekeeping> = {}): UnidadHousekeeping {
     ocupada: false,
     saleHoy: false,
     llegaHoy: false,
-    enReparacion: false,
     ...over,
   }
 }
@@ -65,12 +64,6 @@ describe('prioridadDe', () => {
     // Mandar a alguien a limpiar una habitación con una cañería rota es hacerle
     // perder el viaje. Si además hay una llegada, el problema es de recepción.
     expect(prioridadDe(unidad({ estado: 'bloqueada', llegaHoy: true }))).toBe('sin_tarea')
-  })
-
-  it('en reparación tampoco, aunque el estado diga sucia', () => {
-    expect(prioridadDe(unidad({ estado: 'sucia', enReparacion: true, llegaHoy: true }))).toBe(
-      'sin_tarea',
-    )
   })
 
   it('cada prioridad tiene etiqueta y motivo', () => {
