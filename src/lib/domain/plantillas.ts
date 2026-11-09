@@ -14,8 +14,6 @@
  * cosas distintas con el tiempo.
  */
 
-import { formatearUSD } from './moneda'
-
 /**
  * El catálogo de avisos.
  *
@@ -406,72 +404,17 @@ export function variablesFaltantes(
  * Los marcadores sin valor se dejan visibles (`{{nombre}}`) en lugar de quedar
  * vacíos: es preferible que un error se note antes de enviar y no que el
  * huésped reciba «Hola ,».
- *
- * `override` es el asunto/cuerpo editado desde el panel
- * (`plantillas_email`, migración 0097) — este módulo es puro y no sabe leer
- * la base, así que quien llama (`lib/email`) lo trae resuelto. `variables` y
- * `opcionales` siguen saliendo SIEMPRE del catálogo de código: son el
- * contrato de qué datos hacen falta, y ese contrato no se edita desde acá.
  */
 export function renderizar(
   evento: EventoEmail,
   variables: Record<string, string | number>,
-  override?: { asunto?: string | null; cuerpo?: string | null },
 ): EmailRenderizado {
   const plantilla = PLANTILLAS[evento]
-  const asuntoFuente = override?.asunto ?? plantilla.asunto
-  const cuerpoFuente = override?.cuerpo ?? plantilla.cuerpo
-  const cuerpo = reemplazar(cuerpoFuente, variables, plantilla.opcionales)
+  const cuerpo = reemplazar(plantilla.cuerpo, variables, plantilla.opcionales)
   return {
-    asunto: reemplazar(asuntoFuente, variables, plantilla.opcionales),
+    asunto: reemplazar(plantilla.asunto, variables, plantilla.opcionales),
     cuerpo,
     cuerpoHtml: textoAHtml(cuerpo),
     faltantes: variablesFaltantes(plantilla, variables),
   }
-}
-
-/**
- * Datos de muestra para probar cualquier plantilla: la vista previa de
- * `/panel/config/plantillas` y el botón «Enviar prueba» de esa misma pantalla
- * (`enviarPlantillaPrueba`, en `plantillas-actions.ts`).
- *
- * ⚠️ Fuente única a propósito. Antes cada uno tenía su propia copia, y
- * divergieron: la de la vista previa sabía de variables nuevas como `saldo` o
- * `detalle_cancelacion`, la del envío de prueba no — así que la vista previa
- * se veía bien y apretar «Enviar prueba» fallaba con «Faltan datos para
- * completar la plantilla», sin que nada en pantalla lo explicara. Cubre TODAS
- * las variables que declara alguna plantilla en `PLANTILLAS`; si se agrega una
- * plantilla con una variable nueva, hay que sumarla acá una sola vez.
- *
- * Los importes van con `formatearUSD`, igual que los arma el código real al
- * enviar (ver `lib/notificaciones/eventos.ts`): así la muestra se parece a lo
- * que de verdad le llega a un huésped, no a un número pelado.
- */
-export const MUESTRA_PLANTILLAS: Record<string, string | number> = {
-  nombre: 'Ana',
-  huesped: 'Ana Pérez',
-  codigo: 'BP-DEMO',
-  check_in: '10/09/2026',
-  check_out: '13/09/2026',
-  hora_check_in: '15:00',
-  hora_check_out: '10:00',
-  total: formatearUSD(642.51),
-  sena: formatearUSD(150),
-  importe: formatearUSD(200),
-  saldo: formatearUSD(90),
-  detalle_cancelacion: `primera noche (${formatearUSD(145.2)})`,
-  enlace: 'https://blancapatagonia.com/ejemplo',
-  nivel: 'Oro',
-  puntos: 2100,
-  origen: 'Booking',
-  medio: 'MercadoPago',
-  canal: 'Booking',
-  detalle: 'el feed no respondió en el último intento',
-  cantidad: 3,
-  devengado: formatearUSD(1200),
-  facturado: formatearUSD(1150),
-  diferencia: formatearUSD(50),
-  unidad: 'Bolados 3',
-  titulo: 'Pérdida de agua en el baño',
-  prioridad: 'Alta',
 }

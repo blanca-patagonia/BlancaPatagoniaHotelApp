@@ -53,12 +53,11 @@ export async function register() {
     construye sin ellas) y no hay ningún huésped del otro lado todavía.
   */
   if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build') {
-    const [{ urlDelSitio }, email, facturacion, divisas, cifrado] = await Promise.all([
+    const [{ urlDelSitio }, email, facturacion, divisas] = await Promise.all([
       import('@/lib/env'),
       import('@/lib/email'),
       import('@/lib/facturacion'),
       import('@/lib/divisas'),
-      import('@/lib/seguridad/cifrado'),
     ])
     urlDelSitio()
     email.obtenerProveedorEmail()
@@ -66,9 +65,6 @@ export async function register() {
     email.verificarCredencialesDeEmail()
     facturacion.obtenerProveedorFacturacion()
     divisas.obtenerProveedorCotizacion()
-    // La clave de los tokens OAuth (ADR 0036): si falta, el hotel autoriza a
-    // Mercado Pago y el token se pierde en el callback.
-    cifrado.verificarClaveDeCifrado()
   }
 }
 

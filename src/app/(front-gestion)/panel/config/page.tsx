@@ -42,12 +42,6 @@ const SECCIONES: Seccion[] = [
     icono: 'objetos',
   },
   {
-    titulo: 'Plantillas de correo',
-    descripcion: 'Los textos que recibe el huésped en cada aviso automático.',
-    href: '/panel/config/plantillas',
-    icono: 'avisos',
-  },
-  {
     titulo: 'Cotización de divisas',
     descripcion: 'El valor del dólar y otras monedas para mostrar los importes en pesos.',
     href: '/panel/config/divisas',
@@ -71,25 +65,13 @@ const SECCIONES: Seccion[] = [
     href: '/panel/config/ubicaciones',
     icono: 'ocupacion',
   },
-  {
-    titulo: 'Integraciones y claves',
-    descripcion: 'Qué servicios externos están conectados (cobros, correo, cotización…), qué clave falta y una prueba de cada uno.',
-    href: '/panel/config/integraciones',
-    icono: 'config',
-  },
-  {
-    titulo: 'Conexiones',
-    descripcion: 'Vincular Mercado Pago, el correo, Booking y Expedia sin pegar claves a mano.',
-    href: '/panel/config/conexiones',
-    icono: 'canales',
-  },
 ]
 
 /**
  * Índice de configuración.
  *
- * Reemplaza la pantalla única de seis secciones apiladas (tarifario,
- * plantillas, inventario, datos fiscales, divisas y ubicaciones) por un punto
+ * Reemplaza la pantalla única de secciones apiladas (tarifario,
+ * inventario, datos fiscales, divisas y ubicaciones) por un punto
  * de partida con una tarjeta por tema. Mismo criterio que el índice de
  * Reportes: cada tema tiene su propia dirección y sus propios filtros, en vez
  * de competir por espacio en un scroll larguísimo.

@@ -110,13 +110,11 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `ayuda.ts` | Contenido de la sección de Ayuda |
 | `cuenta.ts` | «Mi cuenta» y el mínimo de contraseña |
 | `pwa.ts` | Qué cachea la app instalable — lista blanca (ADR 0028) |
-| `conexiones.ts` | Conexiones con proveedores externos |
 
 ## Utilidades transversales
 
 | Módulo | Qué decide |
 |---|---|
-| `integraciones.ts` | Catálogo de integraciones: qué clave lleva cada servicio, dónde se consigue y qué pasa si falta (ADR 0043) |
 | `formularios.ts` | `falloConValores()`: devolver lo escrito cuando una acción falla (sin campos sensibles) |
 | `limites.ts` | Límites de intentos de las entradas públicas |
 | `listas.ts` | `deLista()`: validar un valor contra una lista blanca |

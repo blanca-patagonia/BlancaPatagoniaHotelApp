@@ -21,8 +21,7 @@ import type { Rol } from '@/lib/domain/roles'
  * que el buscador "en vivo" del encabezado (`GET /api/buscar`, que responde
  * JSON mientras se escribe) use EXACTAMENTE la misma consulta que la
  * pantalla de resultados completa — no una segunda versión que con el tiempo
- * diverja, la misma situación que ya pasó con `saldarSiCorresponde` y con
- * `MUESTRA_PLANTILLAS`.
+ * diverja, la misma situación que ya pasó con `saldarSiCorresponde`.
  */
 
 /** Tope por ámbito: la búsqueda es para encontrar algo puntual, no para listar. */

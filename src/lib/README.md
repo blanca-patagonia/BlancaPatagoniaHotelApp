@@ -20,7 +20,6 @@ falla si aparece uno sin listar.
 | `domain/` | Reglas de negocio puras (precios, IVA, cancelación, estados…) |
 | `supabase/` | Clientes de la base: navegador, servidor, `admin` (saltea RLS: sólo servidor) y el del `proxy` |
 | `auth/` | Sesión del staff y `requerirAcceso(area)` |
-| `seguridad/` | Cifrado de credenciales de terceros (ADR 0036) |
 | `auditoria/` | Registro de quién abrió la ficha de un huésped |
 | `reservas/` | Alta de reserva, saldo, cancelación y cuenta cerrada: lo que comparten panel y portal |
 | `housekeeping/` | Estado de limpieza de las unidades y el aviso a recepción (compartido con el asistente) |
@@ -31,8 +30,7 @@ falla si aparece uno sin listar.
 | `divisas/` | Cotización del dólar, con su cadena de respaldo |
 | `email/` | Envío de correo: consola o Resend |
 | `notificaciones/` | Bandeja de salida de avisos al huésped, con reintentos |
-| `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks, pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
-| `conexiones/` | OAuth2 con Mercado Pago y Google |
+| `integraciones/` | Elección de proveedor por variable de entorno y firma de webhooks |
 | `storage/` | Fotos operativas en Supabase Storage (ADR 0037) |
 | `asistente/` | Asistente del portal público, por reglas (ADR 0011) |
 | `busqueda/` | Consulta del buscador global |
