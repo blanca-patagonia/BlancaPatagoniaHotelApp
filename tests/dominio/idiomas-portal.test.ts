@@ -30,7 +30,6 @@ describe('proxy: qué rutas llevan prefijo de idioma', () => {
     expect(llevaIdioma('/reservar/confirmacion/abc123')).toBe(false)
     expect(llevaIdioma('/reservar/pagar/abc123')).toBe(false)
     expect(llevaIdioma('/reservar/factura/abc123')).toBe(false)
-    expect(llevaIdioma('/firmar/abc123')).toBe(false)
     expect(llevaIdioma('/encuesta/abc123')).toBe(false)
     expect(llevaIdioma('/panel')).toBe(false)
   })
@@ -44,12 +43,11 @@ describe('idiomaDeReferencia', () => {
   const origen = 'https://blancapatagonia.com'
 
   it('toma el idioma de la página del mismo sitio desde la que se hizo clic', () => {
-    expect(idiomaDeReferencia('https://blancapatagonia.com/en/alojamientos', origen)).toBe('en')
-    expect(idiomaDeReferencia('https://blancapatagonia.com/zh', origen)).toBe('zh')
+    expect(idiomaDeReferencia('https://blancapatagonia.com/es/alojamientos', origen)).toBe('es')
   })
 
   it('ignora un sitio ajeno: otro dominio no decide el idioma del nuestro', () => {
-    expect(idiomaDeReferencia('https://otro.com/fr/algo', origen)).toBeNull()
+    expect(idiomaDeReferencia('https://otro.com/es/algo', origen)).toBeNull()
   })
 
   it('devuelve null sin referencia, con una URL rota o sin prefijo de idioma', () => {
@@ -58,25 +56,25 @@ describe('idiomaDeReferencia', () => {
     expect(idiomaDeReferencia('https://blancapatagonia.com/panel', origen)).toBeNull()
   })
 
-  it('sin referencia se cae al idioma del navegador', () => {
-    expect(idiomaPreferido('pt-BR,pt;q=0.9')).toBe('pt')
+  it('sin referencia se cae al español, también con un navegador en otro idioma', () => {
+    expect(idiomaPreferido('pt-BR,pt;q=0.9')).toBe('es')
+    expect(idiomaPreferido(null)).toBe('es')
   })
 })
 
 describe('rutas y alternativas por idioma', () => {
   it('rutaConIdioma conserva la consulta', () => {
-    expect(rutaConIdioma('/reservar?tipo=1&check_in=2026-11-01', 'en')).toBe(
-      '/en/reservar?tipo=1&check_in=2026-11-01',
+    expect(rutaConIdioma('/reservar?tipo=1&check_in=2026-11-01', 'es')).toBe(
+      '/es/reservar?tipo=1&check_in=2026-11-01',
     )
-    expect(rutaConIdioma('/', 'fr')).toBe('/fr')
-    expect(rutaConIdioma('/es/alojamientos', 'pt')).toBe('/pt/alojamientos')
+    expect(rutaConIdioma('/', 'es')).toBe('/es')
   })
 
-  it('alternativasDeIdioma declara los cinco idiomas y la canónica propia', () => {
-    const alt = alternativasDeIdioma('en', '/alojamientos')
-    expect(alt.canonical).toBe('/en/alojamientos')
+  it('alternativasDeIdioma declara el idioma del sitio y la canónica propia', () => {
+    const alt = alternativasDeIdioma('es', '/alojamientos')
+    expect(alt.canonical).toBe('/es/alojamientos')
     expect(Object.keys(alt.languages)).toHaveLength(IDIOMAS.length)
-    expect(alt.languages['pt-BR']).toBe('/pt/alojamientos')
+    expect(alt.languages['es-AR']).toBe('/es/alojamientos')
   })
 
   it('un idioma inventado canoniza al de origen', () => {
@@ -86,10 +84,8 @@ describe('rutas y alternativas por idioma', () => {
 
 describe('fechaCortaEn', () => {
   it('formatea el día del calendario sin correrlo por zona horaria', () => {
-    // El 1 de noviembre tiene que seguir siendo el 1 en cualquier idioma.
+    // El 1 de noviembre tiene que seguir siendo el 1.
     expect(fechaCortaEn('2026-11-01', 'es')).toMatch(/^1 /)
-    expect(fechaCortaEn('2026-11-01', 'en')).toMatch(/\b1$/)
-    expect(fechaCortaEn('2026-11-01', 'zh')).toContain('1日')
   })
 
   it('devuelve el texto tal cual si no es una fecha', () => {
@@ -110,19 +106,10 @@ describe('lineasCancelacion', () => {
       .map((l) => l.replace(/^·\s*/, ''))
     expect(lineasCancelacion(reglas, textos('es'))).toEqual(delAsistente)
   })
-
-  it('en los otros idiomas traduce los mismos tramos, en el mismo orden', () => {
-    const en = lineasCancelacion(reglas, textos('en'))
-    expect(en).toEqual([
-      '15 days or more in advance: free of charge.',
-      'Between 7 and 14 days before: the first night is charged.',
-      'Less than 7 days before: 100% of the stay is charged.',
-    ])
-  })
 })
 
 describe('diccionarios', () => {
-  it('las listas de la portada tienen el mismo largo en todos los idiomas', () => {
+  it('las listas de la portada tienen el mismo largo que las de español', () => {
     // Se emparejan por posición con los metrajes y las fotos de la página: un
     // idioma con una habitación de menos correría todos los metros cuadrados.
     for (const idioma of IDIOMAS) {
@@ -153,26 +140,22 @@ describe('diccionarios', () => {
 
   it('textoCapacidadEn distingue singular y plural', () => {
     expect(textoCapacidadEn(textos('es'), 1)).toBe('1 persona')
-    expect(textoCapacidadEn(textos('en'), 4)).toBe('up to 4 people')
+    expect(textoCapacidadEn(textos('es'), 4)).toBe('hasta 4 personas')
   })
 })
 
-describe('destinoDeIdioma · el selector no rompe las pantallas con token', () => {
+describe('destinoDeIdioma · las pantallas con token', () => {
   it('en una ruta con prefijo cambia el prefijo y conserva la búsqueda', async () => {
     const { destinoDeIdioma } = await import('@/lib/i18n/idiomas')
-    expect(destinoDeIdioma('/es/reservar', 'check_in=2026-11-10', 'en')).toBe(
-      '/en/reservar?check_in=2026-11-10',
+    expect(destinoDeIdioma('/es/reservar', 'check_in=2026-11-10', 'es')).toBe(
+      '/es/reservar?check_in=2026-11-10',
     )
-    expect(destinoDeIdioma('/es', '', 'zh')).toBe('/zh')
   })
 
   it('en una pantalla con token usa ?idioma= (un prefijo daba 404)', async () => {
     const { destinoDeIdioma } = await import('@/lib/i18n/idiomas')
-    expect(destinoDeIdioma('/reservar/confirmacion/abc', '', 'en')).toBe(
-      '/reservar/confirmacion/abc?idioma=en',
-    )
-    expect(destinoDeIdioma('/reservar/confirmacion/abc', 'pago=fallo&idioma=fr', 'pt')).toBe(
-      '/reservar/confirmacion/abc?pago=fallo&idioma=pt',
+    expect(destinoDeIdioma('/reservar/confirmacion/abc', '', 'es')).toBe(
+      '/reservar/confirmacion/abc?idioma=es',
     )
   })
 })

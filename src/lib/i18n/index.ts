@@ -1,9 +1,5 @@
 import { es, type Diccionario } from './diccionarios/es'
 import { claveDeComodidad } from '@/lib/domain/comodidades'
-import { en } from './diccionarios/en'
-import { pt } from './diccionarios/pt'
-import { fr } from './diccionarios/fr'
-import { zh } from './diccionarios/zh'
 import {
   ETIQUETA_BCP47,
   IDIOMAS,
@@ -16,7 +12,7 @@ import {
 /**
  * Acceso a los textos del portal.
  *
- * ── Por qué los cinco diccionarios se importan de una ───────────────────────
+ * ── Por qué los diccionarios se importan de una ───────────────────────
  *
  * Se evaluó cargarlos con `import()` dinámico para que cada visita baje sólo el
  * suyo. No se hizo: los diccionarios se usan en **Server Components**, así que
@@ -28,7 +24,7 @@ import {
  * primero que hay que revisar.
  */
 
-const DICCIONARIOS: Record<Idioma, Diccionario> = { es, en, pt, fr, zh }
+const DICCIONARIOS: Record<Idioma, Diccionario> = { es }
 
 /** Los textos de un idioma. Un idioma desconocido cae al de origen. */
 export function textos(idioma: string | undefined): Diccionario {

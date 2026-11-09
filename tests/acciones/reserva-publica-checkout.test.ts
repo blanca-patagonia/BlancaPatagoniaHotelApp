@@ -26,21 +26,18 @@ const BASE = {
 }
 
 describe('crearReservaPublica · validaciones del checkout', () => {
-  it('sin aceptar las condiciones no reserva, y lo dice en el idioma de la pantalla', async () => {
+  it('sin aceptar las condiciones no reserva', async () => {
     expect(await crearReservaPublica({}, formulario({ ...BASE, idioma: 'es' }))).toMatchObject({
       error: 'Para reservar tenés que aceptar las condiciones.',
-    })
-    expect(await crearReservaPublica({}, formulario({ ...BASE, idioma: 'en' }))).toMatchObject({
-      error: 'To book you need to accept the conditions.',
     })
   })
 
   it('un email inválido se rechaza antes que las condiciones', async () => {
     const r = await crearReservaPublica(
       {},
-      formulario({ ...BASE, email: 'no-es-un-email', condiciones: 'on', idioma: 'fr' }),
+      formulario({ ...BASE, email: 'no-es-un-email', condiciones: 'on', idioma: 'es' }),
     )
-    expect(r).toMatchObject({ error: 'Indiquez un e-mail valide.' })
+    expect(r).toMatchObject({ error: 'Ingresá un email válido.' })
   })
 
   it('un idioma desconocido responde en español', async () => {

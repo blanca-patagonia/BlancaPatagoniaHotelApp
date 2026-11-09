@@ -7,7 +7,6 @@ import { hoyISO, sumarDias } from '@/lib/fechas'
 import { BuscadorEstadia } from '@/app/(front-publico)/_publico/buscador'
 import { JsonLdHotel } from '@/app/(front-publico)/_publico/jsonld-hotel'
 import { AsistenteFlotante } from '@/app/(front-publico)/_publico/asistente-flotante'
-import { SelectorIdioma } from '@/app/(front-publico)/_publico/selector-idioma'
 import { es as diccionarioEs } from '@/lib/i18n/diccionarios/es'
 import {
   textos,
@@ -217,10 +216,6 @@ export default async function Home({ params }: { params: Promise<{ idioma: strin
             >
               {t.nav.ubicacion}
             </a>
-            {/* En el teléfono no entra: el selector está entero en el pie. */}
-            <span className="hidden sm:inline-flex">
-              <SelectorIdioma idioma={idioma} variante="menu" tono="claro" etiqueta={t.nav.idioma} />
-            </span>
             <Link
               href={ruta('/reservar')}
               className="toque inline-flex items-center rounded-full bg-white/95 px-4 text-tinta transition duration-300 hover:bg-white active:scale-[0.97]"
@@ -379,8 +374,7 @@ export default async function Home({ params }: { params: Promise<{ idioma: strin
         es una sola frase (`aria-label`), no veinte palabras sueltas.
       */}
       {(() => {
-        // El chino no separa palabras con espacios: se enciende por carácter.
-        const piezas = idioma === 'zh' ? Array.from(c.manifiesto) : c.manifiesto.split(' ')
+        const piezas = c.manifiesto.split(' ')
         // Las palabras se reparten entre el 4 % y el 42 % del recorrido; los
         // datos, entre el 40 % y el 52 %. La foto toma de ahí al final.
         const tramo = (desde: number, hasta: number) =>
@@ -405,7 +399,7 @@ export default async function Home({ params }: { params: Promise<{ idioma: strin
                     return (
                       <span key={i} aria-hidden="true" data-palabra style={tramo(desde, desde + 6)}>
                         {palabra}
-                        {idioma === 'zh' ? '' : ' '}
+                        {' '}
                       </span>
                     )
                   })}
@@ -1107,12 +1101,6 @@ export default async function Home({ params }: { params: Promise<{ idioma: strin
                 </a>
               </div>
             </div>
-          </div>
-
-          {/* Selector de idioma, entero y a la vista: es el único lugar donde
-              está en el teléfono, así que no puede ir plegado. */}
-          <div className="mt-10 border-t border-stone-800 pt-6">
-            <SelectorIdioma idioma={idioma} tono="claro" etiqueta={t.nav.idioma} />
           </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm text-stone-500">

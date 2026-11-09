@@ -23,8 +23,15 @@
  * para elegir un objeto según una cadena no se justifica (AGENTS.md).
  */
 
-/** Los idiomas que el portal sabe mostrar. El primero es el de origen. */
-export const IDIOMAS = ['es', 'en', 'pt', 'fr', 'zh'] as const
+/**
+ * Los idiomas que el portal sabe mostrar. El primero es el de origen.
+ *
+ * La versión actual muestra solo español. La estructura (prefijo en la URL,
+ * diccionario por idioma, `hreflang`) se conserva a propósito: sumar un idioma
+ * es agregarlo acá y escribir su diccionario en `diccionarios/`, sin tocar las
+ * pantallas.
+ */
+export const IDIOMAS = ['es'] as const
 
 export type Idioma = (typeof IDIOMAS)[number]
 
@@ -39,10 +46,6 @@ export const IDIOMA_POR_OMISION: Idioma = 'es'
 /** Nombre de cada idioma **en ese idioma**, que es como se elige en un selector. */
 export const NOMBRE_IDIOMA: Record<Idioma, string> = {
   es: 'Español',
-  en: 'English',
-  pt: 'Português',
-  fr: 'Français',
-  zh: '中文',
 }
 
 /**
@@ -53,10 +56,6 @@ export const NOMBRE_IDIOMA: Record<Idioma, string> = {
  */
 export const CODIGO_CORTO: Record<Idioma, string> = {
   es: 'ES',
-  en: 'EN',
-  pt: 'PT',
-  fr: 'FR',
-  zh: '中文',
 }
 
 /**
@@ -68,10 +67,6 @@ export const CODIGO_CORTO: Record<Idioma, string> = {
  */
 export const ETIQUETA_BCP47: Record<Idioma, string> = {
   es: 'es-AR',
-  en: 'en-US',
-  pt: 'pt-BR',
-  fr: 'fr-FR',
-  zh: 'zh-CN',
 }
 
 /** ¿Esa cadena es uno de los idiomas que sabemos mostrar? */
