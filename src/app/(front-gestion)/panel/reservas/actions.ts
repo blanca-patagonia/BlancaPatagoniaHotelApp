@@ -686,9 +686,8 @@ export async function crearReservaGrupal(
 /**
  * Envía el recordatorio a los huéspedes que llegan mañana.
  *
- * Es una tarea programada, como `expirar_reservas_pendientes` o
- * `generar_mantenimiento_preventivo`: hoy se dispara a mano desde el panel y en
- * producción iría por cron. Se limita a las reservas activas con email cargado.
+ * En esta versión reducida se dispara a mano desde el panel (el cron de
+ * recordatorios se quitó). Se limita a las reservas activas con email cargado.
  */
 export async function enviarRecordatoriosLlegada(): Promise<void> {
   const sesion = await requerirAcceso('reservas')

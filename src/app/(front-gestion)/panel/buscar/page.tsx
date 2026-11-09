@@ -258,7 +258,7 @@ export default async function BuscarPage({
               {unidades.map((u) => (
                 <li key={u.id} className="border-t border-stone-100 first:border-0">
                   <Link
-                    href="/panel/config/unidades"
+                    href="/panel/config/ubicaciones"
                     className="flex items-center gap-3 px-5 py-3 transition hover:bg-stone-50"
                   >
                     <span className="min-w-0 flex-1">

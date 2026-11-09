@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { cortarSiFalla } from '@/lib/acciones'
 import { siguienteEstadoMucama } from '@/lib/domain/housekeeping'
 import { subirAdjunto } from '@/lib/storage'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { fijarEstadoUnidad } from '@/lib/housekeeping/estado'
 
 /** Vuelta de la vista movil: quien la usa esta en el pasillo con el telefono. */
@@ -27,7 +28,7 @@ export async function cambiarEstadoUnidad(formData: FormData): Promise<void> {
   const estado = String(formData.get('estado') ?? '') as EstadoHousekeeping
   if (!id || !ESTADOS_HK.includes(estado)) redirect('/panel/housekeeping')
 
-  // La regla (y el aviso a recepción) vive en `lib/housekeeping/estado.ts`.
+  // La regla vive en `lib/housekeeping/estado.ts`.
   const resultado = await fijarEstadoUnidad(await crearClienteServidor(), id, estado)
   if (!resultado.ok) redirect('/panel/housekeeping?error=estado')
   redirect('/panel/housekeeping')
@@ -124,7 +125,8 @@ export async function agregarRegistroLimpieza(formData: FormData): Promise<void>
 
   const unidadId = String(formData.get('unidad_id') ?? '')
   const destino = `/panel/housekeeping/mi-trabajo/${unidadId}`
-  if (!unidadId) redirect(DESTINO_MOVIL)
+  // Va armando la ruta del archivo y la URL: tiene que ser un UUID, no texto libre.
+  if (!esUuid(unidadId)) redirect(DESTINO_MOVIL)
 
   const comentario = String(formData.get('comentario') ?? '').trim()
   const archivo = formData.get('foto')

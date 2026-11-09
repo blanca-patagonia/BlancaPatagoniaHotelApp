@@ -508,7 +508,7 @@ export function FormularioReserva({
             ayuda="Sin garantía, un no-show no se puede cobrar."
           >
             <select name="garantia" key={`garantia-${v.garantia ?? 'sin_garantia'}`} defaultValue={v.garantia ?? 'sin_garantia'} className={CAMPO}>
-              {GARANTIAS.map((g) => (
+              {GARANTIAS.filter((g) => g !== 'agencia' && g !== 'contrato' || g === v.garantia).map((g) => (
                 <option key={g} value={g}>
                   {ETIQUETAS_GARANTIA[g]}
                 </option>
@@ -527,7 +527,7 @@ export function FormularioReserva({
             </select>
           </Campo>
 
-          <Campo etiqueta="Voucher" ayuda="Número que dio la agencia o el canal, si hay.">
+          <Campo etiqueta="Voucher" ayuda="Número del comprobante de la reserva, si hay.">
             <input name="voucher" defaultValue={v.voucher ?? ''} className={CAMPO} />
           </Campo>
 
@@ -547,7 +547,7 @@ export function FormularioReserva({
 
           <Campo
             etiqueta="Descuento adicional (%)"
-            ayuda="Se aplica sobre la tarifa. El descuento del convenio de la agencia va aparte."
+            ayuda="Se aplica sobre la tarifa."
           >
             <input
               name="descuento_pct"

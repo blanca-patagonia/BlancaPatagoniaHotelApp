@@ -38,7 +38,10 @@ export async function subirAdjunto(
   const invalido = archivoInvalido(archivo)
   if (invalido) return { error: invalido }
 
-  const extension = archivo.name.includes('.') ? archivo.name.split('.').pop() : undefined
+  // La extensión viene del nombre que mandó el cliente: sólo se acepta tal cual
+  // si es corta y alfanumérica; si no, se sube sin extensión.
+  const candidata = archivo.name.includes('.') ? archivo.name.split('.').pop() : undefined
+  const extension = candidata && /^[a-z0-9]{1,5}$/i.test(candidata) ? candidata.toLowerCase() : undefined
   const ruta = `${carpeta}/${crypto.randomUUID()}${extension ? `.${extension}` : ''}`
 
   const admin = crearClienteAdmin()

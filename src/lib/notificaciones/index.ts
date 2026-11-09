@@ -3,7 +3,7 @@ import type { ClienteServicio } from '@/lib/supabase/admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { enviarPlantilla } from '@/lib/email'
-import { type EventoEmail } from '@/lib/domain/plantillas'
+import { EVENTOS_EMAIL, type EventoEmail } from '@/lib/domain/plantillas'
 import {
   agotoIntentos,
   claveDeNotificacion,
@@ -196,6 +196,15 @@ export async function despachar(
     .from('notificaciones')
     .select('id, evento, canal, destinatario, variables, intentos')
     .eq('estado', 'pendiente')
+    /*
+      Sólo lo que esta versión sabe mandar: correo, de los eventos del catálogo.
+      La base conserva filas de módulos quitados (avisos internos, WhatsApp,
+      «por vencer»…). Sin este filtro una de ésas —sin plantilla o con un
+      destinatario que no es un correo— lanzaba al renderizar, el cron daba 500
+      y, al seguir primera en la cola, los avisos de atrás nunca salían.
+    */
+    .eq('canal', 'email')
+    .in('evento', [...EVENTOS_EMAIL])
     .lte('proximo_en', 'now')
     .order('proximo_en', { ascending: true })
     .limit(limite)

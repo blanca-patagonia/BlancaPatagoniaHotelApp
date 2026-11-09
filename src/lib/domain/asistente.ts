@@ -348,8 +348,8 @@ export function componerRespuesta(intencion: Intencion, datos: DatosHotel): Resp
         intencion,
         derivar: true,
         texto:
-          'Esa no la sé responder todavía. Dejamos tu consulta registrada y el equipo del hotel ' +
-          'te va a contactar a la brevedad.',
+          'Esa no la sé responder todavía. Escribinos o llamanos y el equipo del hotel ' +
+          'te responde a la brevedad.',
       }
   }
 }

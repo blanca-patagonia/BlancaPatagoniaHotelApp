@@ -52,16 +52,6 @@ export const PRIMEROS_PASOS: Paso[] = [
     detalle:
       'En pantallas chicas algunas columnas de las tablas se ocultan para que se pueda leer sin mover la pantalla de costado. Los datos completos están siempre tocando la fila.',
   },
-  {
-    titulo: 'Se puede instalar en el teléfono',
-    detalle:
-      'El sistema se agrega a la pantalla de inicio y se abre como una aplicación, sin la barra del navegador. En Android aparece un cartel con el botón "Instalar"; en iPhone hay que tocar el botón de compartir de Safari y elegir "Agregar a inicio".',
-  },
-  {
-    titulo: 'Sin internet no se puede trabajar, y el sistema lo avisa',
-    detalle:
-      'Aunque esté instalado como aplicación, el sistema no guarda una copia de los datos en el teléfono: los muestra siempre desde el servidor, para que nadie vea una habitación libre que ya se vendió. Si se corta la conexión aparece un aviso, y lo que ya habías guardado está a salvo.',
-  },
 ]
 
 /** Guía por módulo. El orden es el del menú lateral. */
@@ -170,7 +160,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Unir dos fichas de la misma persona',
         detalle:
-          'Pasa seguido con el que entra por Booking sin documento y después vuelve directo. Desde "Fusionar con otra ficha" buscás la otra y se unen: el historial y los puntos pasan a la que estás mirando, y la otra desaparece. No se puede deshacer.',
+          'Pasa seguido con el huésped que se cargó una vez sin documento y después vuelve a reservar. Desde "Fusionar con otra ficha" buscás la otra y se unen: el historial y los puntos pasan a la que estás mirando, y la otra desaparece. No se puede deshacer.',
       },
       {
         titulo: 'Si alguien pide que se borren sus datos',
@@ -204,11 +194,6 @@ export const CAPITULOS: Capitulo[] = [
           'La lista se ordena por urgencia y dice el motivo al lado. "Urgente" significa que llega alguien hoy y la habitación todavía no está lista. "Prioridad alta" es que se desocupó hoy y hay que prepararla. Si dice "Normal", se puede dejar para después.',
       },
       {
-        titulo: 'Las que están en reparación no se limpian',
-        detalle:
-          'Si hay una orden de mantenimiento abierta, la habitación aparece como "sin tarea" aunque esté sucia. Es a propósito: no tiene sentido limpiar algo que todavía están arreglando.',
-      },
-      {
         titulo: 'La inspección no la hace la mucama',
         detalle:
           'Desde el celular sólo se puede marcar "limpia". Pasar a "inspeccionada" lo hace la gobernanta o gerencia desde el tablero: es el control de calidad, y no lo puede firmar quien hizo el trabajo.',
@@ -216,7 +201,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'El avance del turno',
         detalle:
-          'Arriba se ve el porcentaje y cuántas faltan. Las habitaciones bloqueadas o en reparación no se cuentan, así que el 100% significa de verdad que terminaste.',
+          'Arriba se ve el porcentaje y cuántas faltan. Las habitaciones bloqueadas no se cuentan, así que el 100% significa de verdad que terminaste.',
       },
     ],
   },
@@ -355,7 +340,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Tipos de alojamiento',
         detalle:
-          'Hostería o Cabaña, con su capacidad y descripción. El código (el que usan las fotos y los canales de venta) no se puede cambiar una vez creado.',
+          'Hostería o Cabaña, con su capacidad y descripción. El código (el que usan las fotos y el catálogo público) no se puede cambiar una vez creado.',
       },
       {
         titulo: 'Promociones',
@@ -386,7 +371,7 @@ export const GLOSARIO: Termino[] = [
   {
     termino: 'Tarifa neta',
     definicion:
-      'El precio con el descuento del convenio. Es lo que paga una agencia; la diferencia es su comisión.',
+      'El precio sin el margen del mostrador. El sistema guarda dos precios por noche, el neto y el rack; el que se le muestra al huésped es el rack, con el IVA discriminado.',
   },
   { termino: 'In house', definicion: 'El huésped ya hizo el check-in y está alojado ahora.' },
   {

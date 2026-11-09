@@ -22,7 +22,7 @@ falla si aparece uno sin listar.
 | `auth/` | Sesión del staff y `requerirAcceso(area)` |
 | `auditoria/` | Registro de quién abrió la ficha de un huésped |
 | `reservas/` | Alta de reserva, saldo, cancelación y cuenta cerrada: lo que comparten panel y portal |
-| `housekeeping/` | Estado de limpieza de las unidades y el aviso a recepción (compartido con el asistente) |
+| `housekeeping/` | Estado de limpieza de las unidades |
 | `availability/` | Consulta de disponibilidad (la garantía real es la base, ADR 0002) |
 | `pricing/` | Cotización de una estadía contra las tarifas cargadas |
 | `payments/` | Pasarelas de pago: MercadoPago, Stripe, Payway y el simulador (ADR 0027) |

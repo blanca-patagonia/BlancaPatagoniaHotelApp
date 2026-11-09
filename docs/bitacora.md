@@ -9183,3 +9183,15 @@ Pedido de los autores: el sistema quedó demasiado grande para presentarlo y def
 
 **Lo que NO se verificó:** los tests que usan Postgres (anti-overbooking, RLS por rol, etc.) no corrieron porque el entorno no tiene Docker. Antes de la entrega hay que correr `npm run test:aislado` en una máquina con Docker. Sí se verificó que `npm run build` compila.
 
+
+## 2026-11-09 · Rama `tesis-a-presentar` · Auditoría posterior a la reducción
+
+**Qué:** revisión de código y de seguridad de la rama reducida (typecheck, lint, tests y build en verde). Correcciones:
+- `despachar` (bandeja de avisos) sólo toma filas `canal = 'email'` con evento del catálogo: una fila vieja de un módulo quitado ya no traba el cron.
+- Enlaces del buscador rotos (`/panel/punto_venta`, `/panel/config/unidades`) y typo en Auditoría.
+- Ayuda sin la app instalable, la reparación de habitaciones, Booking ni agencias; el asistente público ya no promete un contacto que nadie lee.
+- Reserva de mostrador: se ocultan las garantías «agencia» y «contrato» (la base las conserva por el `check`).
+- Housekeeping: `unidad_id` validado como UUID y extensión del adjunto saneada.
+- Se quitó `lib/supabase/client.ts`, que quedó sin uso.
+
+**Decisiones pendientes del equipo (no se tocaron):** pantalla de Auditoría oculta por `AREAS_OCULTAS` frente a la ADR 0045; el simulador de pagos si se usa `PAGO_PROVIDER=simulado` en una demo pública; el límite de tasa por IPv6 (migración); revocar grants de las tablas de módulos quitados.

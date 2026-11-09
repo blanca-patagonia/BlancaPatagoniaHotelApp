@@ -78,7 +78,7 @@ export async function GET(req: Request) {
       })),
       unidades: resultado.unidades.map((u) => ({
         id: `unidad-${u.id}`,
-        href: `/panel/config/unidades`,
+        href: `/panel/config/ubicaciones`,
         titulo: u.nombre,
         detalle: [
           u.tipo?.nombre,

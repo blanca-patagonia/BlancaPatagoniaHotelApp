@@ -194,7 +194,7 @@ export default async function AuditoriaPage({
         {registros.length === 0 ? (
           <EstadoVacio
             titulo="Sin movimientos registrados"
-            descripcion="Se registran los cambios en pagos, tarifas y estados de reserva,."
+            descripcion="Se registran los cambios en pagos, tarifas y estados de reserva."
             icono="auditoria"
           />
         ) : (
