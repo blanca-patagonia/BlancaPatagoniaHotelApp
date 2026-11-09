@@ -9161,3 +9161,25 @@ Pedido del usuario, con una captura de la bandeja vacía: «agregá las otras co
 **No se hizo:** enviar archivos desde la bandeja (pide Storage, ADR 0013), el inicio de sesión con Facebook de WhatsApp (pide una app de Meta aprobada), presencia en línea y exportar contactos a CSV.
 
 **Para el deploy:** aplicar **0127**. En la base local ya está aplicada.
+
+## 2026-11-09 — Rama `tesis-a-presentar`: el proyecto se achica para poder defenderlo (ADR 0045)
+
+Pedido de los autores: el sistema quedó demasiado grande para presentarlo y defenderlo en la tesis. Se crea una rama aparte, `tesis-a-presentar`, a partir de `main` (`c160c74`), y se le sacan los módulos que exceden el pedido original. **`main` queda intacto** con el sistema completo.
+
+**Cómo se hizo.** Un módulo por commit, en este orden, cada uno con typecheck, lint y tests antes de pushear: asistente de IA → bandeja de mensajes y chat interno → conciliación → contratos → proveedores → agencias → canales de venta → notificaciones avanzadas → mantenimiento, objetos perdidos y avisos → configuración avanzada → portal multi-idioma → PWA, respaldos, cierre del día y servicio de cocina. Se partió de una base verde (typecheck y lint sin errores, 2.267 tests pasando) y se terminó en verde (1.195 tests: los restantes son los de los módulos que ya no existen).
+
+**Qué quedó.** El núcleo del pedido (PP2 §1.2): reservas con anti-overbooking en la base, check-in/out, consumos y factura, pagos, huéspedes, reportes, housekeeping, usuarios y roles, portal público en español, auditoría y registro de errores. Detalle y motivos en el ADR 0045.
+
+**Cosas que aparecieron al sacar, y se corrigieron en el mismo commit en que aparecieron:**
+- El tablero vigila que cada tarea programada haya corrido (`lib/domain/crons.ts`). Al quitar los crons de canales, ari y recordatorios de `vercel.json` había que quitarlos también de esa lista, o la alerta de «tarea atrasada» habría quedado encendida para siempre.
+- Al sacar el registro de envíos, el área «notificaciones» quedó en el menú apuntando a una pantalla que ya no existía. Se quitó en el commit siguiente, junto con «avisos».
+- `lib/domain/servicio.ts` se llamaba como el servicio de cocina pero también guarda la regla de cuándo se puede cargar un consumo, que usan el punto de venta y la cuenta de la reserva. Se conservó esa parte y se sacó solo la lista de desayuno.
+- Housekeeping cruzaba cada habitación con las órdenes de mantenimiento abiertas («en reparación»). Con el módulo fuera, ese cruce se quitó de la prioridad de limpieza, de las dos pantallas y del tablero.
+
+**Decisiones de alcance que conviene que los autores confirmen:**
+1. La reserva dejó de poder vincularse a una agencia (la tarifa sale del canal; la factura va siempre al huésped).
+2. Auditoría, errores, buscador global y encuestas se conservaron (ver ADR 0045, «Lo que se dejó a propósito»).
+3. La base de datos no se achicó: las tablas y migraciones de los módulos quitados siguen. Está explicado en el ADR por qué, y qué hay que hacer antes de tocarlas.
+
+**Lo que NO se verificó:** los tests que usan Postgres (anti-overbooking, RLS por rol, etc.) no corrieron porque el entorno no tiene Docker. Antes de la entrega hay que correr `npm run test:aislado` en una máquina con Docker. Sí se verificó que `npm run build` compila.
+

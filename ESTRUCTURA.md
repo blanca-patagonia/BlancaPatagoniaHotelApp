@@ -1,5 +1,17 @@
 # Estructura del proyecto — Blanca Patagonia
 
+> ⚠️ **Rama `tesis-a-presentar` — versión reducida para la tesis.** Esta rama es el
+> sistema recortado a lo que pidió el hotel (reservas, check-in/out, consumos,
+> factura, pagos, huéspedes y reportes). Se quitaron la bandeja de mensajes, el
+> asistente de IA, canales de venta, conciliación, contratos, agencias,
+> proveedores, mantenimiento, objetos perdidos, avisos, el portal en otros
+> idiomas, la app instalable y los respaldos. **`main` conserva el sistema
+> completo.** Lo que quedó y el porqué: `docs/decisiones/0045-version-reducida-para-la-tesis.md`.
+>
+> Este mapa describe el sistema completo: las carpetas de los módulos quitados
+> **ya no existen en esta rama**.
+
+
 Este documento es el mapa del repositorio: qué hay en cada carpeta, cuál es el
 **front**, cuál es el **back**, dónde está la base de datos y **dónde va cada
 cosa nueva**. Está pensado para presentar el trabajo y para que alguien nuevo se

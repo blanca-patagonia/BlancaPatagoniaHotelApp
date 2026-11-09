@@ -1,5 +1,18 @@
 # Blanca Patagonia — Guía para Claude (pautas fijas del proyecto)
 
+> ⚠️ **Rama `tesis-a-presentar` — versión reducida para la tesis.** Esta rama es el
+> sistema recortado a lo que pidió el hotel (reservas, check-in/out, consumos,
+> factura, pagos, huéspedes y reportes). Se quitaron la bandeja de mensajes, el
+> asistente de IA, canales de venta, conciliación, contratos, agencias,
+> proveedores, mantenimiento, objetos perdidos, avisos, el portal en otros
+> idiomas, la app instalable y los respaldos. **`main` conserva el sistema
+> completo.** Lo que quedó y el porqué: `docs/decisiones/0045-version-reducida-para-la-tesis.md`.
+>
+> Lo que sigue de este documento describe el sistema completo: las secciones sobre
+> los módulos quitados **no aplican acá**. Los números de migraciones y de tests
+> también son los de `main`.
+
+
 > Este archivo define **cómo trabajar en este repo**. Vale siempre, incluso si se
 > compacta el contexto. Leerlo antes de actuar.
 

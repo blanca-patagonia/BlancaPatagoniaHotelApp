@@ -19,7 +19,7 @@ no lo elimina.
 
 **El despliegue lo tiene que hacer el hotel**, no quien escribió el código:
 requiere las cuentas de Vercel, Supabase, la pasarela de pagos y —si se usa—
-Resend y WhatsApp Business. Ninguna de esas credenciales está ni debe estar en el
+Resend. Ninguna de esas credenciales está ni debe estar en el
 repositorio.
 
 **Hace falta el plan Pro de Vercel**, no el gratuito (Hobby). `vercel.json`
@@ -29,9 +29,6 @@ con esos horarios el despliegue se rechaza. Bajarlos a uno por día para entrar
 en Hobby no es una salida: los avisos saldrían una vez al día (una confirmación
 de reserva llegaría al otro día) y el tablero marcaría la bandeja como atrasada
 todo el tiempo, porque su tolerancia es de 30 minutos (`src/lib/domain/crons.ts`).
-Verificar también en *Project Settings → Functions* que el límite de duración
-del plan alcance los `maxDuration = 120` s que declaran el asistente de IA
-(`panel/ia/consulta`) y el tablero (sus consultas rápidas de IA).
 
 ---
 
@@ -70,10 +67,8 @@ emite un CAE inventado sobre una factura real.
 | Variable | Real | Simulador | Qué hace el simulador |
 |---|---|---|---|
 | `EMAIL_PROVIDER` | `resend` | `consola` | Escribe el correo en el log, no lo manda |
-| `FIRMA_PROVIDER` | — | `local` | Registra una aceptación **sin validez legal** |
 | `FACTURACION_PROVIDER` | — | `simulado` | **CAE inventado**, no es ARCA |
 | `COTIZACION_PROVIDER` | `dolarapi` / `argentinadatos` | `manual` | Usa la cotización que cargó un admin (no inventa) |
-| `CANAL_PROVIDER` | `booking-ical` | `simulado` | No habla con ninguna OTA |
 | `PAGO_PROVIDER` | `mercadopago,stripe,payway` | `simulado` | No cobra nada |
 
 > `PAGO_PROVIDER` es el **único plural**: admite varios separados por coma,
@@ -83,27 +78,14 @@ emite un CAE inventado sobre una factura real.
 
 | Integración | Variables | Notas |
 |---|---|---|
-| **MercadoPago (cobro)** | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | El token es también el que usa la conciliación de liquidaciones. Cómo conseguirlas: §1.6 |
-| **MercadoPago (conexión OAuth)** | `MERCADOPAGO_APP_ID`, `MERCADOPAGO_APP_SECRET` | Para el botón «Conectar Mercado Pago» de `/panel/config/conexiones` (ADR 0036) — **no** reemplaza al par de arriba, ver §1.6. Exige `ENCRYPTION_KEY` |
-| **Cifrado de credenciales** (ADR 0036) | `ENCRYPTION_KEY` | Clave AES-256: 32 bytes en base64 (`openssl rand -base64 32`). Cifra los tokens OAuth guardados en `conexiones_proveedores`. **Obligatoria si está `MERCADOPAGO_APP_ID`**: sin ella la app no arranca. Ver la advertencia de abajo |
-| **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | ⚠️ Stripe cuenta en **centavos**. ⚠️ No admite cuentas de Argentina directas, ver §1.6 |
-| **Payway** (ADR 0038) | `PAYWAY_PUBLIC_KEY`, `PAYWAY_PRIVATE_KEY`, `PAYWAY_INTERNAL_SECRET` | ⚠️ Payway también cuenta en **centavos**. `PAYWAY_INTERNAL_SECRET` no es de Payway: firma el evento que el propio servidor se manda a sí mismo tras una respuesta síncrona (ver `src/lib/payments/payway.ts`). Cómo conseguirlas: §1.6 |
+| **MercadoPago (cobro)** | `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET` | Cómo conseguirlas: §1.5 |
+| **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | ⚠️ Stripe cuenta en **centavos**. ⚠️ No admite cuentas de Argentina directas, ver §1.5 |
+| **Payway** (ADR 0038) | `PAYWAY_PUBLIC_KEY`, `PAYWAY_PRIVATE_KEY`, `PAYWAY_INTERNAL_SECRET` | ⚠️ Payway también cuenta en **centavos**. `PAYWAY_INTERNAL_SECRET` no es de Payway: firma el evento que el propio servidor se manda a sí mismo tras una respuesta síncrona (ver `src/lib/payments/payway.ts`). Cómo conseguirlas: §1.5 |
 | **Pago simulado** | `PAGO_WEBHOOK_SECRET` | Sólo con `PAGO_PROVIDER=simulado` |
 | **Resend (envío)** | `RESEND_API_KEY`, `EMAIL_FROM` | ⚠️ `EMAIL_FROM` debe ser de un dominio **verificado** o la API responde 403 |
-| **Resend (entrega)** | `RESEND_WEBHOOK_SECRET` | Sin esto **no se detectan los rebotes**: el aviso queda «enviada» para siempre |
-| **WhatsApp** | `WHATSAPP_PROVIDER`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_IDIOMA` | Ver §1.5 |
-| **Asistente de IA** | `IA_PROVIDER`, `IA_BASE_URL`, `IA_API_KEY`, `IA_MODELO` (+ `IA_MODELO_RESPALDO`, recomendada: `gemini-3.5-flash-lite`; + proveedor de respaldo `IA_RESPALDO_BASE_URL`, `IA_RESPALDO_API_KEY`, `IA_RESPALDO_MODELO`, por ejemplo Groq: `https://api.groq.com/openai/v1` y `openai/gpt-oss-120b`) | Opcionales. Sin las cuatro, `/panel/ia` no se ofrece. Con Gemini: `openai_compatible`, `https://generativelanguage.googleapis.com/v1beta/openai`, la clave de AI Studio y `gemini-2.5-flash` (ver `COMO-LEVANTARLO.md`) |
-| **Booking (iCal)** | `BOOKING_ICAL_FEEDS` | Pares `CODIGO_TIPO=url` separados por comas. ⚠️ Con los códigos **actuales** de `tipos_unidad`: la 0106 renombró varios (`HOST-DBL-STD` → `HOST-STD`, `HOST-DBL-SUP` → `HOST-SUP`, `CAB-3D-6P` → `CAB-BOLADOS`, `CAB-1D-3P` → `CAB-ONELLI`, `CAB-2D-4P` → `CAB-SPEGAZZINI`). Un código viejo no da error: ese tipo simplemente no se importa |
 | **Divisas** | `DOLARAPI_URL`, `ARGENTINADATOS_URL`, `AMBITO_URL` | Opcionales: vacías usan las públicas. `AMBITO_URL` es solo para el dato informativo de Banco Nación del dashboard (no participa del cobro); si Ámbito no responde, esa fila del widget simplemente no aparece |
 | **Login con Google** | `AUTH_GOOGLE_HABILITADO` | `1` lo habilita. Además hay que configurar el proveedor en Supabase, ver §2.2 paso 4 |
 | **Asistente del portal público** | `ASISTENTE_PROVIDER` | Opcional. El único valor es `reglas`, que es también el que se usa si falta (ADR 0011: el portal no usa un modelo de IA, a propósito) |
-
-> ⚠️ **`ENCRYPTION_KEY` no se puede perder ni cambiar.** Los tokens que ya se
-> guardaron cifrados con una clave sólo se descifran con esa misma clave: si
-> se pierde o se reemplaza, las cuentas conectadas dejan de funcionar y hay
-> que volver a conectarlas una por una. Guardar una copia **fuera de Vercel**
-> (el gestor de contraseñas del hotel), porque Vercel no muestra el valor de
-> una variable sensible después de cargarla.
 
 ### 1.4 De desarrollo — **no ponerlas en producción**
 
@@ -113,38 +95,7 @@ emite un CAE inventado sobre una factura real.
 | `REGISTRO_SIN_BASE=1` | Apaga la escritura de errores en la tabla `errores` |
 | `ADMIN_EMAIL` · `ADMIN_PASSWORD` · `ADMIN_NOMBRE` | Sólo las lee `scripts/seed-usuarios.mjs`, que además **corta si la base no es local** |
 
-### 1.5 WhatsApp: lo que no se resuelve con una variable
-
-`WHATSAPP_PROVIDER` vacía significa «el canal no se ofrece» y todo sale por
-correo. No hay fallo al arrancar como en los otros adapters, y es a propósito: la
-bandeja elige el canal **antes** de encolar, así que nada puede darse por enviado
-sin haber salido.
-
-Para que el canal funcione de verdad hacen falta tres cosas **del lado de Meta**,
-y son trámites del hotel:
-
-1. Una cuenta de **WhatsApp Business verificada** con el número del hotel.
-2. Un **token permanente** de usuario de sistema. El token de prueba dura 24
-   horas y sirve sólo para probar.
-3. Las **plantillas aprobadas**, una por evento, con el nombre y el orden de
-   huecos que declara `src/lib/domain/whatsapp.ts`:
-
-   | Evento | Plantilla en Meta | Huecos, en orden |
-   |---|---|---|
-   | `confirmacion_reserva` | `reserva_recibida` | nombre · código · llegada · salida |
-   | `reserva_confirmada` | `reserva_confirmada` | nombre · código · llegada · saldo |
-   | `recordatorio_checkin` | `recordatorio_llegada` | nombre · código · llegada · hora |
-   | `reserva_por_vencer` | `reserva_por_vencer` | nombre · código · seña |
-
-> ⚠️ **El orden es el contrato.** WhatsApp numera los huecos (`{{1}}`, `{{2}}`) y
-> Meta valida la **cantidad**, no el significado: si el orden de la plantilla
-> aprobada no coincide con el del código, el huésped recibe el código de reserva
-> donde iba la fecha **y el mensaje sale igual**.
->
-> ⚠️ `es_AR` y `es` son plantillas **distintas** para Meta. Pedir una que no
-> existe devuelve el error 132001 y el mensaje no sale.
-
-### 1.6 Pasarelas de pago: qué trámite hace falta para cada una
+### 1.5 Pasarelas de pago: qué trámite hace falta para cada una
 
 El código de las cuatro está escrito (`src/lib/payments/`); lo que falta en los
 cuatro casos es el trámite comercial, no programar. Investigado el
@@ -152,30 +103,20 @@ cuatro casos es el trámite comercial, no programar. Investigado el
 se probó contra una cuenta real todavía (ver ADR 0027 y ADR 0038): antes de
 activar cualquiera en producción, conviene un pago de prueba chico primero.
 
-#### Mercado Pago — tres pares de credenciales, no uno
+#### Mercado Pago
 
-Hay TRES variables de Mercado Pago en este proyecto, y se confunden fácil
-porque las tres se llaman parecido pero son trámites distintos:
+Las credenciales de cobro:
 
 | Variable | Para qué | De dónde sale |
 |---|---|---|
 | `MERCADOPAGO_ACCESS_TOKEN` + `MERCADOPAGO_WEBHOOK_SECRET` | Cobrar de verdad (Checkout Pro, `src/lib/payments/mercadopago.ts`) | Credenciales de **producción** de la cuenta de cobro del hotel, en `mercadopago.com.ar/developers/panel/app` → la aplicación → «Credenciales de producción». El webhook secret se genera al configurar la URL de notificaciones dentro de esa misma aplicación (menú Webhooks → Configurar notificaciones → pestaña «Modo productivo», poner `https://<dominio>/api/webhooks/pagos/mercadopago`) |
-| `MERCADOPAGO_APP_ID` + `MERCADOPAGO_APP_SECRET` | El botón «Conectar Mercado Pago» de `/panel/config/conexiones` (OAuth2, ADR 0036) — para que el staff conecte la cuenta sin pegar un token a mano | Se registra **una sola aplicación** de Mercado Pago para Blanca Patagonia (no una por hotel, acá hay uno solo) en el mismo panel de developers, sección «Tus integraciones» → «Crear aplicación». Ahí salen el `Client ID` (= `APP_ID`) y el `Client Secret` (= `APP_SECRET`) |
 
-⚠️ **Requisito previo, para cualquiera de los dos pares:** una cuenta de
+⚠️ **Requisito previo:** una cuenta de
 Mercado Pago dada de alta como **vendedor**, lo que pide CUIT/CUIL y
 Monotributo o el régimen fiscal que corresponda al hotel — es un trámite del
 hotel, no de quien programa. Y para que Mercado Pago habilite las
 credenciales de **producción** (no solo las de prueba) pide un sitio HTTPS
 real: no se puede activar contra `localhost`.
-
-⚠️ **La conexión OAuth (segundo par) hoy es solo de estado** — Fase 1 de 4
-del ADR 0036, según la bitácora del 2026-09-09: guarda el token conectado en
-`conexiones_proveedores` (cifrado) y lo muestra en la pantalla, pero
-`src/lib/payments/mercadopago.ts` y la conciliación (ADR 0030) siguen leyendo el
-primer par (`MERCADOPAGO_ACCESS_TOKEN`) directo de las variables de entorno,
-no de la conexión guardada. Conectar por OAuth hoy no reemplaza cargar el
-`ACCESS_TOKEN` a mano.
 
 #### Payway (Prisma) — es un trámite telefónico, no un formulario web
 
@@ -226,31 +167,6 @@ que paga con Stripe hoy en el sistema es el que paga desde el exterior, y
 Mercado Pago con tarjeta internacional cubre buena parte del mismo caso sin
 ese trámite.
 
-#### Santander — no es una pasarela, es la fuente de conciliación (ADR 0030)
-
-No hace falta ninguna credencial nueva de API: Santander Argentina **no
-tiene banca abierta** para descargar movimientos por API, así que
-`src/lib/conciliacion/extracto-csv.ts` está armado para importación manual de
-archivo, no para conectarse solo. Lo único que hace falta operativamente:
-
-1. Bajar el extracto desde **Online Banking Santander**
-   (`onlinebanking.santander.com.ar`) — sale en **PDF**, no en CSV/Excel
-   directo. Para convertirlo antes de subirlo al sistema hace falta un
-   conversor (hay servicios como ExtractPro pensados justo para bancos
-   argentinos) o pasarlo a mano.
-2. Nada de esto pide una variable de entorno ni un desarrollo nuevo: es un
-   procedimiento mensual/semanal de quien concilia, no una integración.
-
-**Si en algún momento el hotel quisiera un posnet físico de Santander** (no
-es lo mismo que conciliar el banco), la marca es **Getnet by Santander**
-(`getnet.net/ar` o `docs.globalgetnet.com` para su API). Contacto comercial:
-`comercios@getnet.com.ar` / `+54 11 6074-7001`. Esto sería una **quinta
-pasarela nueva** (ni Payway ni Getnet son lo mismo, aunque las dos sean
-adquirentes locales) — no hay código escrito para Getnet todavía, y no se
-escribió en esta pasada porque el pedido original mencionaba «Santander»
-esperando que fuera la conciliación, no un posnet nuevo. Si el hotel
-confirma que quiere Getnet como medio de cobro además de Payway, es un
-adapter nuevo con el mismo patrón que `src/lib/payments/payway.ts`.
 
 ---
 
@@ -361,20 +277,14 @@ npx vercel --prod
 > hotel dejó de enterarse de los pagos».
 
 **7. Los crons.** Los declara `vercel.json` y Vercel los toma del despliegue.
-Requieren el plan **Pro** (§0): dos corren varias veces por día. Son seis:
+Requieren el plan **Pro** (§0): dos corren varias veces por día. Son tres:
 
 | Cron | Horario (UTC) | Qué hace |
 |---|---|---|
 | `/api/cron/notificaciones` | cada 5 min | Manda lo que está anotado en la bandeja |
-| `/api/cron/recordatorios` | 12:00 (9 del hotel) | Decide qué recordatorios corresponden hoy |
-| `/api/cron/canales` | 06:00 | Aterriza las reservas de Booking |
-| `/api/cron/ari` | 06:20 | Calcula y publica disponibilidad y tarifas |
-| `/api/cron/mantenimiento` | 06:40 | Expira pendientes, vence comprobantes, purga |
+| `/api/cron/mantenimiento` | 06:40 | Expira reservas pendientes y purga errores viejos |
 | `/api/cron/salud` | cada 15 min | Sondea que la base responda |
 
-> El horario del cron de recordatorios **no es arbitrario**: 12:00 UTC son las 9
-> de El Calafate, que es cuando abre la franja en la que se le puede escribir a un
-> huésped. Correrlo de madrugada anotaría todo con espera hasta las 9 igual.
 
 ### 2.3 Verificación después de publicar
 
@@ -386,9 +296,8 @@ En este orden, y **mirando el resultado**, no el exit code:
    login**, no es la contraseña: es un perfil `sin_rol` (ver `AGENTS.md`).
 3. Abrir `/panel/errores`. Debería estar vacía o con ruido menor. Un error de
    arranque repetido ahí es un proveedor mal configurado.
-4. Abrir `/panel/notificaciones`. Encolar algo real —una reserva de prueba— y
-   verificar que pasa de `pendiente` a `enviada` en la corrida siguiente, y de
-   ahí a `entregada` cuando Resend informe.
+4. Encolar algo real —una reserva de prueba— y verificar en la tabla
+   `notificaciones` que pasa de `pendiente` a `enviada` en la corrida siguiente.
 5. Hacer **un cobro real de importe mínimo** con la pasarela viva y comprobar
    que el webhook lo acredita. La URL de retorno **no es prueba de pago**: quien
    confirma es el webhook.
@@ -475,27 +384,19 @@ incluye, o restaurar el backup diario.
 
 ### 3.5 Lo que ya salió del sistema
 
-Un correo o un WhatsApp enviado **no se puede deshacer**. Si un despliegue mandó
+Un correo enviado **no se puede deshacer**. Si un despliegue mandó
 avisos equivocados:
 
 1. **Frenar la fuente**, no la salida: en Vercel, sacar temporalmente
    `CRON_SECRET`. Los crons pasan a responder 503 y dejan de encolar. La bandeja
    queda quieta; nada se pierde.
-2. Marcar como `cancelada` lo que todavía está `pendiente` en
-   `/panel/notificaciones`. Lo cancelado no sale y se puede reencolar después.
+2. Marcar como `cancelada` lo que todavía está `pendiente` en la tabla
+   `notificaciones`. Lo cancelado no sale y se puede reencolar después.
 3. Reponer `CRON_SECRET` cuando el problema esté resuelto.
 
 > Ese orden importa: apagar el cron de notificaciones **antes** de tocar la
 > bandeja evita que una corrida se lleve justo lo que se está por cancelar.
 
-### 3.6 Rollback del service worker
-
-⚠️ **Un service worker roto no se arregla con un deploy**: queda instalado en el
-dispositivo de cada persona y sigue interceptando pedidos con la versión vieja.
-El procedimiento de apagado está escrito en el encabezado de `public/sw.js` —hay
-que publicar un service worker vacío que se desregistre— y `next.config.ts` le
-pone `Cache-Control: no-store` justamente para que ese reemplazo se pueda
-publicar (ADR 0028).
 
 ---
 
@@ -505,10 +406,7 @@ Lo que conviene mirar la primera semana, en orden de importancia:
 
 1. **`/panel/errores`** todos los días. Un error repetido es configuración; uno
    aislado es ruido.
-2. **`/panel/notificaciones`**, filtrando por *Fallida*. Si hay rebotes, son
-   direcciones mal cargadas y se arreglan de a una.
-3. **`/panel/conciliacion`** a fin de mes, contra el extracto del banco en papel.
-4. Que **el contador correlativo de facturas no salte**. Si salta, algo está
+2. Que **el contador correlativo de facturas no salte**. Si salta, algo está
    pidiendo números y no los usa.
 
 Y lo que sigue sin poder cerrarse desde el código, para tenerlo presente:

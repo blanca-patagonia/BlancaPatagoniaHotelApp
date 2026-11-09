@@ -181,8 +181,8 @@ simulador tiene que ser una decisión escrita, nunca un descuido. El de facturac
 por ejemplo, emite un CAE inventado sobre una factura real.
 
 ```
-EMAIL_PROVIDER, FIRMA_PROVIDER, FACTURACION_PROVIDER,
-COTIZACION_PROVIDER, CANAL_PROVIDER, PAGO_PROVIDER
+EMAIL_PROVIDER, FACTURACION_PROVIDER,
+COTIZACION_PROVIDER, PAGO_PROVIDER
 ```
 
 La plantilla completa, con el nombre del simulador de cada una, está en
