@@ -17,38 +17,37 @@ concentran el **79 %** de las reservas del hotel.
 > asistente de IA, canales de venta, conciliación, contratos, agencias,
 > proveedores, mantenimiento, objetos perdidos, avisos, el portal en otros
 > idiomas, la app instalable y los respaldos. **`main` conserva el sistema
-> completo.** Lo que quedó y el porqué: `docs/decisiones/0045-version-reducida-para-la-tesis.md`.
+> completo.** Lo que quedó y el porqué: [ADR 0045](docs/decisiones/0045-version-reducida-para-la-tesis.md).
 >
-> Lo que sigue de este documento describe el sistema completo: las secciones sobre
-> los módulos quitados **no aplican acá**. Los números de migraciones y de tests
-> también son los de `main`.
-
+> Este documento describe **sólo lo que hay en esta rama**. Las migraciones son
+> la excepción: la base de datos no se achicó, y las tablas de los módulos
+> quitados siguen ahí sin pantalla ni código que las use
+> ([qué tablas son de cada lado](docs/2-arquitectura/modelo-datos.md)).
 
 ## Estado del proyecto
 
-**2294 tests en verde** (146 archivos, cero salteados contra la base local) · typecheck,
-lint y build limpios · CI verificado en GitHub.
+**141 archivos de test, 1780 tests.** Sin base de datos corren 1197 y pasan los
+1197; los otros 583 necesitan Postgres y se saltean (corrida del 2026-11-10 con
+`npx vitest run`, sin las variables de la base). La suite completa contra la base
+aislada (`npm run test:aislado`) **no está verificada desde esta rama**: se corre
+en una máquina con Docker antes de la entrega ([ADR 0045](docs/decisiones/0045-version-reducida-para-la-tesis.md)).
 
 ### Qué está funcionando
 
 | Área | Alcance implementado |
 |---|---|
 | **Reservas** | Alta con cotización por temporada e IVA, máquina de estados (confirmar · check-in · check-out · cancelar · no-show), política de cancelación con vista previa del cargo, reservas grupales, reprogramación y cambio de unidad |
-| **Ocupación** | Grilla unidades × días con celdas accionables, filtros por categoría, ventana de 14/30 días y KPIs del período |
-| **Portal público** | Catálogo de alojamientos con detalle y precios por temporada, búsqueda de disponibilidad sin login, checkout del huésped, confirmación por token opaco, expiración de reservas pendientes y asistente basado en reglas |
-| **Pagos** | Seña → saldo → `pagada` automática al saldar, registro manual desde recepción y webhook idempotente |
-| **Consumos y factura** | Catálogo de productos/servicios, consumos por reserva, cuenta consolidada y comprobante imprimible con IVA discriminado |
-| **Facturación fiscal** | Letra del comprobante según condición de emisor y receptor, desglose que garantiza `neto + iva = total` y validación de CUIT por módulo 11 |
-| **Housekeeping** | Estados de habitación, vista por responsable, asignación de mucamas y KPIs de limpieza |
-| **Mantenimiento** | Órdenes con prioridad y antigüedad, planes de mantenimiento **preventivo** y objetos perdidos |
-| **Agencias y proveedores** | Cuentas corrientes, pipeline comercial, conciliación, antigüedad de saldos (*aging*) y portal de socios por token |
-| **Reportes** | Ocupación, ingresos, ADR y RevPAR con prorrateo, comparativa contra el mes anterior, evolución de 6 meses, ranking de canales y NPS |
-| **Contratos** | Redacción, envío, firma electrónica por token desde vista pública y verificación de integridad por hash |
-| **Canales de venta** | Importación del informe CSV de Booking y del feed iCal, mapeo manual de columnas, zona de recepción de entrantes, costos y comisiones por canal, conciliación de la factura del canal, mensajes y reseñas. **Solo lectura: no evita el overbooking** ([ADR 0021](docs/decisiones/0021-canales-de-venta-solo-lectura.md)) |
-| **Punto de venta** | Grilla por departamento con buscador, total en vivo, número de comanda y anulación con detalle del importe |
-| **Respaldos** | Exportación verificable de los datos operativos, con el alcance declarado en pantalla. **No es un backup de Postgres**: eso lo hace la plataforma |
-| **Divisas** | Cotización automática con respaldo manual del gerente ([ADR 0020](docs/decisiones/0020-cotizacion-de-divisas.md)) |
-| **Interno** | Conversaciones por canal en tiempo real, avisos fijables, buscador global por rol, auditoría *append-only* y sección de Ayuda |
+| **Ocupación** | Grilla unidades × días con celdas accionables, filtros por categoría, bloque y piso, ventana de 14/30 días, KPIs del período y arrastre de una reserva a otra habitación ([ADR 0033](docs/decisiones/0033-arrastrar-una-reserva-cambia-de-habitacion-no-de-fechas.md)) |
+| **Portal público** | Catálogo de alojamientos con detalle y precios por temporada, búsqueda de disponibilidad sin login, checkout del huésped, confirmación por token opaco, expiración de reservas pendientes y asistente basado en reglas. Sólo en español (`/es/…`) |
+| **Pagos** | Mercado Pago, Stripe y Payway por webhook idempotente, en dólares y en pesos; seña → saldo → `pagada` automática al saldar y registro manual desde recepción |
+| **Consumos y punto de venta** | Catálogo de productos/servicios, grilla por departamento con número de comanda, folios A/B con división de cuenta y cuenta consolidada |
+| **Factura** | Comprobante imprimible con IVA discriminado, letra según emisor y receptor, `neto + iva = total`, validación de CUIT por módulo 11, numeración sin huecos y notas de crédito. **El CAE es simulado** |
+| **Huéspedes** | Ficha, historial, fusión de duplicados, exención de IVA derivada y puntos de fidelidad |
+| **Housekeeping** | Estados de habitación, vista por responsable, asignación de mucamas, vista móvil ordenada por prioridad y foto adjunta |
+| **Reportes** | Ocupación, ADR y RevPAR con prorrateo, venta por categoría, facturación, satisfacción (NPS) y reservas por estado, con exportación a CSV |
+| **Configuración** | Tarifario, temporadas, promociones, inventario, tipos de alojamiento, ubicaciones, datos fiscales y cotización del dólar ([ADR 0020](docs/decisiones/0020-cotizacion-de-divisas.md)) |
+| **Correo al huésped** | Bandeja de salida con reintentos y diez eventos: confirmación, pago, cancelación, recordatorio de check-in, encuesta y otros |
+| **Interno** | Buscador global por rol, auditoría *append-only*, registro de errores del servidor ([ADR 0029](docs/decisiones/0029-errores-observables-en-postgres.md)) y sección de Ayuda |
 
 ### Garantías que impone la base de datos
 
@@ -56,34 +55,34 @@ La integridad crítica no depende de la aplicación:
 
 - **Anti-overbooking** — restricción de exclusión GiST sobre `estadias`; dos
   reservas no pueden solapar la misma unidad aunque la app falle ([ADR 0002](docs/decisiones/0002-motor-de-disponibilidad.md)).
-- **RLS activado en todas las tablas** (bastante más de 103 políticas sobre 56 tablas, y sigue creciendo), con lectura pública solo del catálogo.
+- **RLS activado en las 69 tablas** que crean las migraciones, con lectura pública
+  solo del catálogo.
 - **Auditoría *append-only*** por trigger genérico: el staff lee, no escribe.
 - **Límite de tasa** en las entradas públicas, atómico (inserta y después cuenta).
 
 ### Lo que todavía no está
 
-Hay **siete puertos** con el mismo patrón (interfaz + implementación
-seleccionable por variable de entorno). Los cinco primeros tienen **simulador y
-ninguno está integrado**: `PaymentProvider`, `EmailProvider`,
-`FirmaElectronicaProvider`, `AsistenteProvider` y
-`FacturacionElectronicaProvider`. **No se procesan pagos ni se envían correos
-reales, y el CAE es simulado.**
+Hay **cinco puertos** con el mismo patrón (interfaz + implementación
+seleccionable por variable de entorno). Cuatro tienen **simulador**:
+`PaymentProvider`, `EmailProvider`, `FacturacionElectronicaProvider` y
+`AsistenteProvider` (éste último es por reglas, a propósito: [ADR 0011](docs/decisiones/0011-asistente-basado-en-reglas.md)).
+Los adaptadores de Mercado Pago, Stripe, Payway y Resend están escritos, pero
+**ninguna cuenta está contratada**: no se procesan pagos ni se envían correos
+reales, y el CAE es simulado.
 
-Los otros dos son distintos: `CotizacionProvider` (divisas) y
-`CanalVentaProvider` (OTA) hablan con fuentes públicas sin credenciales, así que
-**no tienen un simulador que mienta**. El respaldo de divisas es el valor que
-cargó un admin a mano; el de canales sí es simulado y no habla con nadie.
+El quinto es distinto: `CotizacionProvider` (divisas) habla con fuentes públicas
+sin credenciales, así que **no tiene un simulador que mienta**. Su respaldo es el
+valor que cargó un admin a mano.
 
 Si un simulador queda seleccionado en producción, el sistema **falla al
 arrancar** a propósito ([ADR 0018](docs/decisiones/0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md)).
 
-El **deploy** (Vercel + Supabase cloud) está pendiente. La sincronización
-automática de canales ya tiene su tarea programada (`vercel.json`), documentada
-en [`docs/2-arquitectura/sincronizacion-automatica.md`](docs/2-arquitectura/sincronizacion-automatica.md) —
-con la advertencia de que el plan Hobby de Vercel corre **una vez por día**,
-no cada tres horas.
+El **deploy** (Vercel + Supabase cloud) está pendiente. `vercel.json` declara tres
+tareas programadas (avisos por correo, sondeo de salud y mantenimiento); las
+primeras dos corren varias veces por día, así que **no entran en el plan Hobby**
+de Vercel (detalle en [despliegue](docs/3-manuales/despliegue.md)).
 
-Tres pendientes técnicos, anotados donde viven y no solo acá:
+Dos pendientes técnicos, anotados donde viven y no solo acá:
 
 - **Auditar las políticas RLS una por una.** Que estén activadas en todas las
   tablas no dice qué permite cada una. La matriz de **lectura** ya es exhaustiva
@@ -92,10 +91,6 @@ Tres pendientes técnicos, anotados donde viven y no solo acá:
 - **Atomicidad de los flujos de varios pasos de `reservas`.** Hoy un fallo a mitad
   de camino avisa, pero deja los datos a medias; resolverlo pide una función SQL
   transaccional.
-- **Las fotos de los alojamientos.** El catálogo está diseñado para verse
-  terminado sin ellas; para sumarlas, copiar los archivos en
-  `public/alojamientos/` y descomentar su línea en `FOTOS`
-  (`src/lib/domain/catalogo.ts`).
 
 Ver [roadmap](docs/roadmap.md) y [ADR 0013](docs/decisiones/0013-alcance-erp-y-trabajo-futuro.md)
 para el trabajo futuro documentado.
@@ -151,19 +146,22 @@ contraseña perdida se recupera en **`/login/recuperar`**.
 
 ## Correr los tests — esto sí necesita Docker
 
-Los tests **no** se corren contra el proyecto de la nube: 29 archivos escriben con
-`service_role` —que saltea RLS— y borran filas de `reservas`, `huespedes`,
-`tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso destruye datos del
-hotel, así que `tests/apoyo/db.ts` corta si las variables no apuntan a una base local.
+Los tests **no** se corren contra el proyecto de la nube: hay 20 archivos que
+escriben con `service_role` —que saltea RLS— y borran filas (entre otras, de
+`reservas`, `huespedes`, `tarifas`, `unidades` y `tipos_unidad`). Contra la base
+real eso destruye datos del hotel, así que `tests/apoyo/db.ts` corta si las
+variables no apuntan a una base local.
+
+Tampoco contra la base local con la que se trabaja (la de `npm run dev`): para eso
+hay una base aparte, sólo para tests ([ADR 0042](docs/decisiones/0042-verificacion-base-aislada-esquema-e2e.md)).
 
 ```bash
-npx supabase start      # Postgres + Auth locales; la primera vez tarda unos minutos
-npx supabase db reset   # aplica las migraciones + el seed (Tarifario real)
-npm run seed:usuarios   # OJO: db reset borra los usuarios de auth
-npm test
+npm run test:aislado         # levanta la base de tests (puerto 55321), la deja en cero,
+                             # siembra el admin y corre TODO, sin saltear nada
+npm run test:aislado:parar   # la apaga cuando terminás
 ```
 
-Sin base local `npm test` **saltea** los tests de integración en vez de fallar
+Sin base `npm test` **saltea** los tests de integración en vez de fallar
 —entre ellos el anti-overbooking, que es la garantía central del sistema—. En CI
 eso no puede pasar: `EXIGIR_DB=1` convierte la ausencia de base en error.
 
@@ -175,6 +173,7 @@ Detalle completo en [cómo levantarlo](COMO-LEVANTARLO.md) y en el
 `admin` · `gerencia` · `recepcion` · `housekeeping`, más el huésped público sin
 cuenta. Cada rol ve su propia navegación, su propio alcance de búsqueda y sus
 propios capítulos de Ayuda ([ADR 0005](docs/decisiones/0005-autenticacion-y-roles.md)).
+El panel tiene **12 áreas** (`src/lib/domain/permisos.ts`).
 
 ## Documentación
 
@@ -184,12 +183,11 @@ Toda la documentación vive en [`docs/`](docs/), en español (índice en [`docs/
 - [Roadmap por fases](docs/roadmap.md) — plan y estado de cada fase.
 - [Arquitectura](docs/2-arquitectura/arquitectura.md) — visión técnica del sistema.
 - [Modelo de datos](docs/2-arquitectura/modelo-datos.md) — entidades y relaciones.
-- [Decisiones (ADR)](docs/decisiones/) — 40 decisiones de arquitectura numeradas.
-- [Qué queda pendiente](docs/5-pendientes/analisis-pendientes-2026-09-09.md) — documento vigente; el
-  estado más actual son los [issues de GitHub](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/issues).
-  [`docs/4-seguridad-y-auditorias/audit/`](docs/4-seguridad-y-auditorias/audit/) y [`docs/5-pendientes/PENDIENTES.md`](docs/5-pendientes/PENDIENTES.md) quedaron
-  congelados, como referencia histórica.
-- [Manual de usuario](docs/3-manuales/manual-usuario.md) · [Manual técnico](docs/3-manuales/manual-tecnico.md)
+- [Decisiones (ADR)](docs/decisiones/) — 29 decisiones de arquitectura numeradas
+  (los números saltan porque las de los módulos quitados quedaron en `main`).
+- [Qué queda pendiente](docs/5-pendientes/PENDIENTES.md); el estado más actual son
+  los [issues de GitHub](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/issues).
+- [Manual de usuario](docs/3-manuales/manual-usuario.md) · [Manual técnico](docs/3-manuales/manual-tecnico.md) · [Despliegue](docs/3-manuales/despliegue.md)
 - [Seguridad](docs/4-seguridad-y-auditorias/SEGURIDAD.md) · [Auditoría inicial](docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md) ·
   [Revisión de RLS y endpoints](docs/4-seguridad-y-auditorias/revision-seguridad.md)
 
@@ -199,14 +197,14 @@ Mapa completo, carpeta por carpeta: **[ESTRUCTURA.md](ESTRUCTURA.md)**.
 
 ```
 src/                    # TODO el código de la aplicación
-  app/(front-publico)/  #   FRONT · sitio del huésped (5 idiomas, reserva y pago)
+  app/(front-publico)/  #   FRONT · sitio del huésped (reserva y pago, en español)
   app/(front-gestion)/  #   FRONT · panel de gestión del staff + login
   app/(back-api)/       #   BACK  · endpoints, webhooks y cron
   lib/                  #   BACK  · reglas de negocio, datos e integraciones
   proxy.ts              #   BACK  · sesión, idioma y límites de cada pedido
 supabase/               # base de datos: migraciones SQL numeradas
-tests/                  # pruebas por tipo: dominio, servicios, acciones, base de datos, contratos
-public/                 # fotos del hotel, íconos, service worker
+tests/                  # pruebas por tipo: dominio, servicios, acciones, base de datos, contratos, componentes
+public/                 # fotos del hotel
 docs/                   # documentación: tesis, arquitectura, manuales, ADRs, bitácora
 scripts/                # utilidades de consola
 ```
@@ -221,21 +219,25 @@ ninguna URL (`src/app/(front-gestion)/panel` se sigue abriendo en `/panel`).
 | `npm run dev` | Servidor de desarrollo |
 | `npm run build` | Build de producción |
 | `npm run lint` | ESLint |
-| `npm test` | Tests (Vitest) |
-| `npm run test:watch` | Tests en modo watch |
 | `npm run typecheck` | Chequeo de tipos |
+| `npm test` | Tests (Vitest) |
+| `npm run test:aislado` | Todos los tests, sin saltear nada, contra una base propia (necesita Docker) |
+| `npm run e2e` | Recorrido de las pantallas en un navegador (Playwright, con la app corriendo) |
+| `npm run check` | lint + typecheck + tests + build |
+| `npm run esquema:comparar` | ¿La base tiene exactamente el esquema de las migraciones? |
 | `npm run seed:usuarios` | Crea el primer admin de una base **nueva**. Contra la nube va una sola vez; en la base local de tests, después de cada `db reset` |
 
-El test de integración anti-overbooking necesita la base local y sus variables
+El test de integración anti-overbooking necesita una base local y sus variables
 de entorno; sin ellas se saltea. En CI corre con `EXIGIR_DB=1`.
 
-Para correr la suite completa en local hay que exportar las tres variables — vitest no lee
+Para correr la suite completa a mano hay que exportar las cuatro variables — vitest no lee
 `.env.local`, y sin la clave publicable los 4 tests del borde público saltean sin
-avisar aunque `EXIGIR_DB=1` esté puesto:
+avisar aunque `EXIGIR_DB=1` esté puesto (`npm run test:aislado` lo resuelve solo):
 
 ```bash
 EXIGIR_DB=1 \
 SUPABASE_URL="http://127.0.0.1:54321" \
+NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:54321" \
 SUPABASE_SERVICE_ROLE_KEY="sb_secret_…" \
 NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_…" \
 npm test

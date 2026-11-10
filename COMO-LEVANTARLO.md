@@ -1,7 +1,8 @@
 # Blanca Patagonia — cómo levantarlo en otra computadora
 
 El sistema usa un proyecto **Supabase en la nube**: la base ya está creada, con las
-67 migraciones aplicadas y el catálogo cargado. **No hace falta Docker para usar el
+migraciones aplicadas y el catálogo cargado (el repositorio trae 127; `npm run esquema:comparar`
+dice si la base tiene el esquema completo). **No hace falta Docker para usar el
 sistema.**
 
 Docker sigue haciendo falta para **una sola cosa**: correr la suite de tests. Está
@@ -70,10 +71,10 @@ en **`/login/recuperar`**.
 
 ## Correr los tests — acá sí hace falta Docker
 
-**Los tests NO se corren contra el proyecto de la nube.** Hay 24 archivos que
-escriben con `service_role`, que saltea RLS, y borran filas de `reservas`,
-`huespedes`, `tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso
-destruye datos del hotel.
+**Los tests NO se corren contra el proyecto de la nube.** Hay 20 archivos que
+escriben con `service_role`, que saltea RLS, y borran filas (entre otras, de
+`reservas`, `huespedes`, `tarifas`, `unidades` y `tipos_unidad`). Contra la base
+real eso destruye datos del hotel.
 
 **Tampoco contra la base local con la que trabajás** (la de `npm run dev`, si la
 usás): los tests borran lo que cargaste a mano. Para eso hay una base aparte,
@@ -108,8 +109,11 @@ eso no puede pasar: `EXIGIR_DB=1` convierte la ausencia de base en error.
 npm run check      # lint + typecheck + tests + build
 ```
 
-Para la suite completa, `npm run test:aislado`: tienen que dar **más de 2.700
-tests en verde, cero salteados** (2026-10-20).
+Para la suite completa, `npm run test:aislado`: tienen que correr **todos los
+tests, cero salteados**. En esta rama hay 1780 tests en 141 archivos; sin base
+corren 1197 (y pasan) y 583 se saltean (`npx vitest run`, 2026-11-10). El total
+con base **no está verificado desde esta rama**: hay que correrlo en una
+máquina con Docker antes de la entrega.
 
 ⚠️ **Leé la salida, no el código de salida.** Si no existe `.env.local`, varios
 archivos de test fallan por falta de variables y el comando **igual devuelve 0**.
@@ -168,7 +172,7 @@ EMAIL_FROM=reservas@tu-dominio.com
 
 ⚠️ `EMAIL_FROM` tiene que ser de un dominio **verificado en Resend** (Resend →
 Domains). Con un dominio sin verificar el envío falla, y el huésped se queda sin
-la confirmación de reserva, el enlace de firma o la encuesta — justo lo que el
+la confirmación de reserva, el aviso de pago o la encuesta — justo lo que el
 simulador `consola` nunca avisa, porque no habla con nadie.
 
 Sin `EMAIL_PROVIDER=resend` el sistema sigue con el simulador `consola`: el correo
@@ -254,5 +258,5 @@ from perfiles p join auth.users u on u.id = p.id;
 | `CLAUDE.md` | El estado del proyecto, las fases y las reglas de trabajo |
 | `AGENTS.md` | Comandos, arquitectura, convenciones y las trampas conocidas |
 | `docs/bitacora.md` | Qué se hizo, cuándo y por qué. Es el insumo de la tesis |
-| `docs/decisiones/` | Los 27 ADRs, uno por decisión de arquitectura |
+| `docs/decisiones/` | Los 29 ADRs de esta rama, uno por decisión de arquitectura |
 | `docs/roadmap.md` | Las fases del proyecto |

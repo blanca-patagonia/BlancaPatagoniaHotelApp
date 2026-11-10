@@ -8,8 +8,9 @@
 > idiomas, la app instalable y los respaldos. **`main` conserva el sistema
 > completo.** Lo que quedó y el porqué: `docs/decisiones/0045-version-reducida-para-la-tesis.md`.
 >
-> Este mapa describe el sistema completo: las carpetas de los módulos quitados
-> **ya no existen en esta rama**.
+> Este mapa describe **lo que hay en esta rama**. Las migraciones son la
+> excepción: la base de datos no se achicó y conserva las tablas de los módulos
+> quitados, sin código que las use.
 
 
 Este documento es el mapa del repositorio: qué hay en cada carpeta, cuál es el
@@ -58,7 +59,7 @@ BLANCA/
 ├── supabase-tests/           ← Base local SÓLO para tests (puerto 55321, ADR 0042)
 ├── tests/                    ← PRUEBAS · separadas por tipo
 ├── e2e/                      ← Recorrido de punta a punta en un navegador (Playwright)
-├── public/                   ← Archivos estáticos (fotos, video, service worker)
+├── public/                   ← Archivos estáticos (fotos y video del hotel)
 ├── scripts/                  ← Utilidades de consola
 ├── docs/                     ← DOCUMENTACIÓN (tesis, arquitectura, manuales, ADRs)
 │
@@ -98,11 +99,11 @@ Así se separa front de back a la vista sin romper ningún enlace.
 
 | Capa | Carpeta | Qué hay | Lo usa |
 |---|---|---|---|
-| **Front público** | `src/app/(front-publico)/` | Portada, alojamientos, reserva, checkout y pago, confirmación, factura, encuestas, firma de contratos, portal de socios | Huéspedes, agencias, proveedores |
-| **Front de gestión** | `src/app/(front-gestion)/` | Panel interno (28 módulos) y pantallas de login | Staff del hotel, según su rol |
-| **Back HTTP** | `src/app/(back-api)/` | Endpoints `/api/...`, webhooks de pagos y correo, tareas programadas, callback de Google | Pasarelas de pago, Vercel Cron, el propio front |
-| **Back lógico** | `src/lib/` | Reglas de negocio, acceso a datos, pagos, facturación, correo, canales | Todo lo anterior |
-| **Base de datos** | `supabase/` | 119 migraciones SQL: tablas, RLS por rol, funciones atómicas | El back |
+| **Front público** | `src/app/(front-publico)/` | Portada, alojamientos, reserva, checkout y pago, confirmación, factura, encuestas | Huéspedes |
+| **Front de gestión** | `src/app/(front-gestion)/` | Panel interno (12 áreas) y pantallas de login | Staff del hotel, según su rol |
+| **Back HTTP** | `src/app/(back-api)/` | Endpoints `/api/...`, webhook de pagos, tareas programadas, callback de Google | Pasarelas de pago, Vercel Cron, el propio front |
+| **Back lógico** | `src/lib/` | Reglas de negocio, acceso a datos, pagos, facturación, correo, divisas | Todo lo anterior |
+| **Base de datos** | `supabase/` | 127 migraciones SQL: tablas, RLS por rol, funciones atómicas | El back |
 
 Las **Server Actions** (`actions.ts`) son la frontera entre los dos mundos:
 viven al lado de la pantalla que las usa, pero **corren en el servidor**. Son el
@@ -114,8 +115,8 @@ viven al lado de la pantalla que las usa, pero **corren en el servidor**. Son el
 
 ```
 (front-publico)/
-├── [idioma]/                 ← páginas traducidas: /es, /en, /pt, /fr, /zh
-│   ├── layout.tsx            ← responde 404 si el idioma no es uno de los cinco
+├── [idioma]/                 ← páginas con prefijo de idioma: hoy sólo /es
+│   ├── layout.tsx            ← responde 404 si el idioma no está en IDIOMAS
 │   ├── page.tsx              ← portada (landing)
 │   ├── alojamientos/         ← catálogo (page.tsx) y ficha de cada unidad ([codigo]/)
 │   └── reservar/             ← paso 1: fechas · checkout/: datos y pago
@@ -127,14 +128,13 @@ viven al lado de la pantalla que las usa, pero **corren en el servidor**. Son el
 │   └── _asistente/           ← asistente de preguntas frecuentes
 ├── _publico/                 ← componentes del sitio (marco, galería, buscador, pasos…)
 ├── encuesta/[token]          ← encuesta de satisfacción post-estadía
-├── firmar/[token]            ← firma electrónica de contratos
-├── portal/                   ← portal de socios (agencias y proveedores)
 ├── pago-simulado/            ← pasarela simulada (solo desarrollo)
 └── pago-payway/              ← formulario de tarjeta de Payway
 ```
 
 **¿Por qué hay dos `reservar`?** El de `[idioma]/reservar` es la compra
-(elegir fechas, cargar datos, pagar) y está traducido a cinco idiomas. El de
+(elegir fechas, cargar datos, pagar) y lleva el prefijo de idioma (`/es/…`; el
+sistema conserva la estructura multi-idioma con `IDIOMAS = ['es']`, ADR 0045). El de
 `reservar/` son las pantallas que el huésped abre **desde un enlace del correo**
 con su token, y la Server Action que crea la reserva; esas URL no llevan
 idioma porque viajan en correos ya enviados y tienen que seguir funcionando.
@@ -150,27 +150,20 @@ idioma porque viajan en correos ya enviados y tienen que seguir funcionando.
     ├── page.tsx              ← tablero de inicio
     │
     │   (agrupados como en el menú lateral, `src/lib/domain/navegacion.ts`)
-    ├── Operación        ocupacion/ reservas/ punto-venta/ huespedes/
-    ├── Unidades         housekeeping/ mantenimiento/ servicio/ objetos-perdidos/
-    ├── Comercial        agencias/ proveedores/ contratos/ canales/
-    ├── Equipo           avisos/ notificaciones/ conversaciones/
-    ├── Administración   reportes/ ia/ conciliacion/ auditoria/ errores/ config/ usuarios/ respaldos/
+    ├── Operación        ocupacion/ reservas/ punto-venta/ huespedes/ housekeeping/
+    ├── Administración   reportes/ auditoria/ errores/ config/ usuarios/
     ├── ayuda/
-    └── Fuera del menú   cierre-diario/ · buscar/ · exportar/ (CSV) · cuenta/ (mis datos)
+    └── Fuera del menú   buscar/ · exportar/ (CSV) · cuenta/ (mis datos)
 ```
 
 Qué módulos ve cada rol lo decide `src/lib/domain/permisos.ts`.
 
-**Cuando una pantalla crece demasiado** se parte como `panel/canales/`, que pasó
-de ~2470 líneas en un archivo a:
-
-```
-canales/
-├── page.tsx          ← arma la pantalla (422 líneas)
-├── _datos.ts         ← toda la lectura; su tipo (`DatosCanales`) se deduce solo
-├── _compartido.ts    ← constantes y tipos que usan los demás
-└── _vistas/          ← un componente por pestaña (entrantes, cobros, costos…)
-```
+**Cuando una pantalla crece demasiado** se parte en secciones, como la ficha de
+reserva (`panel/reservas/[id]/`): `page.tsx` arma la pantalla y cada
+`seccion-*.tsx` (datos, acciones, cuenta, cambios, avisos) dibuja un bloque.
+Los reportes siguen el mismo criterio: `datos.ts` lee, `_componentes.tsx`
+comparte piezas y cada informe tiene su carpeta (`reportes/ocupacion/`,
+`categorias/`, `facturacion/`, `satisfaccion/`, `estados/`).
 
 Cada módulo sigue el mismo molde, lo que lo hace fácil de recorrer y de copiar:
 
@@ -190,17 +183,13 @@ Cada módulo sigue el mismo molde, lo que lo hace fácil de recorrer y de copiar
 ├── api/
 │   ├── salud/                ← estado del sistema (200 si la base responde, 503 si no)
 │   ├── webhooks/pagos/       ← la pasarela avisa que un pago se acreditó (es quien lo confirma)
-│   ├── webhooks/email/       ← entregas y rebotes de correo
-│   ├── cron/                 ← tareas automáticas: expirar reservas, recordatorios, canales…
-│   ├── canales/              ← feed iCal para Booking
+│   ├── cron/                 ← tareas automáticas: avisos por correo, salud, mantenimiento
 │   ├── buscar/               ← búsqueda global del panel
-│   ├── cotizacion/           ← tipo de cambio USD/ARS
-│   ├── conexiones/           ← vuelta de OAuth (Mercado Pago, Google)
-│   └── respaldo/             ← exportación de datos operativos
+│   └── cotizacion/           ← tipo de cambio USD/ARS
 └── auth/callback/            ← vuelta del login con Google
 ```
 
-Los horarios del cron están en `vercel.json`.
+Los horarios del cron están en `vercel.json` (tres tareas: `notificaciones`, `salud` y `mantenimiento`).
 
 ## 6. `src/lib/` — la lógica (el corazón del back)
 
@@ -210,13 +199,13 @@ módulos de reglas por tema en [`src/lib/domain/README.md`](src/lib/domain/READM
 
 | Grupo | Carpetas | Qué resuelven |
 |---|---|---|
-| **Reglas de negocio puras** | `domain/` | 80 módulos sin base de datos ni framework (índice por tema en `src/lib/domain/README.md`): precios, IVA, cancelación, disponibilidad, permisos, estados de reserva… Lo más testeado del sistema. |
-| **Acceso a datos** | `supabase/`, `catalogo/`, `reservas/`, `busqueda/`, `paginado.ts`, `listados.ts` | Clientes de Supabase y consultas reutilizables |
-| **Seguridad y sesión** | `auth/`, `seguridad/`, `limites.ts`, `auditoria/` | Roles, sesión, cifrado, límites de tasa, auditoría |
-| **Dinero** | `payments/`, `pricing/`, `facturacion/`, `conciliacion/`, `divisas/` | Pasarelas, tarifas, factura electrónica, conciliación, cotización |
-| **Comunicación** | `email/`, `whatsapp/`, `notificaciones/` | Avisos al huésped y al staff |
-| **Integraciones** | `canales/`, `firma/`, `integraciones/`, `conexiones/`, `storage/`, `asistente/`, `ia/`, `availability/` | Booking, firma electrónica, OAuth, archivos, asistentes |
-| **Portal público** | `i18n/`, `seo.ts`, `pwa/` | Traducciones (5 idiomas), metadatos, app instalable |
+| **Reglas de negocio puras** | `domain/` | 57 módulos sin base de datos ni framework (índice por tema en `src/lib/domain/README.md`): precios, IVA, cancelación, disponibilidad, permisos, estados de reserva… Lo más testeado del sistema. |
+| **Acceso a datos** | `supabase/`, `catalogo/`, `reservas/`, `busqueda/`, `housekeeping/`, `paginado.ts`, `listados.ts` | Clientes de Supabase y consultas reutilizables |
+| **Seguridad y sesión** | `auth/`, `limites.ts`, `auditoria/` | Roles, sesión, límites de tasa, registro de accesos |
+| **Dinero** | `payments/`, `pricing/`, `facturacion/`, `divisas/` | Pasarelas, tarifas, factura electrónica, cotización |
+| **Comunicación** | `email/`, `notificaciones/` | Avisos al huésped por correo, con bandeja de salida y reintentos |
+| **Integraciones** | `integraciones/`, `storage/`, `asistente/`, `availability/` | Elección de proveedor y firma de webhooks, archivos, asistente por reglas, disponibilidad |
+| **Portal público** | `i18n/`, `seo.ts` | Diccionario (hoy sólo español), metadatos |
 | **Utilidades** | `fechas.ts`, `csv.ts`, `env.ts`, `registro.ts`, `acciones.ts`, `retorno.ts`, `crons.ts` | Fechas en la zona del hotel, CSV seguro, variables de entorno, registro de errores, manejo de errores de escritura, registro de las tareas programadas |
 
 ### Los adaptadores: cambiar de proveedor sin tocar código
@@ -230,10 +219,8 @@ en producción, el real.
 | Cobros | `payments/` | `PAGO_PROVIDER` (Stripe, Mercado Pago, Payway, simulado) |
 | Correo | `email/` | `EMAIL_PROVIDER` (Resend, consola) |
 | Factura electrónica | `facturacion/` | `FACTURACION_PROVIDER` |
-| Firma de contratos | `firma/` | `FIRMA_PROVIDER` |
-| Canales de venta | `canales/` | `CANAL_PROVIDER` |
 | Tipo de cambio | `divisas/` | `COTIZACION_PROVIDER` |
-| WhatsApp | `whatsapp/` | `WHATSAPP_PROVIDER` (opcional) |
+| Asistente del portal | `asistente/` | `ASISTENTE_PROVIDER` (opcional; hoy sólo existe `reglas`) |
 
 Así un proveedor nuevo es **un archivo nuevo** que implementa la interfaz, no
 un cambio en las pantallas.
@@ -261,17 +248,16 @@ prohibida, la suite falla:
 2. `src/lib/domain/` solo importa de sí mismo y de `lib/fechas`: nada de base
    de datos, React, Next ni paquetes. Por eso se prueba sin nada instalado.
 3. `(back-api)` no importa de ningún front: lo que compartan va a `src/lib/`.
-4. Entre los dos fronts solo hay **cinco cruces declarados**, cada uno con su
-   motivo escrito en el test (el portal de socios reutiliza tres componentes del
-   panel, el login usa el esqueleto de carga del sitio y la factura del huésped
-   el botón de imprimir de recepción).
+4. Entre los dos fronts solo hay **dos cruces declarados**, cada uno con su
+   motivo escrito en el test (el login usa el esqueleto de carga del sitio y la
+   factura del huésped el botón de imprimir de recepción).
 
 ## 8. Un pedido de punta a punta
 
 Qué pasa cuando un huésped confirma una reserva en el checkout:
 
 ```
-navegador ──► src/proxy.ts                         idioma y sesión
+navegador ──► src/proxy.ts                         idioma, sesión y límites
           ──► (front-publico)/[idioma]/reservar/checkout/page.tsx   la pantalla
           ──► (front-publico)/reservar/actions.ts  Server Action (servidor)
                  ├─► src/lib/domain/…              precio, IVA, seña, validaciones
@@ -291,10 +277,9 @@ quien da el pago por hecho es el webhook.
 
 | Ruta | Contenido |
 |---|---|
-| `migrations/` | 117 migraciones numeradas (`0001_…` a `0117_…`). Se aplican en orden y **nunca se edita una ya aplicada**: se crea la siguiente. |
+| `migrations/` | 127 migraciones numeradas (`0001_…` a `0127_…`). Se aplican en orden y **nunca se edita una ya aplicada**: se crea la siguiente. La base **no se achicó** con la reducción: las tablas de los módulos quitados siguen ahí (ver `docs/2-arquitectura/modelo-datos.md`). |
 | `config.toml` | Configuración de la base local de pruebas |
 | `seed.sql` | Datos iniciales de la base local |
-| `snippets/` | Carpeta del CLI de Supabase para consultas guardadas (hoy vacía) |
 
 La integridad crítica vive acá y no en la aplicación: la restricción que impide
 vender dos veces la misma unidad (ADR 0002), las políticas RLS que limitan qué
@@ -304,7 +289,7 @@ ve cada rol y las funciones que escriben varias tablas de una sola vez.
 
 ```
 tests/
-├── dominio/          ← reglas puras (~1500 pruebas, corren en cualquier máquina)
+├── dominio/          ← reglas puras (71 archivos, corren en cualquier máquina)
 ├── componentes/      ← componentes de React renderizados en jsdom (Testing Library)
 ├── servicios/        ← webhooks, cron y pasarelas con dependencias simuladas
 ├── acciones/         ← Server Actions
@@ -324,11 +309,9 @@ y cómo correr los que necesitan base: [`tests/README.md`](tests/README.md).
 | Carpeta | Contenido |
 |---|---|
 | `public/hotel/` | Fotos y video del hotel ([`public/hotel/README.md`](public/hotel/README.md)) |
-| `public/alojamientos/` | Una foto por tipo de unidad |
-| `public/sw.js`, `public/sin-conexion.html` | Service worker y pantalla sin conexión del panel instalable |
-| `public/plantilla-next-sin-uso/` | SVG de la plantilla de Next que nadie usa (se apartaron, no se borraron) |
-| `scripts/` | `setup.mjs` (dice qué falta para arrancar), `seed-usuarios.mjs`, `limpiar-qa.mjs`, `activar-google.sh` |
-| `.github/` | Integración continua (`workflows/ci.yml`), plantilla de PR, etiquetas automáticas |
+| `public/alojamientos/` | Una foto de stock por tipo de unidad (hoy el catálogo usa las de `public/hotel/fotos/`) |
+| `scripts/` | `setup.mjs` (dice qué falta para arrancar), `seed-usuarios.mjs`, `tests-aislados.mjs`, `comparar-esquema.mjs`, `activar-google.sh` |
+| `.github/` | Integración continua (`workflows/ci.yml`, `e2e.yml`), plantillas de issue y de PR, etiquetas automáticas |
 | `.claude/`, `.agents/`, `.codex/` | Reglas, recetas y revisores para asistentes de código |
 | `.nvmrc`, `.editorconfig`, `.prettierrc.json` | Versión de Node (la misma que usa el CI), estilo base del editor y formato del código: sin punto y coma, comillas simples, 100 columnas |
 
@@ -337,11 +320,11 @@ y cómo correr los que necesitan base: [`tests/README.md`](tests/README.md).
 ```
 docs/
 ├── README.md                 ← índice de la documentación
-├── 1-tesis/                  ← tesis completa, PP3 e informe final (md + pdf)
+├── 1-tesis/                  ← tesis completa y PP3
 ├── 2-arquitectura/           ← arquitectura, modelo de datos, modernización WinPAX
 ├── 3-manuales/               ← manual de usuario, manual técnico, despliegue
-├── 4-seguridad-y-auditorias/ ← auditorías de seguridad, calidad y pulido
-├── 5-pendientes/             ← trabajo pendiente y análisis
+├── 4-seguridad-y-auditorias/ ← modelo de seguridad, auditoría inicial y revisión de RLS
+├── 5-pendientes/             ← PENDIENTES.md
 ├── decisiones/               ← ADRs: cada decisión de arquitectura, numerada
 ├── bitacora.md               ← diario del desarrollo, fecha por fecha
 ├── roadmap.md                ← fases del proyecto
@@ -358,7 +341,7 @@ archivo, buscalo en esta tabla:
 |---|---|---|
 | Una regla de negocio (un cálculo, una validación) | `src/lib/domain/<tema>.ts` | Su prueba en `tests/dominio/` |
 | Un módulo nuevo del panel | `src/app/(front-gestion)/panel/<modulo>/` con el molde de §4 | Tocar `permisos.ts`, `navegacion.ts`, `shell.tsx` y `ayuda.ts` (ver `AGENTS.md`) |
-| Una pantalla para el huésped | `src/app/(front-publico)/[idioma]/<pantalla>/` | Sus textos en los 5 diccionarios de `src/lib/i18n/diccionarios/` y la ruta en `RUTAS_CON_IDIOMA` (`src/proxy.ts`) |
+| Una pantalla para el huésped | `src/app/(front-publico)/[idioma]/<pantalla>/` | Sus textos en el diccionario de `src/lib/i18n/diccionarios/` (hoy `es.ts`) y la ruta en `RUTAS_CON_IDIOMA` (`src/proxy.ts`) |
 | Un formulario que guarda | `actions.ts` junto a la pantalla | `requerirAcceso`, nunca descartar `{ error }` |
 | Un endpoint, webhook o cron | `src/app/(back-api)/api/<nombre>/route.ts` | El cron, en `vercel.json` |
 | Un proveedor externo (otra pasarela, otro correo) | Un archivo en la carpeta del adaptador (`src/lib/payments/`, `email/`…) | Implementa la interfaz; se elige por variable de entorno |
@@ -372,7 +355,7 @@ archivo, buscalo en esta tabla:
 ## 14. Convenciones de nombres
 
 - **Español en todo**: carpetas, archivos, funciones y variables
-  (`calcularEstadia`, `reservas/`, `cierre-diario/`). Los nombres de Next.js
+  (`calcularEstadia`, `reservas/`, `punto-venta/`). Los nombres de Next.js
   (`page`, `layout`, `route`) y los de paquetes quedan como son.
 - **Carpetas y archivos en minúscula con guiones**: `punto-venta/`,
   `boton-envio.tsx`.
@@ -384,7 +367,7 @@ archivo, buscalo en esta tabla:
 
 ## 15. Recorrido sugerido para una presentación
 
-1. **El problema**: `README.md` y `docs/1-tesis/`.
+1. **El problema**: `README.md` y `docs/1-tesis/`. Y por qué esta versión es más chica que `main`: ADR 0045.
 2. **El mapa**: este documento, §1 y §2. Abrir `src/` y mostrar los tres
    grupos: front público, front de gestión, back.
 3. **El front del huésped**: `src/app/(front-publico)/[idioma]/page.tsx` → ficha
@@ -409,7 +392,7 @@ ajustaron las rutas que las nombraban. Las direcciones web no cambiaron.
 |---|---|
 | `app/` | `src/app/` |
 | `app/panel/`, `app/login/` | `src/app/(front-gestion)/…` |
-| `app/[idioma]/`, `app/reservar/`, `app/_publico/`, `app/encuesta/`, `app/firmar/`, `app/portal/`, `app/pago-*/` | `src/app/(front-publico)/…` |
+| `app/[idioma]/`, `app/reservar/`, `app/_publico/`, `app/encuesta/`, `app/pago-*/` | `src/app/(front-publico)/…` |
 | `app/api/`, `app/auth/` | `src/app/(back-api)/…` |
 | `lib/` | `src/lib/` |
 | `proxy.ts`, `instrumentation.ts` | `src/proxy.ts`, `src/instrumentation.ts` |

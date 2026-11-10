@@ -24,4 +24,3 @@
 - [Bitácora](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/bitacora.md)
 - [ADRs](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/tree/main/docs/decisiones)
 - [Seguridad](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/SECURITY.md)
-- [Contribuir](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/CONTRIBUTING.md)

@@ -5,6 +5,10 @@
 >
 > Para levantar el sistema en una máquina de desarrollo, el instructivo es
 > `COMO-LEVANTARLO.md`. Este documento es el otro: poner el sistema en internet.
+>
+> Rama `tesis-a-presentar` (versión reducida, ADR 0045): las variables y los pasos
+> de los módulos quitados (canales de venta, firma de contratos, WhatsApp, claves
+> de la bandeja, respaldos) ya no figuran. La base de datos conserva sus tablas.
 
 ---
 
@@ -44,9 +48,9 @@ resumen para revisarlas de un vistazo antes de publicar.
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase | La app no arranca |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave publicable (`sb_publishable_…`) | La app no arranca |
-| `SUPABASE_SERVICE_ROLE_KEY` | Clave secreta (`sb_secret_…`). **Sólo servidor** | Fallan webhooks, crons y respaldos |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave secreta (`sb_secret_…`). **Sólo servidor** | Fallan los webhooks, los crons y el alta pública de reservas |
 | `NEXT_PUBLIC_SITE_URL` | URL pública del sitio | Los enlaces de los correos apuntan a `localhost` |
-| `CRON_SECRET` | Autoriza los seis crons | **Los crons rechazan todo** (503) |
+| `CRON_SECRET` | Autoriza los tres crons | **Los crons rechazan todo** (503) |
 
 > ⚠️ La clave del **protocolo S3 del Storage** se parece a la secret y **no
 > sirve**: con ésa falla todo lo que use `service_role` y el error no dice que la
@@ -252,7 +256,6 @@ pero la **recuperación de contraseña** y el **login con Google** devuelven a
 | Supabase → Authentication → URL Configuration → *Site URL* | `https://<dominio>` |
 | Supabase → Authentication → URL Configuration → *Redirect URLs* | `https://<dominio>/auth/callback` (Google) y `https://<dominio>/login/nueva-contrasena` (recuperar contraseña) |
 | Supabase → Authentication → Providers → Google | El *Client ID* y *Client Secret* de Google Cloud; en Google Cloud, como URI de redirección autorizada, la que muestra Supabase ahí (`https://<ref>.supabase.co/auth/v1/callback`) |
-| Mercado Pago → la aplicación del OAuth → *Redirect URL* | `https://<dominio>/api/conexiones/mercadopago/callback` (sólo si se usa «Conectar Mercado Pago») |
 
 `<dominio>` tiene que ser exactamente el de `NEXT_PUBLIC_SITE_URL`: el código
 arma las URLs de vuelta con esa variable.
@@ -270,7 +273,6 @@ npx vercel --prod
 |---|---|---|
 | MercadoPago | `https://<dominio>/api/webhooks/pagos/mercadopago` | Panel de desarrollador |
 | Stripe | `https://<dominio>/api/webhooks/pagos/stripe` | Dashboard → Webhooks |
-| Resend | `https://<dominio>/api/webhooks/email/resend` | Resend → Webhooks |
 
 > ⚠️ El secreto de cada webhook es **distinto** del de la API. Copiarlo mal no da
 > un error visible: el endpoint rechaza todos los eventos y el síntoma es «el
@@ -363,9 +365,7 @@ Antes de escribirla, mirar qué tipo de cambio fue:
 ### 3.4 Restaurar un backup
 
 Los backups los hace **la plataforma** (Supabase → Database → Backups), no la
-aplicación. Lo que hay en `/panel/respaldos` es una **exportación de datos
-operativos** y la pantalla lo aclara: no es un backup de Postgres y no sirve para
-restaurar.
+aplicación: el sistema no tiene ninguna pantalla ni botón de respaldo.
 
 El procedimiento es el de Supabase: *Point-in-time recovery* si el plan lo
 incluye, o restaurar el backup diario.

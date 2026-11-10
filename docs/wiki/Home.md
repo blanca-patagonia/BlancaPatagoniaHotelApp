@@ -8,8 +8,9 @@
 | **Autores** | Octavio Fakiani · Santiago Morán |
 | **Establecimiento** | Hotel Blanca Patagonia — El Calafate, provincia de Santa Cruz |
 | **Naturaleza** | Proyecto de tesis |
-| **Estado** | Sistema desarrollado y verificado; despliegue en producción pendiente |
-| **Última revisión** | 26 de agosto de 2026 |
+| **Versión** | Rama `tesis-a-presentar`: la versión **reducida** para presentar la tesis ([ADR 0045](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/decisiones/0045-version-reducida-para-la-tesis.md)). `main` conserva el sistema completo |
+| **Estado** | Sistema desarrollado; despliegue en producción pendiente |
+| **Última revisión** | 10 de noviembre de 2026 |
 
 ---
 
@@ -17,8 +18,10 @@
 
 Un **PMS** (*Property Management System*) desarrollado a medida para el Hotel
 Blanca Patagonia. Cubre el ciclo completo del negocio —reserva → estadía →
-consumos → pago → factura— e incorpora housekeeping, mantenimiento, cuentas de
-agencias y proveedores, canales de venta y reportes gerenciales.
+consumos → pago → factura— e incorpora huéspedes, housekeeping y reportes
+gerenciales. Esta versión se recortó a lo que pidió el hotel: no incluye bandeja
+de mensajes, asistente de IA, canales de venta, conciliación, contratos, agencias,
+proveedores, mantenimiento, aplicación instalable ni respaldos.
 
 Reemplaza el sistema heredado del establecimiento y las planillas de cálculo que
 lo complementaban, y suma un canal de venta propio.
@@ -45,25 +48,27 @@ con el costo concreto de cada limitación.
 |---|---|
 | WinPAX en un único equipo del mostrador | Aplicación web: mostrador, oficina y personal de piso acceden a la misma información |
 | El overbooking se evitaba por la atención del operador | Lo **rechaza PostgreSQL** mediante una restricción de exclusión: no depende de la corrección de la aplicación |
-| Excel para cuentas de agencias, consumos y reportes | Módulos integrados sobre la misma base de datos que las reservas |
+| Excel para consumos y reportes | Módulos integrados sobre la misma base de datos que las reservas |
 | Sin canal de venta propio | Portal público con disponibilidad, precios por temporada y cobro en línea |
 | Tarifas consultadas manualmente en un documento | Temporadas y tarifas parametrizadas, con neto/rack e IVA calculados por el sistema |
-| Comisión de OTA sobre 8 de cada 10 reservas | Canal directo propio; las reservas de Booking se importan y concilian |
+| Comisión de OTA sobre 8 de cada 10 reservas | Canal directo propio, para ir reduciendo esa dependencia |
 
 ---
 
 ## El sistema en cifras
 
-Todas verificables en el repositorio.
+Todas verificables en el repositorio (recontadas el 2026-11-10).
 
 | | |
 |---|---|
-| **67** migraciones SQL numeradas | **43** tablas, todas con RLS activo |
-| **90+** políticas de seguridad a nivel de fila | **4** roles de personal + huésped público sin cuenta |
-| **1555** pruebas automatizadas, **0** omitidas | **94** archivos de prueba |
-| **21** áreas del panel interno | **50** módulos de dominio puro, verificables sin base de datos |
-| **28** decisiones de arquitectura documentadas (ADR) | **7** puertos de integración con adaptador intercambiable |
-| **15** unidades en el inventario cargado | **3** temporadas tarifarias (Anexo A 2025/2026) |
+| **127** migraciones SQL numeradas | **69** tablas, todas con RLS activo (30 las usa el sistema reducido) |
+| **1780** pruebas en **141** archivos | **1197** corren sin base de datos; las otras **583** necesitan Postgres |
+| **12** áreas del panel interno | **55** pantallas |
+| **57** módulos de dominio puro, verificables sin base de datos | **4** roles de personal + huésped público sin cuenta |
+| **29** decisiones de arquitectura (ADR) | **5** puertos de integración con adaptador intercambiable |
+| **37** unidades en el inventario real, en 10 tipos | **3** temporadas tarifarias (Anexo A 2025/2026) |
+
+La suite completa contra la base aislada no se corrió desde esta rama (ver el ADR 0045).
 
 ---
 
@@ -103,5 +108,5 @@ como reglas del proyecto.
 
 Las páginas se redactan y versionan en
 [`docs/wiki/`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/tree/main/docs/wiki)
-dentro del repositorio principal, y se publican aquí mediante un procedimiento
-documentado. Toda corrección debe realizarse allí.
+dentro del repositorio principal, y se copian a esta wiki aparte: mergear no las
+publica. Toda corrección debe realizarse allí.

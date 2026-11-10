@@ -4,6 +4,12 @@ Cada fase deja un **avance demostrable**, **tests verdes**, la **bitácora**
 actualizada y, si corresponde, un **ADR**. Las fases mapean a los capítulos de
 diseño / implementación / pruebas de la tesis.
 
+> Rama `tesis-a-presentar`: este roadmap lista sólo lo que **quedó** en la versión
+> reducida. Lo que se quitó (agencias, proveedores, contratos, canales de venta,
+> conciliación, mantenimiento, bandeja de mensajes, asistente de IA, app instalable,
+> respaldos…) sigue en `main` y en su roadmap; el detalle está en el
+> [ADR 0045](decisiones/0045-version-reducida-para-la-tesis.md).
+
 ## Fase 0 — Fundaciones
 - [x] Proyecto Next.js 16 + TypeScript + Tailwind
 - [x] Repositorio Git conectado al remoto
@@ -52,7 +58,7 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Generación server-side de PDF a Storage · consolidación automática al check-out
 
 ## Fase 6 — Reportes / Dashboard gerencial
-- [x] Ocupación por mes, ingresos cobrados y facturación, ranking de canales, reservas por estado
+- [x] Ocupación por mes, ingresos cobrados y facturación, reservas por estado
 - [ ] Comparativos interanuales y exportación (CSV / Power BI)
 
 ## Fase 7 — Hardening de producción
@@ -63,12 +69,11 @@ diseño / implementación / pruebas de la tesis.
 - [ ] Migración de datos desde Winpax / Excel
 
 ## Fase 8 — Ampliación tipo WinPax / Odoo
-- [x] 8.1 Cuentas corrientes de agencias y empresas
 - [x] 8.2 Reservas grupales
-- [x] 8.3 Mantenimiento, objetos perdidos, encuestas y reportes avanzados (ADR / RevPAR)
+- [x] 8.3 Encuestas y reportes avanzados (ADR / RevPAR)
 - [x] 8.4 / 8.5 Consolidación de la gestión y dashboard-hub
 - [x] 8.6 Fidelidad e inventario
-- [x] 8.7 Proveedores (cuentas por pagar), reprogramación, mucamas y avisos internos
+- [x] 8.7 Reprogramación de reservas y asignación de mucamas
 
 ## Fase 9 — Mejora integral del panel
 - [x] Identidad visual propia y sistema de diseño compartido (ADR 0009)
@@ -76,17 +81,13 @@ diseño / implementación / pruebas de la tesis.
 - [x] Navegación móvil, accesibilidad, estados de carga y error por ruta
 - [x] Mejora funcional módulo por módulo (13 módulos)
 
-## Fase 10 — Contratos y comunicación (inspiradas en Odoo)
-- [x] Contratos con firma electrónica por token (ADR 0010)
-- [x] Conversaciones internas en tiempo real por canal
+## Fase 10 — Asistente del portal
 - [x] Asistente del portal basado en reglas (ADR 0011)
 
 ## Fase 11 — Alcance ERP
 - [x] Facturación fiscal argentina: letra, IVA discriminado, CUIT (ADR 0012)
 - [x] Auditoría *append-only* de operaciones sensibles
-- [x] Conciliación de proveedores y antigüedad de saldos (*aging*)
-- [x] Pipeline comercial de agencias · encuestas NPS · mantenimiento preventivo
-- [x] Portal de agencias y proveedores por token (ADR 0014)
+- [x] Encuestas NPS
 - [ ] Gestión documental con Storage · seguridad por campo · multi-propiedad (ADR 0013)
 
 ## Fase 12 — Endurecimiento y verificación
@@ -104,7 +105,7 @@ diseño / implementación / pruebas de la tesis.
 - [x] 20 Ningún fallo de escritura en silencio: `cortarSiFalla` / `registrarFalla`
       en las 38 escrituras que descartaban su error
 - [x] 21 Catálogo público de alojamientos (`/alojamientos` + detalle por tipo),
-      con precios por temporada. Pendiente: incorporar las fotos del hotel
+      con precios por temporada
 
 ## Modernización WinPAX (numeración propia de 11 pasos) — ✅ 2026-08-16
 
@@ -115,37 +116,15 @@ funciones core. El plan completo, con el porqué de cada decisión, está en
 - [x] 1 Cotización de divisas automática con respaldo manual (ADR 0020, cierra el ADR 0003)
 - [x] 2 Fila resumen de la grilla y estados legibles sin color
 - [x] 3 Diez vistas operativas del listado de reservas, con saldo
-- [x] 4-5 Canales de venta: informe CSV de Booking y feed iCal (ADR 0021)
 - [x] 6 Ficha de reserva completa (VIP, ocupantes, plan, garantía, segmento, voucher)
 - [x] 7 Punto de venta con grilla por departamento y número de comanda
 - [x] 8 Folios A/B con split y jerarquía de departamentos
 - [x] 9 Housekeeping móvil ordenado por prioridad real
 - [x] 10 Piso y bloque en `unidades`
-- [x] 11 Respaldos verificables
 
-Tres áreas nuevas del panel: `canales`, `punto_venta` y `respaldos`.
-
-> ⚠️ **La sincronización con Booking NO evita el overbooking.** Los dos caminos
-> posibles sin ser Connectivity Partner son de **solo lectura**: nadie le informa
-> a Booking qué queda libre. La solución real es un channel manager y es una
-> contratación del hotel (ADR 0021). No quitar esas advertencias de la pantalla.
-
-## Bloque Booking (B1–B10)
-
-- [x] **B1** Costos y comisiones por canal (migración 0049)
-- [x] **B2** Modalidad de cobro del canal (migración 0050)
-- [x] **B4** Mapeo manual de columnas del informe (migración 0051)
-- [x] **B5** Conflicto de cupo detectado al aterrizar (migración 0052)
-- [x] **B6** Ingesta de reseñas y vínculo con la reserva (migración 0054)
-- [x] **B8** Sincronización automática: cron diario que **aterriza, no importa**
-      (`app/api/cron/canales/route.ts`, `vercel.json`, PR #14).
-      Ver [`docs/2-arquitectura/sincronizacion-automatica.md`](2-arquitectura/sincronizacion-automatica.md)
-- [ ] **B3** Importador general (refactor sin valor visible por sí solo)
-- [ ] **B7** Feed iCal propio de salida + ADR 0022
-- [ ] **B9** Reporte de neto de comisión y costo por canal.
-      **Tiene demanda del cliente:** en el relevamiento del 15/08/2026 preguntó
-      «cuál nos conviene». La vista `resumen_canal_mes` (0055) ya existe
-- [x] **B10** Documentación al día (este archivo, README, modelo de datos, manual)
+Los pasos **4-5** (canales de venta: Booking e iCal) y **11** (respaldos) no
+figuran: son de módulos que esta rama no tiene (ADR 0045). Área nueva del panel
+que sí quedó: `punto_venta`.
 
 ## Relevamiento con el cliente — 15/08/2026
 
@@ -157,9 +136,6 @@ lo pedido ya estaba; lo que faltaba se abordó así:
 - [x] **P4** Declarar en pantalla la fuente y la antigüedad de la cotización
 - [x] **P3** Desayuno como ítem cobrable fuera de la estadía
 - [x] **P2** Verificar la tarjeta de garantía **sin guardar el número** — ADR 0025
-- [ ] **P5** Booking: bandeja, comentarios y analytics. **Diferido por el propio
-      cliente.** Antes de prometer nada hay que verificar qué exporta realmente el
-      extranet sin API de partner
 
 ## Auditoría de seguridad (numeración propia)
 - [x] Fase 0 — Reconocimiento sin modificar código (`docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md`)
@@ -169,14 +145,14 @@ lo pedido ya estaba; lo que faltaba se abordó así:
       `anon` (migración 0030), webhook de pagos que fallaba abierto, inyección de
       condiciones en los filtros `or` y el último `<details>`
 - [x] Fase 3 — Alta de usuario sin privilegios (ADR 0017), baja efectiva,
-      numeración operable, tokens de firma fuera del alcance del staff, facturas
-      inmutables, 51 Server Actions con verificación de rol, firma HMAC real en el
-      webhook y simuladores que fallan fuerte en producción (ADR 0018).
+      numeración operable, facturas inmutables, Server Actions con verificación
+      de rol, firma HMAC real en el webhook y simuladores que fallan fuerte en
+      producción (ADR 0018).
       Migraciones `0032`–`0035`, **aplicadas y verificadas contra Postgres**
-- [x] Matriz de **lectura** RLS exhaustiva: 51 tablas × 4 roles
+- [x] Matriz de **lectura** RLS exhaustiva: todas las tablas × 4 roles
       (`tests/base-de-datos/rls-por-rol.test.ts`), con la lista traída de la base para que una
       tabla nueva sin declarar haga fallar el test
-- [ ] Matriz de **escritura** RLS: hoy es dirigida (20 casos elegidos por
+- [ ] Matriz de **escritura** RLS: hoy es dirigida (casos elegidos por
       consecuencia), no exhaustiva. El archivo lo declara. Es el pendiente de
       seguridad más importante que queda
 - [x] Cerrar el segundo camino al precio neto (migración 0031, ADR 0016): dos
@@ -185,10 +161,17 @@ lo pedido ya estaba; lo que faltaba se abordó así:
       `security definer`, que habría desactivado en silencio la guarda de la 0030
 - [ ] Atomicidad de los flujos de varios pasos de `reservas`: hoy un fallo a mitad
       de camino avisa, pero deja los datos a medias. Pide función SQL transaccional
-- [ ] Los tokens de firma y de portal no caducan ni se revocan
 
 ## Pendiente — AFIP WSFE/CAE real
 - [ ] Facturación electrónica real (certificados, punto de venta, CAE)
 - [ ] Emitir la factura en **una sola transacción SQL**: hoy el correlativo se
       consume antes de pedir el CAE, así que un rechazo deja un salto de
       numeración, que es obligación formal (ADR 0015)
+
+## Versión reducida para la tesis — ✅ 2026-11-09 ([ADR 0045](decisiones/0045-version-reducida-para-la-tesis.md))
+- [x] Rama `tesis-a-presentar`: de 26 a 12 áreas del panel y de 105 a 55 pantallas
+- [x] Un commit revertible por módulo quitado; `main` conserva el sistema completo
+- [ ] Correr la suite completa (`npm run test:aislado`) en una máquina con Docker
+      antes de la entrega: la reducción se verificó sin base
+- [ ] Limpiar de la base las tablas de los módulos quitados (paso aparte, contra la
+      base de tests aislada)

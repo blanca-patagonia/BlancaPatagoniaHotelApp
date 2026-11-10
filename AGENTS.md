@@ -12,19 +12,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # AGENTS.md — Blanca Patagonia
 
-> ⚠️ **Rama `tesis-a-presentar` — versión reducida para la tesis.** Esta rama es el
-> sistema recortado a lo que pidió el hotel (reservas, check-in/out, consumos,
-> factura, pagos, huéspedes y reportes). Se quitaron la bandeja de mensajes, el
-> asistente de IA, canales de venta, conciliación, contratos, agencias,
-> proveedores, mantenimiento, objetos perdidos, avisos, el portal en otros
-> idiomas, la app instalable y los respaldos. **`main` conserva el sistema
-> completo.** Lo que quedó y el porqué: `docs/decisiones/0045-version-reducida-para-la-tesis.md`.
->
-> Lo que sigue de este documento describe el sistema completo: las secciones sobre
-> los módulos quitados **no aplican acá**. Los números de migraciones y de tests
-> también son los de `main`.
-
-
 > Operativo: comandos, arquitectura, convenciones y Definition of Done.
 > El **proceso** de trabajo (fases, bitácora, ADRs) vive en `CLAUDE.md`. Leé los dos.
 > Procedimientos paso a paso: `.claude/skills/`.
@@ -36,29 +23,36 @@ Dos vistas separadas: **panel interno** de staff por rol (`src/app/(front-gestio
 reservas (`src/app/(front-publico)/reservar`, `src/app/(front-publico)/[idioma]/alojamientos`). El flujo central es reserva → estadía → consumos
 → pago → factura, con anti-overbooking garantizado por la base, no por la app.
 
+Esta rama (`tesis-a-presentar`) es la versión **reducida** al pedido del hotel: reservas y
+estadías, check-in/check-out, consumos, factura, pagos, huéspedes y reportes, más housekeeping,
+usuarios y el portal público (ADR 0045). El panel tiene **12 áreas** (`AREAS` en
+`src/lib/domain/permisos.ts`) y el sistema entero, **55 páginas** (`find src/app -name page.tsx`). `main` conserva
+el sistema completo; lo que no está en esta rama se recupera de ahí.
+
 ## Setup y comandos
 
 | Acción | Comando | Estado |
 |---|---|---|
 | Puesta en marcha | `npm run setup` | verificado — dice qué falta y cómo resolverlo |
 | Dev | `npm run dev` | — |
-| **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | verificado, exit 0 |
-| Lint | `npm run lint` | verificado, exit 0 |
-| Typecheck | `npm run typecheck` | verificado, exit 0 |
-| Tests | `npm test` — uno solo: `npm test -- <patrón>` | verificado, **0 saltean** con base local y las 4 variables |
-| Build | `npm run build` | verificado, 21 s |
+| **Verificación completa** | **`npm run check`** (lint + typecheck + tests + build) | lint y typecheck verificados 2026-11-10; el build no se corrió en esa pasada |
+| Lint | `npm run lint` | verificado 2026-11-10, exit 0 |
+| Typecheck | `npm run typecheck` | verificado 2026-11-10, exit 0 |
+| Tests | `npm test` — uno solo: `npm test -- <patrón>` | sin base: 1.197 pasan y **583 se saltean** (2026-11-10). Con base local y las 4 variables no debería saltear ninguno: **no verificado en esta rama** |
+| Build | `npm run build` | verificado al hacer la reducción (ADR 0045) |
 | Sembrar usuarios | `npm run seed:usuarios` | requiere Node ≥ 20.12 |
-| **Tests completos, sin saltear nada** | **`npm run test:aislado`** (base propia en el puerto 55321: la levanta, la deja en cero, siembra y corre todo) | verificado 2026-10-20: 2.700+ tests, 0 salteados |
-| Tests de interfaz | `npm run test:componentes` (jsdom + Testing Library) | verificado |
-| Recorrido de todas las pantallas | `npm run e2e` (Playwright; con la app corriendo) | verificado, 1,2 min |
-| ¿La base tiene el esquema del repo? | `npm run esquema:comparar` (o `ESQUEMA_DB_URL=… npm run esquema:comparar` para la nube) | verificado |
+| **Tests completos, sin saltear nada** | **`npm run test:aislado`** (base propia en el puerto 55321: la levanta, la deja en cero, siembra y corre todo) | necesita Docker. **Sin correr en esta rama** (el ADR 0045 lo deja como paso previo a la entrega) |
+| Tests de interfaz | `npm run test:componentes` (jsdom + Testing Library) | corren sin base |
+| Recorrido de todas las pantallas | `npm run e2e` (Playwright; con la app corriendo) | `e2e/recorrido-panel.spec.ts`; sin correr en esta rama |
+| ¿La base tiene el esquema del repo? | `npm run esquema:comparar` (o `ESQUEMA_DB_URL=… npm run esquema:comparar` para la nube) | necesita una base alcanzable |
 | Base local **(solo para tests)** | `npx supabase start` · `npx supabase db reset` | necesita Docker |
 | Salud del sistema | `GET /api/salud` | 200 si la base responde, 503 si no |
 
 **La base es un proyecto Supabase en la nube.** Levantar el sistema es `npm install`
 + `.env.local` + `npm run dev`; no hay que levantar Docker. Lo único que sigue
-necesitando una base local son **los tests**: 24 archivos escriben con `service_role`
-y borran filas de `reservas`, `huespedes`, `tarifas`, `unidades` y `tipos_unidad`, así
+necesitando una base local son **los tests**: 22 archivos de `tests/` hacen `.delete()`
+con `service_role` (recontado el 2026-11-10; el comentario de `tests/apoyo/db.ts` todavía dice 24)
+sobre `reservas`, `huespedes`, `tarifas`, `unidades` y `tipos_unidad`, así
 que contra la base real destruyen datos del hotel. `tests/apoyo/db.ts` corta si la URL no es
 local. Instructivo completo en `COMO-LEVANTARLO.md`.
 
@@ -66,20 +60,20 @@ local. Instructivo completo en `COMO-LEVANTARLO.md`.
 
 ## Arquitectura en 20 líneas
 
-Los números son **archivos de `src/app/` que importan** cada capa (recontados el 2026-10-19):
+Los números son **archivos de `src/app/` que importan** cada capa (recontados el 2026-11-10 con `rg -l`):
 
 ```
-src/app/rutas ──183──> panel/_components          (UI compartida del panel)
-              ──151──> src/lib/domain             (reglas puras — índice en su README)
-              ──133──> src/lib/{auth,reservas,payments,pricing,canales,notificaciones,…}
-              ──116──> src/lib/supabase           ← puentea la capa de datos (deuda conocida)
+src/app/rutas ── 98──> panel/_components          (UI compartida del panel)
+              ──109──> src/lib/domain             (reglas puras — índice en su README)
+              ── 97──> src/lib/{auth,reservas,payments,pricing,notificaciones,facturacion,divisas,email,…}
+              ── 69──> src/lib/supabase           ← puentea la capa de datos (deuda conocida)
 src/lib/<servicio> ──> src/lib/domain ──> src/lib/fechas
 src/lib/supabase ──> Postgres + RLS (políticas en cada migración; matriz en tests/base-de-datos/rls-por-rol.test.ts)
 ```
 
 Reglas de dependencia, verificables con `rg`:
 
-- **`src/lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 80 módulos de
+- **`src/lib/domain/` es puro.** No importa `@supabase/*`, `next/*`, `react` ni `zod`. Son 57 módulos de
   reglas testeables sin base, agrupados por tema en `src/lib/domain/README.md`. **Nunca** metas un cliente de datos ahí.
 - **`src/lib/` nunca importa de `src/app/`.** Cero excepciones (hoy hay cero aristas).
 - La lógica de negocio va en `src/lib/domain/`. Las páginas y acciones orquestan; no calculan reglas.
@@ -91,13 +85,13 @@ Reglas de dependencia, verificables con `rg`:
 | Tema | Regla | Referencia canónica |
 |---|---|---|
 | Idioma | Código y docs en **español** (identificadores incluidos) | `src/lib/domain/cancelacion.ts` |
-| Autorización | `requerirAcceso(area)` en toda página y acción del panel | `src/lib/auth/session.ts:50` |
-| Escrituras que cortan | `cortarSiFalla(error, destino, motivo)` | `src/lib/acciones.ts:43` |
-| Escrituras accesorias | `registrarFalla(error, contexto)` — loguea, no corta | `src/lib/acciones.ts:71` |
+| Autorización | `requerirAcceso(area)` en toda página y acción del panel | `src/lib/auth/session.ts:83` |
+| Escrituras que cortan | `cortarSiFalla(error, destino, motivo)` | `src/lib/acciones.ts:46` |
+| Escrituras accesorias | `registrarFalla(error, contexto)` — loguea, no corta | `src/lib/acciones.ts:76` |
 | Lecturas de página | `registrarFalla(error, contexto)` siempre; `Mensaje` visible si el dato es crítico | `src/app/(front-gestion)/panel/ocupacion/page.tsx` |
-| Server Action con estado | `(prev, formData) => Promise<EstadoX>` con `{ error }` / `{ ok }` | `src/app/(front-gestion)/panel/huespedes/actions.ts:67` |
-| Después de escribir | `revalidatePath(...)`; no redirigir en silencio | `src/app/(front-gestion)/panel/huespedes/actions.ts:92` |
-| UI | Componentes de `src/app/(front-gestion)/panel/_components/ui.tsx` y `boton-envio.tsx` | `src/app/(front-gestion)/panel/proveedores/page.tsx` |
+| Server Action con estado | `(prev, formData) => Promise<EstadoX>` con `{ error }` / `{ ok }` | `src/app/(front-gestion)/panel/huespedes/actions.ts:113` |
+| Después de escribir | `revalidatePath(...)`; no redirigir en silencio | `src/app/(front-gestion)/panel/huespedes/actions.ts:143` |
+| UI | Componentes de `src/app/(front-gestion)/panel/_components/ui.tsx` y `boton-envio.tsx` | `src/app/(front-gestion)/panel/huespedes/page.tsx` |
 | Tests | `describe`/`it` en español, sin mocks en dominio | `tests/dominio/cancelacion.test.ts` |
 
 **Nunca revises `{ data }` sin revisar `{ error }`.** Es el bug clásico de este stack y `src/lib/acciones.ts`
@@ -120,7 +114,7 @@ typecheck falla (`Area` es una unión de tipos y `NAV` un `Record<Area, …>`):
 4. `src/lib/domain/ayuda.ts` — el capítulo (`CLAUDE.md` lo exige)
 5. `src/app/(front-gestion)/panel/_components/iconos.tsx` si el icono es nuevo
 
-Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
+Ejemplo vigente: `punto_venta`, que se sumó con la modernización WinPAX.
 
 ## Testing
 
@@ -140,18 +134,19 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   huéspedes para limpiar. `tests/apoyo/db.ts` corta si la URL de los tests es la de `.env.local`
   (salida de escape `PERMITIR_BASE_DE_TRABAJO=1`). La aislada es `supabase-tests/`, con
   `migrations/` y `seed.sql` enlazados a los de `supabase/` (una sola fuente).
-- **Trampa:** `npm test` sale verde con **unos 600 tests salteados** si no hay base local — entre ellos
-  el anti-overbooking. En CI `EXIGIR_DB=1` los vuelve obligatorios (`tests/apoyo/db.ts:22`).
+- **Trampa:** `npm test` sale verde con **unos 580 tests salteados** si no hay base local — entre ellos
+  el anti-overbooking (medido el 2026-11-10: 1.197 pasan y 583 se saltean). En CI `EXIGIR_DB=1` los
+  vuelve obligatorios (`tests/apoyo/db.ts:92`).
 - **Segunda trampa, la que `EXIGIR_DB` NO cubre:** esa guarda mira `hayDB`, no `hayAnon`
-  (`tests/apoyo/db.ts:40`). Vitest no lee `.env.local`, así que sin exportar
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY` los **4 tests del borde público (ADR 0016) saltean en
+  (`tests/apoyo/db.ts:130`). Vitest no lee `.env.local`, así que sin exportar
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` los **tests del borde público (ADR 0016) saltean en
   silencio** aun con `EXIGIR_DB=1`. Localmente hay que exportar **cuatro** variables:
   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` **y
   `NEXT_PUBLIC_SUPABASE_URL`** — esta última no la pide ningún test directamente, pero
   `envServidor()` (`src/lib/env.ts`) la exige para construir el cliente admin, y sin ella
   `crearClienteAdmin` no falla en silencio: tira `Error` y hace fallar (no saltear)
-  `tests/base-de-datos/ari-servicio.test.ts` y `tests/base-de-datos/registro.test.ts`. En CI ya se exportan las
-  cuatro (`ci.yml:77-80`).
+  `tests/base-de-datos/registro.test.ts`. En CI ya se exportan las
+  cuatro (`ci.yml:102-105`).
 - Todo bugfix entra con un test que fallaba antes del fix.
 
 ## Definition of Done
@@ -195,11 +190,13 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
 - **Rol: área o rol, nunca el literal.** Los 23 `['admin','gerencia'].includes(sesion.rol)` ya se
   migraron: `requerirAcceso(area)` cuando la regla coincide con la matriz de
   `src/lib/domain/permisos.ts`, y `requerirRol(...)` (`src/lib/auth/session.ts`) cuando la acción
-  es **más estrecha que su área a propósito** (mover plata de una agencia, usuarios, preventivo).
+  es **más estrecha que su área a propósito** (hoy: la gestión de usuarios y la nota de crédito, que sólo emiten admin y gerencia).
   No volver a escribir el literal: `tests/contratos/autorizacion-acciones.test.ts` acepta las dos
   formas y exige una en cada Server Action.
 - **`src/lib/env.ts`** dice que falla "al arrancar", pero `envPublico()`/`envServidor()` son perezosas y
-  no validan `MERCADOPAGO_*`, `STRIPE_*` ni `RESEND_API_KEY`.
+  no validan `MERCADOPAGO_*`, `STRIPE_*`, `PAYWAY_*` ni `RESEND_API_KEY`. Eso lo cubre `src/instrumentation.ts`
+  (`register`), que en producción —fuera del `next build`— verifica las pasarelas habilitadas, la URL del sitio
+  y los tres proveedores restantes.
 - **Un seed de test que se salta en silencio auditó menos de lo que decía auditar.**
   `tests/base-de-datos/rls-por-rol.test.ts` exige que cada tabla nueva tenga su caso negativo probado contra una
   fila REAL, no contra una tabla vacía (si no, el test pasa por el motivo equivocado). Su propio
@@ -210,9 +207,12 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   para ESTE caso, no sobre si la tabla en general tiene algo.
 - **PostgREST corta en 1000 filas** (`max_rows`, `supabase/config.toml:10`), sin error y sin aviso.
   Toda lectura que agregue sobre una tabla entera tiene que ir por `traerTodo` (`src/lib/paginado.ts`).
-- **Los simuladores fallan fuerte en producción:** `EMAIL_PROVIDER`, `FIRMA_PROVIDER`,
-  `FACTURACION_PROVIDER`, `COTIZACION_PROVIDER` y `CANAL_PROVIDER` son obligatorias ahí
-  (`src/lib/integraciones/seleccion.ts`, ADR 0018).
+- **Los simuladores fallan fuerte en producción:** `EMAIL_PROVIDER`, `FACTURACION_PROVIDER`,
+  `COTIZACION_PROVIDER` y `PAGO_PROVIDER` son obligatorias ahí
+  (`src/lib/integraciones/seleccion.ts`, ADR 0018; la lista completa de variables, en
+  `docs/3-manuales/despliegue.md` §1). `PAGO_PROVIDER` es el único plural: admite varias separadas por
+  comas (`mercadopago,stripe,payway`). `ASISTENTE_PROVIDER` es opcional y su único valor es `reglas`:
+  el asistente del portal no usa un modelo de IA, a propósito (ADR 0011).
 - **`estadias.check_in` / `check_out` son columnas GENERADAS** desde `periodo` (migración 0037). No
   se pueden escribir, y eso es la garantía de que no se desincronizan. Existen porque PostgREST no
   expone `lower()`: sin ellas, «las que llegan hoy» había que escribirlo con operadores de rango
@@ -231,22 +231,25 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   intercambiar los mecanismos.
 - **`departamentos` tiene jerarquía de dos niveles, con trigger que rechaza el tercero.** Un árbol
   arbitrario pediría consultas recursivas en la cuenta del huésped y el hotel no lo necesita.
-- **La app no puede hacer backups de Postgres.** `/panel/respaldos` exporta datos operativos y lo
-  aclara. No convertirlo en un botón que diga «hacer backup»: sería la peor función del sistema.
 - **`rangoISO(hoy, hoy)` es un rango VACÍO** (`[hoy,hoy)`) y no se solapa con nada. «La noche de hoy» se escribe `rangoISO(hoy, sumarDias(hoy, 1))`. El punto de venta salía siempre en cero por esto y decía «no hay nadie alojado hoy».
 - **«Hoy» sale SIEMPRE de `hoyISO()`, nunca de `new Date().toISOString()`.** El hotel está en
   `America/Argentina/Rio_Gallegos` (UTC−3, sin horario de verano) y Vercel corre en UTC: el
   `toISOString()` pelado devuelve el día siguiente **entre las 21:00 y la medianoche de El
-  Calafate**, todos los días. Mientras estuvo así, housekeeping listaba las salidas de mañana,
-  el punto de venta cargaba el consumo de las 21:30 a la noche equivocada y el feed iCal
-  publicaba como libre una noche vendida. No se ve programando —de día las dos fechas
+  Calafate**, todos los días. Mientras estuvo así, housekeeping listaba las salidas de mañana
+  y el punto de venta cargaba el consumo de las 21:30 a la noche equivocada. No se ve programando —de día las dos fechas
   coinciden— ni en el CI, que corre en UTC y comparaba UTC contra UTC. `hoyISO()` acepta un
   `Date` opcional para poder fijar el instante en los tests; `tests/dominio/fechas.test.ts` clava
   00:30 y 02:59 UTC, que son las 21:30 y 23:59 del día anterior en el hotel. El resto de
   `src/lib/fechas.ts` (`sumarDias`, `diasEntre`…) sí ancla en UTC **a propósito**: opera sobre
   días, no sobre instantes, y ahí la zona no interviene.
+- **El portal tiene UN idioma pero conserva la estructura multi-idioma** (ADR 0045):
+  `IDIOMAS = ['es']` en `src/lib/i18n/idiomas.ts`, así que las URLs públicas llevan el prefijo
+  (`/es/alojamientos`, `/es/reservar`) y el `proxy` redirige `/alojamientos` y `/reservar` sin él. La lista de
+  rutas con prefijo (`RUTAS_CON_IDIOMA`, `src/proxy.ts`) es **blanca a propósito**: `/reservar/confirmacion/<token>`
+  y `/encuesta/<token>` ya viajaron por correo y no pueden moverse. Sumar un idioma es agregarlo a
+  `IDIOMAS` y escribir su diccionario en `src/lib/i18n/diccionarios/`; el panel sigue en español.
 - **PostgREST NO sigue una clave foránea auto-referencial hacia el padre.** Un embed anidado como `departamento:departamentos(nombre, padre:departamentos(nombre))` devuelve `"padre": []` —los hijos, no el padre— y las pistas de FK no lo corrigen. La jerarquía se resuelve en la app con `src/lib/domain/departamentos.ts`.
-- **Los importes van por `formatearUSD`/`importe` de `src/lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Ya se migraron los 67 del panel; las cantidades (filas, puntos) sí van con `toLocaleString`.
+- **Los importes van por `formatearUSD`/`importe` de `src/lib/domain/moneda.ts`, nunca por `toLocaleString`.** Éste usa entre 0 y 3 decimales, así que una misma columna publica «USD 726», «USD 290,4» y «USD 40,11»: el segundo parece un número cortado. Hoy ningún importe del panel usa `toLocaleString`; las cantidades (filas, puntos, noches) sí van con `toLocaleString`.
 - **`[auth.email].enable_signup` NO es «no dejes que se registren»: es «habilitá el proveedor de
   email».** En `false` desactiva **también el inicio de sesión con contraseña**, que es el único
   camino de acceso del staff (`src/app/(front-gestion)/login/actions.ts` usa `signInWithPassword`), o sea que nadie
@@ -256,8 +259,8 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   fija las dos garantías juntas.
 - **«El login me acepta y me devuelve al login» NO es una contraseña mal puesta: es un perfil
   `sin_rol`.** `signInWithPassword` **funciona** —si fallara verías «Email o contraseña
-  incorrectos» sin salir de la pantalla, porque `src/app/(front-gestion)/login/actions.ts:43` devuelve `{ error }` en
-  vez de redirigir—. Lo que rechaza es `obtenerSesion()` (`src/lib/auth/session.ts:53`):
+  incorrectos» sin salir de la pantalla, porque `src/app/(front-gestion)/login/actions.ts:47` devuelve `{ error }` en
+  vez de redirigir—. Lo que rechaza es `obtenerSesion()` (`src/lib/auth/session.ts:65`):
   `!perfil.activo || !esRolValido(perfil.rol)` devuelve `null`, y `requerirSesion` redirige a
   `/login`. Un usuario creado fuera de `src/app/(front-gestion)/panel/usuarios` —desde el dashboard de Supabase, por
   ejemplo— nace `sin_rol` y `activo = false` (ADR 0017, migraciones 0032 y 0035), y `sin_rol` está
@@ -265,33 +268,11 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   `node scripts/seed-usuarios.mjs`. Se diagnostica en un query:
   `select u.email, p.rol, p.activo from perfiles p join auth.users u on u.id = p.id;`
   ⚠️ No «arreglar» esto agregando `sin_rol` a `ROLES`: reabre el agujero que cerró la 0032.
-- **Un service worker roto NO se arregla con un deploy.** Queda instalado en el dispositivo de
-  cada persona y sigue interceptando pedidos con la versión vieja. Por eso `public/sw.js` hace lo
-  mínimo, `next.config.ts` le pone `Cache-Control: no-store` —sin eso no se podría ni publicar el
-  reemplazo que lo apaga— y el propio archivo documenta en su encabezado el service worker vacío
-  que lo desregistra. Al tocarlo hay que **subir `VERSION`** en los dos lados (ADR 0028).
-- **El service worker NO cachea datos, y es a propósito.** La política es una **lista blanca** en
-  `src/lib/domain/pwa.ts`: solo assets con hash de `/_next/static/`, los iconos y la pantalla de sin
-  conexión. Cachear `/panel` dejaría nombres de huéspedes y datos de pago en el disco de una tablet
-  compartida, legibles tras cerrar sesión, y publicaría una ocupación vencida —libre una unidad ya
-  vendida—. No convertirla en lista negra: una ruta nueva se cachearía sola. `public/sw.js` repite
-  la lista porque no pasa por el bundler, y `tests/contratos/pwa.test.ts` **lee el archivo** y falla si las
-  dos se separan (ADR 0028).
-- **El service worker solo se registra en producción.** En dev, Next recompila los chunks de
-  `/_next/static` sin hash estable: una caché «primero lo guardado» devuelve JavaScript viejo y la
-  pantalla deja de reflejar el código que estás editando. Se prueba con `next build && next start`.
 - **Estado del navegador va con `useSyncExternalStore`, no con `useState` + `useEffect`.** Volcar
-  `navigator.onLine`, `matchMedia` o `localStorage` a estado desde un efecto provoca un render en
+  `navigator.onLine`, `matchMedia` o `sessionStorage` a estado desde un efecto provoca un render en
   cascada y el linter lo corta (`react-hooks/set-state-in-effect`). El tercer argumento —el
   snapshot del servidor— no es opcional: sin él, el render del servidor rompe porque `navigator` no
-  existe. Ejemplo en `src/app/(front-gestion)/panel/_components/pwa.tsx`.
-- **El feed iCal de salida marca ocupado sólo cuando NO queda ninguna unidad del tipo libre.** Un
-  calendario dice «ocupado», no «me queda una»: cerrar el tipo al vender la primera unidad le
-  costaría ventas reales al hotel. Y si la consulta de estadías se trunca, el handler responde
-  **503 en vez de servir un calendario parcial** — uno incompleto no se ve roto, se ve como uno con
-  menos bloqueos, o sea publicando como libres noches llenas (ADR 0022).
-- **Booking es de solo lectura y NO evita el overbooking.** `capacidades()` lo declara y
-  `ResultadoEnvio.noSoportado` distingue «no puedo» de «fallé». No borrar esas advertencias (ADR 0021).
+  existe. Ejemplo en `src/app/(front-gestion)/panel/reservas/nueva/formulario.tsx` (el borrador del alta de mostrador).
 - **NUNCA agregues una columna que pueda guardar datos de tarjeta** (`tarjeta_numero`, `pan`,
   `cvv`, `codigo_seguridad`, `pin`…). Saca al hotel del alcance SAQ-A de PCI-DSS. Hay un
   **test-contrato** que recorre las migraciones y falla si aparece una (`tests/contratos/garantia-tarjeta.test.ts`),
@@ -343,18 +324,13 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   patrón correcto —`revoke ... from public; grant ... to <roles>`— ya lo usaban
   `tablas_publicas` (0046/0047) y `sumar_puntos_huesped` (0053). Hay un test de contrato,
   `tests/base-de-datos/funciones-sin-public.test.ts`, apoyado en `funciones_expuestas_a_publico()`.
-  ⚠️ `rol_actual()` y `puede_ver_canal()` **tienen que quedar** ejecutables por PUBLIC: se
+  ⚠️ `rol_actual()` y `puede_ver_canal()` (esta sigue en la base aunque el chat interno ya no) **tienen que quedar** ejecutables por PUBLIC: se
   usan en expresiones de políticas RLS y Postgres chequea el EXECUTE del rol que consulta al
   evaluar una policy (verificado). Revocárselo rompe la lectura de `anon` sobre el catálogo.
-- **Un token de socio NO se lee con el cliente del usuario.** `agencias.token`,
-  `proveedores.token` y `firmas.token` tienen el `select` revocado por columna
-  (migración 0060). Para mostrarlos hay que usar `crearClienteAdmin()`. Antes cualquier
-  rol —housekeeping incluido— podía leerlos, y con ellos abrir `/portal/<token>` y firmar
-  un contrato en nombre del socio.
-- **No se borran reservas, estadías, pagos, agencias, proveedores, tarifas ni perfiles.**
-  `authenticated` no tiene `delete` sobre esas tablas (migración 0061): el camino es la
-  máquina de estados o la baja lógica (`activo`). Los borrados que la UI sí usa —consumos,
-  huéspedes, avisos, rangos de temporada, mapeos— siguen habilitados y auditados.
+- **No se borran reservas, estadías, pagos, tarifas ni perfiles** (ni las tablas de agencias y
+  proveedores, que siguen en la base). `authenticated` no tiene `delete` sobre esas tablas
+  (migración 0061): el camino es la máquina de estados o la baja lógica (`activo`). Los borrados
+  que la UI sí usa —consumos, huéspedes, productos, rangos de temporada— siguen habilitados y auditados.
 - **Contar filas es `count: 'exact', head: true`, nunca traerlas.** PostgREST corta en
   1000 (`max_rows`) con **HTTP 200 y sin aviso**: contar en JavaScript da un número
   equivocado a partir de la fila 1001 y nada falla. Hay un test que lo demuestra
@@ -408,41 +384,12 @@ Ejemplos recientes: `canales`, `punto_venta` y `respaldos`.
   pierden también los cobros buenos. Por eso `ResultadoWebhook` distingue `ignorar` (200),
   `invalido` (400) y `reintentar` (500).
 - **El límite de tasa del webhook de pagos se cuenta DESPUÉS de rechazar la firma, nunca antes.**
-  Cada evento descartado por volumen es un cobro del que el hotel no se entera. Lo mismo vale
-  para el webhook de entrega de correo (`webhook_email`): cada evento descartado es un rebote
-  del que el hotel no se entera, o sea volver a creer que un correo llegó cuando no llegó.
-- **`enviada` NO es `entregada`.** El proveedor de correo acepta el mensaje y responde 200 mucho
-  antes de saber si el servidor del destinatario lo aceptó: entre las dos cosas está el **rebote**.
-  Tratarlas como una sola deja invisible el caso que el hotel necesita ver —«le escribimos y no le
-  llegó»— y un huésped con la dirección mal cargada figura avisado. Y **la ausencia de `leida` no
-  prueba nada**: muchos clientes de correo bloquean el pixel de apertura, así que su presencia
-  informa y su ausencia no (migración 0086, `src/lib/domain/entregas.ts`).
-- **Los eventos de un webhook de entrega llegan DESORDENADOS.** El de apertura puede entrar antes
-  que el de entrega, y aplicarlos a ciegas haría retroceder de `leida` a `entregada`: el sistema
-  olvidaría que el huésped abrió el correo. Lo decide `esAvance`, que sí deja que un **rebote pise
-  una entrega** porque eso es información nueva y mala.
-- **La firma de Svix (Resend) NO es la del otro esquema del proyecto.** Firma
-  `"<id>.<timestamp>.<cuerpo>"` —con el id adentro—, la clave va **decodificada de base64** detrás
-  del prefijo `whsec_`, y la comparación es en base64, no en hex. La cabecera puede traer **varias
-  firmas separadas por espacios** durante una rotación de secreto. Reimplementar mal un HMAC no
-  falla ruidosamente: **rechaza todos los eventos**, y el síntoma es que el hotel deja de enterarse
-  de los rebotes. Está en `src/lib/integraciones/firma-svix.ts` con tests por cada diferencia.
-- **WhatsApp no deja mandar texto libre fuera de la ventana de 24 horas:** hay que usar
-  **plantillas aprobadas por Meta**, así que los cuerpos del catálogo NO sirven tal cual. Y **el
-  orden de los parámetros es el contrato**: Meta numera los huecos (`{{1}}`, `{{2}}`) y valida la
-  **cantidad**, no el significado — cruzarlos manda el código de reserva donde va la fecha y el
-  mensaje sale igual. Ver `src/lib/domain/whatsapp.ts` y el test que compara cada parámetro contra la
-  plantilla del catálogo.
-- **Un aviso se encola con UN canal, decidido al encolar y no al despachar.** La clave de
-  idempotencia no incluye el canal: dos filas del mismo aviso chocarían contra el `unique` y una se
-  descartaría en silencio. Y recalcular el canal al despachar haría salir por WhatsApp un aviso
-  cuyo `destinatario` guardado es una dirección de correo.
+  Cada evento descartado por volumen es un cobro del que el hotel no se entera.
 - **La URL de retorno de una pasarela no es prueba de pago:** se puede abrir a mano sin haber
   pagado. Quien confirma es el webhook; la pantalla de confirmación lee el estado de la base.
-- **`npm run check` devuelve 0 con tests en rojo** si no hay `.env.local`: tres archivos fallan por
-  falta de `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` y el exit code igual da 0. Es la misma trampa
-  que `tests/apoyo/db.ts` documenta querer evitar, pero el guardián (`EXIGIR_DB=1`) no está en ese script.
-  **Leé la salida, no el exit code**, o exportá las tres variables antes.
+- **`npm run check` devuelve 0 sin base de datos**, porque los tests que la necesitan se saltean (583 el
+  2026-11-10). Leé la salida —cuántos pasaron y cuántos se saltearon—, no sólo el exit code, y para la
+  verificación de verdad usá `npm run test:aislado`.
 
 ## Automatizaciones (hooks activos)
 

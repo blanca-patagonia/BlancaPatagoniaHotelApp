@@ -3,6 +3,8 @@
 - **Fecha:** 2026-07-28
 - **Alcance:** modelo de datos (RLS), roles/permisos, endpoints públicos (portal y
   webhook), uso de `service_role` y validación de entrada.
+- **Es una fotografía de esa fecha.** Lo que se cerró después figura en la última
+  sección y, con más detalle, en `SEGURIDAD.md`.
 
 ## Base de datos — verificado ✅
 
@@ -19,7 +21,7 @@
 
 ## Aplicación — verificado ✅
 
-- `service_role` **solo** en módulos `server-only` (`lib/supabase/admin.ts`); se usa
+- `service_role` **solo** en módulos `server-only` (`src/lib/supabase/admin.ts`); se usa
   en el webhook, el alta pública y la gestión de usuarios, siempre en servidor y
   —para usuarios— detrás del guard de `admin`.
 - Los **Server Actions** de Next.js incluyen protección CSRF nativa (chequeo de origen).
@@ -44,9 +46,14 @@
    `expirar_reservas_pendientes(dias)` que cancela las pendientes sin seña con más de
    N días y libera el inventario. Con test de integración.
 
-## Riesgos conocidos / a resolver en la Fase 7
+## Riesgos conocidos al 2026-07-28 y cómo quedaron
 
-- **Sin rate-limiting** en los endpoints públicos (alta y webhook): agregar límite por
-  IP para prevenir abuso/DoS.
-- **Programar** `expirar_reservas_pendientes` por cron (pg_cron / Edge Function) en producción.
-- Integrar pasarelas y email reales (hoy stubs) y cargar sus secretos.
+- **Sin rate-limiting** en los endpoints públicos (alta y webhook). *Resuelto* para
+  el alta pública, el login, la encuesta y el asistente: migración 0029 y
+  `src/lib/domain/limites.ts` (ver `SEGURIDAD.md` §1). Sobre el webhook de pagos el
+  límite se cuenta **después** de rechazar la firma, a propósito.
+- **Programar** `expirar_reservas_pendientes`. *Resuelto*: lo dispara
+  `/api/cron/mantenimiento` (`vercel.json`) y cada corrida queda registrada.
+- **Integrar pasarelas y email reales.** *Los adaptadores están escritos*
+  (Mercado Pago, Stripe, Payway y Resend); falta contratar las cuentas y cargar los
+  secretos (`docs/3-manuales/despliegue.md` §1).

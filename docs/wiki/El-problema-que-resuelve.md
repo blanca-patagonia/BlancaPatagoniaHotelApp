@@ -12,10 +12,10 @@ establecimiento mixto, y esa mezcla es la que complica la gestión:
 
 - Una **hostería boutique** con vista al Lago Argentino — single, dobles standard
   y superior, triple y una suite.
-- Un conjunto de **cabañas** de 1, 2 y 3 dormitorios, de 3 a 7 personas, con
-  cocina y hogar a parrilla.
+- Un conjunto de **cabañas** de 2 a 6 personas, con cocina y hogar a parrilla.
 
-Son **15 unidades repartidas en 10 tipos**. Poco inventario y mucha variedad: cada
+Son **37 unidades repartidas en 10 tipos** (inventario físico real, [ADR 0040](Decisiones-de-arquitectura)).
+Poco inventario y mucha variedad: cada
 tipo tiene su capacidad, sus amenities y su tarifa por temporada. Es el peor caso
 para una planilla y un caso chico para un PMS comercial, que se cobra por
 habitación y trae funciones de hotel de cadena que acá sobran.
@@ -47,11 +47,12 @@ el punto: no se reemplaza porque esté roto, se reemplaza por lo que impide.
 
 Cuentas corrientes de agencias, consumos del bar y del restaurante, control de
 mucamas, mantenimiento, objetos perdidos, proveedores, y cada reporte que la
-gerencia quisiera mirar de otra manera.
+gerencia quisiera mirar de otra manera. (La versión reducida de la tesis se queda
+con lo que pidió el hotel: consumos, mucamas y reportes. Lo demás está en `main`.)
 
-El problema del Excel no es Excel: es que **los datos quedan en otro lado**. La
-cuenta de una agencia vivía en una planilla que no sabía nada de las reservas que
-la habían generado, así que cuadrarlas era volver a leer las dos cosas.
+El problema del Excel no es Excel: es que **los datos quedan en otro lado**. El
+consumo del bar vivía en una planilla que no sabía nada de la reserva que lo
+había generado, así que cuadrarlos era volver a leer las dos cosas.
 
 ### 3. Booking, con el 79 % de las reservas
 
@@ -85,15 +86,14 @@ y el motivo por el que el sistema puede confiar en su propio inventario.
 
 **Cómo lo resuelve:** un **portal público de reservas propio** —catálogo de
 alojamientos con precios por temporada, búsqueda de disponibilidad sin necesidad
-de crear cuenta, checkout del huésped y cobro en línea— más la importación de lo
-que llega por Booking, para que esas reservas también vivan en el sistema en vez
-de copiarse a mano.
+de crear cuenta, checkout del huésped y cobro en línea—.
 
 Cada reserva directa es la comisión completa que no se paga, y el dato del huésped
 que queda del lado del hotel.
 
-**Corresponde declararlo explícitamente:** la integración con Booking es de **sólo
-lectura**, y no evita el overbooking. Ver [abajo](#lo-que-el-sistema-no-resuelve).
+**Corresponde declararlo explícitamente:** esta versión **no se conecta con
+Booking** (el módulo de canales de venta quedó en `main`). Las reservas de la OTA
+se cargan a mano en el mostrador, como siempre.
 
 ### 3. El precio nunca era un solo número
 
@@ -119,14 +119,13 @@ las muestran. El sistema calcula, no la persona.
 **Cómo lo resuelve:** es una aplicación web con **cuatro roles** —admin, gerencia,
 recepción, housekeeping— donde cada uno ve lo suyo. La mucama marca la habitación
 como limpia desde el teléfono, en una pantalla ordenada por prioridad, y recepción
-lo ve en el momento. Las 38 pantallas están hechas para andar en un celular.
+lo ve en el momento. Las pantallas están hechas para andar en un celular.
 
 ### 5. Todo lo que no era una reserva vivía en Excel
 
 **Cómo lo resuelve:** los módulos que estaban en planillas ahora comparten la base
-con las reservas. La cuenta corriente de una agencia se arma con los movimientos
-que generan sus propias reservas; el consumo del bar entra a la cuenta del huésped
-y sale en su factura; el reporte de ocupación sale de las estadías reales.
+con las reservas. El consumo del bar entra a la cuenta del huésped y sale en su
+factura; el reporte de ocupación sale de las estadías reales.
 
 ---
 
@@ -134,7 +133,7 @@ y sale en su factura; el reporte de ocupación sale de las estadías reales.
 
 Reemplazar un sistema viejo tiene una trampa: el sistema nuevo suele ser más lindo
 y hacer menos. Por eso hubo un trabajo específico —**la modernización WinPAX**, de
-once pasos— dedicado a cubrir lo que el sistema anterior sí hacía y el nuevo
+once pasos, de los cuales esta versión conserva ocho— dedicado a cubrir lo que el sistema anterior sí hacía y el nuevo
 todavía no:
 
 - La **ficha de reserva completa**: VIP, adultos / menores / bebés por separado,
@@ -149,7 +148,7 @@ pendiente.
 - **Piso y bloque** en las unidades, que es como el personal se refiere a ellas.
 
 El plan completo, con el porqué de cada paso, está en
-[`docs/2-arquitectura/modernizacion-winpax.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/modernizacion-winpax.md).
+[`docs/2-arquitectura/modernizacion-winpax.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/2-arquitectura/modernizacion-winpax.md).
 
 ---
 
@@ -161,13 +160,12 @@ corresponde:
 
 | Límite | Por qué |
 |---|---|
-| **La sincronización con Booking no evita el overbooking** | Los dos caminos posibles sin ser *Connectivity Partner* —el informe CSV y el feed iCal— son de **sólo lectura**: nadie le informa a Booking qué quedó libre. La solución real es un *channel manager*, y es una contratación del hotel, no código ([ADR 0021](Decisiones-de-arquitectura)) |
-| **El feed iCal de salida angosta la ventana, no la cierra** | Publica la ocupación para que la OTA la lea, pero no hay acuse ni intervalo garantizado ([ADR 0022](Decisiones-de-arquitectura)) |
+| **No hay conexión con Booking ni con otras OTA** | El módulo de canales de venta se quitó de esta versión. Sin un *channel manager* (una contratación del hotel, no código) nadie le informa a la OTA qué quedó libre, así que la reserva de la OTA se carga a mano y el overbooking contra ese canal depende de quien carga |
 | **La facturación fiscal está preparada, no conectada** | El desglose, la letra del comprobante y la validación de CUIT están hechos y probados; el CAE de ARCA/AFIP es simulado hasta que se integre el servicio real |
-| **Las pasarelas de pago están escritas, faltan contratarse** | Los adaptadores de MercadoPago y Stripe están implementados y testeados. Enchufarlos es cargar credenciales, no tocar código ([ADR 0027](Decisiones-de-arquitectura)) |
+| **Las pasarelas de pago están escritas, faltan contratarse** | Los adaptadores de MercadoPago, Stripe y Payway están implementados y testeados. Enchufarlos es cargar credenciales, no tocar código ([ADR 0027](Decisiones-de-arquitectura)) |
 | **No se envía correo real** | El adaptador de correo existe con un simulador detrás, y **falla al arrancar en producción** si no se configura de verdad, para que nadie confunda un envío simulado con uno real |
 | **En junio, julio y agosto el sistema no cotiza** | El tarifario del hotel no publica tarifa de invierno. El portal ofrece «consultar» en vez de inventar un precio |
-| **La aplicación no hace backups de Postgres** | Eso lo hace la plataforma. Lo que hay en el panel es una **exportación de datos operativos**, y la pantalla lo dice con todas las letras |
+| **La aplicación no hace backups de Postgres** | Eso lo hace la plataforma, y el sistema no tiene ninguna pantalla que sugiera lo contrario. Además, **nunca se probó restaurar uno** (`docs/3-manuales/despliegue.md` §3.4) |
 
 ---
 
