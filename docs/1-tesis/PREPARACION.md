@@ -44,7 +44,7 @@ regeneran al final.
 
 - **Quitar el «Módulo 5 — Canales de venta»** (§9.6, §10.5) y todo lo que lo nombre: Booking, iCal, comisiones, ARI.
 - **Reubicar Housekeeping** (queda; solo cambia su vecino) y reescribir **Gestión y administración** (§9.7, §10.6) con lo que queda: usuarios y roles, tarifario, temporadas, promociones, inventario, divisas, datos fiscales, tipos de alojamiento, ubicaciones, auditoría y errores.
-- **Alcance (§4.3 a §4.5):** el sistema reducido es el pedido original de PP2 (§1.2): reservas y estadías, check-in/check-out con facturación, consumos, huéspedes y reportes, más pagos y correo. Lo quitado va en «Fuera de alcance, declarado», con la ADR 0045 como fundamento.
+- **Alcance (§4.3 a §4.5):** el sistema es el pedido original de PP2 (§1.2): reservas y estadías, check-in/check-out con facturación, consumos, huéspedes y reportes, más pagos y correo. **La tesis presenta el producto terminado que se le entrega al cliente: NO menciona en ningún momento los módulos quitados, ni la rama, ni la ADR 0045, ni «versión reducida».** Lo que el hotel no pidió simplemente no figura (ni como «fuera de alcance» ni como trabajo futuro).
 - **Requerimientos (§5):** sacar los de canales, contratos, agencias, proveedores, mantenimiento, conciliación, bandeja, asistente de IA y otros idiomas.
 - **Cifras:** 12 áreas del panel, 55 páginas, 29 ADRs, 3 tareas programadas, ~51.000 líneas en `src/`. Recontar al final (ver §4).
 - **Modelo de datos (§6.3):** presentar las **30 tablas** que el código usa y aclarar que la base conserva 39 más sin pantalla (`docs/2-arquitectura/modelo-datos.md` las separa).
@@ -80,9 +80,9 @@ regeneran al final.
 3. **Cifras verificadas:** correr `npm run test:aislado`, `npm run e2e` y recontar líneas, pantallas y tests.
 4. **Regenerar el PDF** con el formato de la cátedra (A4, 2,5 cm, justificado, carátula, índices, membrete, paginación).
 
-## 5. Preguntas abiertas para los autores
+## 5. Decisiones ya tomadas por los autores
 
-- ¿Qué versión de PP2 vio el profesor? La inferencia es `PP2_Moran_Fakiani` (mayo, con notas del docente en el margen); confirmarlo antes de reutilizar su texto.
-- ¿Formato de entrega? Propuesta: Word (`.docx`) y PDF.
-- ¿Casos de uso a fondo? Propuesta: los **diez centrales** con ficha completa, vista estática y dinámica; el resto en formato resumido.
-- ¿Se defienden los módulos que quedaron fuera (canales, bandeja, contratos…) como **trabajo futuro** ya implementado en `main`? Si sí, citar la ADR 0045 y la rama.
+- **Versión de PP2 que vio el profesor:** `PP2_Moran_Fakiani` (la de mayo). Hay que respetar sus elementos formales, en particular la sección **«Firmas y conformidades»** y el **Anexo C: firma del comitente** (Franco Theo Cheli, Director de Blanca Patagonia S.A.S.).
+- **Formato de entrega:** Word (`.docx`). El PDF se genera después si hace falta.
+- **Casos de uso:** las tesis de ejemplo desarrollan entre 4 y 14 fichas completas (Bimba ~4, NutriSmart ~3, Club La Tablada ~14), cada una con diagrama de asociaciones, ficha, prototipo y diagrama de secuencia o interacciones. Se hacen **de 10 a 12 casos de uso completos** repartidos por módulo; no hace falta un «resto resumido».
+- **Módulos quitados:** no se mencionan en ningún momento (ver §2).
