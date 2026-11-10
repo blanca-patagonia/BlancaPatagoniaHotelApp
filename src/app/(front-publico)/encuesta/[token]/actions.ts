@@ -1,6 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { puntajeValido } from '@/lib/domain/encuestas'
 import { permitirIntento } from '@/lib/limites'
@@ -18,7 +19,7 @@ export async function responderEncuesta(formData: FormData): Promise<void> {
   const puntaje = Number(formData.get('puntaje'))
   const comentario = String(formData.get('comentario') ?? '').trim().slice(0, 1000)
 
-  if (!token) redirect('/')
+  if (!esUuid(token)) redirect('/')
   if (!puntajeValido(puntaje)) redirect(`/encuesta/${token}?error=puntaje`)
 
   // Una encuesta se responde una vez. El límite evita que se inflen los

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { estadoDeCobro, type EstadoCobro } from '@/lib/reservas/cobro'
 import { motivoNoSeCobra } from '@/lib/domain/cobro'
@@ -43,6 +44,9 @@ export default async function ConfirmacionPage({
   searchParams: Promise<{ pago?: string; idioma?: string }>
 }) {
   const { token } = await params
+  // Un token que no es UUID no existe: se corta antes de consultar. PostgREST
+  // responde 400 y cada bot que probara direcciones dejaba un error en /panel/errores.
+  if (!esUuid(token)) notFound()
   const sp = await searchParams
   /*
     Idioma por consulta (`?idioma=en`) y no por prefijo: esta dirección viaja en

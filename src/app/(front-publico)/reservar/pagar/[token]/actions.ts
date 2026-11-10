@@ -12,6 +12,7 @@
  */
 
 import { redirect } from 'next/navigation'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { abrirCobroDelPortal } from '@/lib/payments/portal'
 import { permitirIntento } from '@/lib/limites'
@@ -33,7 +34,7 @@ export async function pagarDesdeElPortal(formData: FormData): Promise<void> {
   const conError = (motivo: string) =>
     `/reservar/pagar/${token}?error=${motivo}${idioma === 'es' ? '' : `&idioma=${idioma}`}`
 
-  if (!token) redirect('/reservar')
+  if (!esUuid(token)) redirect('/reservar')
   if (!(await permitirIntento('pago_portal'))) redirect(conError('limite'))
 
   const admin = crearClienteAdmin()

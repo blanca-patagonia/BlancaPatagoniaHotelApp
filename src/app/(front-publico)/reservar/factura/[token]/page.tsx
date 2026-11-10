@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
 import {
@@ -90,6 +91,9 @@ export default async function FacturaPublicaPage({
   params: Promise<{ token: string }>
 }) {
   const { token } = await params
+  // Un token que no es UUID no existe: se corta antes de consultar. PostgREST
+  // responde 400 y cada bot que probara direcciones dejaba un error en /panel/errores.
+  if (!esUuid(token)) notFound()
   const admin = crearClienteAdmin()
 
   const { data, error } = await admin

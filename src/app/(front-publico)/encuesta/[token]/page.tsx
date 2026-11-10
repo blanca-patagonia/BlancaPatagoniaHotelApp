@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { mensajeDe } from '@/lib/listados'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { responderEncuesta } from './actions'
@@ -47,6 +48,9 @@ export default async function EncuestaPage({
   searchParams: Promise<{ ok?: string; error?: string }>
 }) {
   const { token } = await params
+  // Un token que no es UUID no existe: se corta antes de consultar. PostgREST
+  // responde 400 y cada bot que probara direcciones dejaba un error en /panel/errores.
+  if (!esUuid(token)) notFound()
   const sp = await searchParams
 
   const admin = crearClienteAdmin()
