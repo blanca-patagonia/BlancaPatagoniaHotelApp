@@ -46,7 +46,7 @@ export interface HuespedHit {
 export interface UnidadHit {
   id: string
   nombre: string
-  piso: number | null
+  piso: string | null
   activo: boolean
   tipo: { nombre: string } | null
 }

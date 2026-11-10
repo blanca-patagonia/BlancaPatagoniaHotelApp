@@ -167,7 +167,8 @@ export default async function OcupacionPage({
   const sp = await searchParams
 
   const hoy = hoyISO()
-  const desde = /^\d{4}-\d{2}-\d{2}$/.test(sp.desde ?? '') ? sp.desde! : hoy
+  // Una fecha con forma válida pero imposible (2026-13-45) hacía lanzar a `sumarDias`.
+  const desde = /^\d{4}-\d{2}-\d{2}$/.test(sp.desde ?? '') && !Number.isNaN(Date.parse(`${sp.desde}T00:00:00Z`)) ? sp.desde! : hoy
   const ventana = VENTANAS.includes(Number(sp.dias) as (typeof VENTANAS)[number])
     ? Number(sp.dias)
     : VENTANA_DEFECTO

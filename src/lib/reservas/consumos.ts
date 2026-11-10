@@ -2,6 +2,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { MENSAJES_NO_CARGABLE, motivoNoCargable, type MotivoNoCargable } from '@/lib/domain/servicio'
+import { hoyISO } from '@/lib/fechas'
 
 export type ClaveFallaConsumo = MotivoNoCargable | 'consumo' | 'consumo_verificar'
 
@@ -73,6 +74,8 @@ export async function cargarConsumo(
     producto_id: productoId,
     cantidad,
     precio_unitario: Number(producto.precio),
+    // El día del hotel, no `current_date` de la base (UTC).
+    fecha: hoyISO(),
   })
   if (error) {
     registrarFalla(error, 'consumos:insertar')

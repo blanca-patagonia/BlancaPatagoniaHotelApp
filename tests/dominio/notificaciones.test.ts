@@ -99,6 +99,20 @@ describe('horario permitido', () => {
     expect(cuando!.getTime(), 'lo mandó para atrás').toBeGreaterThan(noche.getTime())
   })
 
+  it('un aviso de las 22:30 sale a las 9 del día SIGUIENTE, no del subsiguiente', () => {
+    // 22:30 del 10/11 en El Calafate son las 01:30 UTC del 11/11: sumar un día al
+    // día UTC lo mandaba al 12.
+    const noche = new Date('2026-11-11T01:30:00.000Z')
+    const cuando = cuandoEnviar('recordatorio_checkin', noche)
+    expect(cuando?.toISOString()).toBe('2026-11-11T12:00:00.000Z')
+  })
+
+  it('un aviso de la madrugada sale a las 9 del mismo día', () => {
+    // 03:30 del 10/11 en el hotel son las 06:30 UTC del mismo día.
+    const cuando = cuandoEnviar('recordatorio_checkin', new Date('2026-11-10T06:30:00.000Z'))
+    expect(cuando?.toISOString()).toBe('2026-11-10T12:00:00.000Z')
+  })
+
   it('dentro de la franja no se demora nada', () => {
     expect(cuandoEnviar('recordatorio_checkin', enElHotel(15))).toBeNull()
   })

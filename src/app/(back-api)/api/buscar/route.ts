@@ -82,7 +82,7 @@ export async function GET(req: Request) {
         titulo: u.nombre,
         detalle: [
           u.tipo?.nombre,
-          u.piso !== null ? `Piso ${u.piso}` : null,
+          u.piso ? `Piso ${u.piso}` : null,
           u.activo ? null : 'Inactiva',
         ]
           .filter(Boolean)

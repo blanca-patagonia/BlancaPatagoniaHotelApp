@@ -1,4 +1,4 @@
-import { ZONA_HOTEL } from '@/lib/fechas'
+import { ZONA_HOTEL, hoyISO, sumarDias } from '@/lib/fechas'
 import { type EventoEmail } from './plantillas'
 
 /**
@@ -105,13 +105,13 @@ export function cuandoEnviar(evento: EventoEmail, ahora: Date): Date | null {
   if (dentroDeHorario(ahora)) return null
 
   const h = horaDelHotel(ahora)
-  // Antes de la franja: hoy a las 9. Después: mañana a las 9.
-  const dias = h >= HORA_HASTA ? 1 : 0
-  const destino = new Date(ahora)
-  destino.setUTCDate(destino.getUTCDate() + dias)
+  // Antes de la franja: hoy a las 9. Después: mañana a las 9. «Hoy» es el día del
+  // HOTEL: entre las 21 y las 24 el día UTC ya es el siguiente, y sumarle uno
+  // más mandaba el aviso dos días después.
+  const hoy = hoyISO(ahora)
+  const dia = h >= HORA_HASTA ? sumarDias(hoy, 1) : hoy
   // `HORA_DESDE` es hora del hotel (UTC−3), así que en UTC es +3.
-  destino.setUTCHours(HORA_DESDE + 3, 0, 0, 0)
-  return destino
+  return new Date(`${dia}T${String(HORA_DESDE + 3).padStart(2, '0')}:00:00.000Z`)
 }
 
 /* ────────────────────────────────────────────── los estados del envío ──── */

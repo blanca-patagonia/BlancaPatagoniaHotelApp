@@ -562,7 +562,7 @@ export default async function DashboardPage() {
           ) : (
             <ul className="p-4">
               {pendientes.map((p) => (
-                <li key={p.href}>
+                <li key={p.texto}>
                   <Link
                     href={p.href}
                     className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm transition hover:bg-lago-50"

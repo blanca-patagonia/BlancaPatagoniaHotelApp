@@ -52,3 +52,28 @@ housekeeping sólo firman rutas bajo `housekeeping/`. Quedan, por orden de peso:
    permite meter ruido en `auditoria_accesos`. Agregar la guarda `rol_actual() is
    not null` (migración nueva).
 6. **La exportación CSV de huéspedes no deja rastro** en `auditoria_accesos`.
+
+## Hallazgos de la revisión de código (2026-11-10) que quedan abiertos
+
+Cerrados: el aviso «Recibimos tu pago» ya no sale en un reembolso; el primer cargo
+manual lo puede crear recepción (con el cliente de servicio y el producto inactivo en
+el punto de venta); los avisos nocturnos salen a las 9 del día siguiente (no del
+subsiguiente); los consumos se fechan con el día del hotel; la confirmación pública
+de una reserva cancelada lo dice; y cuatro detalles menores (clave repetida del
+tablero, «Piso» vacío en el buscador, comentario de `requerirRol`, fecha de Ocupación).
+
+Abiertos, de menor a mayor esfuerzo:
+
+- **`crearReservaGrupal`** es más frágil que el alta individual: busca al titular con
+  `maybeSingle()` (falla si hay dos fichas con el mismo correo), no limita la cantidad
+  de unidades por tipo ni valida fechas pasadas.
+- **`purgar_intentos`** sólo corre por `pg_cron`, que puede no estar activo; el cron de
+  mantenimiento podría llamarla.
+- **Exportación CSV**: los filtros (`estado`, `canal`, `plan`…) no pasan por `deLista`,
+  un valor inválido da «No se pudo generar el archivo» en vez de ignorarse.
+- **`cargarConsumo`** no verifica que el producto esté activo (el punto de venta sí).
+- **`editarFichaReserva`** vuelca `notas` y `voucher` a la URL de redirección.
+- **La búsqueda de reservas por nombre de unidad** arma un `.or()` de hasta ~18 KB y
+  corta a 300 estadías sin orden; medirla con un historial grande.
+- **`despachar()`** no reclama las filas: dos corridas solapadas del cron podrían mandar
+  el mismo correo dos veces.

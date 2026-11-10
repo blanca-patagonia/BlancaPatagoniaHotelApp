@@ -243,6 +243,16 @@ function EstadoDePago({
   t: Diccionario['confirmacion']
   enlacePago: string
 }) {
+  // Una reserva cancelada (también la que el sistema liberó por falta de seña) no
+  // está «lista» ni «por liberarse»: ya no existe para el hotel.
+  if (reserva.estado === 'cancelada') {
+    return (
+      <Mensaje tono="aviso">
+        <strong className="font-medium">{t.canceladaTitulo}</strong> {t.canceladaTexto}
+      </Mensaje>
+    )
+  }
+
   // Sin datos de cobro no se inventa un estado: se dice que no se pudo calcular.
   if (!cobro) {
     return <Mensaje tono="aviso">{t.sinCalculo}</Mensaje>

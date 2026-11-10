@@ -150,13 +150,17 @@ export async function registrarPago(formData: FormData): Promise<void> {
     No corta el flujo: el cobro ya está hecho, y no poder anotar un correo no
     puede volverse un error en la cara de quien está cobrando.
   */
-  await avisarCobroAprobado(crearClienteAdmin(), {
-    reservaId,
-    pagoId: externalId ?? reservaId,
-    importe: montoUSD,
-    medio,
-    confirmada,
-  })
+  // Un reembolso es plata que SALE: decirle «Recibimos tu pago» al huésped al que
+  // se le devuelve sería un correo falso sobre su propio dinero.
+  if (tipo !== 'reembolso') {
+    await avisarCobroAprobado(crearClienteAdmin(), {
+      reservaId,
+      pagoId: externalId ?? reservaId,
+      importe: montoUSD,
+      medio,
+      confirmada,
+    })
+  }
 
   redirect(`/panel/reservas/${reservaId}`)
 }

@@ -535,6 +535,8 @@ export const es = {
     todoPagoTexto: 'No tenés que hacer nada más; te esperamos el día de la llegada.',
     saldoPendienteTitulo: 'Queda un saldo pendiente.',
     saldoPendienteTexto: 'Podés abonarlo ahora o al llegar al hotel.',
+    canceladaTitulo: 'Esta reserva está cancelada.',
+    canceladaTexto: 'Si querés volver a reservar, hacé una nueva reserva o escribinos y te ayudamos.',
     sinConfirmarTitulo: 'La reserva todavía no está confirmada.',
     sinConfirmarTexto: 'Queda tomada por {dias} días; para asegurarla hay que abonar la seña.',
     pagarSaldo: 'Pagar el saldo',
