@@ -18,9 +18,7 @@ public/
 │       ├── blanca-hero.mp4       → video de la portada, 1080p (escritorio)
 │       └── blanca-hero-movil.mp4 → la misma toma en 540p, sin audio ni timecode, para
 │                                   pantallas de hasta 768 px (6,6 MB contra 18,3)
-├── alojamientos/           → una foto por tipo de unidad (la toma el catálogo)
-├── sw.js, sin-conexion.html → service worker y pantalla offline del panel (ADR 0028)
-└── plantilla-next-sin-uso/ → SVG que trajo la plantilla de Next; nadie los usa
+└── alojamientos/           → una foto por tipo de unidad (la toma el catálogo)
 ```
 
 ⚠️ El master del video institucional (`.mov`, ~550 MB) está en `.gitignore`:
