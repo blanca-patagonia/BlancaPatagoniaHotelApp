@@ -133,25 +133,6 @@ export function rutaConIdioma(ruta: string, idioma: Idioma): string {
 }
 
 /**
- * A dónde lleva elegir otro idioma desde la pantalla actual.
- *
- * Las rutas del portal llevan el idioma como prefijo (`/es/reservar` →
- * `/en/reservar`). Las pantallas con token (`/reservar/confirmacion/<token>`,
- * `/reservar/pagar/<token>`) no pueden: sus direcciones ya viajaron en correos
- * y tienen que seguir funcionando, así que llevan el idioma como consulta
- * (`?idioma=en`). Ponerles un prefijo daba un 404.
- *
- * `consulta` es el `search` actual sin el `?`; se conserva todo lo demás.
- */
-export function destinoDeIdioma(ruta: string, consulta: string, idioma: Idioma): string {
-  const primero = ruta.split('/').filter(Boolean)[0]
-  if (esIdioma(primero)) return `${rutaConIdioma(ruta, idioma)}${consulta ? `?${consulta}` : ''}`
-  const parametros = new URLSearchParams(consulta)
-  parametros.set('idioma', idioma)
-  return `${ruta}?${parametros.toString()}`
-}
-
-/**
  * Fecha corta de un día (`YYYY-MM-DD`) en el idioma del visitante: «3 sep»,
  * «Sep 3», «3 set.», «3 sept.», «9月3日».
  *

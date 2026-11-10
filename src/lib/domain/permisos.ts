@@ -66,47 +66,11 @@ export const PERMISOS: Record<Rol, readonly Area[]> = {
   ],
 }
 
-/**
- * Áreas apagadas por decisión del hotel: no se van a usar por ahora.
- *
- * ── Por qué apagadas y no borradas ──────────────────────────────────────────
- *
- * El código, las tablas, las políticas RLS y los tests siguen enteros. Borrar tres
- * módulos que funcionan para volver a escribirlos si el hotel cambia de idea sería
- * tirar trabajo verificado; y como el sistema es una entrega de tesis, las pantallas
- * siguen siendo demostrables sacando el nombre de esta lista.
- *
- * Para volver a habilitar una, se le quita el nombre de acá. Nada más: no hay que
- * tocar el menú, ni el hub de inicio, ni la Ayuda, ni las páginas.
- *
- * ── Qué apaga exactamente ───────────────────────────────────────────────────
- *
- * Todo lo que pregunta por el área, porque todo pasa por `puedeAcceder`:
- * el menú lateral y el móvil (`_components/shell.tsx` vía `navegacion.ts`), las
- * tarjetas del hub (`app/panel/page.tsx`), el capítulo correspondiente de la Ayuda
- * (`lib/domain/ayuda.ts`) y el `requerirAcceso` de cada página y cada Server Action
- * del módulo. Entrar a la URL a mano tampoco sirve: `requerirAcceso` redirige.
- *
- * ⚠️ Lo que NO apaga, y es deliberado: la **tabla** `auditoria` sigue registrando
- * las operaciones sensibles. Lo que se oculta es la pantalla que las muestra, no el
- * registro. Un rastro de auditoría que se deja de escribir porque nadie lo mira
- * pierde justamente el valor que tiene —estar ahí cuando hay que revisar algo que
- * pasó antes—, y volver a encenderlo no recupera lo que no se guardó.
- */
-export const AREAS_OCULTAS: readonly Area[] = [
-  'auditoria',
-]
-
-export function estaOculta(area: Area): boolean {
-  return AREAS_OCULTAS.includes(area)
-}
-
 export function areasDe(rol: Rol): readonly Area[] {
-  return PERMISOS[rol].filter((a) => !estaOculta(a))
+  return PERMISOS[rol]
 }
 
 export function puedeAcceder(rol: Rol, area: Area): boolean {
-  if (estaOculta(area)) return false
   return PERMISOS[rol].includes(area)
 }
 
@@ -114,8 +78,7 @@ export function puedeAcceder(rol: Rol, area: Area): boolean {
  * ¿Es de la dirección del hotel (admin o gerencia)?
  *
  * Para las acciones MÁS restrictivas que el área: recepción entra a
- * notificaciones, pero algunas operaciones de esas pantallas son
- * sólo de la dirección. La regla estaba escrita a mano 22 veces, en dos formas
+ * reservas, pero algunas operaciones de esas pantallas son sólo de la dirección. La regla estaba escrita a mano 22 veces, en dos formas
  * (`=== … || ===` y `!== … && !==`); una sola definición evita que una se
  * corrija y la otra no.
  */

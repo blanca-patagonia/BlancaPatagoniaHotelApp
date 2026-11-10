@@ -1,6 +1,6 @@
 # Agentes del proyecto
 
-Son **11 subagentes** especializados. Cada uno corre en su propio contexto: mira lo suyo a fondo sin
+Son **10 subagentes** especializados. Cada uno corre en su propio contexto: mira lo suyo a fondo sin
 llenar el contexto principal de archivos, y devuelve un informe.
 
 ## Agentes vs. skills — cuál usar
@@ -34,7 +34,6 @@ está el problema.
 | **`continuidad`** | Respaldos, restauración, RPO/RTO, qué pasa si un servicio externo cae | No |
 | **`privacidad`** | Al agregar un campo con datos de personas, al exportar, al integrar un tercero | No |
 | **`accesibilidad`** | Al terminar una pantalla, al tocar un formulario o una tabla | No |
-| **`i18n`** | Huéspedes extranjeros, idiomas, formatos de fecha y moneda | No |
 | **`docs-sync`** | Después de un cambio grande o antes de una entrega | Sólo documentación |
 
 ## Por qué casi todos son de sólo lectura
@@ -54,11 +53,11 @@ quedó algo viejo». También los elige solo cuando la tarea encaja con su descr
 
 ## Si agregás uno
 
-1. **Que no se pise con otro.** Si su trabajo ya lo hace un agente existente, mejorá ese. Once
+1. **Que no se pise con otro.** Si su trabajo ya lo hace un agente existente, mejorá ese. Diez
    agentes con límites claros sirven; veinte que se superponen, no.
 2. **Que sea de este proyecto.** Lo que hace útil a estos agentes no es el rol genérico: son los
    datos concretos —que `pagos.monto` está siempre en USD, que PostgREST corta en 1000 filas, que
-   `/panel/respaldos` no es un backup—. Un agente que podría funcionar en cualquier repositorio no
+   el respaldo de Postgres lo hace la plataforma y no la app—. Un agente que podría funcionar en cualquier repositorio no
    aporta nada sobre el modelo base.
 3. **Cerrale la escritura** salvo que haya un motivo fuerte, y si la abrís, acotá el alcance en el
    prompt como hacen `test-writer` y `docs-sync`.

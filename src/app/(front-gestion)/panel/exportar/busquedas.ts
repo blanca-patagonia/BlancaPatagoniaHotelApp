@@ -20,9 +20,3 @@ export function busquedaHuespedes(termino: string): string {
   const p = patronOr(termino)
   return `apellido.ilike.${p},nombre.ilike.${p},doc_numero.ilike.${p},email.ilike.${p}`
 }
-
-/** Una palabra en el nombre o el apellido del huésped. Para `.or()`. */
-export function condicionNombre(termino: string): string {
-  const p = patronOr(termino)
-  return `apellido.ilike.${p},nombre.ilike.${p}`
-}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LIMITES, mensajeLimite, type AccionLimitada } from '@/lib/domain/limites'
+import { LIMITES, claveDeIp, mensajeLimite, type AccionLimitada } from '@/lib/domain/limites'
 
 /**
  * El límite de tasa es un control de seguridad y era el único módulo del dominio
@@ -70,5 +70,33 @@ describe('mensaje al visitante', () => {
     for (const a of ACCIONES) {
       expect(mensajeLimite(a).trim().length, `mensaje de ${a}`).toBeGreaterThan(20)
     }
+  })
+})
+
+describe('claveDeIp · una IPv6 se cuenta por su /64', () => {
+  it('una IPv4 se cuenta entera', () => {
+    expect(claveDeIp('200.45.10.7')).toBe('200.45.10.7')
+  })
+
+  it('dos direcciones del mismo /64 dan la misma clave (no se evade rotando)', () => {
+    expect(claveDeIp('2001:db8:aaaa:bbbb:1:2:3:4')).toBe(claveDeIp('2001:db8:aaaa:bbbb:ffff:eeee:dddd:cccc'))
+    expect(claveDeIp('2001:db8:aaaa:bbbb:1:2:3:4')).toBe('2001:db8:aaaa:bbbb::')
+  })
+
+  it('un /64 distinto da otra clave', () => {
+    expect(claveDeIp('2001:db8:aaaa:bbbc::1')).not.toBe(claveDeIp('2001:db8:aaaa:bbbb::1'))
+  })
+
+  it('expande la forma abreviada con ::', () => {
+    expect(claveDeIp('2001:db8::1')).toBe('2001:db8:0:0::')
+    expect(claveDeIp('::1')).toBe('0:0:0:0::')
+  })
+
+  it('una IPv4 mapeada vuelve a ser la IPv4', () => {
+    expect(claveDeIp('::ffff:200.45.10.7')).toBe('200.45.10.7')
+  })
+
+  it('lo que no parece una IP se devuelve tal cual', () => {
+    expect(claveDeIp('no-es-una-ip')).toBe('no-es-una-ip')
   })
 })

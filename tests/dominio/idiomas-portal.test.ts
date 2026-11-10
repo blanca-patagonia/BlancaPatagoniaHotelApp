@@ -143,19 +143,3 @@ describe('diccionarios', () => {
     expect(textoCapacidadEn(textos('es'), 4)).toBe('hasta 4 personas')
   })
 })
-
-describe('destinoDeIdioma · las pantallas con token', () => {
-  it('en una ruta con prefijo cambia el prefijo y conserva la búsqueda', async () => {
-    const { destinoDeIdioma } = await import('@/lib/i18n/idiomas')
-    expect(destinoDeIdioma('/es/reservar', 'check_in=2026-11-10', 'es')).toBe(
-      '/es/reservar?check_in=2026-11-10',
-    )
-  })
-
-  it('en una pantalla con token usa ?idioma= (un prefijo daba 404)', async () => {
-    const { destinoDeIdioma } = await import('@/lib/i18n/idiomas')
-    expect(destinoDeIdioma('/reservar/confirmacion/abc', '', 'es')).toBe(
-      '/reservar/confirmacion/abc?idioma=es',
-    )
-  })
-})

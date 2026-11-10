@@ -62,11 +62,6 @@ export function plural(n: number, una: string, varias: string): string {
   return rellenar(n === 1 ? una : varias, { n })
 }
 
-/** La etiqueta de `Intl` que corresponde a ese idioma, para fechas e importes. */
-export function etiquetaIntl(idioma: string | undefined): string {
-  return ETIQUETA_BCP47[esIdioma(idioma) ? idioma : IDIOMA_POR_OMISION]
-}
-
 /**
  * `canonical` y `hreflang` de una pantalla del portal.
  *

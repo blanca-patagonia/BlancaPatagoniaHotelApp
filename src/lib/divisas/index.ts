@@ -412,7 +412,4 @@ export function obtenerProveedorCotizacion(
   return proveedor
 }
 
-/** Nombres disponibles, para mostrarlos en la pantalla de configuración. */
-export const PROVEEDORES_COTIZACION = Object.keys(PROVEEDORES)
-
 export { MONEDA_BASE }

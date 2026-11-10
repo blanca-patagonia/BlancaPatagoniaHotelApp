@@ -42,10 +42,3 @@ export const SIMBOLO_HK: Record<EstadoHousekeeping, string> = {
   bloqueada: '✕',
 }
 
-/** Tono de la etiqueta de cada estado de limpieza. */
-export const TONO_HK: Record<EstadoHousekeeping, Tono> = {
-  limpia: 'exito',
-  sucia: 'alerta',
-  inspeccionada: 'lago',
-  bloqueada: 'peligro',
-}

@@ -19,7 +19,6 @@
 export const es = {
   /* ─────────────────────────────── navegación ─────────────────────────────── */
   nav: {
-    idioma: 'Idioma',
     volverArriba: 'Volver arriba',
     navegacion: 'Navegación principal',
     inicio: 'Inicio',
@@ -28,7 +27,6 @@ export const es = {
     ubicacion: 'Ubicación',
     reservar: 'Reservar',
     conocerMas: 'Conocer más',
-    cambiarIdioma: 'Cambiar idioma',
     irAlContenido: 'Ir al contenido',
   },
 

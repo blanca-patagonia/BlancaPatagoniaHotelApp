@@ -115,11 +115,9 @@ describe('requerirAcceso · la puerta de la que dependen las 51 Server Actions',
     expect(await destinoDe(() => requerirAcceso('config'))).toBe('/panel')
   })
 
-  it('admin entra a todo lo que no esté apagado', async () => {
-    // `respaldos` salió de esta lista: está en `AREAS_OCULTAS` (pedido del
-    // hotel, 2026-09-14), así que ni admin entra — lo cubre el test de abajo.
+  it('admin entra a todo', async () => {
     comoRol('admin')
-    for (const area of ['reservas', 'config', 'usuarios'] as const) {
+    for (const area of ['reservas', 'config', 'usuarios', 'auditoria'] as const) {
       expect(await destinoDe(() => requerirAcceso(area)), `admin no entró a ${area}`).toBeNull()
     }
   })
@@ -131,10 +129,8 @@ describe('requerirAcceso · la puerta de la que dependen las 51 Server Actions',
     expect(await destinoDe(() => requerirAcceso('reservas'))).toBe('/login')
   })
 
-  it('un área APAGADA no la abre nadie, ni el admin', async () => {
-    // `AREAS_OCULTAS` en permisos.ts. Si esto dejara de valer, tres módulos
-    // apagados por decisión del hotel volverían a estar accesibles por URL.
-    comoRol('admin')
+  it('la auditoría no la abre recepción', async () => {
+    comoRol('recepcion')
     expect(await destinoDe(() => requerirAcceso('auditoria'))).toBe('/panel')
   })
 })

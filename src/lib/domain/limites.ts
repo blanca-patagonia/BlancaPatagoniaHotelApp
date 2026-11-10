@@ -171,3 +171,33 @@ export function mensajeLimite(accion: AccionLimitada): string {
     ? `Demasiados intentos. Esperá unos minutos y volvé a probar.`
     : `Recibimos varios envíos desde tu conexión. Probá de nuevo en ${minutos} minutos, o escribinos y lo resolvemos por teléfono.`
 }
+
+/**
+ * La clave con la que se cuenta una IP.
+ *
+ * Una IPv4 se cuenta entera. Una IPv6 se cuenta por su **prefijo /64**: a una
+ * conexión residencial o a un servidor barato le asignan un /64 completo, así que
+ * contar la dirección entera deja rotar de a una por cada intento y el límite
+ * deja de existir. Una IPv4 mapeada (`::ffff:1.2.3.4`) vuelve a ser la IPv4.
+ *
+ * Si el texto no parece una IP se devuelve tal cual: la base decide si lo acepta.
+ */
+export function claveDeIp(ip: string): string {
+  const limpia = ip.trim().replace(/^\[|\]$/g, '').split('%')[0]
+
+  const mapeada = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(limpia)
+  if (mapeada) return mapeada[1]
+
+  if (!limpia.includes(':')) return limpia
+
+  const [cabeza, cola = ''] = limpia.split('::')
+  const antes = cabeza ? cabeza.split(':') : []
+  const despues = limpia.includes('::') && cola ? cola.split(':') : []
+  const grupos = limpia.includes('::')
+    ? [...antes, ...Array(Math.max(0, 8 - antes.length - despues.length)).fill('0'), ...despues]
+    : antes
+
+  if (grupos.length !== 8 || grupos.some((g) => !/^[0-9a-f]{1,4}$/i.test(g))) return limpia
+
+  return `${grupos.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')).join(':')}::`
+}

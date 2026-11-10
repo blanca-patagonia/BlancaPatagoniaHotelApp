@@ -10,10 +10,10 @@ los datos, y seguir atendiendo huéspedes mientras tanto.
 
 ## Dos cosas que hay que tener clarísimas antes de empezar
 
-1. **`/panel/respaldos` NO es un backup de la base.** Es una **exportación de datos operativos**, la
-   pantalla lo dice, y **convertirlo en un botón que diga «hacer backup» sería la peor función del
-   sistema**: daría por cubierto lo que no está. El respaldo real de PostgreSQL lo hace la
-   plataforma. Si en algún informe tuyo aparece esa confusión, el informe está mal.
+1. **La app NO puede hacer un backup de la base.** El respaldo real de PostgreSQL lo hace la
+   plataforma (Supabase). Un botón que diga «hacer backup» sería la peor función del sistema:
+   daría por cubierto lo que no está. Si en algún informe tuyo aparece esa confusión, el informe
+   está mal.
 2. **Un respaldo que nunca se restauró no es un respaldo: es una intención.** El único hecho que
    cuenta es una restauración ejecutada, cronometrada y verificada contra datos reales.
 

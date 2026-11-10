@@ -1,7 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { readdirSync } from 'node:fs'
 import { join, sep } from 'node:path'
-import { AREAS_OCULTAS } from '../src/lib/domain/permisos'
 
 /**
  * Recorre TODAS las pantallas del panel como admin y falla si alguna se rompe.
@@ -26,12 +25,6 @@ function rutasDelPanel(): string[] {
     .sort()
 }
 
-/** Una pantalla de un área apagada (AREAS_OCULTAS) redirige al inicio: es lo esperado. */
-function estaApagada(ruta: string): boolean {
-  const area = ruta.split('/')[2]?.replaceAll('-', '_')
-  return Boolean(area && (AREAS_OCULTAS as readonly string[]).includes(area))
-}
-
 const SEÑALES_DE_FALLA = /Algo salió mal|Application error|Unhandled Runtime Error|No se pudo leer|No se pudieron leer/
 
 async function entrar(page: Page) {
@@ -52,7 +45,7 @@ async function revisar(page: Page, ruta: string, fallas: Falla[]) {
   const alError = (e: Error) => errores.push(e.message)
   page.on('pageerror', alError)
   /*
-    `networkidle` y no `load`: una pantalla de un área apagada redirige DESPUÉS
+    `networkidle` y no `load`: una pantalla que redirige lo hace DESPUÉS
     de cargar (el `redirect` llega por el flujo de React), y si se navega a la
     siguiente en ese momento el navegador corta una de las dos (ERR_ABORTED).
   */
@@ -68,7 +61,7 @@ async function revisar(page: Page, ruta: string, fallas: Falla[]) {
   if (resp.status() >= 400) fallas.push({ ruta, motivo: `HTTP ${resp.status()}` })
 
   const final = new URL(page.url()).pathname
-  if (final !== ruta.split('?')[0] && !(estaApagada(ruta) && final === '/panel')) {
+  if (final !== ruta.split('?')[0]) {
     fallas.push({ ruta, motivo: `redirigió a ${final}` })
   }
   const texto = await page.locator('main').innerText().catch(() => '')
@@ -81,7 +74,7 @@ async function revisar(page: Page, ruta: string, fallas: Falla[]) {
 test('todas las pantallas del panel cargan sin errores (admin)', async ({ page }) => {
   await entrar(page)
   const rutas = rutasDelPanel()
-  expect(rutas.length, 'no se encontraron pantallas: ¿cambió la carpeta del panel?').toBeGreaterThan(40)
+  expect(rutas.length, 'no se encontraron pantallas: ¿cambió la carpeta del panel?').toBeGreaterThan(25)
 
   const fallas: Falla[] = []
   for (const ruta of rutas) await revisar(page, ruta, fallas)

@@ -1,7 +1,7 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { LIMITES, type AccionLimitada } from '@/lib/domain/limites'
+import { LIMITES, claveDeIp, type AccionLimitada } from '@/lib/domain/limites'
 import { registrarFalla } from '@/lib/acciones'
 
 /**
@@ -34,8 +34,16 @@ import { registrarFalla } from '@/lib/acciones'
  *
  * Detrás de un proxy distinto habría que ajustar este orden. Es preferible eso
  * a un limitador que aparenta funcionar.
+ *
+ * Devuelve la **clave de conteo** (`claveDeIp`): una IPv6 se cuenta por su
+ * prefijo /64, porque si no se evade rotando direcciones dentro del mismo bloque.
  */
 export function ipDeCabeceras(cabeceras: Headers): string | null {
+  const cruda = ipSinNormalizar(cabeceras)
+  return cruda ? claveDeIp(cruda) : null
+}
+
+function ipSinNormalizar(cabeceras: Headers): string | null {
   const vercel = cabeceras.get('x-vercel-forwarded-for')?.trim()
   if (vercel) return vercel
 

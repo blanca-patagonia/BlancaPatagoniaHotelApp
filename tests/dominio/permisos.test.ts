@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { AREAS, AREAS_OCULTAS, estaOculta, puedeAcceder, areasDe } from '@/lib/domain/permisos'
+import { AREAS, puedeAcceder, areasDe } from '@/lib/domain/permisos'
 import { ROLES } from '@/lib/domain/roles'
 
 describe('permisos por rol', () => {
-  it('admin accede a todas las áreas que no estén apagadas', () => {
+  it('admin accede a todas las áreas', () => {
     for (const area of AREAS) {
-      expect(puedeAcceder('admin', area), `área ${area}`).toBe(!estaOculta(area))
+      expect(puedeAcceder('admin', area), `área ${area}`).toBe(true)
     }
   })
 
@@ -38,42 +38,18 @@ describe('permisos por rol', () => {
     }
   })
 
-  describe('áreas apagadas', () => {
-    /*
-      El hotel decidió no usar auditoría, objetos perdidos ni conversaciones
-      por ahora (más respaldos). El código
-      sigue entero y se vuelven a habilitar sacándolas de `AREAS_OCULTAS`;
-      estos tests fijan que mientras estén ahí queden apagadas para TODOS,
-      incluido admin, y que apagarlas no se lleve puesto lo demás.
-    */
+  it('ningún rol queda sin inicio ni ayuda', () => {
+    for (const rol of ROLES) {
+      expect(areasDe(rol).length, `${rol} quedó sin áreas`).toBeGreaterThan(0)
+      expect(puedeAcceder(rol, 'dashboard')).toBe(true)
+      expect(puedeAcceder(rol, 'ayuda')).toBe(true)
+    }
+  })
 
-    it('ninguna área apagada la puede ver nadie, ni admin', () => {
-      for (const area of AREAS_OCULTAS) {
-        for (const rol of ROLES) {
-          expect(puedeAcceder(rol, area), `${rol} todavía ve ${area}`).toBe(false)
-        }
-      }
-    })
-
-    it('ninguna área apagada aparece en el menú de ningún rol', () => {
-      // `areasDe` es lo que arma la navegación: si el nombre siguiera acá, el ítem
-      // se vería en el menú y llevaría a una pantalla que redirige.
-      for (const rol of ROLES) {
-        for (const area of areasDe(rol)) {
-          expect(estaOculta(area), `${rol} tiene ${area} en el menú`).toBe(false)
-        }
-      }
-    })
-
-    it('apagar un área no deja a ningún rol sin las que sí usa', () => {
-      // El apagado es un filtro y podría estar mal escrito: esto verifica que lo que
-      // queda es exactamente «lo que tenía menos lo apagado», y nada más.
-      for (const rol of ROLES) {
-        expect(areasDe(rol).length, `${rol} quedó sin áreas`).toBeGreaterThan(0)
-        expect(puedeAcceder(rol, 'dashboard')).toBe(true)
-        expect(puedeAcceder(rol, 'ayuda')).toBe(true)
-      }
-    })
+  it('la auditoría es sólo del administrador', () => {
+    for (const rol of ROLES) {
+      expect(puedeAcceder(rol, 'auditoria'), rol).toBe(rol === 'admin')
+    }
   })
 })
 

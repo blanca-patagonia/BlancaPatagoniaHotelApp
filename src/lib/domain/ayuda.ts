@@ -242,6 +242,27 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
+    area: 'auditoria',
+    resumen: 'Quién cambió qué y cuándo en las operaciones sensibles. Solo administración.',
+    pasos: [
+      {
+        titulo: 'Qué se registra',
+        detalle:
+          'Cada cambio en pagos, tarifas, facturas y estados de reserva queda anotado con la fecha, el usuario y los campos que se modificaron. No se puede editar ni borrar desde el panel: es el rastro para revisar qué pasó.',
+      },
+      {
+        titulo: 'Filtrar por tipo de operación',
+        detalle:
+          'Arriba hay una fila de botones, uno por tabla. Tocá uno para ver solo esos movimientos, y "Todos" para volver a la lista completa.',
+      },
+      {
+        titulo: 'Quién abrió una ficha',
+        detalle:
+          'Abajo figuran los accesos recientes a fichas de huéspedes, aunque no se haya cambiado nada. Sirve para saber quién consultó datos personales.',
+      },
+    ],
+  },
+  {
     area: 'errores',
     resumen: 'Qué falló, cuándo y en qué pantalla. Sirve para pedir ayuda con datos.',
     pasos: [

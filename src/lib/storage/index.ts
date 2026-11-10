@@ -60,8 +60,3 @@ export async function urlAdjunto(ruta: string, segundos = 300): Promise<string |
   if (error || !data) return null
   return data.signedUrl
 }
-
-export async function eliminarAdjunto(ruta: string): Promise<void> {
-  const admin = crearClienteAdmin()
-  await admin.storage.from(BUCKET_ADJUNTOS).remove([ruta])
-}

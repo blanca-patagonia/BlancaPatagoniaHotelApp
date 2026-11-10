@@ -36,11 +36,10 @@ un hotel.** No hay términos que haya aceptado ni alternativa que pueda usar.
    mano. Y hay una tensión real que hay que resolver de frente: **`authenticated` no tiene `delete`
    sobre reservas, estadías ni pagos** (migración 0061, y está bien que así sea). La salida es
    **anonimizar en vez de borrar**: desvincular la persona de la estadía conservando la operación.
-5. **Lo que sale del sistema.** `/panel/respaldos` exporta datos operativos y **concentra los datos
-   personales de todos los huéspedes en un archivo**. Por eso gerencia puede ver el estado pero no
-   exportar. Revisá cada export, cada CSV y cada correo por el mismo criterio.
+5. **Lo que sale del sistema.** La exportación a CSV (`/panel/exportar`) **concentra datos personales de
+   huéspedes en un archivo**. Revisá cada export, cada CSV y cada correo por el mismo criterio.
 6. **Terceros.** Cada puerto que manda datos afuera es una transferencia: pasarelas de pago, correo,
-   firma electrónica, facturación, canales. Anotá qué dato sale, hacia dónde y con qué fundamento.
+   facturación. Anotá qué dato sale, hacia dónde y con qué fundamento.
    Los simuladores **no** transfieren nada, y eso hay que decirlo para no inflar el informe.
 7. **Registros que también son PII.** Los logs y la tabla `auditoria` acumulan quién hizo qué. Que
    el rastro sea *append-only* es una virtud de integridad y a la vez una decisión de retención que
