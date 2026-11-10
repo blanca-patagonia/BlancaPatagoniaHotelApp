@@ -10,6 +10,7 @@ Mapa del código y de las carpetas del repositorio: [`../ESTRUCTURA.md`](../ESTR
 | Documento | Qué es |
 |---|---|
 | [tesis-completa.md](1-tesis/tesis-completa.md) | La tesis completa |
+| [PREPARACION.md](1-tesis/PREPARACION.md) | Hoja de ruta para escribir la tesis sobre la versión reducida: qué exige la cátedra, qué hay escrito y qué falta |
 | [tesis-pp3.md](1-tesis/tesis-pp3.md) | Entrega de Práctica Profesional III |
 
 ## 2. Arquitectura — `2-arquitectura/`
