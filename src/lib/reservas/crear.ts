@@ -90,9 +90,8 @@ export async function crearReservaEnUnidadLibre(
   // «no encontré ninguna» y el sistema respondía **«no hay unidades
   // disponibles»**: la misma frase que cuando el hotel está lleno de verdad.
   // Las dos situaciones piden lo contrario —una es esperar, la otra reintentar—
-  // y llegan a gente que no puede distinguirlas: al huésped en `/reservar`, y a
-  // recepción en la zona de canales, donde el motivo queda escrito en la fila
-  // pendiente (`lib/canales/servicio.ts`) y manda a buscar un overbooking que
+  // y llegan a gente que no puede distinguirlas: al huésped en `/reservar` y a
+  // recepción en el alta de mostrador, que irían a buscar un overbooking que
   // nunca existió.
   const { data: libres, error: eLibres } = await client.rpc('unidades_disponibles', {
     desde: p.checkIn,

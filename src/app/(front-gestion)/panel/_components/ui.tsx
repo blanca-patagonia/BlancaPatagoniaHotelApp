@@ -107,9 +107,9 @@ interface EncabezadoProps {
  *
  * `min-w-0` en las dos filas anidadas — no es decorativo, es el mismo motivo
  * que documenta `Tarjeta`: sin él, un `<h1>` es ítem de un flex y no baja de
- * su ancho mínimo intrínseco. Un nombre de agencia largo («Turismo
+ * su ancho mínimo intrínseco. Un nombre largo («Turismo
  * Internacional Patagonia Austral Sociedad Anónima») desbordaba la página
- * entera en un teléfono, con la ficha de `agencias/[id]` como caso real.
+ * entera en un teléfono.
  *
  * `break-words` en la descripción, y no solo `min-w-0` en el contenedor: un
  * email o una URL no tiene espacios donde cortar, así que sin esto la palabra

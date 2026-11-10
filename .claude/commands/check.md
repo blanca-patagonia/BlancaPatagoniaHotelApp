@@ -26,9 +26,9 @@ Por cada error:
 
 `npm test` sale en verde **con tests salteados** si no hay base local. Reportá siempre el conteo:
 
-> 344 pasan · **43 salteados** (necesitan Docker + `npx supabase start`)
+> 1197 pasan · **583 salteados** (necesitan Docker + `npx supabase start`)
 
-Entre los salteados está el anti-overbooking, que es la garantía central del sistema. Verde con 43
+Entre los salteados está el anti-overbooking, que es la garantía central del sistema. Verde con unos 580
 sin ejecutar **no es verde**, y decirlo es parte del informe.
 
 Si Docker está disponible, ofrecé correr la suite completa:

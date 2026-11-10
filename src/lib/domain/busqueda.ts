@@ -8,7 +8,7 @@ import type { Rol } from './roles'
  *
  * Nace de una necesidad concreta de recepción: alguien llama preguntando por su
  * reserva y hay que encontrarlo **mientras está al teléfono**, sin adivinar si
- * está cargado como huésped, como reserva o como cuenta de agencia.
+ * está cargado como huésped o como reserva.
  *
  * La regla que vive acá es de qué se puede buscar según el rol. No alcanza con
  * que la pantalla no muestre un módulo: si el buscador consultara todo, alguien

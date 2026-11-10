@@ -85,14 +85,14 @@ export function inicioDelDiaHotel(fecha: string): string {
  * todo lo ocurrido entre las 21:00 y la medianoche de El Calafate se mostraba
  * **con la fecha del día siguiente**, y toda hora, tres horas adelantada.
  *
- * No es un detalle cosmético en las pantallas donde aparecía: la fecha de firma
- * de un contrato, la de emisión de una nota de crédito y el registro de
- * auditoría son, las tres, constancias de cuándo pasó algo.
+ * No es un detalle cosmético en las pantallas donde aparecía: la de emisión
+ * de una nota de crédito y el registro de auditoría
+ * son constancias de cuándo pasó algo.
  *
- * Había además una inconsistencia visible: `conversaciones/page.tsx` pinta la
- * lista en el servidor (UTC) y `chat.tsx` es un componente de cliente, que usaba
- * la zona del navegador (la del hotel). El mismo mensaje mostraba dos horas
- * distintas según qué lo dibujara. Fijar la zona hace que coincidan.
+ * Había además una inconsistencia visible: una lista dibujada en el servidor
+ * (UTC) y el mismo dato dibujado por un componente de cliente, que usaba la zona
+ * del navegador (la del hotel), mostraban dos horas distintas. Fijar la zona hace
+ * que coincidan.
  *
  * `es-AR` da `dd/mm/aaaa`, que es como se escribe una fecha en la Argentina.
  */
@@ -110,7 +110,7 @@ export function fechaHotel(iso: string | Date, opciones?: Intl.DateTimeFormatOpt
  * **sin ningún indicador de a. m. / p. m.**. Esa hora es ambigua: 09:30 de la
  * mañana y 21:30 de la noche se escriben igual.
  *
- * Donde se muestra —auditoría, registro de errores, respaldos, conversaciones—
+ * Donde se muestra —auditoría, registro de errores, cuenta del huésped—
  * la hora es el dato. Un registro de auditoría en el que no se puede distinguir
  * la mañana de la noche no sirve para lo que existe. Con `h23` se lee `21:30`,
  * que además es lo que espera cualquiera acá.

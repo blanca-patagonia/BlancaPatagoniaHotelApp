@@ -4,8 +4,8 @@
  *
  * Por qué existe: React 19 **resetea** el `<form action={…}>` después de cada
  * envío. Si la Server Action responde `{ error }`, el mensaje aparece arriba
- * de un formulario vacío y hay que volver a tipear todo —en un alta de agencia
- * o de contrato, una docena de campos— por un CUIT mal puesto. Para gente que
+ * de un formulario vacío y hay que volver a tipear todo —en el alta de una reserva
+ * o de un huésped, una docena de campos— por un documento mal puesto. Para gente que
  * no usa mucho la computadora (principio de la Fase 15) eso es abandonar la
  * carga. La acción devuelve estos valores y el formulario los usa como
  * `defaultValue`.

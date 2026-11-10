@@ -65,7 +65,7 @@ Modelo completo a copiar: `src/app/(front-gestion)/panel/proveedores/`.
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-Los cuatro en verde, o no está listo. Y si `npm test` reporta tests salteados, decilo: hoy son 43 y
+Los cuatro en verde, o no está listo. Y si `npm test` reporta tests salteados, decilo: hoy son unos 580 y
 no se ejecutan sin base local.
 
 ## Errores comunes en este repo

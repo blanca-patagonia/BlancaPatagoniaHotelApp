@@ -9203,3 +9203,5 @@ Pedido de los autores: el sistema quedó demasiado grande para presentarlo y def
 **Por qué:** el sistema se presenta y defiende; lo que describe módulos que no están resta. Detalle y decisiones en la ADR 0045 (sección «Revisión posterior»).
 
 **Verificación:** typecheck, lint y build sin errores; 1.197 tests pasan sin base (583 requieren Docker y no se corrieron).
+
+**Seguimiento (2026-11-10):** se quitaron seis iconos del panel que sólo usaban módulos borrados, los comentarios que todavía nombraban pantallas inexistentes (conversaciones, agencias, contratos, respaldos) y las cifras viejas («43 salteados») de `.claude/`. Quedan a propósito las reglas de dominio con test que hoy no llama la app (p. ej. `puedeFacturarse`, `tieneCae`, `precioPorNoche`): son reglas del negocio documentadas y probadas, y sacarlas no aporta a la defensa.

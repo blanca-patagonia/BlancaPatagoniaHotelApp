@@ -10,7 +10,7 @@ import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
  * Registra la respuesta de la encuesta de satisfacción.
  *
  * Sin cuenta: el token de la URL es la credencial, igual que en la confirmación
- * de reserva y en la firma de contratos. Se resuelve con `service_role`, de modo
+ * de reserva. Se resuelve con `service_role`, de modo
  * que `anon` no necesita ninguna política sobre la tabla.
  */
 export async function responderEncuesta(formData: FormData): Promise<void> {
