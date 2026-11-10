@@ -63,9 +63,10 @@ La integridad crítica no depende de la aplicación:
 ### Lo que todavía no está
 
 Hay **cinco puertos** con el mismo patrón (interfaz + implementación
-seleccionable por variable de entorno). Cuatro tienen **simulador**:
-`PaymentProvider`, `EmailProvider`, `FacturacionElectronicaProvider` y
-`AsistenteProvider` (éste último es por reglas, a propósito: [ADR 0011](docs/decisiones/0011-asistente-basado-en-reglas.md)).
+seleccionable por variable de entorno). Tres tienen **simulador**:
+`PaymentProvider`, `EmailProvider` y `FacturacionElectronicaProvider`. El cuarto,
+`AsistenteProvider`, es por reglas y no usa un modelo de lenguaje, a propósito
+([ADR 0011](docs/decisiones/0011-asistente-basado-en-reglas.md)).
 Los adaptadores de Mercado Pago, Stripe, Payway y Resend están escritos, pero
 **ninguna cuenta está contratada**: no se procesan pagos ni se envían correos
 reales, y el CAE es simulado.

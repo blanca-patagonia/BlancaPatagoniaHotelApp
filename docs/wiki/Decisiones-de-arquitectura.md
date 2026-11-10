@@ -1,11 +1,17 @@
 # Decisiones de arquitectura (ADR)
 
-**28 decisiones documentadas.** Un ADR se escribe cuando una decisión tiene
+**29 decisiones documentadas en esta rama.** Un ADR se escribe cuando una decisión tiene
 alternativas razonables y consecuencias que alguien va a querer entender después —
 sobre todo si la decisión fue *no* hacer algo.
 
 Es la parte del proyecto que más se lee: varias cosas que parecen faltar **están
 decididas a propósito**.
+
+> Los números saltan (no hay 0010, 0014, 0021…) porque las decisiones de los
+> módulos que la rama `tesis-a-presentar` no tiene —firma de contratos, portal de
+> socios, canales de venta, conciliación, aplicación instalable, bandeja de
+> mensajes, asistente de IA, etc.— se quedaron en `main`. La que explica el recorte
+> es el [0045](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/decisiones/0045-version-reducida-para-la-tesis.md).
 
 > Base de los enlaces: [`docs/decisiones/`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/tree/main/docs/decisiones)
 
@@ -18,7 +24,8 @@ decididas a propósito**.
 | [0001](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0001-eleccion-de-stack.md) | Elección del stack | Next.js + Supabase: un solo lenguaje, y una base relacional de verdad con RLS |
 | [0002](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0002-motor-de-disponibilidad.md) | **Motor de disponibilidad sin overbooking** | La garantía es una restricción de exclusión de Postgres, no una comprobación de la app. **La decisión más importante del proyecto** |
 | [0005](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0005-autenticacion-y-roles.md) | Autenticación y control de acceso por rol | Cuatro roles de staff, resueltos en la base con `rol_actual()` |
-| [0009](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0009-sistema-de-diseno-del-panel.md) | Sistema de diseño del panel | Componentes compartidos e identidad propia. **Reemplazado en paleta por el 0026**, vigente en todo lo demás |
+| [0009](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0009-sistema-de-diseno-del-panel.md) | Sistema de diseño del panel | Componentes compartidos e identidad propia. **Reemplazado en paleta y tipografía por el 0026**, vigente en todo lo demás |
+| [0045](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/decisiones/0045-version-reducida-para-la-tesis.md) | **Versión reducida para la tesis** | De 26 a 12 áreas del panel: se quita lo que el hotel no pidió y se deja la base intacta. `main` conserva el sistema completo |
 
 ## Dinero y tarifas
 
@@ -31,28 +38,20 @@ decididas a propósito**.
 | [0012](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0012-facturacion-electronica-argentina.md) | Facturación electrónica argentina | Letra del comprobante, desglose que cierra y CUIT validado. El CAE real queda pendiente |
 | [0019](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0019-cobro-efectivo-de-la-politica-de-cancelacion.md) | Cobro efectivo de la cancelación | ⏳ **Sin decidir**, pero ya tiene el dato que le faltaba: la garantía dice si hay de dónde cobrar un no-show |
 | [0020](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0020-cotizacion-de-divisas.md) | Cotización de divisas | Fuente pública con respaldo **manual** y nunca bloqueante: si la fuente no responde usa lo que cargó un admin, no un número inventado. **Cierra el 0003** |
-| [0023](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0023-contabilidad-de-la-comision-de-canal.md) | La comisión del canal, en dos capas | Lo que paga el huésped y lo que se lleva el canal son dos hechos distintos |
 | [0024](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0024-exencion-de-iva-al-turista-del-exterior.md) | Exención de IVA al turista del exterior | **Se deriva, no se tilda.** Un extranjero que paga en efectivo no está exento |
 | [0027](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0027-cobro-en-linea-dos-pasarelas-y-una-sola-moneda-de-saldo.md) | Cobro en línea: dos pasarelas, una moneda de saldo | Stripe para la tarjeta del exterior y MercadoPago para pesos y cuotas. El saldo siempre en USD |
+| [0038](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0038-payway-como-tercera-pasarela.md) | Payway como tercera pasarela | Posnet / tarjeta local, con el patrón de los dos pasos del lado del integrador que exige su Gateway API |
 
 ## Cara al público
 
 | # | Decisión | En una línea |
 |---|---|---|
 | [0007](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0007-portal-publico-reservas.md) | Portal público de reservas | El canal propio del hotel, sin obligar al huésped a crear una cuenta |
-| [0010](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0010-contratos-y-firma-electronica.md) | Contratos y firma electrónica | Firma por token desde una vista pública, con verificación por hash |
 | [0011](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0011-asistente-basado-en-reglas.md) | Asistente basado en reglas, **no LLM** | Responde lo que sabe y deriva lo que no. Un modelo que inventa una política de cancelación es peor que no tener asistente |
-| [0014](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0014-portal-de-socios-por-token.md) | Portal de socios por token | Agencias y proveedores entran sin cuenta. Un token inválido devuelve 404, no 401 |
 | [0026](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0026-interfaz-azul-y-blanca.md) | Interfaz azul y blanca | La paleta del registro visual de las plataformas de reserva. ⚠️ Los **nombres** de los tokens no cambiaron: renombrarlos rompe sin que el typecheck lo vea |
+| [0033](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0033-arrastrar-una-reserva-cambia-de-habitacion-no-de-fechas.md) | Arrastrar una reserva cambia de habitación, no de fechas | Correr fechas recotiza y cambia lo que el huésped paga: no puede salir de un gesto que se dispara sin querer |
 
-## Canales de venta
-
-| # | Decisión | En una línea |
-|---|---|---|
-| [0021](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0021-canales-de-venta-solo-lectura.md) | Canales de venta de **sólo lectura** | Sin ser *Connectivity Partner* no se puede publicar disponibilidad. **No evita el overbooking, y se declara en el código y en la pantalla** |
-| [0022](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0022-feed-ical-saliente.md) | Feed iCal de salida | Publica la ocupación y **angosta la ventana del overbooking sin cerrarla**. Por eso `publicaDisponibilidad` sigue en `false` |
-
-## Seguridad
+## Seguridad y verificación
 
 | # | Decisión | En una línea |
 |---|---|---|
@@ -61,13 +60,16 @@ decididas a propósito**.
 | [0017](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0017-alta-de-usuario-sin-privilegios.md) | El alta de un usuario nace sin privilegios | `sin_rol` y `activo = false`. La baja revoca en la base |
 | [0018](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md) | Los simuladores fallan fuerte en producción | Si falta la variable, el sistema **no arranca**. Un comprobante simulado que parece fiscal es peor que un error |
 | [0025](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0025-verificar-la-tarjeta-sin-guardar-el-numero.md) | Verificar la tarjeta sin guardar el número | Preautorización tokenizada. Mantiene al hotel en el alcance SAQ-A de PCI-DSS |
-| [0028](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0028-analisis-estatico-y-configuracion-de-github.md) | Análisis estático y configuración de GitHub | CodeQL versionado y no una casilla de la web; y lo que no puede vivir en el repositorio, documentado |
+| [0029](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0029-errores-observables-en-postgres.md) | Los errores del servidor se guardan en Postgres | No en un tercero: los datos de huéspedes no salen del sistema y el hotel no depende de mirar el log de Vercel |
+| [0042](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0042-verificacion-base-aislada-esquema-e2e.md) | Cómo se verifica el sistema | Base de tests aislada (`npm run test:aislado`), comparación de esquema antes de cada deploy, tests de interfaz y recorrido de punta a punta |
 
-## Alcance
+## Datos y alcance
 
 | # | Decisión | En una línea |
 |---|---|---|
 | [0013](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0013-alcance-erp-y-trabajo-futuro.md) | Alcance ERP: qué se implementó y qué queda | Gestión documental, seguridad por campo y multi-propiedad quedan como trabajo futuro. **No implementar sin releerlo** |
+| [0037](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0037-storage-para-fotos-operativas.md) | Supabase Storage para fotos operativas | Bucket privado y acceso siempre por URL firmada generada en el servidor |
+| [0040](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/decisiones/0040-inventario-fisico-real-de-unidades.md) | Inventario físico real de unidades | Los nombres reales de habitaciones y cabañas, en vez de un catálogo representativo |
 
 ---
 

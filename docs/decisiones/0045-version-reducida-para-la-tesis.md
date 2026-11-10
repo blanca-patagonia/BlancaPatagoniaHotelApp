@@ -68,7 +68,7 @@ funcionar. **`main` no se toca**: conserva el sistema completo.
 ## Consecuencias
 
 - **Tamaño:** de ~100.000 a ~51.000 líneas en `src/`, de 105 a 55 pantallas, de
-  26 a 12 áreas del panel, de 6 a 3 tareas programadas y de 226 a 146 archivos
+  26 a 12 áreas del panel, de 6 a 3 tareas programadas y de 226 a 141 archivos
   de test.
 - **La base de datos no se achicó.** Las 127 migraciones y las tablas de los
   módulos quitados siguen ahí (`canal_*`, `crm_*`, `contratos`, `firmas`,
@@ -93,7 +93,7 @@ funcionar. **`main` no se toca**: conserva el sistema completo.
   volver a sumar un idioma es agregarlo a esa lista y escribir su diccionario.
 - **Los tests que tocan Postgres no se pudieron correr** en el entorno donde se
   hizo la reducción (sin Docker). Lo verificado ahí fue typecheck, lint, build y
-  los 1.195 tests que no necesitan base. La suite completa (`npm run
+  los 1.197 tests que no necesitan base. La suite completa (`npm run
   test:aislado`) hay que correrla en local antes de la entrega.
 - **Cómo recuperar algo:** todo lo quitado sigue en `main`, y cada módulo salió
   en un commit propio de esta rama (`git log --oneline tesis-a-presentar`), de
@@ -106,3 +106,26 @@ en la defensa: la **auditoría** y el **registro de errores** (el índice de la
 cátedra pide *Seguridad y Auditoría*), el **buscador global** y las **encuestas
 de satisfacción** (alimentan el informe de NPS). Sacarlas es una decisión chica
 que se puede tomar después.
+
+## Revisión posterior (2026-11-10)
+
+Segunda pasada, ya sobre el sistema reducido, para que nada quede apuntando a lo
+que se quitó:
+
+- **La Auditoría quedó visible** (solo administración): se sacó el mecanismo de
+  «áreas apagadas», que ya no tenía nada que apagar, y se le escribió su capítulo
+  de Ayuda. La cátedra pide *Seguridad y Auditoría*.
+- **Documentación podada, no anotada:** `CLAUDE.md`, `AGENTS.md`, los manuales,
+  la wiki y `docs/` describen solo lo que existe. Se borraron los informes del
+  sistema completo (`docs/1-tesis/` conserva los borradores de la tesis a
+  reescribir), las auditorías y el pulido integral de `main`, y el agente `i18n`.
+- **Código sin uso fuera:** exportaciones huérfanas, claves del selector de
+  idioma, `lib/supabase/client.ts`, el script de limpieza de QA y los SVG de la
+  plantilla de Next.
+- **Límite de intentos por IPv6:** una dirección IPv6 se cuenta por su prefijo
+  /64 (`claveDeIp`); contar la dirección entera dejaba rotar de a una y anulaba
+  el límite.
+- **Sigue sin tocarse la base de datos.** Borrar las tablas de los módulos
+  quitados exige una migración verificada contra `npm run test:aislado` (Docker),
+  que este entorno no tiene, y **no debe aplicarse nunca a una base compartida con
+  `main`**.

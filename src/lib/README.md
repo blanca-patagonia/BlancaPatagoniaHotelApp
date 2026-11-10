@@ -35,7 +35,7 @@ falla si aparece uno sin listar.
 | `asistente/` | Asistente del portal público, por reglas (ADR 0011) |
 | `busqueda/` | Consulta del buscador global |
 | `catalogo/` | Catálogo público cacheado |
-| `i18n/` | Diccionarios del portal en cinco idiomas |
+| `i18n/` | Diccionario del portal en español (la estructura admite más idiomas) |
 
 ## Archivos sueltos (utilidades que usa todo el sistema)
 

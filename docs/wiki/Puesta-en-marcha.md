@@ -6,11 +6,10 @@
 
 | | |
 |---|---|
-| **Node.js** | ≥ 20.12 (el CI usa **22**, la LTS vigente) |
-| **Docker** | Para la base local con Supabase. Sin Docker el sistema arranca, pero **43 tests se saltean** — entre ellos el anti-overbooking |
+| **Node.js** | ≥ 20.12 (el CI usa **22**, la LTS vigente: `.nvmrc`) |
+| **Un proyecto de Supabase** | La base es un proyecto en la nube, con las migraciones y el catálogo ya aplicados. No hay que levantar Docker para usar el sistema |
+| **Docker** | Sólo para correr los tests. Sin Docker el sistema arranca, pero **583 de los 1780 tests se saltean** — entre ellos el anti-overbooking |
 | **Git** | — |
-
-No hace falta una cuenta de Supabase: la base corre local, en contenedores.
 
 ---
 
@@ -19,26 +18,24 @@ No hace falta una cuenta de Supabase: la base corre local, en contenedores.
 ```bash
 git clone https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp.git
 cd BlancaPatagoniaHotelApp
+git checkout tesis-a-presentar     # la versión reducida
 
 npm run setup     # instala y dice qué falta y cómo resolverlo
-npx supabase start
-npm run seed:usuarios
+cp .env.example .env.local         # y completarlo con las claves de Supabase
 npm run dev
 ```
 
-La aplicación queda disponible en http://localhost:3000. El administrador de
-desarrollo es
-`admin@blancapatagonia.local` / `blancadev1234` — es del stack local y la
-contraseña es pública a propósito.
+La aplicación queda disponible en http://localhost:3000. Para confirmar que
+enganchó con la base, `GET /api/salud` tiene que responder
+`{"estado":"ok","base":"ok"}`.
+
+Los usuarios ya viven en la base: se entra al panel con las credenciales de cada
+uno, y las cuentas nuevas las da de alta un administrador desde `/panel/usuarios`.
+`npm run seed:usuarios` sirve sólo para una base **recién creada, sin ningún
+usuario** (y para la base local de tests).
 
 El paso a paso completo, con los errores más comunes, está en
-[`COMO-LEVANTARLO.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/COMO-LEVANTARLO.md).
-
-| Servicio local | Dirección |
-|---|---|
-| Aplicación | http://localhost:3000 |
-| API de Supabase | http://127.0.0.1:54321 |
-| Studio (ver la base) | http://127.0.0.1:54323 |
+[`COMO-LEVANTARLO.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/COMO-LEVANTARLO.md).
 
 ---
 
@@ -49,10 +46,12 @@ El paso a paso completo, con los errores más comunes, está en
 | Desarrollo | `npm run dev` |
 | **Verificación completa** | **`npm run check`** — lint + typecheck + tests + build |
 | Tests | `npm test` · uno solo: `npm test -- <patrón>` |
+| **Tests completos, sin saltear nada** | **`npm run test:aislado`** — levanta su propia base (puerto 55321), la deja en cero, siembra y corre todo. Necesita Docker |
 | Typecheck | `npm run typecheck` |
 | Lint | `npm run lint` |
-| Rehacer la base | `npx supabase db reset` ⚠️ **borra los usuarios de auth** |
-| Sembrar usuarios | `npm run seed:usuarios` |
+| Recorrido de todas las pantallas | `npm run e2e` (Playwright, con la app corriendo) |
+| ¿La base tiene el esquema del repo? | `npm run esquema:comparar` |
+| Sembrar usuarios | `npm run seed:usuarios` — ⚠️ en la base local de tests hay que repetirlo después de cada rehecha de la base, que **borra los usuarios de auth** |
 | Salud del sistema | `GET /api/salud` — 200 si la base responde, 503 si no |
 
 > **Antes de dar por terminado un cambio, debe ejecutarse `npm run check`.**
@@ -64,31 +63,37 @@ El paso a paso completo, con los errores más comunes, está en
 Ambas hacen que el sistema parezca verificado cuando no lo está. Conviene leerlas
 antes de la primera ejecución.
 
-### 1. `npm run check` devuelve 0 con tests en rojo
+### 1. `npm test` sale verde con 583 tests salteados
 
-Sin `.env.local`, tres archivos fallan por falta de `SUPABASE_URL` y
-`SUPABASE_SERVICE_ROLE_KEY`, y el código de salida **igual da 0**.
+Sin una base local, los 33 archivos que dependen de ella se saltean en vez de
+fallar (corrida del 2026-11-10: 1197 pasan, 583 se saltean, 0 fallan), y el
+comando termina con código 0. Entre los salteados está el anti-overbooking.
 
-**Debe leerse la salida, no el código de salida.**
+**Debe leerse la salida —cuántos se saltearon—, no el código de salida.**
 
-### 2. Faltan **tres** variables, y la tercera se olvida
+### 2. Faltan **cuatro** variables, y la clave publicable se olvida
 
 Vitest no lee `.env.local`. `EXIGIR_DB=1` convierte la ausencia de base en un
 error, pero mira la conexión de servicio, **no la clave publicable**: sin
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, los cuatro tests del borde público —los que
 verifican que `anon` no puede ver el precio neto— **se saltean en silencio**.
 
-Para correr la suite completa de verdad:
+La forma segura es `npm run test:aislado`, que lo resuelve solo. A mano, para
+correr la suite completa de verdad:
 
 ```bash
 EXIGIR_DB=1 \
 SUPABASE_URL="http://127.0.0.1:54321" \
+NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:54321" \
 SUPABASE_SERVICE_ROLE_KEY="sb_secret_…" \
 NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_…" \
 npm test
 ```
 
-Las claves salen de `npx supabase status`. En CI las tres se exportan solas.
+Las claves salen de `npx supabase status`. En CI se exportan solas.
+
+Y **nunca contra la base de la nube**: hay 20 archivos de test que borran filas con
+`service_role`. `tests/apoyo/db.ts` corta si la URL no es local.
 
 ---
 
@@ -97,8 +102,7 @@ Las claves salen de `npx supabase status`. En CI las tres se exportan solas.
 | Workflow | Qué verifica |
 |---|---|
 | **CI** | Levanta Postgres con Docker, crea el admin y corre `npm audit`, typecheck, lint, la suite completa con `EXIGIR_DB=1` y el build |
-| **CodeQL** | Análisis estático de seguridad del código propio |
-| **Revisión de dependencias** | Falla si el PR **agrega** una dependencia con vulnerabilidad alta o crítica |
+| **E2E** | Recorre las pantallas del panel en un navegador (Playwright) |
 
 Dos cosas del CI que hay que respetar si se lo toca:
 
@@ -113,18 +117,13 @@ Dos cosas del CI que hay que respetar si se lo toca:
 ## Estructura del repositorio
 
 ```
-src/app/            # Next.js App Router
-  panel/        #   gestión hotelera (staff, por rol) — 21 áreas
-  alojamientos/ #   catálogo público con detalle por tipo
-  reservar/     #   portal público de reservas
-  firmar/       #   firma de contratos por token
-  encuesta/     #   encuesta de satisfacción por token
-  portal/       #   portal de agencias y proveedores por token
-  api/          #   route handlers, webhooks y cron
-lib/            # dominio puro, disponibilidad, pagos, canales, divisas, Supabase
-supabase/       # migraciones SQL numeradas + seed
-docs/           # documentación del proyecto y de la tesis
-tests/          # 146 archivos, 2294 tests (Vitest)
+src/app/(front-publico)/  # portal del huésped: reservar, alojamientos, encuesta, pago
+src/app/(front-gestion)/  # login y panel (staff, por rol) — 12 áreas
+src/app/(back-api)/       # route handlers: webhook de pagos, cron, salud, búsqueda
+src/lib/                  # dominio puro, disponibilidad, pagos, divisas, Supabase
+supabase/                 # 127 migraciones SQL numeradas + seed
+docs/                     # documentación del proyecto y de la tesis
+tests/                    # 141 archivos, 1780 tests (Vitest)
 ```
 
 ---
@@ -137,32 +136,33 @@ Supabase cloud para la base.
 ⚠️ **Variables obligatorias en producción.** Si faltan, el sistema **falla al
 arrancar, a propósito** ([ADR 0018](Decisiones-de-arquitectura)):
 
-`EMAIL_PROVIDER` · `FIRMA_PROVIDER` · `FACTURACION_PROVIDER` ·
-`COTIZACION_PROVIDER` · `CANAL_PROVIDER` · `PAGO_PROVIDER`
+`EMAIL_PROVIDER` · `FACTURACION_PROVIDER` · `COTIZACION_PROVIDER` ·
+`PAGO_PROVIDER`
 
 `PAGO_PROVIDER` es el único que admite **varias separadas por comas**
 (`mercadopago,stripe`). Con las pasarelas van además
 `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY` y
 `STRIPE_WEBHOOK_SECRET`.
 
-Opcionales: `BOOKING_ICAL_FEEDS`, `DOLARAPI_URL`, `ARGENTINADATOS_URL`.
+Opcionales: `DOLARAPI_URL`, `ARGENTINADATOS_URL`, `AMBITO_URL`. Y `CRON_SECRET`, sin el cual las tres tareas programadas rechazan todo.
 
 La lista completa está en
-[`.env.example`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/.env.example).
+[`.env.example`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/.env.example).
 Hay que revisarlas **antes** del deploy, no después.
 
 ---
 
 ## Para quien vaya a escribir código
 
-Corresponde leer [`AGENTS.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/AGENTS.md)
+Corresponde leer [`AGENTS.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/AGENTS.md)
 —arquitectura, convenciones y trampas— y
-[`CONTRIBUTING.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/CONTRIBUTING.md).
+[`CLAUDE.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/CLAUDE.md)
+—el proceso de trabajo—.
 
 Las tres reglas que más se pasan por alto:
 
 1. **Ningún `{ error }` de Supabase se descarta.** Un `insert` que falla sin avisar
    deja la pantalla recargando sin cambios, y quien la usa no puede distinguir «no
-   se pudo» de «no pasó nada». Había 38 casos así; hoy hay **cero**.
+   se pudo» de «no pasó nada». Había 38 casos así; el objetivo es mantenerlo en **cero**.
 2. **Toda página y acción del panel verifica el rol** con `requerirAcceso(area)`.
 3. **Un bugfix entra con el test que fallaba antes del fix.**

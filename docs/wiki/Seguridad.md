@@ -17,9 +17,9 @@ Una comprobación en la interfaz protege contra el error; una comprobación en l
 base protege también contra el bug, contra la consulta escrita a mano y contra el
 endpoint que se agregue en el futuro sin tener presente la regla.
 
-Por eso el sistema tiene **RLS activo en las 43 tablas**, con más de 90 políticas,
-y el rol se resuelve con un helper de SQL (`rol_actual()`) que no depende de que la
-aplicación lo pase bien.
+Por eso el sistema tiene **RLS activo en las 69 tablas** que crean las migraciones
+(39 de ellas sin código en esta rama), y el rol se resuelve con un helper de SQL
+(`rol_actual()`) que no depende de que la aplicación lo pase bien.
 
 ---
 
@@ -27,13 +27,12 @@ aplicación lo pase bien.
 
 | Capa | Qué impone |
 |---|---|
-| **Postgres** | Anti-overbooking por restricción de exclusión · sin `delete` sobre dinero · facturas inmutables · tokens revocados por columna · `check` que rechazan datos de tarjeta |
+| **Postgres** | Anti-overbooking por restricción de exclusión · sin `delete` sobre dinero · facturas inmutables · `check` que rechazan datos de tarjeta |
 | **RLS** | Qué filas ve y toca cada rol. Lectura pública sólo del catálogo |
 | **`GRANT`** | Qué columnas y funciones puede siquiera nombrar cada rol |
-| **Server Actions** | `requerirAcceso(area)` en las 51 acciones, con guarda estructural |
+| **Server Actions** | `requerirAcceso(area)` (o `requerirRol`) en cada acción, con guarda estructural que verifica un test |
 | **Next.js** | Encabezados de seguridad, incluido HSTS |
 | **CI** | `npm audit`, typecheck, lint, toda la suite (`EXIGIR_DB=1`) y build en cada push |
-| **CodeQL** | Análisis estático del código propio, en cada PR y semanalmente |
 
 ---
 
@@ -62,7 +61,7 @@ Sin tocar código. Inventario de superficie, roles, entradas públicas y datos
 sensibles.
 
 ### Fase 1 — Las entradas públicas
-Límite de tasa en el alta de reservas, el login y las encuestas. Guarda del script
+Límite de tasa en el alta de reservas, el login, las encuestas y el asistente. Guarda del script
 de siembra contra bases que no sean locales. Encabezados de seguridad.
 
 ### Fase 2 — Cuatro bugs leyendo el código
@@ -75,19 +74,16 @@ PostgREST, y una acción escondida en un `<details>`.
 ### Fase 3 — Permisos, tokens e integridad
 
 - Alta de usuario sin privilegios y baja que revoca de verdad.
-- **Tokens de socio fuera del alcance del staff**: antes cualquier rol
-  —housekeeping incluido— podía leer el token de una agencia y con él firmar un
-  contrato en su nombre.
 - Facturas inmutables y su numeración reparada.
-- Las 51 Server Actions verificando rol con guarda estructural.
+- Las Server Actions verificando rol con guarda estructural.
 - **Firma HMAC real** en el webhook de pagos.
 - Los simuladores fallan fuerte en producción
   ([ADR 0018](Decisiones-de-arquitectura)).
 
 ### Auditoría técnica aplicada (agosto 2026)
 Doce fases más: borrado de dinero revocado y auditado, índices del listado,
-enlaces del portal revocables, recuperación de contraseña, y las dependencias **de
-8 vulnerabilidades a 1 baja**.
+recuperación de contraseña, y las dependencias **de 8 vulnerabilidades a 1 baja**
+(cifra de `main` en agosto de 2026).
 
 ---
 
@@ -97,10 +93,11 @@ Se declara para evitar que se invierta tiempo en reportar cuestiones ya conocida
 
 | Pendiente | Por qué sigue abierto |
 |---|---|
-| **Auditar las ~90 políticas RLS una por una** | Que estén activadas en las 43 tablas dice que hay una puerta, no qué deja pasar. Es el pendiente principal, y **exige Docker**: hay que ejecutar cada política contra una base con los cuatro roles |
+| **Auditar las políticas RLS una por una** | Que estén activadas en todas las tablas dice que hay una puerta, no qué deja pasar. La matriz de lectura es exhaustiva; la de escritura es dirigida. Es el pendiente principal, y **exige Docker**: hay que ejecutar cada política contra una base con los cuatro roles |
 | **No hay Content-Security-Policy** | Decidido y documentado: una CSP mal puesta rompe la aplicación en silencio, y ponerla bien exige un inventario de orígenes que todavía no se hizo |
 | **Los flujos de reserva de varios pasos no son atómicos** | Si falla el tercer paso, los datos quedan a medias. Está anotado en el código; resolverlo pide una función SQL transaccional |
-| **Cinco funciones del panel de GitHub apagadas** | Alertas de Dependabot, escaneo de secretos y reporte privado de vulnerabilidades son casillas de la web. Estado y cómo se activan: [`docs/github.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/main/docs/github.md) |
+| **Las tablas de los módulos quitados siguen en la base** | Tienen RLS pero ningún código las usa. La limpieza es un paso aparte, contra la base de tests aislada ([ADR 0045](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/decisiones/0045-version-reducida-para-la-tesis.md)) |
+| **El reporte privado de vulnerabilidades de GitHub está apagado** | Es una casilla de la web (verificado con la API: `enabled = false`). Mientras no se active, el botón *Report a vulnerability* no existe |
 
 ---
 
@@ -120,8 +117,9 @@ Se declara para evitar que se invierta tiempo en reportar cuestiones ya conocida
 
 ## Cómo reportar algo
 
-**No debe abrirse un issue público.** El canal es la pestaña **Security** del
-repositorio.
+**No debe abrirse un issue público.** El reporte privado de GitHub (pestaña
+**Security**) hoy está apagado, así que el contacto es directo con los autores,
+por un medio privado ([`SECURITY.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/SECURITY.md)).
 
 Resulta de gran ayuda incluir: **con qué rol** se explota —es el dato que más se
 omite—, los pasos para reproducirlo, y qué información se expone o qué escritura
@@ -129,4 +127,4 @@ se consigue que no debería permitirse.
 
 Al ser un proyecto de tesis y no un producto con guardia, no hay tiempo de
 respuesta comprometido ni programa de recompensas. Lo que sí se garantiza es que
-todo reporte ingresado por ese canal es leído.
+todo reporte que llegue es leído.

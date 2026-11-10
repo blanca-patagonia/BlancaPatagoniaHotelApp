@@ -9195,3 +9195,11 @@ Pedido de los autores: el sistema quedó demasiado grande para presentarlo y def
 - Se quitó `lib/supabase/client.ts`, que quedó sin uso.
 
 **Decisiones pendientes del equipo (no se tocaron):** pantalla de Auditoría oculta por `AREAS_OCULTAS` frente a la ADR 0045; el simulador de pagos si se usa `PAGO_PROVIDER=simulado` en una demo pública; el límite de tasa por IPv6 (migración); revocar grants de las tablas de módulos quitados.
+
+## 2026-11-10 · Rama `tesis-a-presentar` · Segunda pasada de limpieza
+
+**Qué:** se borró de la rama todo lo que no responde al alcance reducido: informes y auditorías del sistema completo, pendientes y agente `i18n`, SVG y script de QA sin uso, exportaciones huérfanas, claves del selector de idioma. `CLAUDE.md`, `AGENTS.md`, manuales, wiki y arquitectura se reescribieron para describir solo lo que existe (cifras recontadas). La Auditoría quedó visible para administración y con capítulo de Ayuda; se eliminó el mecanismo de áreas apagadas. El límite de intentos cuenta las IPv6 por /64.
+
+**Por qué:** el sistema se presenta y defiende; lo que describe módulos que no están resta. Detalle y decisiones en la ADR 0045 (sección «Revisión posterior»).
+
+**Verificación:** typecheck, lint y build sin errores; 1.197 tests pasan sin base (583 requieren Docker y no se corrieron).

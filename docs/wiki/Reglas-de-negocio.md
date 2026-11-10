@@ -48,7 +48,7 @@ estado a mano.
 
 | | Para quién | Cómo se aplica |
 |---|---|---|
-| **Neto** | Agencias y operadores | Lo define el canal de la reserva |
+| **Neto** | Reservas de Booking y Expedia (la tarifa de agencia) | Lo define el canal de la reserva |
 | **Rack** | Mostrador y web propia | Lo define el canal de la reserva |
 
 Ninguna de las dos incluye IVA: **`tarifas.precio_rack` se guarda sin IVA** y el
@@ -170,19 +170,12 @@ derivación ahí.
 
 ---
 
-## Comisión de canal
-
-Se contabiliza **en dos capas**: lo que el huésped paga y lo que el canal se lleva
-son dos hechos distintos, y mezclarlos hace que el ingreso reportado no cierre con
-lo que entró a la cuenta ([ADR 0023](Decisiones-de-arquitectura)).
-
----
-
 ## Reservas pendientes y expiración
 
 Una reserva de la web nace `pendiente` y **bloquea la unidad**. Si no se confirma,
 expira a los cinco días y libera el inventario.
 
 Ese mecanismo es también el motivo del **límite de tasa** en el alta pública. El
-caso que lo motivó no era spam: con 15 unidades, unas decenas de reservas
-pendientes falsas dejaban al hotel **sin inventario vendible durante una semana**.
+caso que lo motivó no era spam: con el catálogo de entonces (15 unidades; hoy son
+37), unas decenas de reservas pendientes falsas dejaban al hotel **sin inventario
+vendible durante una semana**.
