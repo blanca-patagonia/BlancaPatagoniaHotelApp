@@ -1,0 +1,55 @@
+@startuml
+!include _estilo.iuml
+class Reserva {
+  id : uuid
+  codigo : texto
+  estado : in_house
+  folio_alojamiento : A | B
+}
+class Consumo {
+  id : uuid
+  cantidad : entero
+  precio_unitario : decimal
+  fecha : fecha
+  comanda : entero
+  folio : A | B
+  nota : texto
+  cargado_por : uuid
+  --
+  validarComanda(líneas)
+  siguiente_comanda()
+}
+class ProductoServicio {
+  id : uuid
+  codigo : texto
+  nombre : texto
+  precio : decimal
+  stock : entero
+  stock_minimo : entero
+  activo : booleano
+  --
+  descontar_stock_consumo()
+}
+class Departamento {
+  id : uuid
+  codigo : texto
+  nombre : texto
+  orden : entero
+  activo : booleano
+}
+class Factura {
+  numero : texto
+  emitida_en : fecha y hora
+}
+class Perfil {
+  nombre : texto
+  rol : texto
+}
+Reserva "1" -- "0..*" Consumo : cuenta
+Consumo "0..*" --> "1" ProductoServicio
+Consumo "0..*" --> "1" Departamento
+ProductoServicio "0..*" --> "1" Departamento
+Departamento "0..*" --> "0..1" Departamento : padre
+Reserva "1" -- "0..1" Factura : cierra la cuenta
+Perfil "1" ..> "0..*" Consumo : carga
+@enduml

@@ -1,0 +1,35 @@
+@startuml
+!include _estilo.iuml
+actor "Recepción" as R
+participant "Panel\n(ficha de reserva)" as PA
+participant "Control\nde acceso" as AC
+participant "Máquina\nde estados" as MQ
+database "PostgreSQL" as B
+R -> PA : abre la reserva desde «Llegadas de hoy»
+PA -> AC : requerirAcceso('reservas')
+AC --> PA : rol autorizado
+PA -> B : lee reserva, estadía, huésped y pagos
+B --> PA : ficha completa
+PA --> R : datos, importes y acciones posibles
+opt faltan datos del huésped
+  R -> PA : completa documento y contacto
+  PA -> B : actualiza la ficha del huésped
+end
+R -> PA : pulsa «Check-in»
+PA -> MQ : ¿puede pasar a in_house?
+alt transición no permitida
+  MQ --> PA : no (p. ej. reserva pendiente de seña)
+  PA --> R : mensaje con el motivo
+else permitida
+  MQ --> PA : sí
+  PA -> B : actualiza el estado sólo si sigue\nen el estado leído
+  alt otro puesto la cambió antes
+    B --> PA : ninguna fila actualizada
+    PA --> R : «la reserva cambió de estado»
+  else
+    B -> B : disparador: sincroniza la estadía
+    B --> PA : reserva **in house**
+    PA --> R : huésped alojado · la unidad figura ocupada
+  end
+end
+@enduml

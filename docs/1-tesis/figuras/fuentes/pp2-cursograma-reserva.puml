@@ -1,0 +1,27 @@
+@startuml
+!include _estilo.iuml
+|Huésped|
+start
+:1. Contacta al hotel por teléfono,\ncorreo o agencia en línea\n(Booking / Expedia);
+|Recepción|
+:2. Verifica la disponibilidad a mano\nen las planillas de Excel o en Winpax;
+if (¿Hay disponibilidad?) then (no)
+  :Informa que no hay lugar;
+  stop
+else (sí)
+endif
+:3. Registra la reserva en Winpax\n(huésped, fechas y tipo de habitación);
+:4. Solicita la seña de la primera noche\ndentro de los 5 días;
+if (¿Por qué canal entró?) then (agencia en línea)
+  |Agencia en línea|
+  :5. Gestiona el cobro y envía\nla confirmación al huésped;
+  |Recepción|
+  :Recibe la notificación de la reserva;
+else (directa)
+  |Recepción|
+  :6. Envía un correo manual con los\ndatos bancarios para la transferencia;
+  :Espera la transferencia de la seña;
+endif
+:7. Marca la reserva como\nconfirmada en la planilla;
+stop
+@enduml

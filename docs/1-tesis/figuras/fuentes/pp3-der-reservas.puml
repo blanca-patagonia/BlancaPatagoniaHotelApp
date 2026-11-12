@@ -1,0 +1,176 @@
+@startuml
+!include _estilo.iuml
+hide methods
+skinparam linetype ortho
+
+entity "huespedes" as huespedes {
+  * **id** : uuid <<PK>>
+  --
+  * nombre : text
+  * apellido : text
+  * doc_tipo : text
+  * doc_numero : text
+  email : text
+  telefono : text
+  nacionalidad : text
+  * notas : text
+  * creado_en : timestamptz
+  * puntos : integer
+  * condicion_iva : condicion_iva
+  * vip : boolean
+  * residente_exterior : boolean
+  * acepta_avisos : boolean
+  * acepta_promociones : boolean
+  * anonimizado : boolean
+}
+entity "reservas" as reservas {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  huesped_id : uuid <<FK>>
+  * estado : estado_reserva
+  * canal : text
+  * tarifa_tipo : text
+  promocion_id : uuid <<FK>>
+  politica_id : uuid <<FK>>
+  * moneda : character
+  * total : numeric
+  * notas : text
+  creada_por : uuid <<FK>>
+  * creada_en : timestamptz
+  * token : uuid
+  grupo_id : uuid
+  * plan : text
+  * garantia : text
+  … y 17 columnas más
+}
+entity "estadias" as estadias {
+  * **id** : uuid <<PK>>
+  --
+  * reserva_id : uuid <<FK>>
+  * unidad_id : uuid <<FK>>
+  * tipo_unidad_id : uuid <<FK>>
+  * periodo : daterange
+  * estado : estado_reserva
+  * precio_noche : numeric
+  * huespedes : integer
+  check_in : date
+  check_out : date
+  * adultos : integer
+  * menores : integer
+  * bebes : integer
+  * camas_extra : integer
+  * cunas : integer
+  * no_mover : boolean
+}
+entity "unidades" as unidades {
+  * **id** : uuid <<PK>>
+  --
+  * tipo_unidad_id : uuid <<FK>>
+  * nombre : text
+  * estado : estado_hk
+  * activo : boolean
+  * creado_en : timestamptz
+  asignada_a : uuid <<FK>>
+  * piso : text
+  * bloque : text
+  * orden : integer
+}
+entity "tipos_unidad" as tipos_unidad {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  * categoria : categoria_unidad
+  * capacidad_max : integer
+  * descripcion : text
+  * amenities : jsonb
+  * activo : boolean
+  * creado_en : timestamptz
+}
+entity "housekeeping_registros" as housekeeping_registros {
+  * **id** : uuid <<PK>>
+  --
+  * unidad_id : uuid <<FK>>
+  mucama_id : uuid <<FK>>
+  * comentario : text
+  * fotos : text[]
+  * creado_en : timestamptz
+}
+entity "encuestas_satisfaccion" as encuestas_satisfaccion {
+  * **id** : uuid <<PK>>
+  --
+  * reserva_id : uuid <<FK>>
+  * token : uuid
+  puntaje : integer
+  comentario : text
+  * enviada_en : timestamptz
+  respondida_en : timestamptz
+}
+entity "notificaciones" as notificaciones {
+  * **id** : uuid <<PK>>
+  --
+  * evento : text
+  * canal : text
+  * clave : text
+  * destinatario : text
+  * variables : jsonb
+  * estado : text
+  * intentos : integer
+  * proximo_en : timestamptz
+  enviada_en : timestamptz
+  error : text
+  huesped_id : uuid <<FK>>
+  reserva_id : uuid <<FK>>
+  * creado_en : timestamptz
+  entregada_en : timestamptz
+  leida_en : timestamptz
+  proveedor_id : text
+}
+entity "politicas_cancelacion" as politicas_cancelacion {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  * reembolsable : boolean
+  * reglas : jsonb
+  * activo : boolean
+  * creado_en : timestamptz
+}
+entity "promociones" as promociones {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  * tipo : text
+  * valor : numeric
+  * condiciones : jsonb
+  vigencia_desde : date
+  vigencia_hasta : date
+  * activo : boolean
+  * creado_en : timestamptz
+}
+entity "perfiles" as perfiles {
+  * **id** : uuid <<PK>>
+  --
+  * nombre : text
+  * rol : rol_usuario
+  * activo : boolean
+  * creado_en : timestamptz
+  * telefono : text
+}
+perfiles |o--o{ unidades : asignada_a
+tipos_unidad ||--o{ unidades : tipo_unidad_id
+reservas ||--o{ encuestas_satisfaccion : reserva_id
+reservas ||--o{ estadias : reserva_id
+tipos_unidad ||--o{ estadias : tipo_unidad_id
+unidades ||--o{ estadias : unidad_id
+huespedes |o--o{ notificaciones : huesped_id
+reservas |o--o{ notificaciones : reserva_id
+perfiles |o--o{ reservas : creada_por
+huespedes |o--o{ reservas : huesped_id
+politicas_cancelacion |o--o{ reservas : politica_id
+promociones |o--o{ reservas : promocion_id
+perfiles |o--o{ housekeeping_registros : mucama_id
+unidades ||--o{ housekeeping_registros : unidad_id
+@enduml

@@ -1,0 +1,18 @@
+@startuml
+!include _estilo.iuml
+[*] --> pendiente : reserva desde el portal
+[*] --> confirmada : reserva de mostrador
+pendiente --> confirmada : seña acreditada
+pendiente --> cancelada : cancela o vence sin seña
+confirmada --> pagada : total saldado
+confirmada --> in_house : check-in
+confirmada --> cancelada : cancelación
+confirmada --> no_show : no se presentó
+pagada --> in_house : check-in
+pagada --> cancelada : cancelación
+pagada --> no_show : no se presentó
+in_house --> checkout : check-out
+checkout --> [*]
+cancelada --> [*]
+no_show --> [*]
+@enduml

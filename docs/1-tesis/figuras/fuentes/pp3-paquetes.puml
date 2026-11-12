@@ -1,0 +1,51 @@
+@startuml
+!include _estilo.iuml
+skinparam packageStyle folder
+package "Portal público" as P1 {
+  usecase "Consultar disponibilidad" as a1
+  usecase "**Reservar y pagar la seña**" as a2 #FFF4D6
+  usecase "Ver mi reserva y mi factura" as a3
+  usecase "Responder la encuesta" as a4
+}
+package "Reservas y estadías" as P2 {
+  usecase "Reservar en el mostrador" as b1
+  usecase "**Hacer el check-in**" as b2 #FFF4D6
+  usecase "Cancelar · reprogramar ·\ncambiar de unidad" as b3
+  usecase "Consultar la ocupación" as b4
+}
+package "Consumos" as P3 {
+  usecase "**Cargar un consumo**" as c1 #FFF4D6
+  usecase "Anular una comanda" as c2
+}
+package "Cuenta, pagos y facturación" as P4 {
+  usecase "Registrar un pago" as d1
+  usecase "**Hacer el check-out\ny emitir la factura**" as d2 #FFF4D6
+  usecase "Emitir nota de crédito" as d3
+}
+package "Huéspedes" as P5 {
+  usecase "Registrar y editar huéspedes" as e1
+  usecase "Fusionar fichas duplicadas" as e2
+}
+package "Housekeeping" as P6 {
+  usecase "Ver las tareas por prioridad" as f1
+  usecase "Marcar el estado de limpieza" as f2
+}
+package "Reportes" as P7 {
+  usecase "**Consultar los indicadores\nde gestión**" as g1 #FFF4D6
+  usecase "Exportar listados" as g2
+}
+package "Administración" as P8 {
+  usecase "Gestionar usuarios y roles" as h1
+  usecase "Mantener tarifas y temporadas" as h2
+  usecase "Consultar la auditoría" as h3
+}
+P1 ..> P2 : crea reservas
+P2 ..> P5 : usa
+P3 ..> P2 : imputa a la estadía
+P4 ..> P3 : consolida
+P4 ..> P2 : cierra la estadía
+P6 ..> P2 : salidas del día
+P7 ..> P4 : lee
+P7 ..> P2 : lee
+P2 ..> P8 : tarifas y permisos
+@enduml

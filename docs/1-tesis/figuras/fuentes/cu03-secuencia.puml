@@ -1,0 +1,34 @@
+@startuml
+!include _estilo.iuml
+actor "Recepción" as R
+participant "Punto\nde venta" as PV
+participant "Reglas de\ncomanda" as RG
+database "PostgreSQL" as B
+R -> PV : elige la estadía alojada y el departamento
+PV -> B : productos activos del departamento
+B --> PV : catálogo con precio y stock
+R -> PV : agrega productos y cantidades
+PV --> R : total de la comanda en vivo
+R -> PV : confirma la comanda
+PV -> B : ¿la reserva ya tiene factura?
+alt cuenta cerrada
+  B --> PV : factura emitida
+  PV --> R : «la cuenta está cerrada»
+else cuenta abierta
+  PV -> B : precios vigentes de los productos
+  B --> PV : precios y stock
+  PV -> RG : validarComanda(líneas)
+  alt stock insuficiente o línea inválida
+    RG --> PV : detalle del problema
+    PV --> R : aviso, no se carga nada
+  else válida
+    RG --> PV : correcta
+    PV -> B : siguiente_comanda()
+    B --> PV : número de comanda
+    PV -> B : inserta todas las líneas en consumos\n(precio congelado, folio, departamento)
+    B -> B : disparador: descuenta el stock
+    B --> PV : consumos imputados a la reserva
+    PV --> R : comanda cargada, visible en la cuenta
+  end
+end
+@enduml

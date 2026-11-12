@@ -1,0 +1,21 @@
+@startuml
+!include _estilo.iuml
+left to right direction
+actor "Gerencia" as GER
+actor "Administrador" as ADM
+rectangle "Reportes" {
+  usecase "**CU-05**\nConsultar los indicadores\nde gestión" as CU #FFF4D6
+  usecase "Verificar el permiso\ndel rol" as A
+  usecase "Calcular ocupación,\ntarifa media (ADR) y RevPAR" as B
+  usecase "Comparar con\nel mes anterior" as C
+  usecase "Ver la venta\npor categoría" as D
+  usecase "Abrir el informe\nen pantalla aparte" as E
+}
+GER --> CU
+ADM --> CU
+CU ..> A : <<include>>
+CU ..> B : <<include>>
+CU ..> C : <<include>>
+D ..> CU : <<extend>>
+E ..> CU : <<extend>>
+@enduml

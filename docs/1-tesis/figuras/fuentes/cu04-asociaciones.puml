@@ -1,0 +1,25 @@
+@startuml
+!include _estilo.iuml
+left to right direction
+actor "Recepción" as REC
+actor "Facturación\nelectrónica" as FAC
+actor "Servicio\nde correo" as COR
+rectangle "Cuenta, pagos y facturación" {
+  usecase "**CU-04**\nHacer el check-out\ny emitir la factura" as CU #FFF4D6
+  usecase "Consolidar la cuenta\n(alojamiento + consumos)" as A
+  usecase "Registrar un pago" as B
+  usecase "Calcular el IVA\ny el tipo de comprobante" as C
+  usecase "Reservar el número\ncorrelativo" as D
+  usecase "Solicitar el código\nde autorización (CAE)" as E
+  usecase "Enviar la encuesta\nde satisfacción" as F
+}
+REC --> CU
+CU ..> A : <<include>>
+B ..> CU : <<extend>>
+CU ..> C : <<include>>
+CU ..> D : <<include>>
+CU ..> E : <<include>>
+F ..> CU : <<extend>>
+E --> FAC
+F --> COR
+@enduml

@@ -1,0 +1,91 @@
+@startuml
+!include _estilo.iuml
+class Huesped {
+  id : uuid
+  nombre : texto
+  apellido : texto
+  email : texto
+  telefono : texto
+  doc_numero : texto
+  acepta_promociones : booleano
+}
+class Reserva {
+  id : uuid
+  codigo : texto
+  estado : estado_reserva
+  canal : «web»
+  tarifa_tipo : «rack»
+  subtotal : decimal
+  iva : decimal
+  total : decimal
+  token : uuid
+  --
+  crear_reserva()
+  avanzar_estado_reserva()
+}
+class Estadia {
+  id : uuid
+  periodo : rango de fechas
+  check_in : fecha
+  check_out : fecha
+  precio_noche : decimal
+  adultos : entero
+  menores : entero
+}
+class Unidad {
+  id : uuid
+  nombre : texto
+  estado : estado_unidad
+  activo : booleano
+}
+class TipoUnidad {
+  id : uuid
+  codigo : texto
+  nombre : texto
+  categoria : hostería | cabaña
+  capacidad_max : entero
+  --
+  disponibilidad_por_tipo()
+  cotizar_estadia_publica()
+}
+class Tarifa {
+  precio_rack : decimal
+  precio_neto : decimal
+  iva_pct : decimal
+}
+class Temporada {
+  codigo : texto
+  nombre : texto
+}
+class Pago {
+  id : uuid
+  medio : texto
+  tipo : seña | saldo
+  monto : decimal en USD
+  moneda : texto
+  monto_cobrado : decimal
+  cotizacion : decimal
+  estado : texto
+  external_id : texto
+}
+class Notificacion {
+  evento : texto
+  destinatario : texto
+  estado : texto
+  intentos : entero
+}
+class PoliticaCancelacion {
+  nombre : texto
+  reglas : plazos y cargos
+}
+Huesped "1" -- "0..*" Reserva : titular
+Reserva "1" *-- "1..*" Estadia
+Estadia "0..*" --> "1" Unidad : ocupa
+Unidad "0..*" --> "1" TipoUnidad
+Estadia "0..*" --> "1" TipoUnidad : vendida como
+TipoUnidad "1" -- "0..*" Tarifa
+Temporada "1" -- "0..*" Tarifa
+Reserva "1" -- "0..*" Pago
+Reserva "1" -- "0..*" Notificacion
+Reserva "0..*" --> "1" PoliticaCancelacion
+@enduml

@@ -1,0 +1,17 @@
+@startuml
+!include _estilo.iuml
+|Gobernanta|
+start
+:1. Revisa la planilla de salidas del día;
+:2. Arma el listado de habitaciones a limpiar;
+:3. Reparte el listado en papel\nentre las mucamas;
+|Mucama|
+:4. Limpia la habitación;
+:5. Avisa verbalmente que terminó;
+|Recepción|
+if (¿Necesita saber el estado\nde una habitación?) then (sí)
+  :6. Pregunta por teléfono\no va a mirar;
+else (no)
+endif
+stop
+@enduml

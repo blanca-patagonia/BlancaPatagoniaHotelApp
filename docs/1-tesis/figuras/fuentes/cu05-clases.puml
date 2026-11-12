@@ -1,0 +1,54 @@
+@startuml
+!include _estilo.iuml
+class Perfil {
+  rol : admin | gerencia
+  --
+  requerirAcceso('reportes')
+}
+class MetricasDeMes <<dominio>> {
+  mes : año-mes
+  noches_vendidas : entero
+  noches_disponibles : entero
+  ocupacion : porcentaje
+  adr : decimal
+  revpar : decimal
+  ingreso : decimal
+  --
+  metricasDeMes(estadías, mes, unidades)
+  variacion(actual, anterior)
+}
+class Estadia {
+  periodo : rango de fechas
+  precio_noche : decimal
+  estado : texto
+  tipo_unidad_id : uuid
+}
+class Reserva {
+  estado : estado_reserva
+  canal : texto
+  total : decimal
+}
+class Unidad {
+  activo : booleano
+}
+class TipoUnidad {
+  nombre : texto
+  categoria : texto
+}
+class Factura {
+  total : decimal
+  emitida_en : fecha y hora
+}
+class EncuestaSatisfaccion {
+  puntaje : entero
+  respondida_en : fecha y hora
+}
+Perfil ..> MetricasDeMes : consulta
+MetricasDeMes ..> Estadia : agrega
+MetricasDeMes ..> Unidad : cuenta
+Reserva "1" *-- "1..*" Estadia
+Estadia "0..*" --> "1" TipoUnidad
+Unidad "0..*" --> "1" TipoUnidad
+Reserva "1" -- "0..1" Factura
+Reserva "1" -- "0..1" EncuestaSatisfaccion
+@enduml

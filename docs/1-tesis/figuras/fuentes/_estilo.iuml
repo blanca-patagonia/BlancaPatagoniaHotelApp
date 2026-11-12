@@ -1,0 +1,59 @@
+' Estilo común de los diagramas de la tesis (PlantUML).
+skinparam dpi 170
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #1F4E79
+skinparam ArrowFontSize 11
+skinparam roundCorner 8
+skinparam rectangle {
+  BackgroundColor #EAF2FA
+  BorderColor #1F4E79
+}
+skinparam usecase {
+  BackgroundColor #EAF2FA
+  BorderColor #1F4E79
+}
+skinparam actor {
+  BackgroundColor #FFFFFF
+  BorderColor #1F4E79
+}
+skinparam class {
+  BackgroundColor #FFFFFF
+  HeaderBackgroundColor #D6E6F5
+  BorderColor #1F4E79
+  AttributeFontSize 11
+}
+skinparam package {
+  BackgroundColor #F7FAFD
+  BorderColor #1F4E79
+}
+skinparam activity {
+  BackgroundColor #EAF2FA
+  BorderColor #1F4E79
+  DiamondBackgroundColor #FFF4D6
+  DiamondBorderColor #9A6B00
+}
+skinparam swimlane {
+  BorderColor #1F4E79
+  TitleBackgroundColor #D6E6F5
+  TitleFontStyle bold
+}
+skinparam sequence {
+  ParticipantBackgroundColor #EAF2FA
+  ParticipantBorderColor #1F4E79
+  LifeLineBorderColor #7A93AD
+  ActorBorderColor #1F4E79
+  GroupBackgroundColor #F0F4F8
+  GroupBorderColor #7A93AD
+}
+skinparam state {
+  BackgroundColor #EAF2FA
+  BorderColor #1F4E79
+}
+skinparam note {
+  BackgroundColor #FFF9E6
+  BorderColor #9A6B00
+}
+hide circle

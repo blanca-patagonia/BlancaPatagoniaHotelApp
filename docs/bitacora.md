@@ -9207,3 +9207,44 @@ Pedido de los autores: el sistema quedó demasiado grande para presentarlo y def
 **Seguimiento (2026-11-10):** se quitaron seis iconos del panel que sólo usaban módulos borrados, los comentarios que todavía nombraban pantallas inexistentes (conversaciones, agencias, contratos, respaldos) y las cifras viejas («43 salteados») de `.claude/`. Quedan a propósito las reglas de dominio con test que hoy no llama la app (p. ej. `puedeFacturarse`, `tieneCae`, `precioPorNoche`): son reglas del negocio documentadas y probadas, y sacarlas no aporta a la defensa.
 
 **Segunda auditoría (2026-11-10):** revisión de código y de seguridad con agentes de solo lectura. Corregido: tokens públicos validados como UUID antes de consultar; fotos de housekeeping sólo bajo su prefijo; reembolso sin aviso de «pago recibido»; cargo manual creable por recepción; avisos nocturnos al día correcto; consumos con la fecha del hotel; confirmación de reserva cancelada. Lo que requiere una migración probada con Docker o una decisión del hotel quedó en `docs/5-pendientes/PENDIENTES.md` (el más importante: el staff puede leer `reservas.token`).
+
+## 2026-11-12 · Tesis · Fase 1: la aplicación corriendo y el material visual
+
+**Qué se hizo.** Se levantó el sistema, se lo recorrió entero y se produjo el material visual de
+la tesis en `docs/1-tesis/figuras/` (71 figuras, con su índice en `INDICE.md`):
+
+- **30 diagramas** (`diagramas/`), generados con PlantUML desde `fuentes/*.puml`: organigrama y
+  cuatro cursogramas del relevamiento; contexto, paquetes, casos de uso, ciclo de vida de la
+  reserva, arquitectura y despliegue; cuatro DER (vista general de las 30 tablas y tres de
+  detalle) generados del esquema real con `fuentes/generar-der.py`; y, para cada uno de los cinco
+  casos de uso principales, diagrama de asociaciones, de clases y de secuencia.
+- **32 capturas** (`capturas/`) del panel y del portal, a doble resolución.
+- **9 imágenes de anexo** (`anexos/`): WinPAX 9 y el extranet de Booking, provistas por el
+  comitente, con los nombres de personas difuminados.
+
+**Cómo se verificó.** Recorrido automatizado con Playwright de las 35 pantallas fijas del panel y
+de 11 rutas del portal: todas responden 200, sin errores de consola ni enlaces rotos. No hizo
+falta corregir código. La suite completa (`npm run test:aislado`) corrió por primera vez en esta
+rama: **142 archivos, 1.788 tests, todos pasan y ninguno se saltea**.
+
+**Decisiones.**
+
+- **Las capturas se sacaron sobre la base aislada (`supabase-tests`, puerto 55321) con datos
+  ficticios**, no sobre el proyecto de Supabase en la nube. Ese proyecto tiene el catálogo pero
+  ninguna reserva, le faltan tablas que el código usa (`errores`, `cron_corridas`,
+  `auditoria_accesos`, `notificaciones`, `notas_credito`, `housekeeping_registros`,
+  `datos_fiscales`) y la clave de servicio configurada no es válida. Queda pendiente
+  ponerlo al día antes de un despliegue (`npm run esquema:comparar`).
+- **Los datos de demostración se cargaron por la interfaz** (alta de mostrador, check-in,
+  consumos, pagos, check-out, factura y una reserva completa desde el portal con la seña paga),
+  no con SQL: así cada captura muestra un estado al que el sistema llega por sus propios caminos.
+  Son 27 reservas con huéspedes inventados.
+- **Casos de uso principales, cinco** (indicación del docente): reservar desde el portal, hacer
+  el check-in, cargar un consumo, hacer el check-out y emitir la factura, y consultar los
+  indicadores de gestión.
+- **Los diagramas se guardan con su fuente** para poder corregirlos al redactar: si un paso de un
+  diagrama de secuencia cambia al verificarlo contra el código, se edita el `.puml` y se regenera.
+
+**Para tener en cuenta.** En este entorno `next dev` entra en un bucle de recargas con el
+navegador automatizado; el recorrido se hizo sobre el build de producción (`next start`) con los
+proveedores simulados declarados. El simulador de pagos exige `PAGO_WEBHOOK_SECRET` en ese modo.

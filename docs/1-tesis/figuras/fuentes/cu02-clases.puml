@@ -1,0 +1,63 @@
+@startuml
+!include _estilo.iuml
+class Perfil {
+  id : uuid
+  nombre : texto
+  rol : admin | gerencia | recepción | housekeeping
+  activo : booleano
+}
+class Huesped {
+  id : uuid
+  nombre : texto
+  apellido : texto
+  doc_tipo : texto
+  doc_numero : texto
+  nacionalidad : texto
+  residente_exterior : booleano
+  vip : booleano
+}
+class Reserva {
+  id : uuid
+  codigo : texto
+  estado : estado_reserva
+  garantia : texto
+  plan : texto
+  total : decimal
+  --
+  puedeTransicionar(desde, hacia)
+  cambiarEstadoReserva()
+}
+class Estadia {
+  id : uuid
+  periodo : rango de fechas
+  estado : texto
+  adultos : entero
+  menores : entero
+  bebes : entero
+  no_mover : booleano
+}
+class Unidad {
+  id : uuid
+  nombre : texto
+  piso : texto
+  bloque : texto
+  estado : limpia | sucia | inspeccionada | bloqueada
+}
+class Pago {
+  tipo : seña | saldo
+  monto : decimal en USD
+  estado : texto
+}
+class Auditoria {
+  tabla : texto
+  operacion : texto
+  usuario : uuid
+  fecha : fecha y hora
+}
+Perfil "1" ..> "0..*" Reserva : opera
+Huesped "1" -- "0..*" Reserva
+Reserva "1" *-- "1..*" Estadia
+Estadia "0..*" --> "1" Unidad
+Reserva "1" -- "0..*" Pago
+Reserva ..> Auditoria : deja rastro
+@enduml

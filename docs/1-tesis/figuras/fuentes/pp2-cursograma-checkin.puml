@@ -1,0 +1,15 @@
+@startuml
+!include _estilo.iuml
+|Huésped|
+start
+:1. Llega al hotel y se presenta\nen recepción;
+|Recepción|
+:2. Busca la reserva en Winpax\no en la planilla;
+|Huésped|
+:3. Entrega su documento de identidad;
+|Recepción|
+:Completa la ficha de registro\na mano, en papel;
+:4. Asigna la habitación\ny entrega la llave;
+:5. Actualiza la planilla de Excel:\nhabitación ocupada;
+stop
+@enduml
