@@ -9248,3 +9248,38 @@ rama: **142 archivos, 1.788 tests, todos pasan y ninguno se saltea**.
 **Para tener en cuenta.** En este entorno `next dev` entra en un bucle de recargas con el
 navegador automatizado; el recorrido se hizo sobre el build de producción (`next start`) con los
 proveedores simulados declarados. El simulador de pagos exige `PAGO_WEBHOOK_SECRET` en ese modo.
+
+## 2026-11-12 · Tesis · Fase 2: Parte 1, relevamiento y propuesta
+
+**Qué se hizo.** Se redactó la Parte 1 de la tesis en `docs/1-tesis/parte-1-relevamiento.md`,
+sobre la base del PP2 que vio el docente (`PP2_Moran_Fakiani`, mayo de 2026): se respetan su
+estructura, sus datos y la sección «Firmas y conformidades».
+
+**Observaciones del docente incorporadas.**
+
+- Organigrama como figura y un cursograma por proceso (reserva, check-in, check-out y
+  facturación, limpieza), cada uno con su descripción y sus problemas.
+- **Anexo D** con las pantallas de los sistemas que el hotel usa hoy (Winpax 9 y el extranet de
+  Booking.com), de las capturas que mandó el comitente, con los nombres difuminados.
+- Respuesta a «¿se conecta a una impresora fiscal?»: no; el sistema trabaja con factura
+  electrónica y código de autorización (CAE).
+- Tabla de tecnologías con el porqué de cada una, el alojamiento (Vercel y Supabase) y el
+  cuadro de costos de licenciamiento.
+
+**Decisiones.**
+
+- **La tecnología que figura es solo la que el sistema usa.** El PP2 de mayo anticipaba React
+  con un servidor Express; la tesis presenta el producto terminado, así que la tabla lista
+  Next.js, PostgreSQL sobre Supabase, Tailwind, las tres pasarelas, Resend y Vercel.
+- **La propuesta se ajustó a lo que el sistema hace.** Los reportes son los que existen
+  (ocupación, tarifa promedio, ingreso por habitación disponible, venta por categoría,
+  facturación) y la cancelación calcula el cargo según el plazo; no se prometen el ranking de
+  canales ni los reembolsos automáticos que mencionaba el borrador.
+- **Costos:** valores de referencia de noviembre de 2026 (Vercel Pro USD 20, Supabase Pro
+  USD 25, Resend gratuito hasta 3.000 correos por mes, Mercado Pago entre 1,49 % y 6,29 % + IVA).
+  Los sitios oficiales no eran alcanzables desde el entorno de trabajo: salen de una búsqueda
+  web y **hay que confirmarlos antes de la entrega**.
+- **Casos de uso principales: cinco** (se actualizó `PREPARACION.md`).
+
+**Pendiente de confirmar con los autores.** La grafía de la calle («Charles Furh», como está en
+el PP2) y los pasos del proceso de limpieza, que no estaban en el PP2 de mayo.

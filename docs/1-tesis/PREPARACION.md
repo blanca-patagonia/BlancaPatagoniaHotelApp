@@ -84,5 +84,5 @@ regeneran al final.
 
 - **Versión de PP2 que vio el profesor:** `PP2_Moran_Fakiani` (la de mayo). Hay que respetar sus elementos formales, en particular la sección **«Firmas y conformidades»** y el **Anexo C: firma del comitente** (Franco Theo Cheli, Director de Blanca Patagonia S.A.S.).
 - **Formato de entrega:** Word (`.docx`). El PDF se genera después si hace falta.
-- **Casos de uso:** las tesis de ejemplo desarrollan entre 4 y 14 fichas completas (Bimba ~4, NutriSmart ~3, Club La Tablada ~14), cada una con diagrama de asociaciones, ficha, prototipo y diagrama de secuencia o interacciones. Se hacen **de 10 a 12 casos de uso completos** repartidos por módulo; no hace falta un «resto resumido».
+- **Casos de uso:** por indicación del docente se desarrollan **solo los principales, cinco**, uno por módulo del pedido del hotel: CU-01 Reservar desde el portal público · CU-02 Hacer el check-in · CU-03 Cargar un consumo · CU-04 Hacer el check-out y emitir la factura · CU-05 Consultar los indicadores de gestión. Cada uno lleva diagrama de asociaciones, ficha, prototipo de interfaz, vista estática y vista dinámica, más el diccionario de datos.
 - **Módulos quitados:** no se mencionan en ningún momento (ver §2).
