@@ -110,7 +110,7 @@ export const es = {
 
     comoLlegarEtiqueta: 'Cómo llegar',
     comoLlegarTitulo: 'En el corazón de la Patagonia',
-    direccion: 'Charles Furh 149, Barrio Los Guías, El Calafate, Santa Cruz.',
+    direccion: 'Charles Fuhr 149, Barrio Los Guías, El Calafate, Santa Cruz.',
     distancias: 'Distancias',
     distanciaCentro: 'Centro de El Calafate',
     distanciaAeropuerto: 'Aeropuerto (FTE)',
@@ -135,7 +135,7 @@ export const es = {
     cierreSecundario: 'Ver alojamientos',
 
     pieDescripcion:
-      'Hostería boutique y cabañas frente al Lago Argentino. Charles Furh 149, B° Los Guías, El Calafate, Santa Cruz, Patagonia Argentina.',
+      'Hostería boutique y cabañas frente al Lago Argentino. Charles Fuhr 149, B° Los Guías, El Calafate, Santa Cruz, Patagonia Argentina.',
     pieElHotel: 'El hotel',
     pieRedes: 'Redes sociales',
     pieAccesoPersonal: 'Acceso del personal',
