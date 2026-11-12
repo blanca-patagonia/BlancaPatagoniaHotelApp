@@ -9316,3 +9316,40 @@ política de cancelación cargada.
 **Decisión.** El diccionario detalla solo las tablas que tocan los casos de uso principales y
 describe las otras 17 en una línea: campo por campo, las 30 tablas ocuparían más que el resto
 del capítulo sin aportar a la defensa.
+
+## 2026-11-12 · Tesis · Fase 4: implementación, testing, especificaciones y documento final
+
+**Qué se hizo.**
+
+- Se redactaron los capítulos 7 a 10 en `docs/1-tesis/parte-3-implementacion-y-especificaciones.md`:
+  implementación por módulo y caso de uso, integración y testing, especificaciones del sistema
+  (despliegue, hardware mínimo y óptimo, software de base y de aplicación, seguridad y auditoría)
+  y conclusión. Los agradecimientos van como texto de ejemplo, para que los editen los autores.
+- Se armó el documento de entrega, **`docs/1-tesis/Tesis_Moran_Fakiani.docx`** (113 páginas, 60
+  figuras), con el formato de la cátedra: A4, márgenes de 2,5 cm, Arial 11, interlineado 1,3,
+  texto justificado con partición de palabras, carátula, índice general, índice de figuras,
+  membrete, número de página y epígrafe con número, descripción, año y fuente en cada figura.
+
+**Cómo se arma.** `docs/1-tesis/armar-docx.sh` genera el Word desde los `.md` en dos pasadas: la
+primera lleva marcas invisibles para saber en qué página cae cada título y cada figura; la
+segunda escribe los índices con esos números. Los índices quedan como campos de Word (se
+actualizan desde Word) y ya completos.
+
+**Cómo se verificó.** El archivo pasa la validación de esquema; se convirtió a PDF y se
+revisaron a ojo la carátula, los índices, la carta y las firmas, una ficha de caso de uso, las
+figuras y los anexos; y se comprobó que la página que anuncian los índices coincide con la
+página real de siete títulos y figuras tomados de muestra.
+
+**Decisiones.**
+
+- **Los anexos y el glosario van al final del documento**, sin número de capítulo: en el PP2
+  eran los capítulos 4 y 5, que en la tesis son Objetivos y Requerimientos.
+- **Las cifras de pruebas que se citan** son las de la corrida completa del 11/11/2026 sobre la
+  base aislada: 142 archivos y 1.788 pruebas, ninguna omitida.
+- **El texto se edita en los `.md` y el Word se regenera.** `tesis-completa.md` y `tesis-pp3.md`
+  quedan como borradores anteriores; no se borraron.
+
+**Para tener en cuenta.** LibreOffice recorta las imágenes en línea si el párrafo no declara su
+regla de interlineado; por eso los párrafos con imagen la llevan explícita. La partición de
+palabras está activada en el archivo y la aplica Word; la vista previa hecha con LibreOffice no
+la mostraba.

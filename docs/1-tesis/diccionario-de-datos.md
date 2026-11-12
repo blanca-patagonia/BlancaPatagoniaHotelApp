@@ -264,7 +264,7 @@ Encuesta que se genera al hacer el check-out y el huésped responde por un enlac
 
 ## notificaciones
 
-Bandeja de salida de los correos al huésped, con reintentos.
+Cola de salida de los correos al huésped, con reintentos.
 
 | Campo | Tipo | Clave | Obl. | Descripción |
 |---|---|---|---|---|

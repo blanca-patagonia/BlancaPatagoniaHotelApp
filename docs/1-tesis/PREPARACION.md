@@ -30,6 +30,33 @@
 - Debe tener: **carátula, índice general, índice de figuras, membrete y número de página**.
 - Toda imagen lleva **epígrafe** debajo: número de figura, descripción, año y fuente (las propias se rotulan «elaboración propia»). Las de terceros citan el autor, la obra o el enlace.
 
+## 0. Estado: tesis escrita (2026-11-12)
+
+La tesis está redactada y armada. **Estos son los archivos vigentes:**
+
+| Archivo | Contenido |
+|---|---|
+| [`Tesis_Moran_Fakiani.docx`](Tesis_Moran_Fakiani.docx) | **El documento de entrega** (113 páginas), con carátula, índices, membrete y paginación. |
+| [`parte-1-relevamiento.md`](parte-1-relevamiento.md) | Capítulos 1 a 3 (PP2), anexos y glosario. |
+| [`parte-2-analisis-y-diseno.md`](parte-2-analisis-y-diseno.md) | Capítulos 4 a 6: objetivos, requerimientos, casos de uso y modelo de datos. |
+| [`diccionario-de-datos.md`](diccionario-de-datos.md) | Diccionario de datos (se genera con `figuras/fuentes/generar-diccionario.py`). |
+| [`parte-3-implementacion-y-especificaciones.md`](parte-3-implementacion-y-especificaciones.md) | Capítulos 7 a 10 y agradecimientos (de ejemplo, para editar). |
+| [`figuras/`](figuras/INDICE.md) | Diagramas con su fuente, capturas y anexos. |
+
+**Cómo se rehace el Word** después de editar un capítulo:
+
+```bash
+docs/1-tesis/armar-docx.sh
+```
+
+Necesita Node con el paquete `docx`, Python 3 con Pillow, LibreOffice y `pdftotext`. El texto se
+edita en los `.md`, no en el Word: lo que se cambie a mano en el Word se pierde al rearmarlo.
+Los índices son campos de Word; si se edita el documento en Word, se actualizan con
+«Actualizar campo».
+
+`tesis-completa.md` y `tesis-pp3.md` son los **borradores anteriores**, escritos para un sistema
+más grande: quedaron reemplazados por los archivos de arriba y no se usan para armar el documento.
+
 ## 2. Qué hay escrito
 
 | Archivo | Estado |

@@ -69,7 +69,7 @@ D = {
 'encuestas_satisfaccion': ("Encuesta que se genera al hacer el check-out y el huésped responde por un enlace.", {
  'id':'Identificador de la encuesta.','reserva_id':'Reserva evaluada.','token':'Clave opaca del enlace de la encuesta.','puntaje':'Puntaje de 0 a 10; vacío hasta que se responde.','comentario':'Comentario libre del huésped.',
  'enviada_en':'Fecha y hora en que se envió la invitación.','respondida_en':'Fecha y hora de la respuesta.'}),
-'notificaciones': ("Bandeja de salida de los correos al huésped, con reintentos.", {
+'notificaciones': ("Cola de salida de los correos al huésped, con reintentos.", {
  'id':'Identificador del aviso.','evento':'Qué se avisa: confirmación, pago recibido, cancelación, recordatorio, encuesta, etc.','canal':'Canal de salida (correo electrónico).','clave':'Clave que impide enviar dos veces el mismo aviso.',
  'destinatario':'Dirección de correo del destinatario.','variables':'Datos con los que se arma el mensaje.','estado':'Pendiente, enviada o fallida.','intentos':'Cantidad de intentos de envío.',
  'proximo_en':'Fecha y hora del próximo intento.','enviada_en':'Fecha y hora de envío.','error':'Último error informado por el servicio de correo.','huesped_id':'Huésped al que se dirige.','reserva_id':'Reserva relacionada.',

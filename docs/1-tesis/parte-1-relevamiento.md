@@ -11,9 +11,9 @@
 
 *El Calafate, mayo de 2026*
 
-A la Dirección de
-Hotel Blanca Patagonia S.A.S.
-Charles Fuhr 149, El Calafate, Santa Cruz
+A la Dirección de\
+Hotel Blanca Patagonia S.A.S.\
+Charles Fuhr 149, El Calafate, Santa Cruz\
 Presente.-
 
 De nuestra mayor consideración:
@@ -34,7 +34,7 @@ cualquier consulta.
 
 Atentamente,
 
-**Morán Santiago — Fakiani Octavio**
+**Morán Santiago — Fakiani Octavio**\
 Estudiantes de Analista de Sistemas
 
 ## 1.2. Pedido del Usuario
@@ -495,43 +495,43 @@ sobre Oracle Forms). Se instala en las PC de recepción y solo funciona dentro d
 
 ![Winpax: menú principal](figuras/anexos/winpax-01-menu.png)
 
-**Figura D.1.** Winpax 9: menú principal (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
+**Figura 52.** Winpax 9: menú principal (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
 
 ![Winpax: grilla de ocupación](figuras/anexos/winpax-02-grilla-ocupacion.png)
 
-**Figura D.2.** Winpax 9: grilla de ocupación, con una fila por habitación y una columna por día (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
+**Figura 53.** Winpax 9: grilla de ocupación, con una fila por habitación y una columna por día (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
 
 ![Winpax: alta de reserva](figuras/anexos/winpax-06-alta-reserva.png)
 
-**Figura D.3.** Winpax 9: alta de reserva (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
+**Figura 54.** Winpax 9: alta de reserva (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
 
 ![Winpax: búsqueda de huéspedes](figuras/anexos/winpax-03-busqueda-huespedes.png)
 
-**Figura D.4.** Winpax 9: búsqueda de huéspedes y reservas (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
+**Figura 55.** Winpax 9: búsqueda de huéspedes y reservas (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
 
 ![Winpax: cuenta del huésped](figuras/anexos/winpax-04-cuenta-huesped.png)
 
-**Figura D.5.** Winpax 9: cuenta del huésped, con los cargos repartidos en dos folios (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
+**Figura 56.** Winpax 9: cuenta del huésped, con los cargos repartidos en dos folios (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
 
 ![Winpax: frigobar](figuras/anexos/winpax-05-frigobar.png)
 
-**Figura D.6.** Winpax 9: carga de consumos de frigobar (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
+**Figura 57.** Winpax 9: carga de consumos de frigobar (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
 
 ![Winpax: situación y gobernanta](figuras/anexos/winpax-07-situacion-gobernanta.png)
 
-**Figura D.7.** Winpax 9: situación del hotel y tablero de la gobernanta (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
+**Figura 58.** Winpax 9: situación del hotel y tablero de la gobernanta (2026). Fuente: Hotel Blanca Patagonia, captura provista por el comitente.
 
 **Extranet de Booking.com.** Es el panel donde el hotel administra sus reservas, tarifas y
 mensajes dentro de la agencia en línea. Las reservas que llegan por este canal figuran
-también en Winpax, con Booking como agente (Figura D.4).
+también en Winpax, con Booking como agente (Figura 55).
 
 ![Booking: inicio](figuras/anexos/booking-01-inicio.png)
 
-**Figura D.8.** Extranet de Booking.com: pantalla de inicio del establecimiento (2026). Fuente: Booking.com, captura provista por el comitente.
+**Figura 59.** Extranet de Booking.com: pantalla de inicio del establecimiento (2026). Fuente: Booking.com, captura provista por el comitente.
 
 ![Booking: reservas](figuras/anexos/booking-02-reservas.png)
 
-**Figura D.9.** Extranet de Booking.com: consulta de reservas (2026). Fuente: Booking.com, captura provista por el comitente.
+**Figura 60.** Extranet de Booking.com: consulta de reservas (2026). Fuente: Booking.com, captura provista por el comitente.
 
 # 5. Glosario
 
