@@ -15,7 +15,7 @@ class MetricasDeMes <<dominio>> {
   ingreso : decimal
   --
   metricasDeMes(estadías, mes, unidades)
-  variacion(actual, anterior)
+  variacionPct(actual, anterior)
 }
 class Estadia {
   periodo : rango de fechas

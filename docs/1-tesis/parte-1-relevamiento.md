@@ -13,7 +13,7 @@
 
 A la Dirección de
 Hotel Blanca Patagonia S.A.S.
-Charles Furh 149, El Calafate, Santa Cruz
+Charles Fuhr 149, El Calafate, Santa Cruz
 Presente.-
 
 De nuestra mayor consideración:
@@ -83,7 +83,7 @@ Winpax actualmente en uso.
 | **Nombre de fantasía** | Blanca Patagonia |
 | **Rubro** | Hotelería · Turismo · Gastronomía |
 | **Categoría** | Hostería boutique 4 estrellas + complejo de cabañas |
-| **Dirección** | Charles Furh 149, El Calafate, Santa Cruz, Argentina |
+| **Dirección** | Charles Fuhr 149, El Calafate, Santa Cruz, Argentina |
 | **Teléfono** | +54 (2902) 493370 |
 | **Correo electrónico** | blancapatagonia@cotecal.com.ar |
 | **Sitio web** | www.blancapatagonia.com |

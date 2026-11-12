@@ -4,10 +4,10 @@ actor "Recepción" as R
 participant "Punto\nde venta" as PV
 participant "Reglas de\ncomanda" as RG
 database "PostgreSQL" as B
-R -> PV : elige la estadía alojada y el departamento
-PV -> B : productos activos del departamento
-B --> PV : catálogo con precio y stock
-R -> PV : agrega productos y cantidades
+R -> PV : abre el punto de venta
+PV -> B : estadías alojadas y productos activos
+B --> PV : habitaciones y catálogo por departamento
+R -> PV : elige la habitación y el folio,\ne indica las cantidades
 PV --> R : total de la comanda en vivo
 R -> PV : confirma la comanda
 PV -> B : ¿la reserva ya tiene factura?

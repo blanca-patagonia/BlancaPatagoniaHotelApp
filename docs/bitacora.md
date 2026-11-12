@@ -9283,3 +9283,36 @@ estructura, sus datos y la sección «Firmas y conformidades».
 
 **Pendiente de confirmar con los autores.** La grafía de la calle («Charles Furh», como está en
 el PP2) y los pasos del proceso de limpieza, que no estaban en el PP2 de mayo.
+
+## 2026-11-12 · Tesis · Fase 3: Parte 2, análisis y diseño
+
+**Qué se hizo.** Se redactaron los capítulos 4 a 6 de la tesis en
+`docs/1-tesis/parte-2-analisis-y-diseno.md` y el diccionario de datos en
+`docs/1-tesis/diccionario-de-datos.md`:
+
+- **Objetivos, límites y alcance** del sistema, por módulo.
+- **Requerimientos:** 9 actores, 37 requerimientos funcionales, 20 no funcionales y 20 reglas de
+  negocio.
+- **Modelado ambiental** (propósito, contexto, 16 acontecimientos) y **de paquetes**.
+- **Los cinco casos de uso principales**, cada uno con requerimientos específicos, prototipos de
+  interfaz, ficha (curso normal y alternativo), vista estática y vista dinámica.
+- **Modelo de datos:** DER, ciclo de vida de la reserva, la decisión anti-sobreventa y el
+  diccionario de 13 tablas (207 campos), generado del esquema real con
+  `figuras/fuentes/generar-diccionario.py`.
+
+**Cómo se verificó.** Cada cifra y cada paso de las fichas se contrastó con el código o con la
+base: 30 tablas con seguridad por fila y 55 políticas, 57 módulos de dominio, 127 migraciones,
+los límites de intentos (`lib/domain/limites.ts`), las transiciones de estado
+(`lib/domain/reservas.ts`), los estados facturables, los disparadores de auditoría y la
+política de cancelación cargada.
+
+**Correcciones.**
+
+- **La dirección del hotel estaba mal escrita en el portal** («Charles Furh» por «Charles
+  Fuhr», `src/lib/i18n/diccionarios/es.ts`); se corrigió ahí y en la tesis.
+- Dos diagramas se ajustaron al verificarlos: en el punto de venta se elige la habitación y el
+  folio (no el departamento), y el stock lo descuenta un disparador de la base, no la pantalla.
+
+**Decisión.** El diccionario detalla solo las tablas que tocan los casos de uso principales y
+describe las otras 17 en una línea: campo por campo, las 30 tablas ocuparían más que el resto
+del capítulo sin aportar a la defensa.
