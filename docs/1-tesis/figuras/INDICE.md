@@ -15,6 +15,7 @@ Material visual producido en la Fase 1. El número definitivo de cada figura se 
 | `diagramas/pp2-cursograma-checkin.png` | Cursograma del proceso de check-in actual | 2026 | Elaboración propia |
 | `diagramas/pp2-cursograma-checkout.png` | Cursograma del proceso de check-out y facturación actual | 2026 | Elaboración propia |
 | `diagramas/pp2-cursograma-limpieza.png` | Cursograma del proceso de limpieza de habitaciones actual | 2026 | Elaboración propia |
+| `anexos/firma-comitente.jpg` | Firma del comitente, Franco Theo Cheli | 2026 | Hotel Blanca Patagonia (firma provista por el comitente) |
 | `anexos/winpax-01-menu.png` | WinPAX 9: menú principal | 2026 | Hotel Blanca Patagonia (captura provista por el comitente) |
 | `anexos/winpax-02-grilla-ocupacion.png` | WinPAX 9: grilla de ocupación | 2026 | Hotel Blanca Patagonia (captura provista por el comitente) |
 | `anexos/winpax-03-busqueda-huespedes.png` | WinPAX 9: búsqueda de huéspedes | 2026 | Hotel Blanca Patagonia (captura provista por el comitente) |
