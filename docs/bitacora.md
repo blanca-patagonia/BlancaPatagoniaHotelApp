@@ -9353,3 +9353,29 @@ página real de siete títulos y figuras tomados de muestra.
 regla de interlineado; por eso los párrafos con imagen la llevan explícita. La partición de
 palabras está activada en el archivo y la aplica Word; la vista previa hecha con LibreOffice no
 la mostraba.
+
+## 2026-11-19 · Demo pública para el docente
+
+**Qué se hizo.** Se publicó una demo del sistema en https://blanca-patagonia-demo.vercel.app para
+que el profesor de Práctica Profesionalizante III lo pruebe.
+
+- **Base:** proyecto Supabase nuevo y aparte (`blanca-patagonia-demo`, São Paulo), con las 127
+  migraciones aplicadas en orden por la API de administración, el catálogo de `seed.sql`, un
+  usuario por rol y datos ficticios cargados por la propia interfaz: 26 reservas en todos los
+  estados, con consumos, pagos y siete facturas. Ningún dato es de huéspedes reales.
+- **Aplicación:** proyecto Vercel `blanca-patagonia-demo` (plan gratuito), publicado desde una
+  copia del repositorio. Proveedores: correo a consola, facturación y pagos simulados, cotización
+  real (`dolarapi`).
+- **Tareas programadas:** el plan gratuito de Vercel solo admite una corrida diaria, así que en
+  la copia publicada `vercel.json` deja solo `mantenimiento`; `notificaciones` (cada 5 min) y
+  `salud` (cada 15 min) las dispara la base con pg_cron y pg_net. El `vercel.json` del
+  repositorio no se tocó.
+- **Autenticación:** registro público deshabilitado; la URL del sitio apunta a la demo.
+
+**Cómo se verificó.** Salud en 200 contra la base; una reserva desde el portal con pago de la seña
+en la pasarela de prueba, que quedó confirmada; ingreso con los cuatro roles a sus pantallas; y
+housekeeping redirigido al intentar abrir las reservas.
+
+**Para tener en cuenta.** Con el pago simulado en un sitio público, cualquiera puede marcar como
+pagada una reserva que cree; sirve para la demo, no para producción (ver `PENDIENTES.md`). Un
+proyecto gratuito de Supabase se pausa tras siete días sin uso.
