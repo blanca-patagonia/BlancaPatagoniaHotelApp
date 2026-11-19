@@ -175,6 +175,16 @@ function bloqueDeFirmas() {
       children: corridas(texto, { size: 20 }),
     })
   const vacio = (alto) => new D.Paragraph({ spacing: { before: alto, after: 0 }, children: [] })
+  // La firma de cada autor entra solo si su imagen existe: las firmas no se suben al repositorio
+  // (es público), así que sin ellas quedan las líneas para firmar a mano.
+  const firma = (archivo, alto) =>
+    fs.existsSync(path.join(AQUI, archivo))
+      ? new D.Paragraph({
+          alignment: D.AlignmentType.CENTER,
+          spacing: { before: alto < 1000 ? 280 : 0, after: 0, line: 240, lineRule: D.LineRuleType.AUTO },
+          children: [imagen(archivo, 3.6, 1.7)],
+        })
+      : vacio(alto)
   const mitad = Math.floor(ANCHO / 2)
   const columna = (hijos) =>
     new D.TableCell({
@@ -203,9 +213,9 @@ function bloqueDeFirmas() {
               linea('Comitente'),
             ]),
             columna([
-              vacio(1100),
+              firma('figuras/anexos/firma-santiago.png', 1100),
               linea('**Morán Santiago** — DNI 45.693.596', true),
-              vacio(900),
+              firma('figuras/anexos/firma-octavio.png', 900),
               linea('**Fakiani Octavio** — DNI 44.970.369', true),
               linea('Equipo de proyecto'),
             ]),
