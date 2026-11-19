@@ -371,17 +371,3 @@ tiene preparado el lugar donde se conecta cada una.
 El proyecto nos permitió aplicar de punta a punta lo aprendido en la carrera: relevar una
 organización real, traducir sus problemas en requerimientos, modelar la solución y
 construirla con un cliente que la esperaba.
-
-# Agradecimientos
-
-> **Texto de ejemplo, para editar por los autores.**
-
-A Franco Theo Cheli y a todo el equipo del Hotel Blanca Patagonia, por abrirnos las puertas
-del hotel, mostrarnos cómo trabajan y confiar en nosotros para este proyecto.
-
-A los docentes del Colegio Universitario IES Siglo 21, por acompañarnos durante la carrera y
-por las correcciones que hicieron mejor este trabajo.
-
-A nuestras familias y amigos, por la paciencia y el apoyo de todos estos años.
-
-*Santiago Morán y Octavio Fakiani*

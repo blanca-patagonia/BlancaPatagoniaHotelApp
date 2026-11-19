@@ -378,9 +378,11 @@ const dic = leer('diccionario-de-datos.md')
   .replace(/^## Otras tablas del sistema/m, '#### Otras tablas del sistema')
   .replace(/^## (\S+)$/gm, '#### Tabla `$1`')
 const p3 = leer('parte-3-implementacion-y-especificaciones.md')
-const corteAgr = p3.indexOf('\n# Agradecimientos')
-const agradecimientos = p3.slice(corteAgr)
-const p3Cuerpo = p3.slice(0, corteAgr)
+// Los agradecimientos van en `agradecimientos.md` y solo entran si ese archivo existe:
+// el borrador (`agradecimientos-borrador.md`) queda fuera del documento a propósito.
+const archivoAgr = path.join(AQUI, 'agradecimientos.md')
+const agradecimientos = fs.existsSync(archivoAgr) ? fs.readFileSync(archivoAgr, 'utf8') : ''
+const p3Cuerpo = p3
 
 const bloquesAgr = convertir(agradecimientos, { conNotas: true })
 
@@ -400,7 +402,8 @@ figuras.forEach((f, k) => {
 // ───────────────────────── índices (se completan después, en el XML) ─────────────────────────
 
 const indices = [
-  new D.Paragraph({ style: 'TituloSinNumero', pageBreakBefore: true, children: [new D.TextRun('Índice general')] }),
+  // Sin agradecimientos, el índice abre la sección: un salto de página ahí dejaría una hoja en blanco.
+  new D.Paragraph({ style: 'TituloSinNumero', pageBreakBefore: bloquesAgr.length > 0, children: [new D.TextRun('Índice general')] }),
   new D.Paragraph({ children: [new D.TextRun('@@TOC@@')] }),
   new D.Paragraph({ style: 'TituloSinNumero', pageBreakBefore: true, children: [new D.TextRun('Índice de figuras')] }),
   new D.Paragraph({ children: [new D.TextRun('@@TOF@@')] }),

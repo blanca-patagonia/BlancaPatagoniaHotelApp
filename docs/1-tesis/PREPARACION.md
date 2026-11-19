@@ -40,7 +40,8 @@ La tesis está redactada y armada. **Estos son los archivos vigentes:**
 | [`parte-1-relevamiento.md`](parte-1-relevamiento.md) | Capítulos 1 a 3 (PP2), anexos y glosario. |
 | [`parte-2-analisis-y-diseno.md`](parte-2-analisis-y-diseno.md) | Capítulos 4 a 6: objetivos, requerimientos, casos de uso y modelo de datos. |
 | [`diccionario-de-datos.md`](diccionario-de-datos.md) | Diccionario de datos (se genera con `figuras/fuentes/generar-diccionario.py`). |
-| [`parte-3-implementacion-y-especificaciones.md`](parte-3-implementacion-y-especificaciones.md) | Capítulos 7 a 10 y agradecimientos (de ejemplo, para editar). |
+| [`parte-3-implementacion-y-especificaciones.md`](parte-3-implementacion-y-especificaciones.md) | Capítulos 7 a 10. |
+| [`agradecimientos-borrador.md`](agradecimientos-borrador.md) | Agradecimientos, fuera del Word hasta el final: para incluirlos, renombrar a `agradecimientos.md` y rearmar. |
 | [`figuras/`](figuras/INDICE.md) | Diagramas con su fuente, capturas y anexos. |
 
 **Cómo se rehace el Word** después de editar un capítulo:
