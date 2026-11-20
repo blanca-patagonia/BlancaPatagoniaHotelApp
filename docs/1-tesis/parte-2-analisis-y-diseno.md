@@ -268,7 +268,7 @@ El sistema se divide en ocho paquetes funcionales. La Figura 7 muestra los casos
 cada uno; los cinco resaltados son los casos de uso principales, que se desarrollan en la
 sección 6.3.
 
-![Diagrama de paquetes](figuras/diagramas/pp3-paquetes.png)
+![Diagrama de paquetes](figuras/diagramas/pp3-paquetes.png){alto=22}
 
 **Figura 7.** Diagrama de paquetes: módulos y casos de uso (2026). Fuente: elaboración propia.
 

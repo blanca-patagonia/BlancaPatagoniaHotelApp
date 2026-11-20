@@ -159,7 +159,7 @@ function tabla(filas) {
   }
   for (const f of cuerpo) {
     filasTabla.push(
-      new D.TableRow({ cantSplit: true, children: Array.from({ length: n }, (_, i) => celda(f[i], i, false, i === 0)) }),
+      new D.TableRow({ children: Array.from({ length: n }, (_, i) => celda(f[i], i, false, i === 0)) }),
     )
   }
   return [
@@ -297,14 +297,15 @@ function convertir(md, { desplazar = 0, conNotas = false } = {}) {
       continue
     }
 
-    const img = /^!\[[^\]]*\]\(([^)]+)\)\s*$/.exec(l)
+    // `![…](ruta){alto=22}` permite que una figura alta ocupe más de la hoja (en cm).
+    const img = /^!\[[^\]]*\]\(([^)]+)\)(?:\{alto=(\d+)\})?\s*$/.exec(l)
     if (img) {
       salida.push(
         new D.Paragraph({
           alignment: D.AlignmentType.CENTER,
           keepNext: true,
           spacing: { before: 160, after: 80, line: 240, lineRule: D.LineRuleType.AUTO },
-          children: [imagen(img[1], 16, 19)],
+          children: [imagen(img[1], 16, img[2] ? Number(img[2]) : 19)],
         }),
       )
       i++
@@ -436,8 +437,10 @@ const centro = (hijos, extra = {}) => new D.Paragraph({ alignment: D.AlignmentTy
 const caratula = [
   centro([imagen('figuras/anexos/logo-ies.png', 3.4, 3)], { spacing: { before: 600, after: 160, line: 240, lineRule: D.LineRuleType.AUTO } }),
   centro([new D.TextRun({ text: 'Colegio Universitario IES Siglo 21', size: 28, bold: true, color: AZUL })], { spacing: { after: 60 } }),
-  centro([new D.TextRun({ text: 'Carrera: Analista de Sistemas', size: 24, color: GRIS })], { spacing: { after: 1300 } }),
-  centro([new D.TextRun({ text: 'PROYECTO DE TESIS', size: 24, color: GRIS, characterSpacing: 60 })], { spacing: { after: 240 } }),
+  centro([new D.TextRun({ text: 'Carrera: Analista de Sistemas', size: 24, color: GRIS })], { spacing: { after: 40 } }),
+  centro([new D.TextRun({ text: 'Materia: Práctica Profesionalizante III', size: 24, color: GRIS })], { spacing: { after: 40 } }),
+  centro([new D.TextRun({ text: 'Docente: Prof. Juan Casale', size: 24, color: GRIS })], { spacing: { after: 1100 } }),
+  centro([new D.TextRun({ text: 'PROYECTO FINAL', size: 24, color: GRIS, characterSpacing: 60 })], { spacing: { after: 240 } }),
   centro([new D.TextRun({ text: 'Sistema de Gestión de Hotelería', size: 60, bold: true, color: AZUL })], {
     spacing: { after: 160 },
     border: { bottom: { style: D.BorderStyle.SINGLE, size: 12, color: AZUL, space: 10 } },
@@ -471,35 +474,48 @@ const estiloIndice = (id, nombre, izquierda, extra = {}) => ({
 })
 
 const margen = { top: Math.round(2.5 * CM), bottom: Math.round(2.5 * CM), left: Math.round(2.5 * CM), right: Math.round(2.5 * CM), header: 480, footer: 480 }
+const sinBorde = { style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+const filaDeDos = (izquierda, derecha, borde, proporcion = 0.55) => {
+  const ancho1 = Math.round(ANCHO * proporcion)
+  const celdaDe = (hijos, ancho, alineacion) =>
+    new D.TableCell({
+      width: { size: ancho, type: D.WidthType.DXA },
+      verticalAlign: D.VerticalAlign.BOTTOM,
+      margins: { top: 0, bottom: 40, left: 0, right: 0 },
+      borders: { top: sinBorde, left: sinBorde, right: sinBorde, bottom: sinBorde, ...borde },
+      children: [new D.Paragraph({ alignment: alineacion, spacing: { after: 0, line: 240, lineRule: D.LineRuleType.AUTO }, children: hijos })],
+    })
+  return new D.Table({
+    width: { size: ANCHO, type: D.WidthType.DXA },
+    columnWidths: [ancho1, ANCHO - ancho1],
+    borders: { top: sinBorde, bottom: sinBorde, left: sinBorde, right: sinBorde, insideHorizontal: sinBorde, insideVertical: sinBorde },
+    rows: [new D.TableRow({ children: [celdaDe(izquierda, ancho1, D.AlignmentType.LEFT), celdaDe(derecha, ANCHO - ancho1, D.AlignmentType.RIGHT)] })],
+  })
+}
+const gris = (text) => new D.TextRun({ text, size: 17, color: GRIS })
 const membrete = new D.Header({
   children: [
-    new D.Paragraph({
-      alignment: D.AlignmentType.LEFT,
-      spacing: { after: 0, line: 240, lineRule: D.LineRuleType.AUTO },
-      border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: AZUL, space: 4 } },
-      tabStops: [{ type: D.TabStopType.RIGHT, position: ANCHO }],
-      children: [
-        imagen('figuras/anexos/logo-ies.png', 1.25, 1),
-        new D.TextRun({ text: '\tSistema de Gestión de Hotelería — Hotel Blanca Patagonia', size: 17, color: GRIS }),
-      ],
-    }),
+    filaDeDos(
+      [imagen('figuras/anexos/logo-ies.png', 1.25, 1)],
+      [gris('Sistema de Gestión de Hotelería — Hotel Blanca Patagonia')],
+      { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: AZUL } },
+      0.25,
+    ),
+    new D.Paragraph({ spacing: { after: 0 }, children: [] }),
   ],
 })
 const pie = new D.Footer({
   children: [
-    new D.Paragraph({
-      alignment: D.AlignmentType.LEFT,
-      spacing: { after: 0 },
-      border: { top: { style: D.BorderStyle.SINGLE, size: 4, color: 'A6B8CC', space: 4 } },
-      tabStops: [{ type: D.TabStopType.RIGHT, position: ANCHO }],
-      children: [
-        new D.TextRun({ text: 'Morán · Fakiani — Analista de Sistemas, IES Siglo 21', size: 17, color: GRIS }),
-        new D.TextRun({ text: '\tPágina ', size: 17, color: GRIS }),
+    filaDeDos(
+      [gris('Morán · Fakiani — Analista de Sistemas, IES Siglo 21')],
+      [
+        gris('Página '),
         new D.TextRun({ children: [D.PageNumber.CURRENT], size: 17, color: GRIS }),
-        new D.TextRun({ text: ' de ', size: 17, color: GRIS }),
+        gris(' de '),
         new D.TextRun({ children: [D.PageNumber.TOTAL_PAGES], size: 17, color: GRIS }),
       ],
-    }),
+      { top: { style: D.BorderStyle.SINGLE, size: 4, color: 'A6B8CC' } },
+    ),
   ],
 })
 

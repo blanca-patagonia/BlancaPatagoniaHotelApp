@@ -450,6 +450,7 @@ administración del hotel.
   ingresos, distribución de canales y reputación en línea.
 - **Anexo C:** Firma del comitente (Franco Theo Cheli, Director de Blanca Patagonia S.A.S.).
 - **Anexo D:** Sistemas que el hotel utiliza actualmente (Winpax y extranet de Booking.com).
+- **Anexo E:** Evidencia de las pruebas, repositorio del código y demo del sistema.
 
 Los documentos originales de los anexos A y B se entregan en formato PDF junto con este
 trabajo.
@@ -543,6 +544,33 @@ también en Winpax, con Booking como agente (Figura 56).
 ![Booking: reservas](figuras/anexos/booking-02-reservas.png)
 
 **Figura 61.** Extranet de Booking.com: consulta de reservas (2026). Fuente: Booking.com, captura provista por el comitente.
+
+## Anexo E — Evidencia de las pruebas, repositorio y demo
+
+**Repositorio del código.** https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp (rama
+`tesis-a-presentar`). Contiene el código fuente, las 127 migraciones de la base de datos, las
+pruebas automáticas y la documentación del proyecto.
+
+**Demo del sistema.** https://blanca-patagonia-demo.vercel.app — entorno de demostración con
+datos ficticios, pagos y facturación simulados. El panel de gestión está en `/login` y se
+accede con un usuario por rol (administrador, gerencia, recepción y housekeeping), cuyas
+credenciales se entregan aparte.
+
+**Resultado de las pruebas.** La Figura 62 muestra la salida de la ejecución completa de las
+pruebas automáticas contra una base de datos aislada, creada desde cero con las migraciones
+del repositorio: 142 archivos y 1.788 pruebas aprobadas, ninguna omitida.
+
+![Resultado de las pruebas](figuras/anexos/evidencia-pruebas.png)
+
+**Figura 62.** Ejecución completa de las pruebas automáticas, 20 de noviembre de 2026 (2026). Fuente: elaboración propia, captura de la terminal (se omite el bloque con la credencial de la base de pruebas).
+
+**Verificación automática del repositorio.** Cada cambio que se sube al repositorio dispara la
+verificación de integración continua (sección 8.4). La Figura 63 muestra una ejecución
+completa en la rama de entrega.
+
+![Verificación automática](figuras/anexos/evidencia-ci.png)
+
+**Figura 63.** Verificación automática del repositorio en GitHub Actions: corrida 355, con todos los pasos aprobados (2026). Fuente: elaboración propia, captura de GitHub.
 
 # 5. Glosario
 

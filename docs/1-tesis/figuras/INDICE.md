@@ -25,6 +25,8 @@ Material visual producido en la Fase 1. El número definitivo de cada figura se 
 | `anexos/winpax-07-situacion-gobernanta.png` | WinPAX 9: situación del hotel y tablero de gobernanta | 2026 | Hotel Blanca Patagonia (captura provista por el comitente) |
 | `anexos/booking-01-inicio.png` | Extranet de Booking.com: inicio | 2026 | Hotel Blanca Patagonia (captura provista por el comitente) |
 | `anexos/booking-02-reservas.png` | Extranet de Booking.com: reservas | 2026 | Hotel Blanca Patagonia (captura provista por el comitente) |
+| `anexos/evidencia-pruebas.png` | Ejecución completa de las pruebas automáticas | 2026 | Elaboración propia (captura de la terminal) |
+| `anexos/evidencia-ci.png` | Verificación automática del repositorio en GitHub Actions | 2026 | Elaboración propia (captura de GitHub) |
 
 ## Parte 2 — Análisis y diseño
 

@@ -9379,3 +9379,37 @@ housekeeping redirigido al intentar abrir las reservas.
 **Para tener en cuenta.** Con el pago simulado en un sitio público, cualquiera puede marcar como
 pagada una reserva que cree; sirve para la demo, no para producción (ver `PENDIENTES.md`). Un
 proyecto gratuito de Supabase se pausa tras siete días sin uso.
+
+## 2026-11-20 · Tesis · Correcciones del docente
+
+**Qué se hizo.** Se aplicaron las observaciones del profesor de Práctica Profesionalizante III
+sobre el documento:
+
+1. **Política de cancelación:** el Anexo A y la regla RN-05 dicen lo mismo. El tarifario pone el
+   día 14 en los dos primeros tramos; se explicita la interpretación que aplica el sistema y que
+   ve el huésped al reservar (15 días o más, sin cargo; de 14 a 7, la primera noche; menos de 7
+   y no-show, el total).
+2. **Pedido contra alcance:** el alcance aclara que la cancelación la registra recepción a pedido
+   del huésped, y la sección 6.3 explica que la gestión de huéspedes está dentro de CU-01 y CU-02.
+3. **Diagrama de paquetes:** en dos columnas, a lo alto de la hoja y sin los asteriscos que
+   dejaba el formato en negrita partido en dos líneas.
+4. **Diccionario de datos:** la columna «Obl.» distingue *Sí* (hay que informarlo), *No* (puede
+   quedar vacío) y *Automático* (lo completa la base); los enumerados figuran como «lista de
+   valores» con sus valores en la descripción.
+5. **Evidencia de las pruebas:** Anexo E con la salida de la suite completa (142 archivos,
+   1.788 pruebas, 20/11/2026), la verificación de GitHub Actions y los enlaces al repositorio
+   y a la demo.
+6. **Menores:** dimensionamiento con las 37 unidades reales (15 habitaciones y 22 cabañas),
+   glosario ampliado, carátula con materia, docente y «Proyecto Final», filas de tabla que se
+   pueden partir entre páginas, y encabezado y pie armados con tablas.
+
+**Un hallazgo de paso.** La verificación automática de GitHub estaba en rojo en esta rama
+desde el 12/11: el script que arma el Word usaba `require()` y ESLint lo rechaza. Se pasó a
+módulo ES (`armar-docx.mjs`) en lugar de desactivar la regla, y la corrida 355 terminó con
+todos los pasos aprobados.
+
+**Por qué el pie se rearmó con una tabla.** Con tabulaciones, Word aplica también las del estilo
+«Pie de página» y el número quedaba amontonado junto al texto; en LibreOffice no se veía.
+
+**Firmas.** El Word del repositorio se arma sin las firmas de los autores (el repositorio es
+público); la versión firmada se genera aparte y no se sube.

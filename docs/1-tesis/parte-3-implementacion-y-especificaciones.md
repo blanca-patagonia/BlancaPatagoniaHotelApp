@@ -208,8 +208,9 @@ esquema se pueda reconstruir completo. Los casos centrales son:
 
 ## 8.3. Resultados
 
-La última ejecución completa, del 11 de noviembre de 2026, corrió los 142 archivos de prueba:
-**1.788 pruebas, todas aprobadas y ninguna omitida**.
+La última ejecución completa, del 20 de noviembre de 2026, corrió los 142 archivos de prueba:
+**1.788 pruebas, todas aprobadas y ninguna omitida**. La captura de esa ejecución y la de la
+verificación automática del repositorio están en el Anexo E.
 
 En el recorrido de pantallas se abrieron las 35 pantallas fijas del panel y 11 rutas del
 portal: todas respondieron correctamente, sin errores en la consola del navegador ni enlaces
