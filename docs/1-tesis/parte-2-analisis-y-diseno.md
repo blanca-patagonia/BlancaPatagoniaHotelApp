@@ -208,7 +208,7 @@ contabilidad general, la liquidación de sueldos y la gestión interna del resta
 | RN-02 | Ocupan inventario las reservas pendientes, confirmadas, pagadas y alojadas. |
 | RN-03 | La reserva del portal nace pendiente; si no registra la seña en 5 días, se cancela y libera la unidad. |
 | RN-04 | La seña es el importe de la primera noche. |
-| RN-05 | Cancelación: con 15 días o más de anticipación, sin cargo; entre 14 y 7 días antes (ambos inclusive), la primera noche; con menos de 7 días, el total. El no-show paga el total. Es la interpretación del tarifario detallada en el Anexo A. |
+| RN-05 | Cancelación: con 15 días o más de anticipación, sin cargo; entre 14 y 7 días antes (ambos inclusive), la primera noche; con menos de 7 días, el total. El no-show paga el total. Es la interpretación del tarifario acordada con el hotel, detallada en el Anexo A. |
 | RN-06 | Cada tipo de alojamiento tiene dos precios por temporada: neto (agencias) y rack (mostrador). |
 | RN-07 | El canal define la tarifa: mostrador y portal venden a rack; Booking y Expedia, a neto. |
 | RN-08 | Las tarifas se guardan sin IVA; al huésped siempre se le muestra el precio con IVA. |

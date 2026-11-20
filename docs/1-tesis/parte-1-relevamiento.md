@@ -470,8 +470,8 @@ trabajo.
 El tarifario la enuncia así: «hasta 14 días antes del check-in, sin cargo; entre 14 y 7 días
 antes, se cobra la primera noche; dentro de los 7 días, se cobra el 100 % de la estadía;
 no-show, se cobra el 100 % de la estadía». Como el día 14 figura en los dos primeros tramos,
-se adoptó la siguiente interpretación, que es la que aplica el sistema y la que se le informa
-al huésped antes de confirmar su reserva:
+se acordó con el hotel la siguiente interpretación, confirmada por su Director, que es la que
+aplica el sistema y la que se le informa al huésped antes de confirmar su reserva:
 
 | Anticipación de la cancelación | Cargo |
 |---|---|
