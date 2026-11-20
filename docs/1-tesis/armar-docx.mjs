@@ -2,7 +2,7 @@
 /**
  * Arma el documento Word de la tesis a partir de los capítulos en Markdown.
  *
- *   node docs/1-tesis/armar-docx.js <salida.docx> [paginas.json] [--marcas]
+ *   node docs/1-tesis/armar-docx.mjs <salida.docx> [paginas.json] [--marcas]
  *
  * - `paginas.json` trae la página de cada título y de cada figura; con él se escriben los
  *   índices ya completos. Sin él, los índices salen con «0» (primera pasada).
@@ -13,11 +13,15 @@
  * justificado con partición de palabras, carátula, índice general, índice de figuras,
  * membrete, número de página y epígrafe en toda figura.
  */
-const fs = require('fs')
-const path = require('path')
-const D = require('docx')
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const AQUI = __dirname
+// `docx` no es dependencia del proyecto: armar-docx.sh pasa su ruta en DOCX_MODULE
+// (un import de módulo ES no busca en los paquetes globales).
+const D = await import(process.env.DOCX_MODULE ? pathToFileURL(process.env.DOCX_MODULE).href : 'docx')
+
+const AQUI = path.dirname(fileURLToPath(import.meta.url))
 const [, , SALIDA, ...resto] = process.argv
 const MARCAS = resto.includes('--marcas')
 const archivoPaginas = resto.find((a) => a.endsWith('.json'))

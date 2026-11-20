@@ -153,12 +153,13 @@ Aeropuerto Internacional en el año 2000.
 ### Dimensionamiento
 
 Los siguientes datos surgen del informe gerencial de marzo de 2026 proporcionado por la
-administración del hotel (Anexo B).
+administración del hotel (Anexo B). La cantidad de habitaciones y cabañas sale de la hoja de
+unidades que usa recepción, también provista por el hotel: en total, 37 unidades.
 
 | Indicador | Dato | Observación |
 |---|---|---|
-| Habitaciones de la hostería | ~20 unidades | Single, Doble Standard, Doble Superior, Triple, Suite |
-| Cabañas | 8–12 unidades | 1, 2 y 3 dormitorios |
+| Habitaciones de la hostería | 15 habitaciones | 7 Standard, 4 Superior, 2 Triple y 2 Suite |
+| Cabañas | 22 cabañas | En cinco complejos: Bolados (7), Spegazzini (5), Onelli (4), Moreno (3) y Upsala (3) |
 | Pernoctes (marzo 2026) | 1.175 | Dato real del informe gerencial |
 | Habitaciones ocupadas | 530 | Dato real de marzo de 2026 |
 | Ocupación promedio | 86 % | Temporada alta |
@@ -463,12 +464,20 @@ trabajo.
 | Media | 01/10 al 31/10 de 2025 · 01/12 al 19/12 de 2025 · 01/03 al 28/03 de 2026 |
 | Alta | 01/11 al 30/11 de 2025 · 20/12 de 2025 al 29/02 de 2026 · 29/03 al 04/04 de 2026 |
 
-**Política de cancelación** (textual del tarifario)
+**Política de cancelación**
 
-- Hasta 14 días antes del check-in: sin cargo.
-- Entre 14 y 7 días antes: se cobra la primera noche.
-- Dentro de los 7 días: se cobra el 100 % de la estadía.
-- No-show: se cobra el 100 % de la estadía.
+El tarifario la enuncia así: «hasta 14 días antes del check-in, sin cargo; entre 14 y 7 días
+antes, se cobra la primera noche; dentro de los 7 días, se cobra el 100 % de la estadía;
+no-show, se cobra el 100 % de la estadía». Como el día 14 figura en los dos primeros tramos,
+se adoptó la siguiente interpretación, que es la que aplica el sistema y la que se le informa
+al huésped antes de confirmar su reserva:
+
+| Anticipación de la cancelación | Cargo |
+|---|---|
+| 15 días o más antes del check-in | Sin cargo |
+| Entre 14 y 7 días antes (ambos inclusive) | La primera noche |
+| Menos de 7 días antes | El 100 % de la estadía |
+| No-show (el huésped no se presenta) | El 100 % de la estadía |
 
 ## Anexo B — Informe Gerencial de marzo de 2026
 
@@ -546,15 +555,21 @@ también en Winpax, con Booking como agente (Figura 56).
 | **Check-out** | Proceso de cierre de la estadía y liquidación de la cuenta del huésped. |
 | **Comanda** | Pedido de consumos que se carga de una vez a la cuenta de un huésped. |
 | **CUIT** | Clave Única de Identificación Tributaria. |
+| **Disparador** | Rutina que la base de datos ejecuta sola cuando se inserta, modifica o borra un registro; por ejemplo, para dejar constancia en la auditoría. |
 | **Folio** | Cada una de las partes en que se divide la cuenta de un huésped. |
 | **Housekeeping** | Área encargada de la limpieza y preparación de las habitaciones. |
+| **Integración continua** | Práctica por la que cada cambio que se sube al repositorio se verifica automáticamente (estilo del código, tipos, pruebas y compilación) antes de integrarse. |
 | **IVA** | Impuesto al Valor Agregado (21 % en la Argentina). |
+| **Migración** | Archivo numerado que describe un cambio en la estructura de la base de datos; aplicadas en orden, reconstruyen la base completa. |
 | **Neto** | Tarifa para agencias de viajes (precio con descuento mayorista). |
 | **No-show** | Cuando el huésped no se presenta en la fecha de check-in reservada. |
 | **Overbooking** | Sobreventa: aceptar más reservas que unidades disponibles. |
 | **Pernocte** | Cada noche que un huésped se aloja en el hotel. |
 | **Pick-up** | Cantidad de reservas nuevas captadas en un período. |
 | **Rack** | Tarifa de mostrador (precio sin descuento de agencia). |
+| **Restricción de exclusión** | Regla de la base de datos que impide guardar dos registros que se superpongan; en el sistema, dos estadías activas de la misma unidad en fechas que se cruzan. |
 | **RevPAR** | *Revenue Per Available Room*: ingreso por habitación disponible. |
+| **Seguridad por fila** | Mecanismo de la base de datos que decide, registro por registro, qué puede leer o modificar cada rol, aunque se consulte la base sin pasar por las pantallas. |
 | **Seña** | Pago anticipado (primera noche) para confirmar la reserva. |
+| **Webhook** | Aviso automático que un servicio externo envía al sistema cuando ocurre algo; en el sistema, la pasarela informa así que un pago se acreditó. |
 | **Winpax** | Sistema de gestión hotelera heredado que usa actualmente el hotel. |

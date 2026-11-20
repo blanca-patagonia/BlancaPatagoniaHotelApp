@@ -1,51 +1,76 @@
 @startuml
 !include _estilo.iuml
+skinparam defaultFontSize 15
 skinparam packageStyle folder
+skinparam ranksep 12
+skinparam nodesep 40
+skinparam package {
+  FontSize 16
+  FontStyle bold
+}
+' Dos columnas de cuatro paquetes, para que entre a lo alto de la hoja y se lea impreso.
+' Resaltados (fondo amarillo): los cinco casos de uso principales.
 package "Portal público" as P1 {
   usecase "Consultar disponibilidad" as a1
-  usecase "**Reservar y pagar la seña**" as a2 #FFF4D6
-  usecase "Ver mi reserva y mi factura" as a3
+  usecase "Reservar y pagar la seña\n(CU-01)" as a2 #FFF4D6
+  usecase "Ver mi reserva\ny mi factura" as a3
   usecase "Responder la encuesta" as a4
 }
 package "Reservas y estadías" as P2 {
   usecase "Reservar en el mostrador" as b1
-  usecase "**Hacer el check-in**" as b2 #FFF4D6
+  usecase "Hacer el check-in\n(CU-02)" as b2 #FFF4D6
   usecase "Cancelar · reprogramar ·\ncambiar de unidad" as b3
   usecase "Consultar la ocupación" as b4
 }
 package "Consumos" as P3 {
-  usecase "**Cargar un consumo**" as c1 #FFF4D6
+  usecase "Cargar un consumo\n(CU-03)" as c1 #FFF4D6
   usecase "Anular una comanda" as c2
 }
 package "Cuenta, pagos y facturación" as P4 {
   usecase "Registrar un pago" as d1
-  usecase "**Hacer el check-out\ny emitir la factura**" as d2 #FFF4D6
+  usecase "Hacer el check-out y\nemitir la factura (CU-04)" as d2 #FFF4D6
   usecase "Emitir nota de crédito" as d3
 }
 package "Huéspedes" as P5 {
-  usecase "Registrar y editar huéspedes" as e1
-  usecase "Fusionar fichas duplicadas" as e2
+  usecase "Registrar y editar\nhuéspedes" as e1
+  usecase "Fusionar fichas\nduplicadas" as e2
 }
 package "Housekeeping" as P6 {
-  usecase "Ver las tareas por prioridad" as f1
-  usecase "Marcar el estado de limpieza" as f2
+  usecase "Ver las tareas\npor prioridad" as f1
+  usecase "Marcar el estado\nde limpieza" as f2
 }
 package "Reportes" as P7 {
-  usecase "**Consultar los indicadores\nde gestión**" as g1 #FFF4D6
+  usecase "Consultar los indicadores\nde gestión (CU-05)" as g1 #FFF4D6
   usecase "Exportar listados" as g2
 }
 package "Administración" as P8 {
-  usecase "Gestionar usuarios y roles" as h1
-  usecase "Mantener tarifas y temporadas" as h2
+  usecase "Gestionar usuarios\ny roles" as h1
+  usecase "Mantener tarifas\ny temporadas" as h2
   usecase "Consultar la auditoría" as h3
 }
-P1 ..> P2 : crea reservas
-P2 ..> P5 : usa
-P3 ..> P2 : imputa a la estadía
-P4 ..> P3 : consolida
-P4 ..> P2 : cierra la estadía
-P6 ..> P2 : salidas del día
-P7 ..> P4 : lee
-P7 ..> P2 : lee
-P2 ..> P8 : tarifas y permisos
+' Grilla: columna izquierda P1, P3, P5, P7; derecha P2, P4, P6, P8.
+P1 -[hidden]right-> P2
+P3 -[hidden]right-> P4
+P5 -[hidden]right-> P6
+P7 -[hidden]right-> P8
+a4 -[hidden]down-> c1
+c2 -[hidden]down-> e1
+e2 -[hidden]down-> g1
+b4 -[hidden]down-> d1
+d3 -[hidden]down-> f1
+f2 -[hidden]down-> h1
+a1 -[hidden]down-> a2
+a2 -[hidden]down-> a3
+a3 -[hidden]down-> a4
+b1 -[hidden]down-> b2
+b2 -[hidden]down-> b3
+b3 -[hidden]down-> b4
+c1 -[hidden]down-> c2
+d1 -[hidden]down-> d2
+d2 -[hidden]down-> d3
+e1 -[hidden]down-> e2
+f1 -[hidden]down-> f2
+g1 -[hidden]down-> g2
+h1 -[hidden]down-> h2
+h2 -[hidden]down-> h3
 @enduml

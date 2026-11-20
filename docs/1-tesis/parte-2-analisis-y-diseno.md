@@ -38,7 +38,7 @@ funcional, por módulo, es el siguiente.
 
 | Módulo | Qué incluye |
 |---|---|
-| **Portal público** | Portada y catálogo de alojamientos; consulta de disponibilidad con precio final; reserva con datos del huésped; pago en línea de la seña y del saldo; página de la reserva con su estado; descarga de la factura; encuesta de satisfacción; asistente de preguntas frecuentes. |
+| **Portal público** | Portada y catálogo de alojamientos; consulta de disponibilidad con precio final; reserva con datos del huésped; pago en línea de la seña y del saldo; página de la reserva con su estado; descarga de la factura; encuesta de satisfacción; asistente de preguntas frecuentes. El huésped consulta su reserva en línea; para cancelarla se comunica con el hotel y recepción la cancela aplicando la política (ver 4.4). |
 | **Reservas y estadías** | Alta de reservas de mostrador y de grupo; grilla de ocupación; listado con vistas operativas (llegadas, salidas, alojados, con saldo); ficha de la reserva; check-in y check-out; cancelación con la política del tarifario; reprogramación de fechas; cambio de unidad. |
 | **Consumos** | Punto de venta con el catálogo por departamento; carga por comanda con control de stock; anulación de comandas; reparto de la cuenta en dos folios. |
 | **Cuenta, pagos y facturación** | Registro de seña, saldo y reembolso; cobro en pesos o en dólares con la cotización del día; enlace de pago para enviar al huésped; factura con IVA discriminado; nota de crédito. |
@@ -55,6 +55,12 @@ El panel se organiza en doce áreas, y cada rol ve solo las que le corresponden 
   reserva.
 - **Hasta:** la emisión de la factura, el registro del cobro y la respuesta de la encuesta de
   satisfacción posterior a la estadía.
+
+**Cancelaciones.** El pedido del usuario prevé cancelar reservas en línea. En el sistema, el
+huésped consulta su reserva en línea, pero la cancelación la registra recepción cuando el
+huésped la solicita por correo o por teléfono: así cada cancelación pasa por el hotel, que
+aplica la política de cancelación (Anexo A), informa el cargo que corresponde y resuelve la
+devolución de la seña. El portal muestra esa política antes de confirmar la reserva.
 
 El sistema abarca la operación de alojamiento del hotel. Quedan fuera de sus límites la
 contabilidad general, la liquidación de sueldos y la gestión interna del restaurante: de este
@@ -111,7 +117,7 @@ contabilidad general, la liquidación de sueldos y la gestión interna del resta
 | RF-08 | Mostrar la grilla de ocupación por unidad y por día. |
 | RF-09 | Listar las reservas con búsqueda, filtros y vistas operativas (llegadas, salidas, alojados). |
 | RF-10 | Registrar el check-in y el check-out de una reserva. |
-| RF-11 | Cancelar una reserva calculando el cargo que corresponde según la política. |
+| RF-11 | Cancelar una reserva, a pedido del huésped o del hotel, calculando el cargo que corresponde según la política. |
 | RF-12 | Reprogramar las fechas de una reserva recalculando su precio. |
 | RF-13 | Cambiar una reserva de unidad, desde la ficha o arrastrándola en la grilla. |
 | RF-14 | Liberar automáticamente las reservas del portal que no registran la seña dentro del plazo. |
@@ -202,7 +208,7 @@ contabilidad general, la liquidación de sueldos y la gestión interna del resta
 | RN-02 | Ocupan inventario las reservas pendientes, confirmadas, pagadas y alojadas. |
 | RN-03 | La reserva del portal nace pendiente; si no registra la seña en 5 días, se cancela y libera la unidad. |
 | RN-04 | La seña es el importe de la primera noche. |
-| RN-05 | Cancelación: con 15 días o más de anticipación, sin cargo; entre 14 y 7 días, la primera noche; con menos de 7 días, el total. El no-show paga el total. |
+| RN-05 | Cancelación: con 15 días o más de anticipación, sin cargo; entre 14 y 7 días antes (ambos inclusive), la primera noche; con menos de 7 días, el total. El no-show paga el total. Es la interpretación del tarifario detallada en el Anexo A. |
 | RN-06 | Cada tipo de alojamiento tiene dos precios por temporada: neto (agencias) y rack (mostrador). |
 | RN-07 | El canal define la tarifa: mostrador y portal venden a rack; Booking y Expedia, a neto. |
 | RN-08 | Las tarifas se guardan sin IVA; al huésped siempre se le muestra el precio con IVA. |
@@ -277,7 +283,7 @@ PostgreSQL, que además de almacenar hace cumplir las reglas críticas.
 
 ## 6.3. Modelado de los Casos de Uso
 
-Se desarrollan los cinco casos de uso principales, uno por cada módulo del pedido del usuario.
+Se desarrollan los cinco casos de uso principales, que cubren los módulos del pedido del usuario. La gestión de huéspedes no tiene un caso de uso propio: está incluida en el CU-01, donde el huésped se registra al reservar, y en el CU-02, donde recepción completa y verifica su ficha.
 Para cada uno se presentan los requerimientos específicos, los prototipos de interfaz, la
 ficha, la vista estática y la vista dinámica.
 

@@ -8,10 +8,10 @@ import subprocess, sys
 
 D = {
 'huespedes': ("Personas que se alojan o reservan. Una ficha por huésped.", {
- 'id':'Identificador del huésped.','nombre':'Nombre de pila.','apellido':'Apellido. Único dato obligatorio para reservar en el mostrador.',
+ 'id':'Identificador del huésped.','nombre':'Nombre de pila. En el alta de mostrador, si no se informa, el sistema guarda el apellido.','apellido':'Apellido. Es el único dato que se le pide al recepcionista en el alta de mostrador.',
  'doc_tipo':'Tipo de documento (DNI, pasaporte, etc.).','doc_numero':'Número de documento.','email':'Correo al que se envían la confirmación y los avisos.',
  'telefono':'Teléfono de contacto.','nacionalidad':'Nacionalidad declarada.','notas':'Observaciones internas de recepción.','creado_en':'Fecha y hora de alta de la ficha.',
- 'puntos':'Puntos de fidelidad acumulados.','condicion_iva':'Condición frente al IVA; define la letra de la factura. Por defecto, consumidor final.',
+ 'puntos':'Puntos de fidelidad acumulados.','condicion_iva':'Condición frente al IVA: responsable inscripto, monotributo, exento o consumidor final (por defecto). Define la letra de la factura.',
  'vip':'Marca de huésped VIP.','residente_exterior':'Indica si reside en el exterior; es una de las dos condiciones de la exención de IVA.',
  'acepta_avisos':'Acepta avisos sobre su reserva (confirmación, recordatorio, factura).','acepta_promociones':'Acepta recibir promociones; requiere consentimiento explícito.',
  'anonimizado':'Indica que sus datos personales fueron suprimidos a pedido del titular.'}),
@@ -25,7 +25,7 @@ D = {
  'descuento_pct':'Descuento adicional, en porcentaje.','subtotal':'Importe sin IVA antes del descuento.','total_neto':'Importe sin IVA después del descuento.','iva':'IVA de la estadía.',
  'folio_alojamiento':'Folio (A o B) que paga el alojamiento.','folio_b_titular':'A nombre de quién se factura el folio B.','pago_desde_exterior':'Indica si el pago proviene del exterior; segunda condición de la exención de IVA.',
  'tarjeta_token':'Referencia que devuelve la pasarela por la tarjeta de garantía; no permite reconstruir el número.','tarjeta_ultimos4':'Últimos cuatro dígitos de la tarjeta de garantía.','tarjeta_marca':'Marca de la tarjeta de garantía.',
- 'tarjeta_vencimiento':'Vencimiento de la tarjeta de garantía (MM/AA).','tarjeta_verificacion':'Resultado de la verificación de la tarjeta.','tarjeta_verificada_en':'Fecha y hora de la verificación.',
+ 'tarjeta_vencimiento':'Vencimiento de la tarjeta de garantía (MM/AA).','tarjeta_verificacion':'Resultado de la verificación de la tarjeta: sin verificar, verificada, rechazada o no soportado.','tarjeta_verificada_en':'Fecha y hora de la verificación.',
  'tarjeta_detalle':'Motivo del rechazo o de la imposibilidad de verificar.','cancelada_en':'Fecha y hora de la cancelación, si se canceló.'}),
 'estadias': ("Ocupación de una unidad durante un período. Es la tabla que impide la sobreventa.", {
  'id':'Identificador de la estadía.','reserva_id':'Reserva a la que pertenece.','unidad_id':'Unidad física que ocupa.','tipo_unidad_id':'Tipo de alojamiento con el que se vendió.',
@@ -63,7 +63,7 @@ D = {
 'facturas': ("Comprobantes emitidos. Una reserva tiene como máximo una factura, y no se modifica una vez emitida.", {
  'id':'Identificador de la factura.','reserva_id':'Reserva facturada.','numero':'Número interno del comprobante.','total':'Importe total.','moneda':'Moneda del comprobante.','pdf_url':'Ubicación del archivo, si se generó.',
  'cae':'Código de autorización electrónico.','cae_vto':'Vencimiento del código de autorización.','punto_venta':'Punto de venta fiscal.','tipo_comprobante':'Letra del comprobante: A, B o C.','emitida_por':'Usuario que la emitió.',
- 'emitida_en':'Fecha y hora de emisión.','neto':'Importe sin IVA.','iva':'IVA discriminado.','alicuota_iva':'Alícuota de IVA aplicada.','condicion_iva_receptor':'Condición frente al IVA del huésped al emitir.',
+ 'emitida_en':'Fecha y hora de emisión.','neto':'Importe sin IVA.','iva':'IVA discriminado.','alicuota_iva':'Alícuota de IVA aplicada.','condicion_iva_receptor':'Condición frente al IVA del huésped al emitir: responsable inscripto, monotributo, exento o consumidor final.',
  'cuit_receptor':'CUIT del receptor, cuando corresponde factura A.','numero_fiscal':'Número correlativo dentro del punto de venta.','cae_solicitado_en':'Fecha y hora en que se pidió la autorización.',
  'exento':'Parte del neto que no paga IVA (alojamiento a turistas del exterior).','motivo_exencion':'Fundamento de la exención, impreso en el comprobante.'}),
 'encuestas_satisfaccion': ("Encuesta que se genera al hacer el check-out y el huésped responde por un enlace.", {
@@ -86,18 +86,25 @@ OTRAS = {
  'errores':'Errores del servidor, para verlos desde el panel.','cron_corridas':'Resultado de cada corrida de las tareas programadas.',
  'consultas_bot':'Consultas hechas al asistente del portal.','intentos_limitados':'Contador del límite de intentos por origen.',
 }
+def obligatoriedad(no_nulo, defecto):
+    """Sí: hay que informarlo. No: puede quedar vacío. Automático: lo completa la base."""
+    if not no_nulo: return 'No'
+    if not defecto: return 'Sí'
+    if defecto.split('::')[0] in ("''", "'{}'", "'[]'"): return 'No'
+    return 'Automático'
 TIPOS = {'uuid':'identificador','text':'texto','integer':'entero','smallint':'entero','bigint':'entero','numeric':'decimal','boolean':'sí / no','date':'fecha',
  'timestamptz':'fecha y hora','daterange':'rango de fechas','jsonb':'estructura','text[]':'lista de textos','inet':'dirección IP'}
 
 def q(sql):
-    out = subprocess.run(['psql','-h','127.0.0.1','-p','55322','-U','postgres','-d','postgres','-At','-F','|','-c',sql],capture_output=True,text=True,check=True).stdout
-    return [l.split('|') for l in out.splitlines() if l]
+    out = subprocess.run(['psql','-h','127.0.0.1','-p','55322','-U','postgres','-d','postgres','-At','-F','\x1f','-c',sql],capture_output=True,text=True,check=True).stdout
+    return [l.split('\x1f') for l in out.splitlines() if l]
+ENUMS = {r[0] for r in q("select t.typname from pg_type t join pg_namespace n on n.oid=t.typnamespace where t.typtype='e' and n.nspname='public'")}
 cols = {}
-for t,c,ty,nn in q("""select table_name, column_name,
+for t,c,ty,nn,defecto in q("""select table_name, column_name,
    case when data_type='USER-DEFINED' then udt_name when data_type='ARRAY' then ltrim(udt_name,'_')||'[]' when data_type like 'timestamp%' then 'timestamptz'
-        when data_type='character varying' then 'text' else data_type end, is_nullable
+        when data_type in ('character varying','character') then 'text' else data_type end, is_nullable, coalesce(column_default,'')
    from information_schema.columns where table_schema='public' order by table_name, ordinal_position"""):
-    cols.setdefault(t,[]).append((c,ty,nn=='NO'))
+    cols.setdefault(t,[]).append((c,ty,obligatoriedad(nn=='NO', defecto)))
 pk = {(t,c) for t,c in q("""select tc.table_name, kcu.column_name from information_schema.table_constraints tc join information_schema.key_column_usage kcu
    using (constraint_name, table_schema) where tc.constraint_type='PRIMARY KEY' and tc.table_schema='public'""")}
 fk = {(t,c):rt for t,c,rt in q("""select cl.relname, a.attname, cf.relname from pg_constraint co join pg_class cl on cl.oid=co.conrelid join pg_class cf on cf.oid=co.confrelid
@@ -105,7 +112,7 @@ fk = {(t,c):rt for t,c,rt in q("""select cl.relname, a.attname, cf.relname from 
 SISTEMA = set(D)|set(OTRAS)|{'users'}
 print("# Diccionario de datos\n")
 print("Generado del esquema real de la base con `figuras/fuentes/generar-diccionario.py`. Se detallan las tablas que intervienen en los casos de uso principales; las demás se describen al final.\n")
-print("Referencias: **PK** clave primaria · **FK** clave foránea · **Obl.** dato obligatorio.\n")
+print("Referencias: **PK** clave primaria · **FK** clave foránea. **Obl.** (obligatorio): **Sí**, hay que informarlo; **No**, puede quedar vacío; **Automático**, lo completa la base (fecha y hora, identificador o valor por defecto). En los campos de tipo *lista de valores*, la descripción indica los valores posibles.\n")
 faltan=[]
 for t,(desc,dc) in D.items():
     print(f"## {t}\n\n{desc}\n\n| Campo | Tipo | Clave | Obl. | Descripción |\n|---|---|---|---|---|")
@@ -114,7 +121,7 @@ for t,(desc,dc) in D.items():
         if rt and rt not in SISTEMA: continue          # columnas hacia tablas que la aplicación no usa
         if c not in dc: faltan.append(f'{t}.{c}'); continue
         clave = 'PK' if (t,c) in pk else (f'FK → {rt}' if rt else '')
-        print(f"| `{c}` | {TIPOS.get(ty, ty.replace('_',' '))} | {clave} | {'Sí' if nn else 'No'} | {dc[c]} |")
+        print(f"| `{c}` | {TIPOS.get(ty, 'lista de valores' if ty in ENUMS else ty)} | {clave} | {nn} | {dc[c]} |")
     print()
 print("## Otras tablas del sistema\n\n| Tabla | Contenido |\n|---|---|")
 for t,d in OTRAS.items():

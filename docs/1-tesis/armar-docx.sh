@@ -31,8 +31,9 @@ for f in glob.glob(origen + '/figuras/*/*.png') + glob.glob(origen + '/figuras/*
         shutil.copy(f, o)
 PY
 export TESIS_IMG="$TMP/img"
+export DOCX_MODULE="${DOCX_MODULE:-$(node -e "console.log(require.resolve('docx'))")}"
 
-node "$AQUI/armar-docx.js" "$TMP/pasada1.docx" --marcas
+node "$AQUI/armar-docx.mjs" "$TMP/pasada1.docx" --marcas
 python3 "$AQUI/completar-indices.py" "$TMP/pasada1.docx"
 (cd "$TMP" && $SOFFICE --headless --convert-to pdf pasada1.docx >/dev/null 2>&1)
 
@@ -48,7 +49,7 @@ json.dump(paginas, open(sys.argv[2], 'w'))
 print(f'{len(paginas)} marcas ubicadas')
 PY
 
-node "$AQUI/armar-docx.js" "$SALIDA" "$TMP/paginas.json"
+node "$AQUI/armar-docx.mjs" "$SALIDA" "$TMP/paginas.json"
 python3 "$AQUI/completar-indices.py" "$SALIDA"
 rm -f "${SALIDA%.docx}.indices.json"
 zip -d "$SALIDA" '*/' >/dev/null 2>&1 || true

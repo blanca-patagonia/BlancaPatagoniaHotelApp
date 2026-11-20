@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Completa el Word de la tesis: escribe los índices como campos de Word y activa la partición de palabras.
 
-Uso:  python3 completar-indices.py <tesis.docx>     (lee <tesis>.indices.json, que deja armar-docx.js)
+Uso:  python3 completar-indices.py <tesis.docx>     (lee <tesis>.indices.json, que deja armar-docx.mjs)
 
 Los índices quedan como campos TOC verdaderos —Word los actualiza con «Actualizar campo»— y con
 su resultado ya escrito, para que se vean completos sin tener que actualizarlos.
