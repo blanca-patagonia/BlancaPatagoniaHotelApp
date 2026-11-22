@@ -9470,3 +9470,13 @@ nueva, Housekeeping, Reportes y Ocupación (los informes, con octubre completo),
 las pruebas (149 archivos y 1.840 pruebas, 22/11/2026). De paso se sacaron dos menciones de la
 rama de trabajo que habían quedado en el Anexo E (en el texto y en el título de la terminal de la
 Figura 62): la tesis presenta el sistema terminado y no la organización del repositorio.
+
+## 2026-11-22 · Dependencias · Next.js 16.4.2 → 16.4.6 (aviso de seguridad)
+
+Next avisaba en `dev` y en `build` que la versión instalada tenía un aviso de seguridad publicado
+(registro de npm) y cortaba el build hasta mostrarlo. Se actualizó `next` y `eslint-config-next`
+a 16.4.6, un parche de la misma versión mayor: el lockfile sólo cambia los paquetes de Next (se
+rearmó con npm 11, porque el npm 10 del entorno borraba los campos `libc` de todo el árbol y
+ensuciaba el diff). Verificado: `npm run check` en verde y la suite completa contra la base
+aislada, 149 archivos y 1.840 pruebas aprobadas. No se agregó ninguna opción de configuración
+ni se envió telemetría: el asistente de actualización lo proponía y no hace falta para el arreglo.
