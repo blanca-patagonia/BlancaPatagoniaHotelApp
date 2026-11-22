@@ -547,8 +547,7 @@ también en Winpax, con Booking como agente (Figura 56).
 
 ## Anexo E — Evidencia de las pruebas, repositorio y demo
 
-**Repositorio del código.** https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp (rama
-`tesis-a-presentar`). Contiene el código fuente, las 127 migraciones de la base de datos, las
+**Repositorio del código.** https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp. Contiene el código fuente, las 127 migraciones de la base de datos, las
 pruebas automáticas y la documentación del proyecto.
 
 **Demo del sistema.** https://blanca-patagonia-demo.vercel.app — entorno de demostración con
@@ -558,11 +557,11 @@ credenciales se entregan aparte.
 
 **Resultado de las pruebas.** La Figura 62 muestra la salida de la ejecución completa de las
 pruebas automáticas contra una base de datos aislada, creada desde cero con las migraciones
-del repositorio: 142 archivos y 1.788 pruebas aprobadas, ninguna omitida.
+del repositorio: 149 archivos y 1.840 pruebas aprobadas, ninguna omitida.
 
 ![Resultado de las pruebas](figuras/anexos/evidencia-pruebas.png)
 
-**Figura 62.** Ejecución completa de las pruebas automáticas, 20 de noviembre de 2026 (2026). Fuente: elaboración propia, captura de la terminal (se omite el bloque con la credencial de la base de pruebas).
+**Figura 62.** Ejecución completa de las pruebas automáticas, 22 de noviembre de 2026 (2026). Fuente: elaboración propia, captura de la terminal (se omite el bloque con la credencial de la base de pruebas).
 
 **Verificación automática del repositorio.** Cada cambio que se sube al repositorio dispara la
 verificación de integración continua (sección 8.4). La Figura 63 muestra una ejecución

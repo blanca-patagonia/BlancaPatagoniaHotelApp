@@ -136,7 +136,8 @@ digital del hotel.
 ## 7.6. Módulo Housekeeping
 
 El tablero (`panel/housekeeping`) muestra el estado de cada unidad y permite asignar mucamas.
-La vista «Trabajo de limpieza» está pensada para el teléfono: lista las unidades por
+La vista «Por responsable» reparte el trabajo: muestra cuántas habitaciones tiene cada una y
+permite asignar varias de una vez. La vista «Trabajo de limpieza» está pensada para el teléfono: lista las unidades por
 prioridad, con el motivo escrito, y cada una se cierra con un botón. Cada limpieza queda en
 un registro con su comentario y, si hace falta, fotos.
 
@@ -208,8 +209,8 @@ esquema se pueda reconstruir completo. Los casos centrales son:
 
 ## 8.3. Resultados
 
-La última ejecución completa, del 20 de noviembre de 2026, corrió los 142 archivos de prueba:
-**1.788 pruebas, todas aprobadas y ninguna omitida**. La captura de esa ejecución y la de la
+La última ejecución completa, del 22 de noviembre de 2026, corrió los 149 archivos de prueba:
+**1.840 pruebas, todas aprobadas y ninguna omitida**. La captura de esa ejecución y la de la
 verificación automática del repositorio están en el Anexo E.
 
 En el recorrido de pantallas se abrieron las 35 pantallas fijas del panel y 11 rutas del

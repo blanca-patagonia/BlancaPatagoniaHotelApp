@@ -381,9 +381,9 @@ ficha, la vista estática y la vista dinámica.
 
 #### Prototipos de interfaz
 
-![Inicio con las llegadas del día](figuras/capturas/panel-01-inicio.png)
+![Inicio de la dirección](figuras/capturas/panel-01-inicio.png)
 
-**Figura 17.** CU-02: tablero de inicio con las llegadas y salidas del día (2026). Fuente: elaboración propia, captura del sistema.
+**Figura 17.** CU-02: tablero de inicio de la dirección, con la caja del hotel, lo que requiere atención y las llegadas y salidas del día (2026). Fuente: elaboración propia, captura del sistema.
 
 ![Ficha de la reserva confirmada](figuras/capturas/panel-05-ficha-confirmada.png)
 

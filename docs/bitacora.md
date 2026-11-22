@@ -9464,3 +9464,9 @@ Cada arreglo entra con su test; la suite completa contra la base aislada da **14
 facturas numeradas por fecha y encuestas), sólo en la base de la demo y con la nota «Historial
 de demostración». **La lentitud** venía de la región: Vercel corría en Washington y la base está
 en São Paulo; `vercel.json` fija `gru1` y el manual de despliegue lo explica.
+
+**Tesis, al cierre de estas mejoras.** Se reemplazaron las capturas de Inicio, Reservas, Reserva
+nueva, Housekeeping, Reportes y Ocupación (los informes, con octubre completo), y la evidencia de
+las pruebas (149 archivos y 1.840 pruebas, 22/11/2026). De paso se sacaron dos menciones de la
+rama de trabajo que habían quedado en el Anexo E (en el texto y en el título de la terminal de la
+Figura 62): la tesis presenta el sistema terminado y no la organización del repositorio.
