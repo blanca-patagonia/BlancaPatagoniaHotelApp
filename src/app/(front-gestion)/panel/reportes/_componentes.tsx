@@ -1,6 +1,13 @@
-import { mesRelativo, semanaRelativa, etiquetaSemana } from '@/lib/domain/metricas'
+import {
+  mesRelativo,
+  semanaRelativa,
+  etiquetaSemana,
+  INDICADORES,
+  tituloIndicador,
+  type Indicador,
+} from '@/lib/domain/metricas'
 import { Icono } from '../_components/iconos'
-import { BarraHerramientas, Mensaje, botonClases } from '../_components/ui'
+import { BarraHerramientas, Explicacion, Mensaje, botonClases } from '../_components/ui'
 import { SelectorMes } from '../_components/selector-mes'
 
 /**
@@ -162,5 +169,33 @@ export function AbrirAparte({ href, titulo }: { href: string; titulo: string }) 
       Abrir aparte
       <span className="sr-only">— {titulo}, en una pestaña nueva</span>
     </a>
+  )
+}
+
+/**
+ * Qué significa cada indicador, en castellano, arriba de los números.
+ *
+ * Al probar la demo, el docente leyó «ADR» y «RevPAR» y no supo qué eran. Son
+ * las siglas del rubro y se mantienen, pero ya no se muestran solas.
+ */
+export function ExplicacionIndicadores({
+  indicadores = ['ocupacion', 'adr', 'revpar'],
+}: {
+  indicadores?: Indicador[]
+}) {
+  return (
+    <Explicacion titulo="Cómo leer estos indicadores">
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3">
+        {indicadores.map((i) => (
+          <div key={i}>
+            <dt className="font-medium">{tituloIndicador(i)}</dt>
+            <dd className="text-lago-800">
+              {INDICADORES[i].explicacion}{' '}
+              <span className="text-xs text-lago-700">({INDICADORES[i].cuenta})</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Explicacion>
   )
 }

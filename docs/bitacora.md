@@ -9413,3 +9413,54 @@ todos los pasos aprobados.
 
 **Firmas.** El Word del repositorio se arma sin las firmas de los autores (el repositorio es
 público); la versión firmada se genera aparte y no se sube.
+
+## 2026-11-22 · Demo · Lo que marcó el docente al probarla
+
+El docente probó la demo pública y grabó un video de 11 minutos con observaciones. Se
+transcribió y se revisó cuadro por cuadro; la lista se acordó con el equipo antes de tocar nada.
+Cada arreglo entra con su test; la suite completa contra la base aislada da **149 archivos y
+1.840 pruebas, todas en verde y ninguna salteada** (22/11/2026).
+
+**Errores**
+
+1. **«Requiere atención» abría el listado entero.** El aviso decía «7 reservas con saldo
+   pendiente» y el enlace mostraba todas las reservas; lo mismo con «cuentas con consumos sin
+   facturar». Ahora son dos vistas del listado («Saldo pendiente» y «Consumos sin facturar») y el
+   aviso cuenta con **la misma consulta** que la vista: `reservasConSaldoVencido`
+   (`lib/reservas/atencion.ts`, regla pura `saldoVencido` en `vistas-reservas.ts`) y el
+   anti-join `facturas=is.null` de PostgREST. Contrato nuevo: ningún enlace del tablero puede
+   abrir el listado sin filtro (`tests/contratos/enlaces-del-tablero.test.ts`).
+2. **Cada pantalla abría a mitad de página**, con el desplazamiento de la anterior. El panel
+   desplaza la ventana entera y Next sólo vuelve arriba cuando el comienzo de la página nueva
+   quedó fuera de la vista. `useArribaAlNavegar` (en `shell.tsx`) vuelve arriba al avanzar y
+   respeta la posición al volver con «atrás».
+3. **Una contraseña pegada con un espacio de más** fallaba sin explicación. El login tiene
+   «Mostrar/Ocultar» y avisa si hay espacios al principio o al final (`avisoDeEspacios`). No se
+   quitan en silencio: un espacio puede ser parte de la contraseña.
+4. **Cada factura dejaba un error en «Errores del sistema»** («La moneda del comprobante no se
+   puede informar a ARCA»). El comprobante se armaba en dólares con tipo de cambio `null`; ahora
+   lleva la cotización vigente del sistema (ADR 0020). Test de acción que captura lo que llega al
+   proveedor de facturación.
+
+**Mejoras**
+
+5. **Inicio de la dirección con la plata**: cobrado hoy y en el mes (contra los mismos días del
+   mes anterior), facturado en el mes, saldo vencido, flujo de caja diario y mensual y «Quién
+   debe» (`lib/domain/caja.ts`, `panel/_inicio/caja.tsx`). Recepción conserva su tablero.
+6. **El logo lleva al Inicio.**
+7. **La barra flotante del punto de venta en todas las altas**: `PieDeFormulario` flota por
+   defecto y puede mostrar un resumen (en la reserva nueva, la unidad elegida y su total).
+8. **Housekeeping «Por responsable»**: explicación, cuántas tiene cada una y asignación de
+   varias habitaciones a la vez (`asignarVarias`). Asignar de a una devolvía a «Por unidad»; ahora
+   vuelve a la vista desde la que se asignó (lista blanca, `retornoHousekeeping`).
+9. **ADR y RevPAR explicados**: nombre en castellano, la cuenta y qué significan, desde un solo
+   lugar (`INDICADORES` en `metricas.ts`) que usan los informes y el glosario de Ayuda.
+10. **«Errores del sistema» en palabras del hotel**: cada evento con su área y su explicación
+    (`lib/domain/errores.ts`); un contrato exige que todo evento nuevo tenga la suya.
+11. **Identidad propia**: el login muestra el lobby del hotel y la marca; el listado de reservas
+    tiene franja de color por estado, iniciales del huésped y una marca por noche.
+
+**La demo**: historial ficticio de enero a noviembre (1.876 reservas con pagos, consumos,
+facturas numeradas por fecha y encuestas), sólo en la base de la demo y con la nota «Historial
+de demostración». **La lentitud** venía de la región: Vercel corría en Washington y la base está
+en São Paulo; `vercel.json` fija `gru1` y el manual de despliegue lo explica.

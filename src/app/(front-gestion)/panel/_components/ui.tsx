@@ -650,25 +650,71 @@ export function ExitoConPasos({
 }
 
 /**
- * Barra de acciones al pie de un formulario: guardar, cancelar y la nota de
- * campos obligatorios. Una sola definición para que todos los formularios
- * terminen igual.
+ * Barra de acciones de un formulario: guardar, cancelar y la nota de campos
+ * obligatorios. Una sola definición para que todos los formularios terminen
+ * igual.
+ *
+ * Flota pegada al borde inferior mientras se completa el formulario, como la
+ * del punto de venta: en un alta larga (una reserva, un huésped) el botón de
+ * guardar y, si lo hay, el total, quedan siempre a la vista sin bajar hasta el
+ * final. Al llegar al final del formulario se apoya en su lugar. La pidió el
+ * docente al probar la demo: «este flotante […] hay que replicarlo en el resto
+ * de las cargas».
+ *
+ * `resumen` es lo que la barra muestra a la izquierda (el total de la comanda,
+ * la unidad elegida): lo que conviene tener a la vista antes de confirmar.
+ * `flotante={false}` la deja fija en su lugar, para formularios cortos dentro
+ * de una tarjeta, donde flotar taparía el contenido de abajo.
  */
 export function PieDeFormulario({
   children,
   hayObligatorios = true,
+  resumen,
+  flotante = true,
 }: {
   children: ReactNode
   hayObligatorios?: boolean
+  resumen?: ReactNode
+  flotante?: boolean
 }) {
   return (
-    <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:items-center">
-      {children}
+    <div
+      className={`flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:flex-wrap sm:items-center ${
+        flotante
+          ? 'sticky bottom-0 z-20 rounded-xl border border-stone-300 bg-white/95 px-4 py-3 shadow-lg backdrop-blur sm:px-5 print:static print:shadow-none'
+          : ''
+      }`}
+    >
+      {resumen && <div className="min-w-0 text-sm sm:mr-auto">{resumen}</div>}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">{children}</div>
       {hayObligatorios && (
-        <p className="text-xs text-stone-500 sm:ml-auto">
+        <p className={`text-xs text-stone-500 ${resumen ? 'sm:basis-full' : 'sm:ml-auto'}`}>
           Los campos con <span className="text-red-600">*</span> son obligatorios.
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Explicación de para qué sirve una pantalla o cómo se usa.
+ *
+ * No es un aviso (no hay nada que corregir) y por eso no usa `Mensaje`: va en
+ * azul, con el icono de ayuda y sin rol de alerta, para que un lector de
+ * pantalla no la anuncie como si algo hubiera pasado. Existe porque al probar
+ * la demo hubo pantallas que se entendían sólo conociendo el sistema
+ * —housekeeping por responsable, Errores del sistema, ADR y RevPAR—.
+ */
+export function Explicacion({ titulo, children }: { titulo?: string; children: ReactNode }) {
+  return (
+    <div className="mb-4 flex items-start gap-2.5 rounded-xl bg-lago-50 px-4 py-3 text-sm text-lago-900 ring-1 ring-lago-100">
+      <span className="mt-0.5 shrink-0 text-lago-600">
+        <Icono nombre="ayuda" tam={17} />
+      </span>
+      <div className="min-w-0">
+        {titulo && <p className="mb-0.5 font-semibold">{titulo}</p>}
+        <div className="leading-relaxed">{children}</div>
+      </div>
     </div>
   )
 }

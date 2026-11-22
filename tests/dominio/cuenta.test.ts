@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validarCambioPassword, LARGO_MINIMO_PASSWORD } from '@/lib/domain/cuenta'
+import { validarCambioPassword, LARGO_MINIMO_PASSWORD, avisoDeEspacios } from '@/lib/domain/cuenta'
 
 const base = { actual: 'vieja1234', nueva: 'nueva1234', repetida: 'nueva1234' }
 
@@ -45,5 +45,30 @@ describe('mínimo de contraseña', () => {
   it('es el mismo para el alta, el cambio y la recuperación, y no baja de 8', () => {
     // Estuvo partido en 8 (alta) y 6 (cambio y recuperación).
     expect(LARGO_MINIMO_PASSWORD).toBeGreaterThanOrEqual(8)
+  })
+})
+
+describe('avisoDeEspacios (contraseña pegada con un espacio de más)', () => {
+  it('avisa del espacio al final, que es el caso de pegar desde un correo', () => {
+    expect(avisoDeEspacios('blancadev1234 ')).toMatch(/espacio al final/)
+  })
+
+  it('avisa del espacio al principio y de los dos a la vez', () => {
+    expect(avisoDeEspacios(' blancadev1234')).toMatch(/espacio al principio\./)
+    expect(avisoDeEspacios(' blancadev1234 ')).toMatch(/al principio y al final/)
+  })
+
+  it('un tabulador o un salto de línea pegados cuentan igual', () => {
+    expect(avisoDeEspacios('clave1234\n')).not.toBeNull()
+    expect(avisoDeEspacios('\tclave1234')).not.toBeNull()
+  })
+
+  it('no avisa por un espacio en el medio: puede ser parte de la contraseña', () => {
+    expect(avisoDeEspacios('mi clave larga')).toBeNull()
+  })
+
+  it('no avisa si no hay nada escrito o si está bien', () => {
+    expect(avisoDeEspacios('')).toBeNull()
+    expect(avisoDeEspacios('blancadev1234')).toBeNull()
   })
 })

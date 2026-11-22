@@ -32,6 +32,8 @@ export type NombreIcono =
   | 'ok'
   | 'ayuda'
   | 'divisas'
+  | 'ojo'
+  | 'ojo_tachado'
 
 /** Trazos de cada icono (todo dentro de un viewBox 0 0 24 24). */
 const TRAZOS: Record<NombreIcono, string[]> = {
@@ -109,6 +111,13 @@ const TRAZOS: Record<NombreIcono, string[]> = {
   montana: ['M2.5 19.5 9 8l3.5 6 2-3.4 7 8.9z', 'M9 8l2.2 3.9'],
   alerta: ['M12 4.5 21 19.5H3z', 'M12 10v4', 'M12 16.8v.2'],
   ok: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M8.5 12.2l2.4 2.4 4.6-4.8'],
+  // Mostrar y ocultar una contraseña.
+  ojo: ['M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z', 'M12 14.8a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6z'],
+  ojo_tachado: [
+    'M2.5 12S6 5.5 12 5.5c1.6 0 3 .4 4.2 1.1',
+    'M21.5 12s-3.5 6.5-9.5 6.5c-1.6 0-3-.4-4.2-1.1',
+    'M4 20 20 4',
+  ],
   // Signo de pregunta dentro de un círculo: la convención universal de ayuda.
   ayuda: [
     'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',

@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { construirQuery, paginaActual, rangoDePagina, terminoBusqueda } from '@/lib/listados'
-import { fechaHoraHotel, hoyISO } from '@/lib/fechas'
+import { fechaHoraHotel, hoyISO, inicioDelDiaHotel } from '@/lib/fechas'
+import { describirEvento } from '@/lib/domain/errores'
 import { registrarFalla } from '@/lib/acciones'
 import {
   BarraHerramientas,
@@ -12,6 +13,7 @@ import {
   Encabezado,
   EstadoVacio,
   Etiqueta,
+  Explicacion,
   FILA,
   Kpi,
   Mensaje,
@@ -103,7 +105,7 @@ export default async function ErroresPage({
   const { count: deHoy, error: eDeHoy } = await supabase
     .from('errores')
     .select('id', { count: 'exact', head: true })
-    .gte('creado_en', `${hoyISO()}T00:00:00-03:00`)
+    .gte('creado_en', inicioDelDiaHotel(hoyISO()))
   if (eDeHoy) registrarFalla(eDeHoy, 'errores:conteo_hoy')
 
   const filtros = { nivel, q: sp.q }
@@ -115,6 +117,16 @@ export default async function ErroresPage({
         descripcion="Qué falló, cuándo y en qué pantalla. Se borra solo a los 90 días."
         icono="alerta"
       />
+
+      {/* Para quién es y qué hacer: sin esto la pantalla era una lista de
+          códigos técnicos (lo marcó el docente al probar la demo). */}
+      <Explicacion titulo="¿Para qué sirve esta pantalla?">
+        Acá queda anotado todo lo que falló del lado del sistema: un cambio que la base no
+        aceptó, una pasarela de pago que no respondió, una tarea automática que no corrió. No
+        hace falta revisarlo todos los días; sirve cuando alguien dice «me salió un error»: con
+        el código de referencia que vio se encuentra su fila. Si un mismo error se repite,
+        conviene avisar al soporte técnico.
+      </Explicacion>
 
       {eRegistros && (
         <Mensaje tono="error">
@@ -197,8 +209,14 @@ export default async function ErroresPage({
                     </td>
                     <td className={TD}>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <Etiqueta tono={TONO_NIVEL[r.nivel] ?? 'neutro'}>{r.evento}</Etiqueta>
+                        <Etiqueta tono={TONO_NIVEL[r.nivel] ?? 'neutro'}>
+                          {describirEvento(r.evento).area}
+                        </Etiqueta>
+                        <span className="font-mono text-[11px] text-stone-500">{r.evento}</span>
                       </div>
+                      <p className="mt-1 text-sm text-stone-800">
+                        {describirEvento(r.evento).explicacion}
+                      </p>
                       {r.detalle && (
                         <p className="mt-1 text-xs break-words text-stone-600">{r.detalle}</p>
                       )}

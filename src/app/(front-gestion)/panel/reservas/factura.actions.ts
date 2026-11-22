@@ -31,6 +31,7 @@ import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
 import { datosFiscales } from '@/lib/facturacion/emisor'
 import { armarComprobante, MENSAJES_NO_ARMABLE } from '@/lib/domain/wsfev1'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
 import { registrarErrorSync } from '@/lib/registro'
 
@@ -235,6 +236,18 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     una integración que todavía no existe. Se registra y se sigue.
   */
   const periodo = (reserva.estadias ?? []) as { check_in: string; check_out: string }[]
+
+  /*
+    Tipo de cambio del comprobante. El importe está en dólares y ARCA exige,
+    para todo comprobante en moneda extranjera, cuántos pesos vale cada unidad
+    (`MonCotiz`). Antes se mandaba `null` y TODA factura quedaba con el motivo
+    «moneda» anotado en Errores del sistema —siete facturas de la demo, siete
+    errores—. Es la misma cotización que usa el hotel para cobrar en pesos
+    (`venta`, ADR 0020); si no hay ninguna disponible, el motivo se registra y
+    la factura interna se emite igual, como ya hacía.
+  */
+  const pesosPorDolar = (await cotizacionVigente('ARS'))?.venta ?? null
+
   const { comprobante, motivo: motivoComprobante } = armarComprobante({
     cuitEmisor: emisor?.cuit ?? null,
     tipo,
@@ -250,11 +263,10 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     discriminaIva: discriminaIva(tipo),
     cuitReceptor: cuitLimpio,
     condicionReceptor: receptor.condicion,
-    // `facturas.total` está en USD, igual que `reservas.total`. La conversión a
-    // pesos para ARCA es parte del adapter real y de una decisión del contador;
-    // hoy se declara la moneda que efectivamente tiene el importe.
+    // `facturas.total` está en USD, igual que `reservas.total`: se declara la
+    // moneda que efectivamente tiene el importe, con su tipo de cambio.
     moneda: 'USD',
-    cotizacion: null,
+    cotizacion: pesosPorDolar,
     tieneProductos: consumos.length > 0,
     servicioDesde: periodo[0]?.check_in ?? null,
     servicioHasta: periodo[0]?.check_out ?? null,

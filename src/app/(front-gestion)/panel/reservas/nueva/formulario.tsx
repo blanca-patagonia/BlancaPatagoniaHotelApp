@@ -583,7 +583,26 @@ export function FormularioReserva({
 
       {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
 
-      <PieDeFormulario>
+      <PieDeFormulario
+        resumen={(() => {
+          // Lo que se está por confirmar, siempre a la vista: la unidad elegida
+          // y su total, como el total de la comanda en el punto de venta.
+          const elegida = opciones.find((o) => o.tipoUnidadId === tipoElegido && !o.faltanTarifas)
+          return elegida ? (
+            <>
+              <p className="text-stone-600">
+                {elegida.nombre} · {noches} {noches === 1 ? 'noche' : 'noches'}
+              </p>
+              <p className="tabular text-xl leading-tight font-semibold text-stone-900">
+                {formatearUSD(elegida.total)}
+                <span className="ml-1.5 text-xs font-normal text-stone-500">total de referencia</span>
+              </p>
+            </>
+          ) : (
+            <p className="text-stone-600">Elegí una unidad para ver el total.</p>
+          )
+        })()}
+      >
         <button
           type="submit"
           disabled={pendiente || cotizables.length === 0}

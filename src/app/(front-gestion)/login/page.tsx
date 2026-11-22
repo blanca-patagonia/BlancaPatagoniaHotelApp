@@ -3,6 +3,7 @@ import { obtenerSesion } from '@/lib/auth/session'
 import { FormularioLogin } from './formulario'
 import { BotonGoogle } from './boton-google'
 import { googleHabilitado } from './actions'
+import { EscenarioLogin } from './escenario'
 
 /**
  * Mensajes de los caminos que pueden fallar antes de tener sesión.
@@ -35,43 +36,29 @@ export default async function LoginPage({
   const conGoogle = await googleHabilitado()
 
   return (
-    <main className="flex flex-1 items-center justify-center bg-stone-100 p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-8 shadow-sm">
-        <div className="mb-6 text-center">
-          <p className="text-xs font-medium uppercase tracking-widest text-lago-700">
-            Blanca Patagonia
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-stone-900">
-            Panel de gestión
-          </h1>
-          <p className="mt-1 text-sm text-stone-500">Ingresá con tu cuenta de staff</p>
-        </div>
-        {error && MENSAJES_ERROR[error] && (
-          <p
-            className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-            role="alert"
-          >
-            {MENSAJES_ERROR[error]}
-          </p>
-        )}
+    <EscenarioLogin titulo="Panel de gestión" bajada="Ingresá con tu cuenta del personal del hotel.">
+      {error && MENSAJES_ERROR[error] && (
+        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          {MENSAJES_ERROR[error]}
+        </p>
+      )}
 
-        <FormularioLogin />
+      <FormularioLogin />
 
-        {/* Solo si está configurado: ver `BotonGoogle`. */}
-        {conGoogle && (
-          <>
-            <div className="my-5 flex items-center gap-3">
-              <span className="h-px flex-1 bg-stone-200" />
-              <span className="text-xs text-stone-500">o</span>
-              <span className="h-px flex-1 bg-stone-200" />
-            </div>
-            <BotonGoogle />
-            <p className="mt-3 text-center text-xs text-stone-500">
-              Solo para cuentas ya dadas de alta por un administrador.
-            </p>
-          </>
-        )}
-      </div>
-    </main>
+      {/* Solo si está configurado: ver `BotonGoogle`. */}
+      {conGoogle && (
+        <>
+          <div className="my-5 flex items-center gap-3">
+            <span className="h-px flex-1 bg-stone-200" />
+            <span className="text-xs text-stone-500">o</span>
+            <span className="h-px flex-1 bg-stone-200" />
+          </div>
+          <BotonGoogle />
+          <p className="mt-3 text-center text-xs text-stone-500">
+            Solo para cuentas ya dadas de alta por un administrador.
+          </p>
+        </>
+      )}
+    </EscenarioLogin>
   )
 }

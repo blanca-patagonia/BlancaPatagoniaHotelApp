@@ -5,7 +5,7 @@ import { BotonEnvio } from '../_components/boton-envio'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { registrarFalla } from '@/lib/acciones'
-import { nombreCompleto } from '@/lib/domain/huespedes'
+import { nombreCompleto, iniciales } from '@/lib/domain/huespedes'
 import {
   ETIQUETAS_ESTADO_RESERVA,
   ESTADOS_RESERVA,
@@ -31,7 +31,7 @@ import {
 } from '@/lib/domain/vistas-reservas'
 import { parsearPeriodo, formatoFechaCorta, diasEntre, hoyISO } from '@/lib/fechas'
 import { construirQuery, paginaActual, rangoDePagina, TAMANIO_PAGINA, mensajeDe } from '@/lib/listados'
-import { TONO_ESTADO } from '../_components/estilos'
+import { FRANJA_ESTADO, TONO_ESTADO } from '../_components/estilos'
 import {
   BarraHerramientas,
   BotonExportar,
@@ -51,6 +51,7 @@ import {
   botonClases,
 } from '../_components/ui'
 import { consultaReservas, filtroTermino } from './consulta'
+import { reservasConSaldoVencido } from '@/lib/reservas/atencion'
 import { enviarRecordatoriosLlegada } from './actions'
 import { formatearUSD } from '@/lib/domain/moneda'
 
@@ -169,7 +170,16 @@ export default async function ReservasPage({
 
   const pagina = paginaActual(sp.pagina)
   const { desde, hasta } = rangoDePagina(pagina)
-  const orTermino = await filtroTermino(supabase, sp.q)
+  // La vista «Saldo pendiente» se resuelve antes, con la MISMA función que usa
+  // el aviso del tablero: así el número del aviso y las filas coinciden.
+  const [orTermino, saldoVencido] = await Promise.all([
+    filtroTermino(supabase, sp.q),
+    vista && definicionDe(vista).calculada === 'saldo_vencido'
+      ? reservasConSaldoVencido(supabase, hoy)
+      : Promise.resolve(null),
+  ])
+  registrarFalla(saldoVencido?.error ?? null, 'reservas:saldo_vencido')
+  const filtrosConsulta = { ...filtros, idsSaldoVencido: saldoVencido?.ids }
 
   // Opciones de los selectores nuevos. Van en paralelo con el listado: son
   // catálogos chicos y ninguno depende del resultado.
@@ -178,7 +188,7 @@ export default async function ReservasPage({
     { data: unidadesData, error: eUnidades },
     { data: tiposData, error: eTipos },
   ] = await Promise.all([
-    consultaReservas(supabase, filtros, orTermino).range(desde, hasta),
+    consultaReservas(supabase, filtrosConsulta, orTermino).range(desde, hasta),
     supabase
       .from('unidades')
       .select('id, nombre')
@@ -195,7 +205,7 @@ export default async function ReservasPage({
   // exactamente igual que "todavía no hay reservas" (auditoría QA/UX
   // 2026-09-09, que había cerrado este patrón en ~53 pantallas — este
   // archivo, el más grande del módulo, había quedado afuera de esa pasada).
-  const huboErrorDeLectura = Boolean(eReservas || eUnidades || eTipos)
+  const huboErrorDeLectura = Boolean(eReservas || eUnidades || eTipos || saldoVencido?.error)
 
   const unidades = (unidadesData ?? []) as { id: string; nombre: string }[]
   const tipos = (tiposData ?? []) as { id: string; nombre: string }[]
@@ -600,7 +610,7 @@ export default async function ReservasPage({
                   const pago = saldos[i]
                   return (
                     <tr key={r.id} className={FILA}>
-                      <td className={TD}>
+                      <td className={`${TD} ${FRANJA_ESTADO[r.estado]}`}>
                         <Link
                           href={`/panel/reservas/${r.id}`}
                           className="font-medium text-lago-700 hover:underline"
@@ -609,6 +619,15 @@ export default async function ReservasPage({
                         </Link>
                       </td>
                       <td className={`${TD} text-stone-700`}>
+                        <span className="flex items-center gap-2.5">
+                          {/* Iniciales: se reconoce a la persona antes de leer el nombre. */}
+                          <span
+                            aria-hidden="true"
+                            className="hidden size-8 shrink-0 items-center justify-center rounded-full bg-lago-100 text-xs font-semibold text-lago-800 sm:inline-flex"
+                          >
+                            {r.huesped ? iniciales(r.huesped) : '—'}
+                          </span>
+                          <span className="min-w-0">
                         {r.huesped ? nombreCompleto(r.huesped) : '—'}
                         {/* VIP con estrella Y texto accesible: el símbolo solo se
                             pierde para quien usa lector de pantalla. */}
@@ -627,12 +646,24 @@ export default async function ReservasPage({
                             {formatearUSD(importeDe(r))}
                           </span>
                         )}
+                          </span>
+                        </span>
                       </td>
                       <td className={`${TD} ${COL_SECUNDARIA} text-stone-600`}>
                         {periodo ? (
                           <>
-                            {formatoFechaCorta(periodo.desde)} → {formatoFechaCorta(periodo.hasta)}
-                            <span className="ml-1.5 text-xs text-stone-600">
+                            <span className="whitespace-nowrap">
+                              {formatoFechaCorta(periodo.desde)} → {formatoFechaCorta(periodo.hasta)}
+                            </span>
+                            {/* Una marca por noche: el largo de la estadía se ve sin
+                                leer el número. Hasta siete; más, con «+». */}
+                            <span className="mt-1 flex items-center gap-1 text-xs text-stone-600">
+                              <span aria-hidden="true" className="flex gap-0.5">
+                                {Array.from({ length: Math.min(noches, 7) }, (_, k) => (
+                                  <span key={k} className="h-1.5 w-2.5 rounded-full bg-lago-300" />
+                                ))}
+                              </span>
+                              {noches > 7 && <span aria-hidden="true">+</span>}
                               {noches} {noches === 1 ? 'noche' : 'noches'}
                             </span>
                           </>

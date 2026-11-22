@@ -35,6 +35,7 @@ import {
   type Segmento,
 } from '@/lib/domain/reservas'
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
+import { reservasConSaldoVencido } from '@/lib/reservas/atencion'
 import { traerEstadias, traerUnidades } from '../../reportes/datos'
 import { busquedaHuespedes } from '../busquedas'
 
@@ -199,6 +200,18 @@ const RECURSOS: Record<string, Definicion> = {
     generar: async (supabase, params) => {
       const q = params.get('q') ?? undefined
       const orTermino = await filtroTermino(supabase, q)
+      const vista = esVista(params.get('vista') ?? undefined)
+        ? (params.get('vista') as VistaReservas)
+        : undefined
+      const hoy = hoyISO()
+      // «Saldo pendiente» se resuelve con la misma función que la pantalla; si
+      // la lectura falla, el CSV no puede salir vacío como si no hubiera nada.
+      let idsSaldoVencido: string[] | undefined
+      if (vista === 'por_cobrar') {
+        const r = await reservasConSaldoVencido(supabase, hoy)
+        if (r.error) throw new FallaDeLectura('reservas con saldo pendiente', r.error.message)
+        idsSaldoVencido = r.ids
+      }
       const consulta = consultaReservas(
         supabase,
         {
@@ -211,15 +224,14 @@ const RECURSOS: Record<string, Definicion> = {
           // La vista tiene que viajar o el CSV bajaría todas las reservas
           // mientras la pantalla muestra sólo las llegadas de hoy. El botón de
           // exportar ya conserva los filtros vigentes en la URL.
-          vista: esVista(params.get('vista') ?? undefined)
-            ? (params.get('vista') as VistaReservas)
-            : undefined,
+          vista,
           plan: params.get('plan') ?? undefined,
           garantia: params.get('garantia') ?? undefined,
           segmento: params.get('segmento') ?? undefined,
           unidad: params.get('unidad') ?? undefined,
           tipoUnidad: params.get('tipo') ?? undefined,
-          hoy: hoyISO(),
+          hoy,
+          idsSaldoVencido,
         },
         orTermino,
       )

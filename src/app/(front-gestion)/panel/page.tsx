@@ -1,5 +1,4 @@
 import { Suspense } from 'react'
-import { comoLista } from '@/lib/domain/listas'
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { crearClienteServidor } from '@/lib/supabase/server'
@@ -18,9 +17,9 @@ import { faltantes as articulosFaltantes } from '@/lib/domain/inventario'
 import { areasDe, esDireccion, type Area } from '@/lib/domain/permisos'
 import { cronsAtrasados } from '@/lib/domain/crons'
 import { registrarFalla } from '@/lib/acciones'
-import { ESTADOS_FACTURABLES } from '@/lib/domain/facturacion'
-import { cuentaConsolidada, type Consumo } from '@/lib/domain/consumos'
-import { resumenPagos, type Pago } from '@/lib/domain/pagos'
+import { reservasConSaldoVencido } from '@/lib/reservas/atencion'
+import { consultaReservas } from './reservas/consulta'
+import { CajaDelHotel, CajaDelHotelCargando } from './_inicio/caja'
 import { TONO_ESTADO } from './_components/estilos'
 import { Icono, type NombreIcono } from './_components/iconos'
 import { WidgetCotizacion, WidgetCotizacionCargando } from './_components/cotizacion'
@@ -91,122 +90,21 @@ function FilaMovimiento({ e }: { e: EstadiaDia }) {
 
 type ClienteServidor = Awaited<ReturnType<typeof crearClienteServidor>>
 
-/** Cuántos días hacia atrás se mira para «consumos sin facturar». */
-const VENTANA_CONSUMOS_SIN_FACTURAR_DIAS = 60
-
 /**
- * Reservas en estados facturables (`ESTADOS_FACTURABLES`) con consumos
- * cargados que todavía no tienen factura — la cuenta que se puede olvidar
- * porque el huésped «ya se fue» (`motivoNoCargable`, ADR/P3: la cuenta se
- * cierra con la FACTURA, no con el check-out — no existe `consumos.factura_id`,
- * «facturada» es «existe una fila en `facturas` con este `reserva_id`», igual
- * que ya lo resuelve `agregarConsumo` en `app/panel/reservas/actions.ts`).
+ * Reservas con consumos que todavía no tienen factura (la cuenta que se olvida
+ * porque el huésped «ya se fue»: se cierra con la FACTURA, no con el check-out).
  *
- * Acotado a los últimos `VENTANA_CONSUMOS_SIN_FACTURAR_DIAS` por el check-out:
- * `checkout` es un estado terminal que no se vuelve a tocar, así que sin esta
- * ventana la consulta sumaría TODAS las reservas facturables de la historia
- * del hotel y con los años pasaría las 1000 filas que PostgREST corta en
- * silencio (`max_rows`). Una cuenta sin facturar hace más de dos meses ya no
- * es «atender hoy»: es otro problema, de auditoría.
+ * Se cuenta con la MISMA consulta que muestra la vista «Consumos sin facturar»
+ * del listado (`consultaReservas`): el aviso enlaza a esa vista, y antes, con una
+ * cuenta propia y un enlace sin filtro, decía «6 cuentas» y abría todas las
+ * reservas. `range(0, 0)` trae una sola fila: el número sale del `count` exacto.
  */
 async function contarConsumosSinFacturar(
   supabase: ClienteServidor,
   hoy: string,
 ): Promise<{ cantidad: number; error: { message: string } | null }> {
-  const desde = sumarDias(hoy, -VENTANA_CONSUMOS_SIN_FACTURAR_DIAS)
-
-  /*
-    Una sola consulta. Antes eran tres viajes en serie (reservas → facturas →
-    consumos) con las listas de ids en la URL, que con unas cientos de
-    reservas se acercaban al límite de largo de URL del proxy; y el tablero
-    entero esperaba los tres.
-
-    · `estadias!inner` + el filtro por `check_out`: la ventana. `!inner` es
-      obligatorio para que el filtro recorte la reserva y no sólo el arreglo
-      embebido (trampa documentada en AGENTS.md).
-    · `consumos!inner(id)`: sólo reservas con algún consumo — sin esto se
-      contaría también el alojamiento solo, que no es «consumos sin facturar».
-    · `facturas(id)`, embed normal: se cuentan las que lo traen vacío. ⚠️ Es
-      a-uno (una factura por reserva, 0045): llega como objeto o `null`, no
-      como arreglo — `comoLista` —. Con `.length` sobre `null` el tablero entero
-      daba error con la primera reserva con consumos y sin factura.
-  */
-  const { data, error } = await supabase
-    .from('reservas')
-    .select('id, estadias!inner(check_out), consumos!inner(id), facturas(id)')
-    .in('estado', ESTADOS_FACTURABLES)
-    .gte('estadias.check_out', desde)
-  if (error) return { cantidad: 0, error }
-  const cantidad = ((data ?? []) as unknown as { facturas: unknown }[]).filter(
-    (r) => comoLista(r.facturas).length === 0,
-  ).length
-  return { cantidad, error: null }
-}
-
-/**
- * Reservas confirmadas o alojadas con saldo pendiente de cobro, calculado con
- * la misma cuenta consolidada (alojamiento + consumos) y el mismo
- * `resumenPagos` que usa `lib/notificaciones/cobros.ts` — no una segunda
- * noción de «pendiente» que con el tiempo diverja de la real (es la misma
- * situación que ya pasó con `saldarSiCorresponde`, documentada en ese archivo).
- *
- * Sólo cuenta las que YA deberían haber sido cobradas: una `confirmada` para
- * dentro de un mes, con la seña pagada y el resto pendiente, es el curso
- * normal de una reserva — contarla acá inundaría «Requiere atención» con
- * prácticamente toda reserva confirmada a futuro. Lo que sí pide atención es
- * el check-in ya pasado sin saldar (`confirmada` que debería haberse alojado)
- * o el check-out ya pasado sin saldar (`in_house` sin registrar la salida).
- */
-async function contarSaldosPendientes(
-  supabase: ClienteServidor,
-  hoy: string,
-): Promise<{ cantidad: number; error: { message: string } | null }> {
-  /*
-    Acotado en la base, no en JavaScript. Antes se traían TODAS las reservas
-    confirmadas e in_house —las confirmadas a futuro, que son la mayoría, sólo
-    para descartarlas— y pasadas las 1000 PostgREST cortaba sin aviso, así que
-    el número podía salir mal. Ahora viajan sólo las candidatas: confirmadas
-    con check-in ya pasado e in_house con check-out ya pasado. `!inner` es lo
-    que hace que el filtro sobre `estadias` acote la reserva (ver AGENTS.md).
-  */
-  const SELECT =
-    'estado, total, pagos(tipo, monto, estado), consumos(cantidad, precio_unitario), estadias!inner(check_in, check_out)'
-  const [confirmadas, alojadas] = await Promise.all([
-    supabase.from('reservas').select(SELECT).eq('estado', 'confirmada').lte('estadias.check_in', hoy),
-    supabase.from('reservas').select(SELECT).eq('estado', 'in_house').lte('estadias.check_out', hoy),
-  ])
-  const error = confirmadas.error ?? alojadas.error
-  if (error) return { cantidad: 0, error }
-
-  const filas = [...(confirmadas.data ?? []), ...(alojadas.data ?? [])] as unknown as {
-    estado: string
-    total: number | string
-    pagos: Pago[]
-    consumos: { cantidad: number; precio_unitario: number | string }[]
-    estadias: { check_in: string; check_out: string }[]
-  }[]
-
-  let cantidad = 0
-  for (const r of filas) {
-    const cuenta = cuentaConsolidada(
-      Number(r.total),
-      r.consumos.map(
-        (c) => ({ cantidad: c.cantidad, precioUnitario: Number(c.precio_unitario) }) as Consumo,
-      ),
-    )
-    const resumen = resumenPagos(
-      cuenta.total,
-      r.pagos.map((p) => ({ tipo: p.tipo, monto: Number(p.monto), estado: p.estado })),
-    )
-    if (resumen.saldo <= 0) continue
-
-    // «Debería haberse cobrado» según el estado: el check-in ya pasado para
-    // una `confirmada`, el check-out ya pasado para una `in_house`.
-    const fechas =
-      r.estado === 'in_house' ? r.estadias.map((e) => e.check_out) : r.estadias.map((e) => e.check_in)
-    if (fechas.some((f) => f <= hoy)) cantidad++
-  }
-  return { cantidad, error: null }
+  const { count, error } = await consultaReservas(supabase, { vista: 'sin_facturar', hoy }, null).range(0, 0)
+  return { cantidad: count ?? 0, error }
 }
 
 export default async function DashboardPage() {
@@ -243,7 +141,7 @@ export default async function DashboardPage() {
     { count: canceladasHoy, error: eCanceladasHoy },
     { data: stockBajo, error: eStock },
     { cantidad: consumosSinFacturar, error: eConsumosSinFacturar },
-    { cantidad: saldosPendientes, error: eSaldosPendientes },
+    { ids: idsSaldoVencido, deudores: deudoresVencidos, error: eSaldosPendientes },
   ] = await Promise.all([
     supabase.from('unidades').select('estado').eq('activo', true),
     supabase
@@ -277,9 +175,10 @@ export default async function DashboardPage() {
       .lt('cancelada_en', inicioDelDiaHotel(mañana)),
     supabase.from('productos_servicios').select('nombre, stock, stock_minimo').eq('activo', true),
     contarConsumosSinFacturar(supabase, hoy),
-    contarSaldosPendientes(supabase, hoy),
+    reservasConSaldoVencido(supabase, hoy),
   ])
   const atrasados = await atrasadosPendientes
+  const saldosPendientes = idsSaldoVencido.length
 
   /*
    * Ninguna de las lecturas de arriba revisaba su `error`: si una fallaba,
@@ -341,7 +240,9 @@ export default async function DashboardPage() {
   const pendientes: { href: string; icono: NombreIcono; cantidad: number; texto: string }[] = [
     {
       area: 'reservas' as Area,
-      href: '/panel/reservas',
+      // Cada aviso abre el listado YA filtrado por lo que dice, y el número sale
+      // de la misma consulta que esa vista: lo que se anuncia es lo que se ve.
+      href: '/panel/reservas?vista=por_cobrar',
       icono: 'divisas' as NombreIcono,
       cantidad: saldosPendientes,
       texto:
@@ -351,7 +252,7 @@ export default async function DashboardPage() {
     },
     {
       area: 'reservas' as Area,
-      href: '/panel/reservas',
+      href: '/panel/reservas?vista=sin_facturar',
       icono: 'reservas' as NombreIcono,
       cantidad: consumosSinFacturar,
       texto:
@@ -369,6 +270,97 @@ export default async function DashboardPage() {
   ]
     .filter((p) => p.cantidad > 0 && puede(p.area))
     .map(({ href, icono, cantidad, texto }) => ({ href, icono, cantidad, texto }))
+
+  const direccion = esDireccion(sesion.rol)
+  const deudores = deudoresVencidos
+
+  /* Movimientos del día: lo que recepción necesita a mano. */
+  const bloqueMovimientos = puede('reservas') ? (
+    <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <Tarjeta titulo="Llegadas de hoy" descripcion="Check-in previstos">
+        {llegadas.length === 0 ? (
+          <EstadoVacio titulo="Sin llegadas para hoy" icono="reservas" />
+        ) : (
+          <ul>
+            {llegadas.map((e, i) => (
+              <FilaMovimiento key={`${e.reserva?.id}-${i}`} e={e} />
+            ))}
+          </ul>
+        )}
+      </Tarjeta>
+
+      <Tarjeta titulo="Salidas de hoy" descripcion="Check-out previstos">
+        {salidas.length === 0 ? (
+          <EstadoVacio titulo="Sin salidas para hoy" icono="salir" />
+        ) : (
+          <ul>
+            {salidas.map((e, i) => (
+              <FilaMovimiento key={`${e.reserva?.id}-${i}`} e={e} />
+            ))}
+          </ul>
+        )}
+      </Tarjeta>
+    </div>
+  ) : null
+
+  /* El widget va en Suspense porque puede tardar hasta 3 s si la fuente
+     externa está lenta, y el resto del tablero no tiene por qué esperarlo. */
+  const bloqueCotizacion = (
+    <Suspense fallback={<WidgetCotizacionCargando />}>
+      <WidgetCotizacion />
+    </Suspense>
+  )
+
+  const bloqueUnidades = (
+    <Tarjeta titulo="Estado de las unidades">
+      <ul className="px-5 py-3">
+        {ESTADOS_HK.map((estado) => (
+          <li key={estado} className="flex items-center gap-2.5 py-1.5">
+            <EstadoUnidad estado={estado} />
+            <span className="tabular w-8 text-lg font-semibold text-stone-900">
+              {porEstado.get(estado) ?? 0}
+            </span>
+            <span className="text-sm text-stone-500">{ETIQUETAS_ESTADO_HK[estado]}</span>
+          </li>
+        ))}
+      </ul>
+    </Tarjeta>
+  )
+
+  /*
+    Lo que pide acción: cada línea existe solo si hay algo que hacer, y abre el
+    listado YA filtrado por lo que dice. Antes acá había una grilla «Módulos»
+    que repetía los enlaces del menú lateral.
+  */
+  const bloqueAtencion = (
+    <Tarjeta titulo="Requiere atención" descripcion="Solo lo que tiene algo pendiente">
+      {pendientes.length === 0 ? (
+        <EstadoVacio titulo="No hay nada pendiente" icono="ayuda" />
+      ) : (
+        <ul className="p-4">
+          {pendientes.map((p) => (
+            <li key={p.texto}>
+              <Link
+                href={p.href}
+                className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm transition hover:bg-lago-50"
+              >
+                <span className="text-lago-600">
+                  <Icono nombre={p.icono} tam={17} />
+                </span>
+                <span className="tabular w-8 shrink-0 text-lg font-semibold text-stone-900">
+                  {p.cantidad}
+                </span>
+                <span className="min-w-0 flex-1 text-stone-700">{p.texto}</span>
+                <span aria-hidden="true" className="text-stone-600">
+                  →
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Tarjeta>
+  )
 
   return (
     <Pagina>
@@ -425,6 +417,7 @@ export default async function DashboardPage() {
           detalle="check-in previstos"
           icono="reservas"
           tono="exito"
+          href={puede('reservas') ? '/panel/reservas?vista=llegadas' : undefined}
         />
         <Kpi
           titulo="Salidas hoy"
@@ -432,6 +425,7 @@ export default async function DashboardPage() {
           detalle="check-out previstos"
           icono="salir"
           tono="alerta"
+          href={puede('reservas') ? '/panel/reservas?vista=salidas' : undefined}
         />
         <Kpi
           titulo="Reservas activas"
@@ -443,7 +437,9 @@ export default async function DashboardPage() {
           // dos de hoy eran huéspedes alojados en este momento.
           detalle="ocupan una unidad"
           icono="reservas"
-          href={puede('reservas') ? '/panel/reservas' : undefined}
+          // Sin enlace: no hay una vista del listado que muestre exactamente
+          // estas, y un número que abre «todas» es el error que se corrigió en
+          // «Requiere atención». Lo mismo con «Nuevas» y «Canceladas» de hoy.
         />
         <Kpi
           titulo="Nuevas hoy"
@@ -451,7 +447,6 @@ export default async function DashboardPage() {
           detalle="reservas cargadas hoy"
           icono="reservas"
           tono="exito"
-          href={puede('reservas') ? '/panel/reservas' : undefined}
         />
         <Kpi
           titulo="Canceladas hoy"
@@ -459,7 +454,6 @@ export default async function DashboardPage() {
           detalle="bajas de hoy"
           icono="reservas"
           tono={(canceladasHoy ?? 0) > 0 ? 'alerta' : undefined}
-          href={puede('reservas') ? '/panel/reservas' : undefined}
         />
       </div>
 
@@ -487,103 +481,40 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Movimientos del día: lo que recepción necesita a mano. */}
-      {puede('reservas') && (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <Tarjeta titulo="Llegadas de hoy" descripcion="Check-in previstos">
-            {llegadas.length === 0 ? (
-              <EstadoVacio titulo="Sin llegadas para hoy" icono="reservas" />
-            ) : (
-              <ul>
-                {llegadas.map((e, i) => (
-                  <FilaMovimiento key={`${e.reserva?.id}-${i}`} e={e} />
-                ))}
-              </ul>
-            )}
-          </Tarjeta>
-
-          <Tarjeta titulo="Salidas de hoy" descripcion="Check-out previstos">
-            {salidas.length === 0 ? (
-              <EstadoVacio titulo="Sin salidas para hoy" icono="salir" />
-            ) : (
-              <ul>
-                {salidas.map((e, i) => (
-                  <FilaMovimiento key={`${e.reserva?.id}-${i}`} e={e} />
-                ))}
-              </ul>
-            )}
-          </Tarjeta>
-        </div>
+      {/*
+        Orden según quién mira. Recepción abre el sistema para atender el día:
+        llegadas y salidas primero. La dirección (admin y gerencia) abre para
+        decidir: primero la plata —qué entró, qué se facturó, quién debe— y lo
+        que pide atención; las cotizaciones del dólar, que son consulta, al final
+        (lo marcó el docente al probar la demo).
+      */}
+      {direccion && (
+        <Suspense fallback={<CajaDelHotelCargando />}>
+          <CajaDelHotel hoy={hoy} deudores={deudores} errorDeudores={Boolean(eSaldosPendientes)} />
+        </Suspense>
       )}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        {/* Cotización y estado de unidades comparten columna: los dos son datos
-            de referencia que recepción consulta de un vistazo, no listados.
-            El widget va en Suspense porque puede tardar hasta 3 s si la fuente
-            externa está lenta, y el resto del dashboard no tiene por qué esperarlo. */}
-        <div className="space-y-4 lg:col-span-1">
-          <Suspense fallback={<WidgetCotizacionCargando />}>
-            <WidgetCotizacion />
-          </Suspense>
-
-          <Tarjeta titulo="Estado de las unidades">
-            <ul className="px-5 py-3">
-              {ESTADOS_HK.map((estado) => (
-                <li key={estado} className="flex items-center gap-2.5 py-1.5">
-                  <EstadoUnidad estado={estado} />
-                  <span className="tabular w-8 text-lg font-semibold text-stone-900">
-                    {porEstado.get(estado) ?? 0}
-                  </span>
-                  <span className="text-sm text-stone-500">{ETIQUETAS_ESTADO_HK[estado]}</span>
-                </li>
-              ))}
-            </ul>
-          </Tarjeta>
-        </div>
-
-        {/*
-          Antes acá había una grilla «Módulos» que repetía, uno por uno, los
-          mismos enlaces del menú lateral. Ocupaba dos tercios del ancho para no
-          decir nada nuevo, y empujaba abajo del pliegue el estado de las
-          unidades, que sí es información.
-
-          Lo único que aportaba eran contadores colgados como insignias. Eso es
-          lo que queda, pero al revés: en vez de un menú con números, una lista
-          de lo que **pide acción**, donde cada línea existe solo si hay algo que hacer. Si no
-          hay nada, lo dice y no ocupa lugar.
-        */}
-        <Tarjeta
-          titulo="Requiere atención"
-          descripcion="Solo lo que tiene algo pendiente"
-          className="lg:col-span-2"
-        >
-          {pendientes.length === 0 ? (
-            <EstadoVacio titulo="No hay nada pendiente" icono="ayuda" />
-          ) : (
-            <ul className="p-4">
-              {pendientes.map((p) => (
-                <li key={p.texto}>
-                  <Link
-                    href={p.href}
-                    className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm transition hover:bg-lago-50"
-                  >
-                    <span className="text-lago-600">
-                      <Icono nombre={p.icono} tam={17} />
-                    </span>
-                    <span className="tabular w-8 shrink-0 text-lg font-semibold text-stone-900">
-                      {p.cantidad}
-                    </span>
-                    <span className="min-w-0 flex-1 text-stone-700">{p.texto}</span>
-                    <span aria-hidden="true" className="text-stone-600">
-                      →
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Tarjeta>
-      </div>
+      {direccion ? (
+        <>
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">{bloqueAtencion}</div>
+            {bloqueUnidades}
+          </div>
+          {bloqueMovimientos}
+          <div className="mt-6 lg:max-w-md">{bloqueCotizacion}</div>
+        </>
+      ) : (
+        <>
+          {bloqueMovimientos}
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            <div className="space-y-4">
+              {bloqueCotizacion}
+              {bloqueUnidades}
+            </div>
+            <div className="lg:col-span-2">{bloqueAtencion}</div>
+          </div>
+        </>
+      )}
     </Pagina>
   )
 }

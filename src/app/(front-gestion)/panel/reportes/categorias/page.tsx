@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { registrarErrorSync } from '@/lib/registro'
 import { mesActual } from '@/lib/fechas'
-import { etiquetaMes } from '@/lib/domain/metricas'
+import { etiquetaMes, INDICADORES, tituloIndicador } from '@/lib/domain/metricas'
 import { formatearUSD, importe } from '@/lib/domain/moneda'
 import { mesValido } from '@/lib/domain/informes'
 import {
@@ -13,7 +13,7 @@ import {
 } from '@/lib/domain/metricas-categoria'
 import { ETIQUETAS_FILTRO, type FiltroCategoria } from '@/lib/domain/catalogo'
 import { traerEstadiasPorTipo, traerTiposConInventario } from '../datos'
-import { SelectorDeMes, AvisoIncompleto } from '../_componentes'
+import { SelectorDeMes, AvisoIncompleto, ExplicacionIndicadores } from '../_componentes'
 import {
   COL_SECUNDARIA,
   Encabezado,
@@ -81,6 +81,8 @@ export default async function InformeCategoriasPage({
 
       <SelectorDeMes base="/panel/reportes/categorias" mes={mes} />
 
+      <ExplicacionIndicadores />
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi
           titulo="Ingreso del mes"
@@ -95,7 +97,7 @@ export default async function InformeCategoriasPage({
           icono="ocupacion"
         />
         <Kpi
-          titulo="ADR del hotel"
+          titulo={`${tituloIndicador('adr')} del hotel`}
           valor={totales.adr === null ? '—' : formatearUSD(totales.adr)}
           detalle="ingreso / noches vendidas"
           icono="reportes"
@@ -103,7 +105,7 @@ export default async function InformeCategoriasPage({
         <Kpi
           titulo="Ocupación"
           valor={totales.ocupacionPct === null ? '—' : `${totales.ocupacionPct}%`}
-          detalle={`RevPAR ${totales.revpar === null ? '—' : formatearUSD(totales.revpar)}`}
+          detalle={`${tituloIndicador('revpar')}: ${totales.revpar === null ? '—' : formatearUSD(totales.revpar)}`}
           icono="ok"
           tono="exito"
         />
@@ -145,7 +147,11 @@ export default async function InformeCategoriasPage({
                       <th className={`${TH} ${COL_SECUNDARIA} text-right`}>Unidades</th>
                       <th className={`${TH} text-right`}>Noches</th>
                       <th className={`${TH} text-right`}>Ingreso</th>
-                      <th className={`${TH} text-right`}>ADR</th>
+                      <th className={`${TH} text-right`}>
+                        <abbr title={INDICADORES.adr.nombre} className="no-underline">
+                          ADR
+                        </abbr>
+                      </th>
                       <th className={`${TH} ${COL_SECUNDARIA} text-right`}>Ocupación</th>
                       <th className={`${TH} text-right`}>% del ingreso</th>
                     </tr>
@@ -172,7 +178,7 @@ export default async function InformeCategoriasPage({
               </strong>
             </span>
             <span className="text-stone-600">
-              ADR{' '}
+              {tituloIndicador('adr')}{' '}
               <strong className="text-stone-800">
                 {totales.adr === null ? '—' : formatearUSD(totales.adr)}
               </strong>

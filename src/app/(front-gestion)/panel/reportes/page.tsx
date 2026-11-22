@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { mesActual } from '@/lib/fechas'
-import { metricasDeMes, etiquetaMes, textoOcupacion, textoRevPAR } from '@/lib/domain/metricas'
+import { metricasDeMes, etiquetaMes, textoOcupacion, textoRevPAR, tituloIndicador } from '@/lib/domain/metricas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { INFORMES, rutaDeInforme, mesValido } from '@/lib/domain/informes'
 import { traerUnidades, traerEstadias, traerPagos, traerFacturas } from './datos'
-import { SelectorDeMes, AvisoIncompleto, AbrirAparte } from './_componentes'
+import { SelectorDeMes, AvisoIncompleto, AbrirAparte, ExplicacionIndicadores } from './_componentes'
 import {
   BotonExportar,
   Encabezado,
@@ -70,6 +70,8 @@ export default async function ReportesPage({
 
       <SelectorDeMes base="/panel/reportes" mes={mes} />
 
+      <ExplicacionIndicadores />
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
           titulo={`Ocupación ${etiquetaMes(mes)}`}
@@ -81,15 +83,15 @@ export default async function ReportesPage({
           icono="ocupacion"
         />
         <Kpi
-          titulo="ADR (tarifa media)"
+          titulo={tituloIndicador('adr')}
           valor={formatearUSD(actual.adr)}
-          detalle="por noche vendida (neto)"
+          detalle="precio promedio de cada noche vendida, sin IVA"
           icono="reportes"
         />
         <Kpi
-          titulo="RevPAR"
+          titulo={tituloIndicador('revpar')}
           valor={textoRevPAR(actual.ingreso, actual.nochesDisponibles, actual.revpar)}
-          detalle="por unidad disponible (neto)"
+          detalle="lo que rindió cada habitación, ocupada o vacía"
           icono="reportes"
         />
         <Kpi

@@ -77,3 +77,24 @@ export function validarMisDatos(nombre: string, telefono: string): string | null
   }
   return null
 }
+
+/**
+ * Aviso si una contraseña escrita tiene espacios al principio o al final.
+ *
+ * Pasa al pegarla desde un correo o un documento: se copia un espacio de más,
+ * el ingreso falla con «Email o contraseña incorrectos» y no hay forma de ver
+ * por qué (le pasó al docente al probar la demo). No se quita el espacio en
+ * silencio: un espacio PUEDE ser parte de una contraseña, y probar las dos
+ * variantes duplicaría los intentos que ve el freno a la fuerza bruta. Se avisa
+ * y decide quien escribe.
+ *
+ * Devuelve `null` si no hay nada que avisar.
+ */
+export function avisoDeEspacios(password: string): string | null {
+  if (!password) return null
+  const alInicio = /^\s/.test(password)
+  const alFinal = /\s$/.test(password)
+  if (!alInicio && !alFinal) return null
+  const donde = alInicio && alFinal ? 'al principio y al final' : alInicio ? 'al principio' : 'al final'
+  return `La contraseña tiene un espacio ${donde}. Si la pegaste, revisá que no se haya copiado de más.`
+}

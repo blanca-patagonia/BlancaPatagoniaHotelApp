@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react'
 import { crearUnidad, type EstadoAltaUnidad } from '../../unidades.actions'
-import { CAMPO, Campo, Mensaje } from '../../../_components/ui'
+import Link from 'next/link'
+import { CAMPO, Campo, Mensaje, PieDeFormulario, botonClases } from '../../../_components/ui'
 import { BotonEnvio } from '../../../_components/boton-envio'
 
 const INICIAL: EstadoAltaUnidad = {}
@@ -50,11 +51,14 @@ export function FormularioUnidad({ tipos }: { tipos: { id: string; nombre: strin
           ))}
         </select>
       </Campo>
-      <div className="sm:col-span-2">
+      <PieDeFormulario hayObligatorios={false}>
         <BotonEnvio cargando="Creando…" extra="w-full sm:w-auto">
           Crear unidad
         </BotonEnvio>
-      </div>
+        <Link href="/panel/config/ubicaciones" className={botonClases('secundario', 'w-full sm:w-auto')}>
+          Cancelar
+        </Link>
+      </PieDeFormulario>
     </form>
   )
 }

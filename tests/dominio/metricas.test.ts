@@ -145,3 +145,20 @@ describe('precisión con poco volumen', () => {
     expect(textoRevPAR(45000, 1000, 45)).toBe('USD 45,00')
   })
 })
+
+describe('nombres de los indicadores', () => {
+  it('las siglas del rubro se muestran con su nombre en castellano', async () => {
+    const { tituloIndicador } = await import('@/lib/domain/metricas')
+    expect(tituloIndicador('adr')).toBe('Tarifa promedio (ADR)')
+    expect(tituloIndicador('revpar')).toBe('Ingreso por habitación disponible (RevPAR)')
+    // «Ocupación» no es una sigla: no se repite entre paréntesis.
+    expect(tituloIndicador('ocupacion')).toBe('Ocupación')
+  })
+
+  it('el glosario de Ayuda usa la misma explicación que los informes', async () => {
+    const { INDICADORES } = await import('@/lib/domain/metricas')
+    const { GLOSARIO } = await import('@/lib/domain/ayuda')
+    const adr = GLOSARIO.find((g) => g.termino.startsWith('ADR'))
+    expect(adr?.definicion).toBe(INDICADORES.adr.explicacion)
+  })
+})

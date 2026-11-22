@@ -1,5 +1,6 @@
 import { puedeAcceder, ETIQUETAS_AREA, type Area } from './permisos'
 import type { Rol } from './roles'
+import { INDICADORES } from './metricas'
 
 /**
  * Contenido de la guía de uso del sistema.
@@ -408,19 +409,10 @@ export const GLOSARIO: Termino[] = [
     definicion:
       'El número que AFIP le da a una factura para validarla. Sin CAE, el comprobante no tiene valor fiscal.',
   },
-  {
-    termino: 'Ocupación',
-    definicion: 'Qué porcentaje de las habitaciones disponibles se vendió.',
-  },
-  {
-    termino: 'ADR',
-    definicion: 'El precio promedio al que se vendió cada habitación ocupada.',
-  },
-  {
-    termino: 'RevPAR',
-    definicion:
-      'Lo que rindió en promedio cada habitación del hotel, ocupada o no. Resume ocupación y precio en un solo número.',
-  },
+  // Los tres indicadores salen del mismo texto que muestran los informes.
+  { termino: 'Ocupación', definicion: INDICADORES.ocupacion.explicacion },
+  { termino: 'ADR (tarifa promedio)', definicion: INDICADORES.adr.explicacion },
+  { termino: 'RevPAR (ingreso por habitación disponible)', definicion: INDICADORES.revpar.explicacion },
   {
     termino: 'Overbooking',
     definicion:

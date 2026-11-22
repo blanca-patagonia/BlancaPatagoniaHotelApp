@@ -221,3 +221,33 @@ export function siguienteEstadoMucama(actual: EstadoHousekeeping): EstadoHouseke
 export function accionMucama(actual: EstadoHousekeeping): string | null {
   return siguienteEstadoMucama(actual) === 'limpia' ? 'Marcar limpia' : null
 }
+
+/* ─────────────────────────────────────────────── repartir el trabajo ──── */
+
+/**
+ * A qué vista del tablero vuelve una acción de housekeeping.
+ *
+ * Asignar una responsable desde la vista «Por responsable» devolvía siempre a
+ * «Por unidad»: quien estaba repartiendo el trabajo perdía la pantalla en la que
+ * lo hacía, y eso fue parte de lo que hizo que no se entendiera (lo marcó el
+ * docente al probar la demo). Es una lista blanca, no una URL del formulario:
+ * un campo con «volvé acá» sería un redirect abierto.
+ */
+export function retornoHousekeeping(vista: string | null | undefined): string {
+  return vista === 'mucama' ? '/panel/housekeeping?vista=mucama' : '/panel/housekeeping'
+}
+
+/** Tope de unidades por asignación en lote: el hotel tiene menos, y acota la URL. */
+export const MAX_ASIGNACION_EN_LOTE = 100
+
+/**
+ * Los ids de unidad de una asignación en lote, sin repetidos y sólo los que
+ * tienen forma de uuid. Devuelve `null` si no queda ninguno o si son demasiados:
+ * en los dos casos no se escribe nada.
+ */
+export function unidadesParaAsignar(valores: readonly unknown[]): string[] | null {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const ids = [...new Set(valores.filter((v): v is string => typeof v === 'string' && UUID.test(v)))]
+  if (ids.length === 0 || ids.length > MAX_ASIGNACION_EN_LOTE) return null
+  return ids
+}

@@ -6,7 +6,7 @@ import { ESTADOS_HK, type EstadoHousekeeping } from '@/lib/domain/unidades'
 import { requerirAcceso } from '@/lib/auth/session'
 import { revalidatePath } from 'next/cache'
 import { cortarSiFalla } from '@/lib/acciones'
-import { siguienteEstadoMucama } from '@/lib/domain/housekeeping'
+import { siguienteEstadoMucama, retornoHousekeeping, unidadesParaAsignar } from '@/lib/domain/housekeeping'
 import { subirAdjunto } from '@/lib/storage'
 import { esUuid } from '@/lib/domain/reserva-publica'
 import { fijarEstadoUnidad } from '@/lib/housekeeping/estado'
@@ -34,20 +34,64 @@ export async function cambiarEstadoUnidad(formData: FormData): Promise<void> {
   redirect('/panel/housekeeping')
 }
 
-/** Asigna (o desasigna) una mucama/o a una unidad. */
+/**
+ * Asigna (o desasigna) una mucama/o a una unidad.
+ *
+ * Vuelve a la vista desde la que se asignó (`retornoHousekeeping`): antes
+ * devolvía siempre a «Por unidad», y quien estaba repartiendo el trabajo en
+ * «Por responsable» perdía la pantalla.
+ */
 export async function asignarMucama(formData: FormData): Promise<void> {
   await requerirAcceso('housekeeping')
+  const destino = retornoHousekeeping(String(formData.get('vista') ?? ''))
   const id = String(formData.get('unidad_id') ?? '')
   const mucamaId = String(formData.get('mucama_id') ?? '')
-  if (id) {
-    const supabase = await crearClienteServidor()
-    const { error } = await supabase
-      .from('unidades')
-      .update({ asignada_a: mucamaId || null })
-      .eq('id', id)
-    cortarSiFalla(error, '/panel/housekeeping', 'asignar')
-  }
-  redirect('/panel/housekeeping')
+  if (!esUuid(id) || (mucamaId && !esUuid(mucamaId))) redirect(destino)
+
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase
+    .from('unidades')
+    .update({ asignada_a: mucamaId || null })
+    .eq('id', id)
+  cortarSiFalla(error, destino, 'asignar')
+  revalidatePath('/panel/housekeeping')
+  redirect(destino)
+}
+
+/**
+ * Reparte varias unidades a una misma responsable de una vez.
+ *
+ * Con una sola asignación por fila, repartir las 37 unidades del hotel eran 37
+ * elecciones y 37 clics en «Asignar». Esta acción toma las marcadas en
+ * «Repartir habitaciones» y las asigna (o las deja sin asignar) en una sola
+ * escritura.
+ *
+ * Se pide de vuelta lo que se actualizó (`select`) y se compara con lo marcado:
+ * si RLS bloquea la escritura, el `update` afecta cero filas SIN dar error, y la
+ * pantalla diría «listo» sin haber hecho nada.
+ */
+export async function asignarVarias(formData: FormData): Promise<void> {
+  await requerirAcceso('housekeeping')
+  const destino = retornoHousekeeping('mucama')
+  const separador = destino.includes('?') ? '&' : '?'
+
+  const ids = unidadesParaAsignar(formData.getAll('unidad_id'))
+  if (!ids) redirect(`${destino}${separador}error=sin_marcar`)
+
+  const mucamaId = String(formData.get('mucama_id') ?? '')
+  if (mucamaId && !esUuid(mucamaId)) redirect(`${destino}${separador}error=asignar`)
+
+  const supabase = await crearClienteServidor()
+  const { data, error } = await supabase
+    .from('unidades')
+    .update({ asignada_a: mucamaId || null })
+    .in('id', ids)
+    .select('id')
+  cortarSiFalla(error, destino, 'asignar')
+  if ((data ?? []).length !== ids.length) redirect(`${destino}${separador}error=asignar_parcial`)
+
+  revalidatePath('/panel/housekeeping')
+  redirect(`${destino}${separador}ok=asignadas&n=${ids.length}`)
 }
 
 /**

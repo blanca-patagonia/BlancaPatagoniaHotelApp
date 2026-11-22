@@ -39,6 +39,7 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `divisas.ts` | Cotización de monedas extranjeras (ADR 0020) |
 | `cobro.ts` | Cobro en línea: conversión y medios de pago |
 | `pagos.ts` | Resumen de pagos y estado según lo cobrado |
+| `caja.ts` | Flujo de caja del tablero: cobrado por día y por mes, y quién debe |
 | `garantia-tarjeta.ts` | Si una garantía de tarjeta sirve para cobrar (ADR 0025) |
 | `servicio.ts` | Cuándo se le puede cargar un consumo a una reserva (la cuenta se cierra con la factura) |
 | `consumos.ts` | Consumos y cuenta consolidada |
@@ -63,6 +64,7 @@ datos y devuelve una decisión, así que se prueba sin levantar nada
 | `inventario.ts` | Stock y reposición |
 | `hotel.ts` | Datos operativos del hotel que todavía no están en la base |
 | `crons.ts` | Tareas programadas y su tolerancia de atraso |
+| `errores.ts` | Cómo se explica cada evento de «Errores del sistema» |
 
 ## Huéspedes, socios y comunicación
 

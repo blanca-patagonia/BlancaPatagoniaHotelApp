@@ -34,6 +34,15 @@ en Hobby no es una salida: los avisos saldrían una vez al día (una confirmaci�
 de reserva llegaría al otro día) y el tablero marcaría la bandeja como atrasada
 todo el tiempo, porque su tolerancia es de 30 minutos (`src/lib/domain/crons.ts`).
 
+**Las funciones de Vercel corren en São Paulo (`gru1`), al lado de la base.**
+`vercel.json` lo fija con `"regions": ["gru1"]`, y el proyecto de Supabase tiene
+que crearse en la misma región (`sa-east-1`). Sin eso Vercel usa Washington
+(`iad1`) y cada consulta cruza el continente ida y vuelta: una pantalla del
+panel hace varias, y se nota. Pasó en la demo publicada (2026-11): el docente
+la probó y casi todas las pantallas mostraban varios segundos de esqueletos de
+carga. Si la base quedara en otra región, cambiar `regions` por la más cercana a
+ella.
+
 ---
 
 ## 1. Variables de entorno (entregable 8)
