@@ -83,7 +83,7 @@ function Cifra({
   const contenido = (
     <>
       <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">{titulo}</p>
-      <p className="tabular mt-2 font-display text-2xl leading-none font-semibold text-stone-900 sm:text-3xl">
+      <p className="tabular mt-2 font-display text-2xl leading-none font-semibold whitespace-nowrap text-stone-900">
         {valor}
       </p>
       <div className="mt-1.5 text-xs text-stone-600">{children}</div>
