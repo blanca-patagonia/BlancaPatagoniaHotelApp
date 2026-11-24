@@ -9480,3 +9480,22 @@ rearmó con npm 11, porque el npm 10 del entorno borraba los campos `libc` de to
 ensuciaba el diff). Verificado: `npm run check` en verde y la suite completa contra la base
 aislada, 149 archivos y 1.840 pruebas aprobadas. No se agregó ninguna opción de configuración
 ni se envió telemetría: el asistente de actualización lo proponía y no hace falta para el arreglo.
+
+## 2026-11-24 · Portal · Dos errores de la portada en el iPhone
+
+Visto en un iPhone sobre la demo publicada:
+
+1. **El texto del hero pasaba por debajo del encabezado.** El encabezado es fijo y transparente
+   sobre el video, y ganaba fondo recién entre el 60 % y el 85 % de la altura de la pantalla
+   (`animation-range` en `globals.css`). Con poco scroll, «El Calafate · Patagonia Argentina»
+   quedaba debajo de «Blanca Patagonia · Alojamientos · Reservar» y se leían encimados. Ahora el
+   fondo aparece en los primeros 6rem de scroll: arriba de todo sigue transparente.
+2. **El campo «Salida» se salía de la tarjeta.** Safari de iOS les da a los campos de fecha un
+   ancho mínimo propio que no cede a `width: 100%`, y la grilla de dos columnas usaba `1fr`
+   (que no baja de su contenido). Las columnas pasan a `minmax(0, 1fr)`, las etiquetas a
+   `min-w-0`, y en Safari de iOS el campo de fecha pierde la apariencia nativa
+   (`appearance: none`) para respetar el ancho; el selector de fecha se sigue abriendo igual.
+
+Verificado en Chromium con la vista de un iPhone 13 (el encabezado gana fondo al bajar y las dos
+fechas terminan en el borde de la tarjeta, sin scroll horizontal). La regla específica de Safari
+de iOS no se puede probar en este entorno, que sólo tiene Chromium.

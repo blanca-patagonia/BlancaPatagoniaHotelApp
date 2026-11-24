@@ -268,6 +268,34 @@ body {
 }
 
 /*
+  Campos de fecha en Safari de iPhone
+  -----------------------------------
+  Safari les da un ancho mínimo propio —el de «24 nov 2026» más su relleno— que
+  no se achica con `width: 100%`. En una grilla de dos columnas (Llegada y
+  Salida, en la portada) la segunda se salía de la tarjeta por la derecha.
+  `min-width: 0` le permite ceder; `appearance: none` saca el tamaño intrínseco
+  del control nativo, y el selector de fecha se sigue abriendo igual al tocar.
+  Sólo se aplica donde existe `-webkit-touch-callout` (Safari de iOS): en el
+  resto de los navegadores el campo se ve como siempre.
+*/
+input[type='date'] {
+  min-width: 0;
+}
+
+@supports (-webkit-touch-callout: none) {
+  input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+  }
+
+  /* Sin esto Safari centra la fecha y el campo parece vacío a la izquierda. */
+  input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
+  }
+}
+
+/*
   Impresión
   ----------
   La app usa la utilidad `print:hidden` de Tailwind (seis pantallas). La clase
@@ -510,11 +538,20 @@ body {
   }
 }
 
+/*
+  El fondo aparece en los primeros 6rem de scroll, no al salir del hero.
+
+  Antes el rango era 60vh–85vh: en el teléfono el texto del hero pasaba por
+  debajo del encabezado todavía transparente y «El Calafate · Patagonia
+  Argentina» se superponía con «Blanca Patagonia · Alojamientos · Reservar»
+  (se vio en un iPhone, 2026-11). Arriba de todo sigue transparente sobre el
+  video; apenas se baja, gana fondo y nada se lee por debajo.
+*/
 @supports (animation-timeline: scroll()) {
   [data-nav-portada] {
     animation: nav-fondo-portada linear both;
     animation-timeline: scroll(root block);
-    animation-range: 60vh 85vh;
+    animation-range: 0 6rem;
   }
 }
 

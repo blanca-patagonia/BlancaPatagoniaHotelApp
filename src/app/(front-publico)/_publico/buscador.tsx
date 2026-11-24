@@ -99,7 +99,7 @@ export function BuscadorEstadia({
     <>
       {/* Etiqueta visible en los tres campos: el `placeholder` desaparece al
           escribir y deja al huésped sin saber qué está cargando (Fase 15). */}
-      <label className="flex flex-col gap-1.5">
+      <label className="flex min-w-0 flex-col gap-1.5">
         <span className="text-sm font-medium text-stone-700">{t.llegada}</span>
         <input
           type="date"
@@ -109,7 +109,7 @@ export function BuscadorEstadia({
           className={CAMPO_PUBLICO}
         />
       </label>
-      <label className="flex flex-col gap-1.5">
+      <label className="flex min-w-0 flex-col gap-1.5">
         <span className="text-sm font-medium text-stone-700">{t.salida}</span>
         <input
           type="date"
@@ -119,7 +119,7 @@ export function BuscadorEstadia({
           className={CAMPO_PUBLICO}
         />
       </label>
-      <label className="flex flex-col gap-1.5">
+      <label className="flex min-w-0 flex-col gap-1.5">
         <span className="text-sm font-medium text-stone-700">{t.huespedes}</span>
         <input
           type="number"
@@ -142,7 +142,7 @@ export function BuscadorEstadia({
       action={rutaConIdioma('/reservar', idioma)}
       className={
         esHero
-          ? 'grid gap-x-4 gap-y-4 telefono:grid-cols-2 telefono:gap-x-3 telefono:gap-y-3 telefono:[&>*:nth-child(n+3)]:col-span-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end'
+          ? 'grid gap-x-4 gap-y-4 telefono:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] telefono:gap-x-3 telefono:gap-y-3 telefono:[&>*:nth-child(n+3)]:col-span-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end'
           : 'grid gap-x-3 gap-y-4 sm:grid-cols-[1fr_1fr_7rem_auto] sm:items-end'
       }
     >
