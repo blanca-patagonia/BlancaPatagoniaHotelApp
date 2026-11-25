@@ -45,14 +45,6 @@ const geistMono = Geist_Mono({
   preload: false,
 });
 
-/*
- * La tipografía para chino (Noto Sans SC) NO se carga acá: vive en
- * `(front-publico)/[idioma]/layout.tsx`. `next/font` emite su CSS en todas las
- * rutas del módulo que la importa —se aplique o no la clase—, y desde este
- * layout eran 372 KB de CSS bloqueante (405 `@font-face`) en las 90 rutas,
- * panel incluido.
- */
-
 export const metadata: Metadata = {
   // Base para las URLs relativas de `openGraph.images` y del `canonical`:
   // sin esto, cada página pública tendría que armar la URL absoluta a mano.

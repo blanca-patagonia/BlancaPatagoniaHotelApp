@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { requerirAcceso } from '@/lib/auth/session'
 import { mesActual } from '@/lib/fechas'
-import { metricasDeMes, etiquetaMes, textoOcupacion, textoRevPAR } from '@/lib/domain/metricas'
+import { metricasDeMes, etiquetaMes, textoOcupacion, textoRevPAR, tituloIndicador } from '@/lib/domain/metricas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { INFORMES, rutaDeInforme, mesValido } from '@/lib/domain/informes'
 import { traerUnidades, traerEstadias, traerPagos, traerFacturas } from './datos'
-import { SelectorDeMes, AvisoIncompleto, AbrirAparte, AnalizarConIA } from './_componentes'
+import { SelectorDeMes, AvisoIncompleto, AbrirAparte, ExplicacionIndicadores } from './_componentes'
 import {
   BotonExportar,
   Encabezado,
@@ -21,8 +21,8 @@ import {
  * Antes todos los informes vivían en esta única pantalla, con **un solo filtro
  * de mes** para los seis. El hotel pidió poder usar varios a la vez sin cerrar
  * ninguno —en WinPAX las ventanas son modales— y acá el problema equivalente
- * era ése: no se podía mirar la venta por categoría de agosto al lado de la
- * rentabilidad por canal de septiembre.
+ * era ése: no se podía mirar la venta por categoría de agosto al lado de
+ * la facturación de septiembre.
  *
  * Ahora cada informe tiene su propia dirección y sus propios filtros. Esta
  * pantalla queda como punto de partida: los tres indicadores del mes de un
@@ -33,7 +33,7 @@ export default async function ReportesPage({
 }: {
   searchParams: Promise<{ mes?: string }>
 }) {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
   const sp = await searchParams
   const mes = mesValido(sp.mes, mesActual())
 
@@ -66,13 +66,11 @@ export default async function ReportesPage({
           <BotonExportar href={`/panel/exportar/reportes?mes=${mes}`} titulo="Exportar serie" />
         }
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={`Analizá cómo viene ${etiquetaMes(mes)}: ocupación, facturación y reservas comparadas con el mes anterior. ¿Qué está bien, qué preocupa y qué harías?`} />
-      </div>
-
       <AvisoIncompleto incompleto={incompleto} />
 
       <SelectorDeMes base="/panel/reportes" mes={mes} />
+
+      <ExplicacionIndicadores />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
@@ -85,15 +83,15 @@ export default async function ReportesPage({
           icono="ocupacion"
         />
         <Kpi
-          titulo="ADR (tarifa media)"
+          titulo={tituloIndicador('adr')}
           valor={formatearUSD(actual.adr)}
-          detalle="por noche vendida (neto)"
+          detalle="precio promedio de cada noche vendida, sin IVA"
           icono="reportes"
         />
         <Kpi
-          titulo="RevPAR"
+          titulo={tituloIndicador('revpar')}
           valor={textoRevPAR(actual.ingreso, actual.nochesDisponibles, actual.revpar)}
-          detalle="por unidad disponible (neto)"
+          detalle="lo que rindió cada habitación, ocupada o vacía"
           icono="reportes"
         />
         <Kpi
@@ -122,20 +120,6 @@ export default async function ReportesPage({
           tono="calafate"
         />
       </div>
-
-      <Tarjeta className="mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-          <div>
-            <h3 className="font-display text-base font-semibold text-stone-900">Cierre del día</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Llegadas, no-shows, salidas y lo cobrado, para repasar antes de cerrar la jornada.
-            </p>
-          </div>
-          <Link href="/panel/cierre-diario" className={botonClases('secundario')}>
-            Abrir
-          </Link>
-        </div>
-      </Tarjeta>
 
       <h2 className="mt-8 mb-3 font-display text-lg font-semibold text-lago-900">Informes</h2>
       {/*

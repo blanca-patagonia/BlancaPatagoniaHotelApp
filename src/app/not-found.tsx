@@ -7,7 +7,7 @@ import { Aviso } from './(front-publico)/_publico/marco'
  *
  * El caso más común no es alguien escribiendo mal una dirección: es un **enlace
  * que ya no sirve** —una confirmación de una reserva cancelada, una encuesta ya
- * respondida, un contrato firmado hace meses—. Esas personas no se equivocaron
+ * respondida—. Esas personas no se equivocaron
  * en nada, así que el texto no las trata como si lo hubieran hecho, y siempre
  * ofrece un camino hacia adelante.
  */

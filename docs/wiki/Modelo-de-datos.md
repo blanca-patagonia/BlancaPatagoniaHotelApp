@@ -1,10 +1,18 @@
 # Modelo de datos
 
-Todas las tablas tienen RLS activo, creadas por **108 migraciones SQL numeradas**
+Todas las tablas tienen RLS activo, creadas por **127 migraciones SQL numeradas**
 en `supabase/migrations/`. Nombres y comentarios en español, `snake_case`.
 
 Una migración ya aplicada **no se edita nunca**: se crea la siguiente con el
 número que sigue.
+
+> **Rama `tesis-a-presentar`: la base no se achicó.** Las migraciones crean **69
+> tablas**; el sistema reducido usa 30. Las otras 39 son de los módulos quitados
+> (agencias, proveedores, contratos, canales de venta, bandeja de mensajes…):
+> siguen en la base, con su RLS, pero **sin pantalla ni código que las use**. La
+> lista exacta está en [`docs/2-arquitectura/modelo-datos.md`](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/2-arquitectura/modelo-datos.md).
+> Limpiarlas queda como paso aparte, contra la base de tests aislada
+> ([ADR 0045](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/decisiones/0045-version-reducida-para-la-tesis.md)).
 
 ---
 
@@ -12,7 +20,7 @@ número que sigue.
 
 ```mermaid
 flowchart LR
-    TU["tipos_unidad<br/><i>10 tipos</i>"] --> U["unidades<br/><i>15 unidades</i>"]
+    TU["tipos_unidad<br/><i>10 tipos</i>"] --> U["unidades<br/><i>37 unidades</i>"]
     TU --> TA["tarifas<br/><i>neto + rack</i>"]
     TE["temporadas"] --> TA
     TE --> TR["temporada_rangos"]
@@ -28,10 +36,7 @@ flowchart LR
     R --> F["facturas"]
     C --> F
     P --> F
-
-    A["agencias"] --> R
-    A --> MC["movimientos_cuenta"]
-    R --> MC
+    F --> NC["notas_credito"]
 ```
 
 Se lee así: una **reserva** es el acuerdo comercial con un huésped; una
@@ -42,80 +47,63 @@ acuerdo.
 
 ---
 
-## Las 43 tablas, por dominio
+## Las 30 tablas del sistema reducido, por dominio
 
 ### Inventario y catálogo (7)
 
 | Tabla | Qué guarda |
 |---|---|
-| `tipos_unidad` | Los 10 tipos: capacidad, categoría (hostería / cabaña), amenities |
-| `unidades` | Las 15 unidades físicas, con piso y bloque |
+| `tipos_unidad` | Los tipos: capacidad, categoría (hostería / cabaña), amenities |
+| `unidades` | Las unidades físicas, con piso y bloque |
 | `temporadas` | Baja, media, alta |
 | `temporada_rangos` | Las fechas de cada temporada, con **anti-solape** por restricción de exclusión |
 | `tarifas` | Precio **neto** y **rack** por tipo y temporada, **sin IVA** |
 | `promociones` | Descuentos aplicables |
 | `politicas_cancelacion` | Los umbrales del tarifario, como datos y no como código |
 
-### Reservas y huéspedes (4)
+### Reservas y huéspedes (3)
 
 | Tabla | Qué guarda |
 |---|---|
 | `reservas` | El acuerdo: estado, canal, plan, garantía, segmento, VIP, desglose de ocupantes, total |
 | `estadias` | **La ocupación**: unidad + período. Es donde vive la garantía anti-overbooking |
-| `huespedes` | Datos personales, documento, residencia en el exterior |
-| `reserva_huespedes` | Los acompañantes de una reserva |
+| `huespedes` | Datos personales, documento, residencia en el exterior, puntos de fidelidad |
 
-### Dinero (7)
+### Dinero (9)
 
 | Tabla | Qué guarda |
 |---|---|
 | `pagos` | Cada cobro. `monto` **siempre en USD**; lo realmente cobrado va en `monto_cobrado` + `moneda` + `cotizacion` |
 | `facturas` | Comprobantes, **inmutables** y con numeración sin huecos por exigencia fiscal |
+| `notas_credito` | El único camino para corregir una factura emitida |
+| `facturas_numeracion` · `puntos_venta` | La numeración correlativa: el número se reserva antes de pedir el CAE |
+| `datos_fiscales` | Los datos del hotel como emisor (una sola fila, que no se siembra a propósito) |
 | `consumos` | Lo que el huésped consume durante la estadía |
 | `productos_servicios` | El catálogo de lo consumible |
 | `cotizaciones` | El tipo de cambio, con su fuente declarada |
-| `movimientos_cuenta` | Cuenta corriente de agencias |
-| `movimientos_proveedor` | Cuentas por pagar |
 
-### Socios (2)
+### Punto de venta (1)
 
-`agencias` · `proveedores` — ambas con un `token` para el portal de socios, que
-**tiene el `select` revocado por columna**: ni siquiera el staff lo lee con su
-propio cliente.
+`departamentos` — la jerarquía es de **dos niveles, con un trigger que rechaza el
+tercero**. Un árbol arbitrario obligaría a consultas recursivas en la cuenta del
+huésped, y el hotel no lo necesita.
 
-### Punto de venta (2)
+### Operación diaria (3)
 
-`puntos_venta` · `departamentos` — la jerarquía de departamentos es de **dos
-niveles, con un trigger que rechaza el tercero**. Un árbol arbitrario obligaría a
-consultas recursivas en la cuenta del huésped, y el hotel no lo necesita.
+`housekeeping_registros` (historial de limpieza) · `encuestas_satisfaccion` (NPS) ·
+`notificaciones` (la bandeja de salida de correos al huésped, con reintentos).
 
-### Operación diaria (6)
-
-`ordenes_mantenimiento` · `planes_mantenimiento` (preventivo) ·
-`objetos_perdidos` · `encuestas_satisfaccion` (NPS) · `avisos` (internos) ·
-`mensajes` (conversaciones del staff en tiempo real).
-
-### Contratos (2)
-
-`contratos` · `firmas` — la firma electrónica es por token, con verificación de
-integridad por hash.
-
-### Canales de venta (8)
-
-`canales` · `canal_config` · `canal_reservas` · `canal_sincronizaciones` ·
-`canal_mensajes` · `canal_resenas` · `canal_cargos` · `canal_mapeos_columnas`.
-
-Todas revocan el `select` a `anon` explícitamente.
-
-### Sistema (5)
+### Sistema (7)
 
 | Tabla | Qué guarda |
 |---|---|
 | `perfiles` | El rol de cada usuario. Un alta nace `sin_rol` y `activo = false` |
 | `auditoria` | Rastro **append-only** de operaciones sensibles: el staff lee, no escribe |
+| `auditoria_accesos` | Quién abrió la ficha de cada huésped |
+| `errores` | Errores del servidor, visibles en el panel |
+| `cron_corridas` | Última corrida de cada tarea programada |
 | `intentos_limitados` | Límite de tasa por IP, atómico (inserta y después cuenta) |
 | `consultas_bot` | Lo que le preguntan al asistente del portal |
-| `respaldos` | El registro de cada exportación de datos operativos |
 
 ---
 
@@ -146,9 +134,9 @@ cambiado da un resultado **plausible y equivocado**.
 ### 3. No se borra dinero
 
 El rol `authenticated` **no tiene `delete`** sobre reservas, estadías, pagos,
-agencias, proveedores, tarifas ni perfiles. El camino es la máquina de estados o
-la baja lógica. Lo que sí se borra —consumos, huéspedes, avisos, rangos de
-temporada, mapeos— queda **auditado por trigger**.
+tarifas ni perfiles (ni sobre las agencias y proveedores que quedaron en la
+base). El camino es la máquina de estados o la baja lógica. Lo que sí se borra
+—consumos, huéspedes, rangos de temporada— queda **auditado por trigger**.
 
 ### 4. Nunca se guarda un número de tarjeta
 

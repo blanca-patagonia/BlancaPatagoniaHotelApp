@@ -2,9 +2,7 @@ import 'server-only'
 import type { ClienteServicio } from '@/lib/supabase/admin'
 import { leerSaldoReserva } from '@/lib/reservas/saldo'
 import { registrarFalla } from '@/lib/acciones'
-import { ETIQUETAS_MEDIO, type MedioPago } from '@/lib/domain/pagos'
 import {
-  avisarPagoInterno,
   avisarPagoRechazado,
   avisarPagoRecibido,
   avisarReservaConfirmada,
@@ -51,7 +49,7 @@ async function contextoDelCobro(
     .from('reservas')
     .select(
       `id, codigo, total, huesped_id,
-       huesped:huespedes!reservas_huesped_id_fkey(nombre, apellido, email, telefono),
+       huesped:huespedes!reservas_huesped_id_fkey(nombre, apellido, email),
        estadia:estadias(check_in, check_out)`,
     )
     .eq('id', reservaId)
@@ -68,7 +66,7 @@ async function contextoDelCobro(
     codigo: string
     total: number
     huesped_id: string | null
-    huesped: { nombre: string; apellido: string; email: string | null; telefono: string | null } | null
+    huesped: { nombre: string; apellido: string; email: string | null } | null
     // ⚠️ PostgREST tipa el embed como arreglo aunque la relación sea a-uno.
     estadia: { check_in: string; check_out: string }[] | null
   }
@@ -97,9 +95,7 @@ async function contextoDelCobro(
       reservaId: r.id,
       huespedId: r.huesped_id,
       email: r.huesped?.email ?? null,
-      telefono: r.huesped?.telefono ?? null,
-      // El nombre de pila para saludar. La cartelera interna no lleva nombre
-      // (la lee el asistente de IA: ver los avisos internos en `plantillas.ts`).
+      // El nombre de pila para saludar.
       nombre: nombre || apellido,
       codigo: r.codigo,
     },
@@ -110,7 +106,7 @@ async function contextoDelCobro(
 }
 
 /**
- * Un pago se acreditó: avisarle al huésped y al mostrador.
+ * Un pago se acreditó: avisarle al huésped.
  *
  * `confirmada` viene de `saldarSiCorresponde` y dice si **este** cobro fue el que
  * pasó la reserva a firme. Es lo que distingue «recibimos tu pago» de «tu reserva
@@ -144,24 +140,13 @@ export async function avisarCobroAprobado(
     })
   }
 
-  // El mostrador se entera del cobro por la cartelera, no abriendo la reserva.
-  await avisarPagoInterno(client, {
-    pagoId: d.pagoId,
-    reservaId: d.reservaId,
-    codigo: ctx.destino.codigo,
-    importe: d.importe,
-    medio: ETIQUETAS_MEDIO[d.medio as MedioPago] ?? d.medio,
-    saldo: ctx.saldo,
-  })
 }
 
 /**
  * La pasarela rechazó el pago.
  *
- * ⚠️ No hay aviso interno para esto, y es deliberado: un rechazo es rutina —la
- * tarjeta se cae por fondos y el huésped pone otra— y llenar la cartelera de
- * rechazos haría que nadie la mirara. El huésped sí necesita saberlo, porque es
- * quien puede reintentar.
+ * Un rechazo es rutina —la tarjeta se cae por fondos y el huésped pone otra—.
+ * El huésped sí necesita saberlo, porque es quien puede reintentar.
  */
 export async function avisarCobroRechazado(
   client: ClienteServicio,

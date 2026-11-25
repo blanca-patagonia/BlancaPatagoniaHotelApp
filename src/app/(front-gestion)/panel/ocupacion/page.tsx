@@ -167,7 +167,8 @@ export default async function OcupacionPage({
   const sp = await searchParams
 
   const hoy = hoyISO()
-  const desde = /^\d{4}-\d{2}-\d{2}$/.test(sp.desde ?? '') ? sp.desde! : hoy
+  // Una fecha con forma válida pero imposible (2026-13-45) hacía lanzar a `sumarDias`.
+  const desde = /^\d{4}-\d{2}-\d{2}$/.test(sp.desde ?? '') && !Number.isNaN(Date.parse(`${sp.desde}T00:00:00Z`)) ? sp.desde! : hoy
   const ventana = VENTANAS.includes(Number(sp.dias) as (typeof VENTANAS)[number])
     ? Number(sp.dias)
     : VENTANA_DEFECTO
@@ -782,14 +783,6 @@ export default async function OcupacionPage({
                             <span className="sr-only">
                               Limpieza de {u.nombre}: {ETIQUETAS_ESTADO_HK[u.estado]}
                             </span>
-                          </Link>
-                          <Link
-                            href={`/panel/mantenimiento/nueva?unidad=${u.id}`}
-                            title={`Reportar un desperfecto en ${u.nombre}`}
-                            className="text-stone-400 transition hover:text-lenga-700"
-                          >
-                            <Icono nombre="mantenimiento" tam={14} />
-                            <span className="sr-only">Reportar desperfecto en {u.nombre}</span>
                           </Link>
                         </span>
                       </div>

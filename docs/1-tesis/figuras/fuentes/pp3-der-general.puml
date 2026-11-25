@@ -1,0 +1,102 @@
+@startuml
+!include _estilo.iuml
+hide methods
+skinparam linetype ortho
+hide members
+left to right direction
+entity "reservas" as reservas {
+}
+entity "huespedes" as huespedes {
+}
+entity "estadias" as estadias {
+}
+entity "unidades" as unidades {
+}
+entity "tipos_unidad" as tipos_unidad {
+}
+entity "housekeeping_registros" as housekeeping_registros {
+}
+entity "encuestas_satisfaccion" as encuestas_satisfaccion {
+}
+entity "notificaciones" as notificaciones {
+}
+entity "politicas_cancelacion" as politicas_cancelacion {
+}
+entity "consumos" as consumos {
+}
+entity "productos_servicios" as productos_servicios {
+}
+entity "departamentos" as departamentos {
+}
+entity "pagos" as pagos {
+}
+entity "facturas" as facturas {
+}
+entity "notas_credito" as notas_credito {
+}
+entity "puntos_venta" as puntos_venta {
+}
+entity "facturas_numeracion" as facturas_numeracion {
+}
+entity "datos_fiscales" as datos_fiscales {
+}
+entity "cotizaciones" as cotizaciones {
+}
+entity "tarifas" as tarifas {
+}
+entity "temporadas" as temporadas {
+}
+entity "temporada_rangos" as temporada_rangos {
+}
+entity "promociones" as promociones {
+}
+entity "perfiles" as perfiles {
+}
+entity "auditoria" as auditoria {
+}
+entity "auditoria_accesos" as auditoria_accesos {
+}
+entity "errores" as errores {
+}
+entity "cron_corridas" as cron_corridas {
+}
+entity "consultas_bot" as consultas_bot {
+}
+entity "intentos_limitados" as intentos_limitados {
+}
+temporadas ||--o{ tarifas : temporada_id
+tipos_unidad ||--o{ tarifas : tipo_unidad_id
+temporadas ||--o{ temporada_rangos : temporada_id
+perfiles |o--o{ unidades : asignada_a
+tipos_unidad ||--o{ unidades : tipo_unidad_id
+perfiles |o--o{ consumos : cargado_por
+departamentos |o--o{ consumos : departamento_id
+productos_servicios ||--o{ consumos : producto_id
+reservas ||--o{ consumos : reserva_id
+departamentos |o--o{ productos_servicios : departamento_id
+perfiles |o--o{ facturas : emitida_por
+reservas ||--o{ facturas : reserva_id
+reservas ||--o{ encuestas_satisfaccion : reserva_id
+perfiles |o--o{ cotizaciones : cargada_por
+departamentos |o--o{ departamentos : padre_id
+reservas ||--o{ estadias : reserva_id
+tipos_unidad ||--o{ estadias : tipo_unidad_id
+unidades ||--o{ estadias : unidad_id
+perfiles |o--o{ notas_credito : emitida_por
+facturas ||--o{ notas_credito : factura_id
+perfiles |o--o{ errores : usuario_id
+puntos_venta ||--o{ facturas_numeracion : punto_venta
+reservas ||--o{ facturas_numeracion : reserva_id
+perfiles |o--o{ pagos : creado_por
+reservas ||--o{ pagos : reserva_id
+perfiles |o--o{ datos_fiscales : actualizado_por
+huespedes ||--o{ auditoria_accesos : huesped_id
+huespedes |o--o{ notificaciones : huesped_id
+reservas |o--o{ notificaciones : reserva_id
+perfiles |o--o{ reservas : creada_por
+huespedes |o--o{ reservas : huesped_id
+politicas_cancelacion |o--o{ reservas : politica_id
+promociones |o--o{ reservas : promocion_id
+perfiles |o--o{ housekeeping_registros : mucama_id
+unidades ||--o{ housekeeping_registros : unidad_id
+@enduml

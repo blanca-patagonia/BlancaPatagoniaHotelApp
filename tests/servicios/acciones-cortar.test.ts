@@ -41,30 +41,30 @@ afterAll(() => {
 
 describe('cortarSiFalla', () => {
   it('deja seguir la acción cuando no hubo error', () => {
-    expect(destinoDe(() => cortarSiFalla(null, '/panel/avisos', 'borrar'))).toBeNull()
-    expect(destinoDe(() => cortarSiFalla(undefined, '/panel/avisos', 'borrar'))).toBeNull()
+    expect(destinoDe(() => cortarSiFalla(null, '/panel/huespedes', 'borrar'))).toBeNull()
+    expect(destinoDe(() => cortarSiFalla(undefined, '/panel/huespedes', 'borrar'))).toBeNull()
     expect(logueado).toHaveLength(0)
   })
 
   it('redirige con el motivo cuando la escritura falló', () => {
     const destino = destinoDe(() =>
-      cortarSiFalla({ message: 'permission denied' }, '/panel/avisos', 'borrar'),
+      cortarSiFalla({ message: 'permission denied' }, '/panel/huespedes', 'borrar'),
     )
-    expect(destino).toBe('/panel/avisos?error=borrar')
+    expect(destino).toBe('/panel/huespedes?error=borrar')
   })
 
   it('usa «guardar» como motivo por defecto', () => {
-    const destino = destinoDe(() => cortarSiFalla({ message: 'boom' }, '/panel/proveedores'))
-    expect(destino).toBe('/panel/proveedores?error=guardar')
+    const destino = destinoDe(() => cortarSiFalla({ message: 'boom' }, '/panel/reservas'))
+    expect(destino).toBe('/panel/reservas?error=guardar')
   })
 
   it('usa & cuando el destino ya trae query string', () => {
-    // Conversaciones redirige a `?canal=…` para no perder el canal abierto. Con
-    // `?` fijo la URL saldría rota y se perdería ese contexto.
+    // Algunas pantallas redirigen con un filtro en la URL (`?canal=…`). Con `?`
+    // fijo la URL saldría rota y se perdería ese contexto.
     const destino = destinoDe(() =>
-      cortarSiFalla({ message: 'boom' }, '/panel/conversaciones?canal=abc', 'mensaje'),
+      cortarSiFalla({ message: 'boom' }, '/panel/reservas?canal=abc', 'mensaje'),
     )
-    expect(destino).toBe('/panel/conversaciones?canal=abc&error=mensaje')
+    expect(destino).toBe('/panel/reservas?canal=abc&error=mensaje')
   })
 
   it('manda el mensaje real de la base al log del servidor, no a la URL', () => {
@@ -73,7 +73,7 @@ describe('cortarSiFalla', () => {
     const destino = destinoDe(() =>
       cortarSiFalla(
         { message: 'duplicate key value violates unique constraint "avisos_pkey"' },
-        '/panel/avisos',
+        '/panel/huespedes',
         'borrar',
       ),
     )

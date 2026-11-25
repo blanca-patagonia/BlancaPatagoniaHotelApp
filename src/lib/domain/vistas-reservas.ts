@@ -21,11 +21,14 @@
  */
 
 import { ESTADOS_RESERVA, type EstadoReserva } from './reservas'
+import { resumenDeCuenta, type Pago } from './pagos'
 
 export const VISTAS_RESERVAS = [
   'en_casa',
   'llegadas',
   'salidas',
+  'por_cobrar',
+  'sin_facturar',
   'pendientes',
   'confirmadas',
   'checkout',
@@ -43,6 +46,15 @@ export type FiltroFecha = 'llega' | 'sale'
 /** Cómo se filtra por agrupación comercial. */
 export type FiltroAgrupacion = 'grupo' | 'particular'
 
+/**
+ * Vistas que no salen de una columna sino de una CUENTA: el saldo se calcula
+ * (alojamiento + consumos − pagos) y «sin facturar» es la ausencia de una fila en
+ * `facturas`. Son las dos que el tablero de Inicio anuncia en «Requiere
+ * atención», y por eso existen: el aviso decía «7 reservas con saldo pendiente»
+ * y el enlace abría el listado entero.
+ */
+export type FiltroCalculado = 'saldo_vencido' | 'sin_facturar'
+
 export interface DefinicionVista {
   etiqueta: string
   /** Texto del estado vacío: dice qué se estaba buscando, no «no hay nada». */
@@ -51,6 +63,7 @@ export interface DefinicionVista {
   estados?: readonly EstadoReserva[]
   fecha?: FiltroFecha
   agrupacion?: FiltroAgrupacion
+  calculada?: FiltroCalculado
 }
 
 /**
@@ -60,6 +73,21 @@ export interface DefinicionVista {
  * se usa para la ocupación: acá hacen falta subconjuntos distintos según la vista.
  */
 const POR_LLEGAR: readonly EstadoReserva[] = ['pendiente', 'confirmada', 'pagada']
+
+/**
+ * Cuántos días hacia atrás (por la fecha de salida) se mira para «consumos sin
+ * facturar». `checkout` es un estado terminal: sin ventana la cuenta sumaría
+ * toda la historia del hotel, y una cuenta sin facturar hace más de dos meses ya
+ * no es «atender hoy» sino un tema de auditoría.
+ */
+export const VENTANA_SIN_FACTURAR_DIAS = 60
+
+/**
+ * Estados facturables (`ESTADOS_FACTURABLES` de `facturacion.ts`). Se repite la
+ * lista en vez de importarla para que este módulo no dependa del de facturación;
+ * `tests/dominio/vistas-reservas.test.ts` verifica que sean la misma.
+ */
+const FACTURABLES: readonly EstadoReserva[] = ['pagada', 'in_house', 'checkout']
 
 export const VISTAS: Record<VistaReservas, DefinicionVista> = {
   en_casa: {
@@ -90,6 +118,22 @@ export const VISTAS: Record<VistaReservas, DefinicionVista> = {
     // Incluye `checkout`: quien ya se fue tiene que seguir en la planilla del día,
     // o recepción no puede distinguir «ya salió» de «se fue sin avisar».
     estados: ['confirmada', 'pagada', 'in_house', 'checkout'],
+  },
+
+  por_cobrar: {
+    etiqueta: 'Saldo pendiente',
+    vacio: 'No hay reservas que ya deberían estar cobradas y tengan saldo.',
+    // Sólo las que YA deberían estar cobradas (ver `saldoVencido`): una
+    // confirmada para dentro de un mes con la seña pagada es el curso normal.
+    estados: ['confirmada', 'in_house'],
+    calculada: 'saldo_vencido',
+  },
+
+  sin_facturar: {
+    etiqueta: 'Consumos sin facturar',
+    vacio: 'No hay cuentas con consumos pendientes de facturar.',
+    estados: FACTURABLES,
+    calculada: 'sin_facturar',
   },
 
   pendientes: {
@@ -158,6 +202,8 @@ export const ORDEN_CHIPS: readonly VistaReservas[] = [
   'en_casa',
   'llegadas',
   'salidas',
+  'por_cobrar',
+  'sin_facturar',
   'pendientes',
   'confirmadas',
   'checkout',
@@ -225,9 +271,41 @@ export function estadosSinVistaPropia(): EstadoReserva[] {
     const def = VISTAS[vista]
     // Solo cuenta como «vista propia» si la vista aísla ESE estado y nada más.
     // «Confirmadas» agrupa dos, así que no deja sin sentido a ninguno de los dos.
-    if (def.estados?.length === 1 && !def.fecha && !def.agrupacion) {
+    if (def.estados?.length === 1 && !def.fecha && !def.agrupacion && !def.calculada) {
       conVistaPropia.add(def.estados[0])
     }
   }
   return ESTADOS_RESERVA.filter((e) => !conVistaPropia.has(e))
+}
+
+/* ─────────────────────────────── saldo vencido ──── */
+
+/** Lo que hace falta de una reserva para decidir si su saldo ya está vencido. */
+export interface ReservaConCuenta {
+  estado: string
+  /** Total del alojamiento, con IVA. */
+  total: number
+  pagos: Pago[]
+  consumos: { cantidad: number; precioUnitario: number }[]
+  estadias: { check_in: string; check_out: string }[]
+}
+
+/**
+ * ¿La reserva tiene saldo y ya debería estar cobrada?
+ *
+ * El saldo se mide contra la cuenta CONSOLIDADA (alojamiento + consumos), con el
+ * mismo `resumenDeCuenta` que usan el listado, la ficha y el cobro: no hay una
+ * segunda noción de «pendiente» que con el tiempo diverja.
+ *
+ * «Ya debería» depende del estado: una `confirmada` cuyo check-in ya pasó (tendría
+ * que estar alojada y pagando) o una `in_house` cuyo check-out es hoy o ya pasó
+ * (se está yendo). Cualquier otra con saldo es el curso normal de una reserva y
+ * contarla inundaría «Requiere atención».
+ */
+export function saldoVencido(r: ReservaConCuenta, hoy: string): boolean {
+  if (r.estado !== 'confirmada' && r.estado !== 'in_house') return false
+  const { saldo } = resumenDeCuenta(r.total, r.consumos, r.pagos)
+  if (saldo <= 0) return false
+  const fechas = r.estadias.map((e) => (r.estado === 'in_house' ? e.check_out : e.check_in))
+  return fechas.some((f) => f <= hoy)
 }

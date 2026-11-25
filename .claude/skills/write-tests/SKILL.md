@@ -66,13 +66,13 @@ de probar RLS de verdad.
 
 Limpiá lo que creaste: usá `sufijoUnico()` en los nombres para que dos corridas no colisionen.
 
-## La trampa de los 43 salteados
+## La trampa de los tests salteados
 
-`npm test` sale **verde con 43 tests sin ejecutar** si no hay base local — entre ellos el
+`npm test` sale **verde con unos 580 tests sin ejecutar** si no hay base local — entre ellos el
 anti-overbooking, que es la garantía central del sistema. Verde acá no significa verificado.
 
 ```bash
-npm test                          # 344 pasan, 43 saltean
+npm test                          # 1197 pasan, 583 saltean
 npx supabase start                # levanta la base (necesita Docker)
 npm run seed:usuarios             # sin esto fallan los tests de facturación (FK contra perfiles)
 EXIGIR_DB=1 npm test              # ahora la falta de base es ERROR, no salto

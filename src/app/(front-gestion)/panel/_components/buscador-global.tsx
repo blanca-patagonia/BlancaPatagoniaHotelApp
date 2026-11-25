@@ -51,8 +51,6 @@ interface RespuestaBusqueda {
   glosario: Opcion[]
   reservas: Opcion[]
   huespedes: Opcion[]
-  agencias: Opcion[]
-  proveedores: Opcion[]
 }
 
 interface Grupo {
@@ -70,8 +68,6 @@ function grupos(r: RespuestaBusqueda | null): Grupo[] {
     { titulo: 'Qué significa', opciones: r.glosario },
     { titulo: 'Reservas', opciones: r.reservas },
     { titulo: 'Huéspedes', opciones: r.huespedes },
-    { titulo: 'Agencias y empresas', opciones: r.agencias },
-    { titulo: 'Proveedores', opciones: r.proveedores },
   ].filter((g) => g.opciones.length > 0)
 }
 

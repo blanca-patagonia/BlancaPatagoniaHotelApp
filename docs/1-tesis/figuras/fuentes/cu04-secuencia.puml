@@ -1,0 +1,37 @@
+@startuml
+!include _estilo.iuml
+actor "Recepción" as R
+participant "Panel\n(ficha y cuenta)" as PA
+participant "Reglas\nfiscales" as DF
+participant "Proveedor de\nfacturación" as FA
+database "PostgreSQL" as B
+R -> PA : abre la reserva desde «Salidas de hoy»
+PA -> B : alojamiento, consumos y pagos
+B --> PA : cuenta consolidada y saldo
+opt queda saldo
+  R -> PA : registra el pago del saldo
+  PA -> B : inserta el pago (monto en USD)
+end
+R -> PA : pulsa «Check-out» y confirma
+PA -> B : estado = checkout (sólo si sigue in house)
+B -> B : disparador: crea la encuesta de satisfacción
+B --> PA : estadía cerrada
+R -> PA : pulsa «Emitir factura» y confirma
+PA -> B : ¿ya existe una factura de esta reserva?
+alt ya facturada
+  B --> PA : factura existente
+  PA --> R : muestra el comprobante emitido
+else sin factura
+  PA -> DF : tipo de comprobante según la condición\nde IVA del emisor y del huésped
+  DF --> PA : A, B o C
+  PA -> DF : desglosar neto, IVA y exento
+  DF --> PA : importes que suman el total
+  PA -> B : reservar_numero_factura()
+  B --> PA : número correlativo
+  PA -> FA : solicita el código de autorización
+  FA --> PA : CAE y vencimiento
+  PA -> B : inserta la factura (inmutable)
+  B --> PA : factura registrada
+  PA --> R : comprobante listo para imprimir
+end
+@enduml

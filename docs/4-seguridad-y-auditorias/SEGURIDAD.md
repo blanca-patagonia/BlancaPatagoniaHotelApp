@@ -8,13 +8,14 @@ verificarlo**.
 ## 🔴 1. El alta pública de reservas no tenía límite de volumen
 
 ### Qué encontré
-`crearReservaPublica` (`app/reservar/actions.ts`) no aplicaba ninguna
+`crearReservaPublica` (`src/app/(front-publico)/reservar/actions.ts`) no aplicaba ninguna
 restricción por IP. Cualquiera podía enviar el formulario público las veces que
 quisiera, sin autenticarse.
 
 ### Por qué es riesgo
 No es spam molesto: **cada reserva pendiente bloquea una unidad durante 5 días**
-(`expirar_reservas_pendientes`, migración 0011). El hotel tiene 15 unidades.
+(`expirar_reservas_pendientes`, migración 0011). El catálogo de entonces tenía 15
+unidades; con el inventario real son 37 (ADR 0040).
 
 Un script que enviara el formulario unas decenas de veces dejaba al hotel **sin
 inventario vendible durante casi una semana**. Es una denegación de servicio
@@ -33,7 +34,7 @@ Migración `0029_limite_de_intentos.sql`:
   insertaran, ambas podrían pasar el techo.
 - `purgar_intentos()` programada por hora, para que la tabla no crezca sin fin.
 
-Los límites viven en `lib/domain/limites.ts`, **cada uno con su justificación
+Los límites viven en `src/lib/domain/limites.ts`, **cada uno con su justificación
 escrita**. Un límite sin motivo se termina ajustando a ojo cuando alguien se
 queja, y ahí deja de proteger.
 
@@ -98,18 +99,6 @@ Once intentos fallidos seguidos desde la misma IP: el undécimo responde
 Tres comprobaciones, todas limpias (ver `docs/4-seguridad-y-auditorias/AUDITORIA_INICIAL.md` §3):
 ningún `.env` en el historial, ningún token real en los 44 commits, ningún
 literal sospechoso en el código. **No hace falta rotar credenciales.**
-
----
-
-## Pendiente de esta fase
-
-- Contraseña por defecto del seed (`blancadev1234`): impedir que se use fuera
-  de desarrollo.
-- Headers de seguridad en `next.config.ts`.
-- **Auditar cada política RLS, una por una.** Están activadas en las 32 tablas,
-  pero eso no dice qué permite cada una.
-- Validación con Zod en el borde público (hoy es una expresión regular).
-- Límite en la encuesta pública (el limitador ya existe; falta conectarlo).
 
 ---
 
@@ -224,9 +213,9 @@ bloque, **más** `alter default privileges`. Sin lo segundo el arreglo duraría
 hasta el próximo `create table`: la plataforma se lo vuelve a conceder.
 
 Se puede revocar en bloque porque **ninguna escritura pública de este sistema usa
-el rol `anon`**. Las tres que existen —reservar desde el portal, responder la
-encuesta y firmar un contrato— resuelven con `service_role` desde el servidor,
-con el token de la URL como credencial.
+el rol `anon`**. Las que existen —reservar desde el portal, responder la encuesta
+y preguntarle al asistente— resuelven con `service_role` desde el servidor, con
+el token de la URL (o el límite por IP) como defensa.
 
 ### Cómo verificarlo
 
@@ -236,7 +225,7 @@ select count(*) from privilegios_de_escritura('authenticated');  -- muchas
 select has_table_privilege('anon', 'tarifas', 'select');         -- t
 ```
 
-El test de contrato es `tests/anon-no-escribe.test.ts`, con sus dos contrapesos:
+El test de contrato es `tests/base-de-datos/anon-no-escribe.test.ts`, con sus dos contrapesos:
 que el catálogo siga siendo legible (un `revoke` de más rompe el portal en
 silencio) y que `authenticated` siga escribiendo (un `revoke` dirigido a `public`
 alcanzaría a los dos roles).
@@ -256,13 +245,13 @@ como si la barrera hubiera actuado.
 
 Lo que ya está cubierto de forma **exhaustiva**:
 
-- **Lectura**, los cuatro roles × todas las tablas: `tests/rls-por-rol.test.ts`,
+- **Lectura**, los cuatro roles × todas las tablas: `tests/base-de-datos/rls-por-rol.test.ts`,
   con la lista traída de la base para que una tabla nueva sin declarar haga
   fallar el test.
-- **Escritura de `anon`**, todas las tablas: `tests/anon-no-escribe.test.ts` (§6).
+- **Escritura de `anon`**, todas las tablas: `tests/base-de-datos/anon-no-escribe.test.ts` (§6).
 
 Lo que sigue siendo **dirigido y no exhaustivo**: la escritura de los tres roles
-de staff (`tests/rls-escritura-por-rol.test.ts`), que elige los casos por
+de staff (`tests/base-de-datos/rls-escritura-por-rol.test.ts`), que elige los casos por
 consecuencia —escalada de privilegio, dinero, inventario, borrado—. Ahí hace falta
 una cuenta del hotel, así que el riesgo es escalada interna y no exposición
 pública; sigue mereciendo una sesión dedicada, pero ya no es el hueco más grande.

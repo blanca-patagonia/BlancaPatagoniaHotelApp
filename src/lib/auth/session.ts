@@ -95,13 +95,8 @@ export async function requerirAcceso(area: Area): Promise<Sesion> {
  * `lib/domain/permisos.ts`, que es la única fuente de verdad de quién ve qué.
  *
  * Esto es para el caso en que una acción concreta es **más restrictiva que el
- * área que la contiene**. Hay dos hoy, y las dos son decisiones de negocio:
- *
- * · **Agencias.** El área la ve recepción —necesita la lista para vincular una
- *   reserva a un convenio—, pero mover plata en la cuenta corriente de un socio
- *   es de administración.
- * · **Mantenimiento.** El área la ve housekeeping —tiene que poder abrir una
- *   orden y cerrarla—, pero los planes de preventivo los define gerencia.
+ * área que la contiene**. Hoy lo usan la gestión de usuarios y la emisión de
+ * notas de crédito, que son sólo de admin y gerencia aunque su área la vean más roles.
  *
  * ── Por qué existe, en vez de dejar el literal ──────────────────────────────
  *

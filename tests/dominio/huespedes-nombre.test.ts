@@ -28,3 +28,26 @@ describe('nombreCompleto', () => {
     expect(nombreCompleto({ apellido: ' Ruiz ', nombre: ' Ruiz ' })).toBe('Ruiz')
   })
 })
+
+describe('iniciales', () => {
+  it('nombre y apellido', async () => {
+    const { iniciales } = await import('@/lib/domain/huespedes')
+    expect(iniciales({ apellido: 'Pérez', nombre: 'maría' })).toBe('MP')
+  })
+
+  it('con acento al comienzo', async () => {
+    const { iniciales } = await import('@/lib/domain/huespedes')
+    expect(iniciales({ apellido: 'Álvarez', nombre: 'Óscar' })).toBe('ÓÁ')
+  })
+
+  it('reserva rápida (sin nombre o con el apellido repetido): dos letras del apellido', async () => {
+    const { iniciales } = await import('@/lib/domain/huespedes')
+    expect(iniciales({ apellido: 'Gómez', nombre: '' })).toBe('GÓ')
+    expect(iniciales({ apellido: 'Gómez', nombre: 'Gómez' })).toBe('GÓ')
+  })
+
+  it('sin datos devuelve un signo, nunca vacío', async () => {
+    const { iniciales } = await import('@/lib/domain/huespedes')
+    expect(iniciales({})).toBe('?')
+  })
+})

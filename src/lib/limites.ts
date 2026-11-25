@@ -1,7 +1,7 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { LIMITES, type AccionLimitada } from '@/lib/domain/limites'
+import { LIMITES, claveDeIp, type AccionLimitada } from '@/lib/domain/limites'
 import { registrarFalla } from '@/lib/acciones'
 
 /**
@@ -34,8 +34,16 @@ import { registrarFalla } from '@/lib/acciones'
  *
  * Detrás de un proxy distinto habría que ajustar este orden. Es preferible eso
  * a un limitador que aparenta funcionar.
+ *
+ * Devuelve la **clave de conteo** (`claveDeIp`): una IPv6 se cuenta por su
+ * prefijo /64, porque si no se evade rotando direcciones dentro del mismo bloque.
  */
 export function ipDeCabeceras(cabeceras: Headers): string | null {
+  const cruda = ipSinNormalizar(cabeceras)
+  return cruda ? claveDeIp(cruda) : null
+}
+
+function ipSinNormalizar(cabeceras: Headers): string | null {
   const vercel = cabeceras.get('x-vercel-forwarded-for')?.trim()
   if (vercel) return vercel
 
@@ -57,11 +65,8 @@ export function ipDeCabeceras(cabeceras: Headers): string | null {
  * La misma resolución, leyendo las cabeceras de la petición en curso.
  *
  * ⚠️ Es **la única** implementación de esto en el proyecto, y tiene que seguir
- * siéndolo. Antes había dos: ésta y `ipDePeticion` en `lib/firma/index.ts`, que
- * había quedado con el bug del primer `x-forwarded-for` que ésta arregló. La
- * copia vieja alimentaba el límite del asistente público —evadible rotando la
- * cabecera— y, peor, la IP que se guarda en `firmas.ip` como constancia de quién
- * firmó un contrato: un dato probatorio que elegía el propio firmante.
+ * siéndolo. Antes había dos copias, y una había quedado con el bug del primer
+ * `x-forwarded-for` que ésta arregló: evadible rotando la cabecera.
  */
 async function ipActual(): Promise<string | null> {
   return ipDeCabeceras(await headers())
@@ -103,38 +108,3 @@ export async function permitirIntento(accion: AccionLimitada): Promise<boolean> 
   }
 }
 
-/**
- * Lo mismo, contado por una clave propia —el id de la persona— en lugar de la IP.
- *
- * Para lo que se usa con sesión: todo el personal del hotel sale a internet por
- * la misma IP, así que un límite sólo por IP lo compartirían todos y la primera
- * persona que lo agotara dejaría sin servicio al resto. La clave va pegada a la
- * acción (`ia_consulta:<id>`), así no hace falta otra tabla ni otra función SQL.
- */
-export async function permitirIntentoDe(accion: AccionLimitada, clave: string): Promise<boolean> {
-  /*
-    IP fija, a propósito. La función SQL cuenta por (ip, acción): con la IP real,
-    la misma persona tendría una cubeta por red (el Wi-Fi del hotel y los datos
-    del celular) y duplicaría su tope. La persona ya va en la acción.
-  */
-  const ip = '0.0.0.0'
-  const { maximo, minutos } = LIMITES[accion]
-  try {
-    const admin = crearClienteAdmin()
-    const { data, error } = await admin.rpc('registrar_intento', {
-      p_ip: ip,
-      p_accion: `${accion}:${clave}`,
-      p_maximo: maximo,
-      p_minutos: minutos,
-    })
-    if (error) {
-      // Deja pasar (ver arriba), pero no en silencio: mientras falle, el
-      // límite no protege nada y alguien tiene que enterarse.
-      registrarFalla(error, `limites:${accion}`)
-      return true
-    }
-    return data !== false
-  } catch {
-    return true
-  }
-}

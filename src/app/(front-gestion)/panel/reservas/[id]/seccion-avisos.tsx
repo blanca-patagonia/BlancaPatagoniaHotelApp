@@ -1,14 +1,13 @@
 import { MENSAJES_FICHA_RESERVA as MENSAJES_ERROR } from './mensajes'
 import { mensajeDe } from '@/lib/listados'
 import { type EstadoReserva } from '@/lib/domain/reservas'
-import { formatoFechaCorta } from '@/lib/fechas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { Mensaje } from '../../_components/ui'
 
 /**
  * Los avisos de arriba de la ficha: el resultado de la última acción
  * (`?error=` / `?ok=`) y las alertas de plata que no pueden pasar
- * desapercibidas (pagos ilegibles, «pagada» con saldo, agencia vencida).
+ * desapercibidas (pagos ilegibles, «pagada» con saldo).
  */
 export function SeccionAvisos({
   errorParam,
@@ -18,8 +17,6 @@ export function SeccionAvisos({
   fallaCuenta,
   estado,
   saldo,
-  totalReserva,
-  avisoPagoAgenciaVencido,
 }: {
   errorParam: string | undefined
   detalleParam: string | undefined
@@ -28,8 +25,6 @@ export function SeccionAvisos({
   fallaCuenta: boolean
   estado: EstadoReserva
   saldo: number
-  totalReserva: number
-  avisoPagoAgenciaVencido: { vencimiento: string; totalPagado: number } | null
 }) {
   return (
     <>
@@ -67,16 +62,6 @@ export function SeccionAvisos({
           Figura como pagada, pero quedan {formatearUSD(saldo)} sin cobrar (la estadía se
           recotizó, se cargaron consumos o hubo un reembolso después del pago). Cobrá la diferencia
           antes de la salida.
-        </Mensaje>
-      )}
-
-      {avisoPagoAgenciaVencido && (
-        <Mensaje tono="error">
-          El pago de la agencia está vencido: tenía que estar cubierto el{' '}
-          {formatoFechaCorta(avisoPagoAgenciaVencido.vencimiento)} (un mes antes del check-in) y
-          lleva pagado {formatearUSD(avisoPagoAgenciaVencido.totalPagado)} de{' '}
-          {formatearUSD(totalReserva)}. Reclamale a la agencia o evaluá liberar la
-          unidad.
         </Mensaje>
       )}
 

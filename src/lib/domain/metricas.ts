@@ -21,6 +21,47 @@ import {
 } from '@/lib/fechas'
 import { formatearUSD } from './moneda'
 
+/**
+ * Los tres indicadores de la industria, explicados una sola vez.
+ *
+ * «ADR» y «RevPAR» son las siglas en inglés que usa toda la hotelería, y no se
+ * traducen porque son las que el hotel va a encontrar en Booking o en cualquier
+ * informe del sector. Pero solas no le dicen nada a quien no es del rubro: al
+ * probar la demo, el docente leyó «ADR» y dijo «no sé qué es». Por eso cada
+ * pantalla las muestra con su nombre en castellano y su explicación, y todas
+ * toman el texto de acá (también el glosario de Ayuda).
+ */
+export const INDICADORES = {
+  ocupacion: {
+    sigla: 'Ocupación',
+    nombre: 'Ocupación',
+    explicacion: 'Qué parte de las habitaciones que se podían vender se vendió.',
+    cuenta: 'noches vendidas ÷ noches disponibles',
+  },
+  adr: {
+    sigla: 'ADR',
+    nombre: 'Tarifa promedio',
+    explicacion:
+      'A qué precio promedio se vendió cada noche ocupada, sin IVA. Sube si se vende más caro, aunque se venda menos.',
+    cuenta: 'ingreso de alojamiento ÷ noches vendidas',
+  },
+  revpar: {
+    sigla: 'RevPAR',
+    nombre: 'Ingreso por habitación disponible',
+    explicacion:
+      'Lo que rindió en promedio cada habitación del hotel, ocupada o vacía. Junta ocupación y precio en un solo número: es el que mejor resume el mes.',
+    cuenta: 'ingreso de alojamiento ÷ noches disponibles',
+  },
+} as const
+
+export type Indicador = keyof typeof INDICADORES
+
+/** «Tarifa promedio (ADR)»: el nombre que se entiende, con la sigla del rubro. */
+export function tituloIndicador(i: Indicador): string {
+  const d = INDICADORES[i]
+  return d.sigla === d.nombre ? d.nombre : `${d.nombre} (${d.sigla})`
+}
+
 /** Lo mínimo que se necesita de una estadía para calcular las métricas. */
 export interface EstadiaMetrica {
   periodo: string

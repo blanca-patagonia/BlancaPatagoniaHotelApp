@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { estadoDeCobro, type EstadoCobro } from '@/lib/reservas/cobro'
 import { motivoNoSeCobra } from '@/lib/domain/cobro'
@@ -10,7 +11,7 @@ import { textos, rellenar, idiomaValido, fechaCortaEn, type Diccionario } from '
 import { Mensaje, Tarjeta, botonPublico } from '../../../_publico/ui'
 import { Aviso, Marco } from '../../../_publico/marco'
 import { HORA_CHECK_IN, HORA_CHECK_OUT } from '@/lib/domain/hotel'
-import { DIAS_EXPIRACION } from '@/lib/domain/recordatorios'
+import { DIAS_EXPIRACION } from '@/lib/domain/expiracion'
 import { registrarFalla } from '@/lib/acciones'
 
 interface Reserva {
@@ -43,6 +44,9 @@ export default async function ConfirmacionPage({
   searchParams: Promise<{ pago?: string; idioma?: string }>
 }) {
   const { token } = await params
+  // Un token que no es UUID no existe: se corta antes de consultar. PostgREST
+  // responde 400 y cada bot que probara direcciones dejaba un error en /panel/errores.
+  if (!esUuid(token)) notFound()
   const sp = await searchParams
   /*
     Idioma por consulta (`?idioma=en`) y no por prefijo: esta dirección viaja en
@@ -239,6 +243,16 @@ function EstadoDePago({
   t: Diccionario['confirmacion']
   enlacePago: string
 }) {
+  // Una reserva cancelada (también la que el sistema liberó por falta de seña) no
+  // está «lista» ni «por liberarse»: ya no existe para el hotel.
+  if (reserva.estado === 'cancelada') {
+    return (
+      <Mensaje tono="aviso">
+        <strong className="font-medium">{t.canceladaTitulo}</strong> {t.canceladaTexto}
+      </Mensaje>
+    )
+  }
+
   // Sin datos de cobro no se inventa un estado: se dice que no se pudo calcular.
   if (!cobro) {
     return <Mensaje tono="aviso">{t.sinCalculo}</Mensaje>

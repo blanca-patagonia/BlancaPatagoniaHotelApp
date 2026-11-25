@@ -1,0 +1,78 @@
+@startuml
+!include _estilo.iuml
+class Reserva {
+  id : uuid
+  codigo : texto
+  estado : in_house → checkout
+  subtotal : decimal
+  iva : decimal
+  total : decimal
+  pago_desde_exterior : booleano
+}
+class Huesped {
+  apellido : texto
+  doc_numero : texto
+  condicion_iva : texto
+  residente_exterior : booleano
+  puntos : entero
+}
+class Consumo {
+  cantidad : entero
+  precio_unitario : decimal
+  folio : A | B
+}
+class Pago {
+  medio : texto
+  tipo : seña | saldo | reembolso
+  monto : decimal en USD
+  moneda : texto
+  monto_cobrado : decimal
+  cotizacion : decimal
+}
+class Factura {
+  id : uuid
+  tipo_comprobante : A | B | C
+  punto_venta : entero
+  numero_fiscal : entero
+  neto : decimal
+  iva : decimal
+  exento : decimal
+  total : decimal
+  cae : texto
+  cae_vto : fecha
+  --
+  tipoComprobante()
+  desglosarConExencion()
+  reservar_numero_factura()
+}
+class PuntoVenta {
+  numero : entero
+  ultimo_numero : entero
+  ultimo_nc : entero
+}
+class DatosFiscales {
+  razon_social : texto
+  cuit : texto
+  condicion_iva : texto
+  domicilio : texto
+}
+class NotaCredito {
+  numero : texto
+  total : decimal
+  motivo : texto
+  cae : texto
+}
+class EncuestaSatisfaccion {
+  token : uuid
+  puntaje : entero
+  comentario : texto
+}
+Huesped "1" -- "0..*" Reserva
+Reserva "1" -- "0..*" Consumo
+Reserva "1" -- "0..*" Pago
+Reserva "1" -- "0..1" Factura
+Factura "0..*" --> "1" PuntoVenta : numeración
+Factura ..> DatosFiscales : emisor
+Factura "1" -- "0..*" NotaCredito
+Reserva "1" -- "0..1" EncuestaSatisfaccion
+@enduml

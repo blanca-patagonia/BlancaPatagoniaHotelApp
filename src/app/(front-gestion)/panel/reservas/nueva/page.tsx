@@ -8,7 +8,6 @@ import { parsearBusquedaFechas } from '@/lib/domain/reservas'
 import {
   FormularioReserva,
   type OpcionTipo,
-  type OpcionAgencia,
   type OpcionPromocion,
   type OpcionUnidad, type HuespedFijo } from './formulario'
 import {
@@ -40,8 +39,6 @@ export default async function NuevaReservaPage({
   const huespedes = Math.max(1, Number(sp.huespedes ?? 1) || 1)
   const noches = buscado ? diasEntre(checkIn, checkOut) : 0
 
-  // Agencias activas con convenio: si la reserva entra por una, de ella salen
-  // la tarifa neta y la letra del comprobante al facturar.
   const supabase = await crearClienteServidor()
 
   /*
@@ -60,16 +57,6 @@ export default async function NuevaReservaPage({
     huespedFijo = (h as HuespedFijo | null) ?? null
     faltaHuesped = !huespedFijo
   }
-
-  const { data: agenciasData, error: eAgencias } = await supabase
-    .from('agencias')
-    .select('id, nombre, descuento_pct')
-    .eq('activo', true)
-    .order('nombre')
-  // Bajo impacto: si falla, el alta sigue andando sin el combo de agencias. Se
-  // loguea para no perder la causa, sin banner que distraiga de la búsqueda.
-  registrarFalla(eAgencias, 'reservas:nueva_agencias')
-  const agencias = (agenciasData ?? []) as OpcionAgencia[]
 
   // Promociones vigentes hoy: activa y, si tiene ventana de vigencia, hoy cae
   // adentro. El resto de las condiciones (noches mínimas, anticipación) no se
@@ -215,7 +202,6 @@ export default async function NuevaReservaPage({
             </Tarjeta>
           ) : (
             <FormularioReserva
-              agencias={agencias}
               promociones={promociones}
               opciones={opciones}
               unidadesPorTipo={unidadesPorTipo}

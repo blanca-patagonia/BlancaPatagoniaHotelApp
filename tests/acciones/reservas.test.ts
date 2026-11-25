@@ -533,17 +533,8 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       return unidad!
     }
 
-    it('guarda el vínculo con la agencia y aplica tarifa neta', async () => {
+    it('aplica la tarifa que corresponde al canal de la reserva', async () => {
       const { desde, hasta } = await fechasConTarifa()
-
-      const { data: ag } = await ctx.db
-        .from('agencias')
-        .insert({ nombre: `Agencia Test ${ctx.sufijo}`, descuento_pct: 10 })
-        .select('id')
-        .single()
-      const agenciaId = (ag as { id: string }).id
-      ctx.aBorrar.push({ tabla: 'agencias', id: agenciaId })
-
       const tipoUnidadId = await tipoConTarifa()
 
       const destino = await destinoDe(() =>
@@ -554,9 +545,8 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
             check_in: desde,
             check_out: hasta,
             huespedes: 1,
-            apellido: `Convenio-${ctx.sufijo}`,
-            canal: 'directo',
-            agencia_id: agenciaId,
+            apellido: `Canal-${ctx.sufijo}`,
+            canal: 'booking',
           }),
         ),
       )
@@ -571,19 +561,17 @@ describe.skipIf(!hayDB)('Server Actions · reservas', () => {
       const reservaId = destino.split('/').pop()!
       const { data } = await ctx.db
         .from('reservas')
-        .select('agencia_id, tarifa_tipo, huesped_id')
+        .select('tarifa_tipo, huesped_id')
         .eq('id', reservaId)
         .single()
 
-      const r = data as { agencia_id: string; tarifa_tipo: string; huesped_id: string }
+      const r = data as { tarifa_tipo: string; huesped_id: string }
       // El huésped lo creó la acción: se registra ANTES que la reserva para que
       // la limpieza (que invierte el orden) borre la reserva primero.
       ctx.aBorrar.push({ tabla: 'huespedes', id: r.huesped_id })
       ctx.aBorrar.push({ tabla: 'reservas', id: reservaId })
 
-      // Este era el hueco: el formulario mandaba la agencia y la acción la perdía.
-      expect(r.agencia_id).toBe(agenciaId)
-      // Con convenio corresponde tarifa neta, sea cual sea el canal.
+      // Una venta por Booking se cotiza a tarifa neta (ADR 0004).
       expect(r.tarifa_tipo).toBe('neto')
     })
 

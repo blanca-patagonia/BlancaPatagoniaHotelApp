@@ -121,11 +121,8 @@ export default async function MiTrabajoPage({
       .select('unidad_id, check_in, check_out, estado')
       .in('estado', [...ESTADOS_DEL_DIA_HOUSEKEEPING])
       .or(`check_in.eq.${hoy},check_out.eq.${hoy}`),
-    // Órdenes de mantenimiento abiertas: no se manda a limpiar una habitación con
-    // una cañería rota.
-    supabase.from('ordenes_mantenimiento').select('unidad_id').neq('estado', 'resuelta'),
   ])
-  const [{ data: unidadesData }, { data: estadiasData }, { data: ordenesData }] = lecturas
+  const [{ data: unidadesData }, { data: estadiasData }] = lecturas
   /*
     Nunca descartar el error de una lectura (regla de la auditoría QA/UX): un
     saldo o una lista vacía por una lectura fallida se ven igual que un dato
@@ -143,11 +140,6 @@ export default async function MiTrabajoPage({
     if (e.check_out === hoy) saleHoy.add(e.unidad_id)
   }
 
-  const enReparacion = new Set(
-    ((ordenesData ?? []) as { unidad_id: string | null }[])
-      .map((o) => o.unidad_id)
-      .filter((x): x is string => Boolean(x)),
-  )
 
   const unidades: UnidadHousekeeping[] = filas.map((u) => ({
     id: u.id,
@@ -158,7 +150,6 @@ export default async function MiTrabajoPage({
     ocupada: false,
     saleHoy: saleHoy.has(u.id),
     llegaHoy: llegaHoy.has(u.id),
-    enReparacion: enReparacion.has(u.id),
   }))
 
   const ordenadas = ordenarPorPrioridad(unidades)
@@ -277,9 +268,6 @@ export default async function MiTrabajoPage({
                 <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-600">
                   {u.saleHoy && <span>· Sale hoy</span>}
                   {u.llegaHoy && <span>· Llega hoy</span>}
-                  {u.enReparacion && (
-                    <span className="font-medium text-stone-800">· En reparación</span>
-                  )}
                   <span>· Estado: {ETIQUETAS_ESTADO_HK[u.estado]}</span>
                 </div>
 
@@ -304,9 +292,7 @@ export default async function MiTrabajoPage({
                 ) : (
                   <p className="mt-3 flex items-center gap-1.5 text-sm font-medium text-emerald-800">
                     <Icono nombre="ok" tam={15} />
-                    {u.enReparacion || u.estado === 'bloqueada'
-                      ? 'No hay que limpiarla'
-                      : 'Ya está lista'}
+                    {u.estado === 'bloqueada' ? 'No hay que limpiarla' : 'Ya está lista'}
                   </p>
                 )}
               </li>

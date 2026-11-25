@@ -16,31 +16,30 @@ flowchart TB
     subgraph clientes[" "]
         H["🌐 Huésped<br/>(sin cuenta)"]
         S["👤 Staff<br/>(4 roles)"]
-        O["🏨 OTA / Socios<br/>(por token)"]
     end
 
     subgraph next["Next.js 16 — App Router"]
         POR["Portal público<br/>src/app/(front-publico)/reservar · src/app/(front-publico)/[idioma]/alojamientos"]
-        PAN["Panel interno<br/>src/app/(front-gestion)/panel — 21 áreas"]
-        TOK["Accesos por token<br/>src/app/(front-publico)/portal · src/app/(front-publico)/firmar · src/app/(front-publico)/encuesta"]
-        API["Route handlers<br/>src/app/(back-api)/api — webhooks, iCal, salud, cron"]
+        PAN["Panel interno<br/>src/app/(front-gestion)/panel — 12 áreas"]
+        TOK["Acceso por token<br/>src/app/(front-publico)/encuesta"]
+        API["Route handlers<br/>src/app/(back-api)/api — webhook de pagos, salud, cron"]
     end
 
     subgraph logica["lib/ — lógica de negocio"]
-        DOM["src/lib/domain<br/>50 módulos PUROS<br/>sin base, sin React"]
-        SRV["availability · pricing · payments<br/>canales · divisas · firma<br/>facturacion · email · auth"]
+        DOM["src/lib/domain<br/>57 módulos PUROS<br/>sin base, sin React"]
+        SRV["availability · pricing · payments<br/>divisas · facturacion<br/>email · notificaciones · auth"]
     end
 
     subgraph datos["Supabase"]
-        PG[("PostgreSQL<br/>RLS en todas las tablas · 108 migraciones")]
+        PG[("PostgreSQL<br/>RLS en todas las tablas · 127 migraciones")]
         AUTH["Auth"]
     end
 
-    EXT["MercadoPago · Stripe<br/>DolarAPI · Booking iCal"]
+    EXT["MercadoPago · Stripe · Payway<br/>DolarAPI · Resend"]
 
     H --> POR
+    H --> TOK
     S --> PAN
-    O --> TOK
     POR & PAN & TOK & API --> SRV
     SRV --> DOM
     SRV --> PG
@@ -53,22 +52,22 @@ flowchart TB
 ## Las capas, y las reglas que las sostienen
 
 ```
-src/app/rutas ──124──> src/app/(front-gestion)/panel/_components   (interfaz compartida)
-          ──100──> src/lib/domain              (reglas puras)
-          ───89──> lib/{auth,pricing,payments,email,firma,
-                        facturacion,availability,canales,divisas}
-          ───60──> src/lib/supabase            ← puentea la capa de datos (deuda conocida)
+src/app/rutas ───95──> panel/_components            (interfaz compartida)
+          ──109──> src/lib/domain              (reglas puras)
+          ───91──> src/lib/{auth,reservas,payments,pricing,notificaciones,
+                            email,facturacion,availability,divisas,…}
+          ───69──> src/lib/supabase            ← puentea la capa de datos (deuda conocida)
 
 src/lib/servicios ──> src/lib/domain ──> src/lib/fechas
 src/lib/supabase  ──> PostgreSQL + RLS
 ```
 
-Tres reglas de dependencia, todas **verificables con `rg`** y no sólo declaradas:
+Tres reglas de dependencia, todas **verificables con `rg`** y no sólo declaradas (los números de arriba son archivos de `src/app/` que importan cada capa, recontados el 2026-11-10):
 
 1. **`src/lib/domain/` es puro.** No importa `@supabase/*`, ni `next/*`, ni `react`,
-   ni `zod`. Son 50 módulos de reglas que se testean sin levantar una base. Es lo
-   que permite tener una suite de 2294 tests que corren en segundos.
-2. **`lib/` nunca importa de `src/app/`.** Cero excepciones, y hoy hay cero aristas.
+   ni `zod`. Son 57 módulos de reglas que se testean sin levantar una base. Es lo
+   que permite que 1197 tests corran en segundos sin ninguna base.
+2. **`src/lib/` nunca importa de `src/app/`.** Cero excepciones, y hoy hay cero aristas.
 3. **La lógica de negocio va en `src/lib/domain/`.** Las páginas y las acciones
    orquestan: leen, llaman al dominio, escriben. No calculan reglas.
 
@@ -83,27 +82,27 @@ servidor (marcado con `server-only`) y nunca recibe datos del usuario sin filtra
 |---|---|---|
 | **Ruta** | `src/app/(front-gestion)/panel` | `src/app/(front-publico)/reservar`, `src/app/(front-publico)/[idioma]/alojamientos` |
 | **Quién entra** | Staff con sesión, por rol | Cualquiera, sin cuenta |
-| **Qué ve** | Las 21 áreas que su rol permite | Catálogo, disponibilidad, checkout |
+| **Qué ve** | Las áreas (de 12) que su rol permite | Catálogo, disponibilidad, checkout |
 | **Datos** | Todo lo del hotel | Sólo el catálogo público |
 
-La separación no es estética: el rol `anon` **no puede leer el precio neto de
-agencia** ni ejecutar la función que cotiza una estadía. Eso lo impone la base,
+La separación no es estética: el rol `anon` **no puede leer el precio neto**
+(la tarifa de agencia) ni ejecutar la función que cotiza una estadía. Eso lo impone la base,
 no la pantalla ([ADR 0016](Decisiones-de-arquitectura)).
 
-Las funciones cara al cliente —web check-in, encuestas de satisfacción— van en el
-portal, nunca en la gestión.
+Las funciones cara al cliente —las encuestas de satisfacción hoy; el web check-in,
+si algún día se hace— van en el portal, nunca en la gestión.
 
 Hay un tercer frente más chico: los **accesos por token**, para quien no tiene ni
-puede tener cuenta —una agencia mirando su cuenta corriente, alguien firmando un
-contrato, un huésped respondiendo una encuesta, un servidor de Booking leyendo el
-calendario—. Un token inválido devuelve **404 y no 401**: un 401 confirmaría que
-la ruta existe y que el token tenía la forma correcta.
+puede tener cuenta —un huésped respondiendo una encuesta, o abriendo la
+confirmación, el pago o la factura de su reserva desde el enlace del correo—. Un
+token inválido devuelve **404 y no 401**: un 401 confirmaría que la ruta existe y
+que el token tenía la forma correcta.
 
 ---
 
 ## Cómo entra y sale la información
 
-**Escrituras: Server Actions.** Hay 33 archivos `actions.ts` en `src/app/`, uno por módulo. Cada
+**Escrituras: Server Actions.** Hay 26 archivos con `'use server'` en `src/app/`, la mayoría uno por módulo. Cada
 acción verifica el rol con `requerirAcceso(area)` —con una guarda estructural, no
 por convención— valida con `zod` y **nunca descarta el error de la base**.
 
@@ -112,15 +111,14 @@ por convención— valida con `zod` y **nunca descarta el error de la base**.
 | Ruta | Para qué |
 |---|---|
 | `/api/webhooks/pagos/[proveedor]` | Confirmación de pago. Verifica firma HMAC y **falla cerrado** |
-| `/api/canales/ical/[token]` | Feed iCal de ocupación que las OTA leen |
 | `/api/cotizacion` | Tipo de cambio del día |
-| `/api/cron/canales` | Sincronización programada de canales |
-| `/api/respaldo` | Exportación de datos operativos |
+| `/api/buscar` | Búsqueda global del panel |
+| `/api/cron/notificaciones` · `salud` · `mantenimiento` | Las tres tareas programadas (`vercel.json`) |
 | `/api/salud` | 200 si la base responde, 503 si no |
 
 ---
 
-## Los siete puertos
+## Los cinco puertos
 
 Todo servicio externo entra por una **interfaz** con implementación
 seleccionable por variable de entorno. Es lo que permite que el sistema esté
@@ -128,12 +126,10 @@ completo y testeado sin tener las cuentas contratadas.
 
 | Puerto | Qué abstrae | Respaldo |
 |---|---|---|
-| `PaymentProvider` | Cobro en línea | Simulador · **MercadoPago y Stripe escritos** |
-| `EmailProvider` | Envío de correo | Simulador |
-| `FirmaElectronicaProvider` | Firma de contratos | Simulador |
+| `PaymentProvider` | Cobro en línea | Simulador · **MercadoPago, Stripe y Payway escritos** |
+| `EmailProvider` | Envío de correo | Simulador · **Resend escrito** |
 | `FacturacionElectronicaProvider` | CAE de ARCA/AFIP | Simulador |
 | `AsistenteProvider` | Asistente del portal | Reglas, **no LLM** ([ADR 0011](Decisiones-de-arquitectura)) |
-| `CanalVentaProvider` | OTA (Booking) | Simulado |
 | `CotizacionProvider` | Tipo de cambio | **Manual** — usa lo que cargó un admin |
 
 Dos detalles que valen más que la tabla:
@@ -142,14 +138,14 @@ Dos detalles que valen más que la tabla:
   la variable no está configurada, el sistema **no arranca**. Es deliberado: un
   comprobante simulado que parece fiscal es peor que un error
   ([ADR 0018](Decisiones-de-arquitectura)).
-- **Los dos últimos no tienen simulador que mienta.** Sus fuentes son públicas y
-  sin credenciales, así que el respaldo de divisas es *manual* —usa el valor que
-  cargó un gerente, no uno inventado— y el de canales es *simulado*, que
-  directamente no habla con nadie.
+- **El último no tiene simulador que mienta.** Su fuente es pública y sin
+  credenciales, así que el respaldo de divisas es *manual* —usa el valor que
+  cargó un gerente, no uno inventado—.
 
 `PAGO_PROVIDER` es el único que admite **varios a la vez**
-(`mercadopago,stripe`): el hotel es internacional y ninguna pasarela cubre las
-dos puntas —la tarjeta del exterior y el pago en pesos con cuotas—.
+(`mercadopago,stripe`, y `payway` si se contrata): el hotel es internacional y
+ninguna pasarela cubre las dos puntas —la tarjeta del exterior y el pago en
+pesos con cuotas—.
 
 ---
 

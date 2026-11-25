@@ -40,7 +40,7 @@ si querés formateo real, hay que agregarlo como dependencia y eso es una decisi
 un hook.
 
 **`al-terminar.sh`** corre la suite y, además de los fallos, informa **cuántos tests se saltearon**.
-Hoy son 43 sin base local, e incluyen el anti-overbooking. Verde con 43 sin ejecutar no es verde.
+Hoy son unos 580 sin base local, e incluyen el anti-overbooking. Verde con unos 580 sin ejecutar no es verde.
 
 **`al-iniciar.mjs`** muestra rama, estado de git, última migración y si hay base local para
 los tests (el sistema en sí corre contra Supabase en la nube, sin Docker).

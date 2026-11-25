@@ -2,7 +2,7 @@
 
 - **Estado:** Aceptada
 - **Fecha:** 2026-08-24
-- **Complementa:** [ADR 0006](0006-pagos-abstraccion-e-idempotencia.md) · [ADR 0018](0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md) · [ADR 0021](0021-canales-de-venta-solo-lectura.md)
+- **Complementa:** [ADR 0006](0006-pagos-abstraccion-e-idempotencia.md) · [ADR 0018](0018-seleccion-de-proveedor-sin-degradacion-silenciosa.md) · ADR 0021 (canales de venta, solo en `main`)
 - **Origen:** relevamiento con el cliente del 15/08/2026 (pedido P2)
 
 ## Contexto

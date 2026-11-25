@@ -35,15 +35,9 @@ export const ETIQUETAS_ESTADO_RESERVA: Record<EstadoReserva, string> = {
  * Canales de venta. Debe coincidir con el constraint `reservas_canal_valido`
  * de `reservas.canal` (migración 0062).
  *
- * `channel_manager` es el bucket genérico de la Fase 7 del análisis de
- * referencia: cualquier reserva que entre por `POST
- * /api/canales/externos/<token>` (Beds24, Hotelrunner, RateGain...) cae acá,
- * sin importar CUÁL proveedor fue —eso vive en `canales_externos`, no en esta
- * columna—. El motivo es el mismo que dejó escrito la 0062: esta lista es la
- * dimensión de `resumen_canal_mes` y de la conciliación de comisiones, y tiene
- * que quedar chica y curada a mano. Cuando un proveedor puntual merezca su
- * propia fila en esos reportes, se lo agrega acá (una migración chica, el
- * mismo trámite que ya pide sumar cualquier canal nuevo) — no antes.
+ * `channel_manager` es el bucket genérico para reservas que entran por un
+ * channel manager externo, sin importar CUÁL proveedor sea. Esta lista tiene que
+ * quedar chica y curada a mano: sumar un canal nuevo es una migración chica.
  */
 export const CANALES = ['directo', 'web', 'booking', 'expedia', 'channel_manager'] as const
 

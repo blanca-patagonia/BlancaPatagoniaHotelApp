@@ -2,6 +2,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { registrarFalla } from '@/lib/acciones'
 import { MENSAJES_NO_CARGABLE, motivoNoCargable, type MotivoNoCargable } from '@/lib/domain/servicio'
+import { hoyISO } from '@/lib/fechas'
 
 export type ClaveFallaConsumo = MotivoNoCargable | 'consumo' | 'consumo_verificar'
 
@@ -22,10 +23,7 @@ function falla(clave: ClaveFallaConsumo): ResultadoCargo {
  * Carga un consumo a la cuenta de una reserva, con el precio del catálogo.
  *
  * Es la regla de la ficha de reserva (`agregarConsumo`) sacada a una función que
- * DEVUELVE el resultado en vez de redirigir, para que la use también el
- * asistente de IA (ADR 0041). Con el `redirect` adentro, confirmar un consumo
- * desde el chat sacaba a la persona de la pantalla y perdía la conversación,
- * tanto si salía bien como si salía mal.
+ * DEVUELVE el resultado en vez de redirigir.
  *
  * ¿Se le puede cargar algo a esta reserva? (P3 del relevamiento del 15/08/2026)
  *
@@ -76,6 +74,8 @@ export async function cargarConsumo(
     producto_id: productoId,
     cantidad,
     precio_unitario: Number(producto.precio),
+    // El día del hotel, no `current_date` de la base (UTC).
+    fecha: hoyISO(),
   })
   if (error) {
     registrarFalla(error, 'consumos:insertar')

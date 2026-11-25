@@ -1,0 +1,30 @@
+@startuml
+!include _estilo.iuml
+left to right direction
+node "Dispositivo del huésped\n(navegador)" as N1
+node "Puesto de recepción\n(PC, navegador)" as N2
+node "Teléfono de housekeeping\n(navegador)" as N3
+node "Vercel" as V {
+  rectangle "Aplicación Next.js\nportal + panel + API" as APP
+  rectangle "Tareas programadas\n(avisos, salud, mantenimiento)" as CRON
+}
+node "Supabase" as SB {
+  database "PostgreSQL" as PG
+  rectangle "Auth" as AU
+  rectangle "Storage" as ST
+}
+cloud "Pasarela de pagos" as PAS
+cloud "Servicio de correo" as COR
+cloud "Fuente de cotización" as COT
+N1 --> APP : HTTPS
+N2 --> APP : HTTPS
+N3 --> APP : HTTPS
+CRON --> APP
+APP --> PG
+APP --> AU
+APP --> ST
+APP --> PAS
+PAS --> APP : webhook firmado
+APP --> COR
+APP --> COT
+@enduml

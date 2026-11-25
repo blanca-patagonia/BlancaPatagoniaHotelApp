@@ -31,6 +31,7 @@ import { exentoDeIva, desglosarConExencion } from '@/lib/domain/exencion-iva'
 import { obtenerProveedorFacturacion } from '@/lib/facturacion'
 import { datosFiscales } from '@/lib/facturacion/emisor'
 import { armarComprobante, MENSAJES_NO_ARMABLE } from '@/lib/domain/wsfev1'
+import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
 import { registrarErrorSync } from '@/lib/registro'
 
@@ -55,8 +56,7 @@ interface ReceptorFactura {
  * Emite la factura de la reserva.
  *
  * Resuelve la letra del comprobante según la condición frente al IVA del
- * receptor (la agencia si la reserva vino por convenio, si no el huésped),
- * discrimina el impuesto y solicita el CAE al proveedor de facturación
+ * huésped, discrimina el impuesto y solicita el CAE al proveedor de facturación
  * electrónica.
  *
  * ⚠️ El CAE lo emite un proveedor **simulado**: los comprobantes no tienen
@@ -103,7 +103,7 @@ export async function emitirFactura(formData: FormData): Promise<void> {
       // `estadias(check_in, check_out)`: WSFEv1 exige el período facturado en un
       // comprobante de servicios, y una estadía lo es. Son columnas GENERADAS
       // desde `periodo` (migración 0037), así que no pueden desincronizarse.
-      'estado, total, agencia_id, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior), estadias(check_in, check_out)',
+      'estado, total, pago_desde_exterior, huesped:huespedes!reservas_huesped_id_fkey(condicion_iva, doc_tipo, doc_numero, residente_exterior), estadias(check_in, check_out)',
     )
     .eq('id', reservaId)
     .maybeSingle()
@@ -131,43 +131,17 @@ export async function emitirFactura(formData: FormData): Promise<void> {
   }))
   const cuenta = cuentaConsolidada(Number(reserva.total ?? 0), consumos)
 
-  // El receptor es la agencia cuando la reserva entró por convenio; si no, el
-  // huésped. De ahí sale la letra del comprobante.
-  let receptor: ReceptorFactura
-  if (reserva.agencia_id) {
-    const { data: agencia, error: eAgencia } = await supabase
-      .from('agencias')
-      .select('condicion_iva, cuit')
-      .eq('id', reserva.agencia_id)
-      .maybeSingle()
-    /*
-      Sin esto, una lectura fallida no se distingue de una agencia sin CUIT
-      cargado: `receptor` caía a `responsable_inscripto` con `cuit: null` — la
-      condición fiscal MÁS exigente (exige CUIT válido) con el dato que
-      justamente hace falta para cumplirla en `null`. Emitir así, o exigirle
-      el CUIT al usuario por un dato que en realidad SÍ está cargado y solo no
-      se pudo leer, son las dos caras del mismo error.
-    */
-    cortarSiFalla(eAgencia, `/panel/reservas/${reservaId}`, 'lectura_agencia_fiscal')
-    // Una agencia que no se ve llega como null sin error: es el mismo caso
-    // que el de arriba (receptor más exigente con el CUIT en null) y se corta igual.
-    if (!agencia) redirect(`/panel/reservas/${reservaId}?error=lectura_agencia_fiscal`)
-    receptor = {
-      condicion: (agencia?.condicion_iva ?? 'responsable_inscripto') as CondicionIva,
-      cuit: (agencia?.cuit as string) ?? null,
-    }
-  } else {
-    const h = reserva.huesped as unknown as {
-      condicion_iva: CondicionIva
-      doc_tipo: string | null
-      doc_numero: string | null
-    } | null
-    // Solo se toma el documento como CUIT si efectivamente lo es.
-    const posibleCuit = h?.doc_tipo?.toUpperCase() === 'CUIT' ? h.doc_numero : null
-    receptor = {
-      condicion: h?.condicion_iva ?? 'consumidor_final',
-      cuit: posibleCuit,
-    }
+  // El receptor es el huésped. De ahí sale la letra del comprobante.
+  const h = reserva.huesped as unknown as {
+    condicion_iva: CondicionIva
+    doc_tipo: string | null
+    doc_numero: string | null
+  } | null
+  // Solo se toma el documento como CUIT si efectivamente lo es.
+  const posibleCuit = h?.doc_tipo?.toUpperCase() === 'CUIT' ? h.doc_numero : null
+  const receptor: ReceptorFactura = {
+    condicion: h?.condicion_iva ?? 'consumidor_final',
+    cuit: posibleCuit,
   }
 
   /*
@@ -196,20 +170,15 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     La exención se DERIVA de dos hechos (residencia del huésped + origen del
     pago). No hay ninguna casilla «exento» que alguien pueda tildar de más:
     `exentoDeIva` es la única puerta.
-
-    Si la reserva entró por una agencia, el receptor del comprobante es la
-    agencia y no el huésped, así que la exención del turista no aplica.
   */
   const huespedFiscal = reserva.huesped as unknown as {
     residente_exterior?: boolean | null
   } | null
 
-  const exento =
-    !reserva.agencia_id &&
-    exentoDeIva({
-      residenteExterior: Boolean(huespedFiscal?.residente_exterior),
-      pagoDesdeExterior: (reserva.pago_desde_exterior as boolean | null) ?? null,
-    })
+  const exento = exentoDeIva({
+    residenteExterior: Boolean(huespedFiscal?.residente_exterior),
+    pagoDesdeExterior: (reserva.pago_desde_exterior as boolean | null) ?? null,
+  })
 
   const desglose = desglosarConExencion({
     alojamientoConIva: cuenta.alojamiento,
@@ -267,6 +236,18 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     una integración que todavía no existe. Se registra y se sigue.
   */
   const periodo = (reserva.estadias ?? []) as { check_in: string; check_out: string }[]
+
+  /*
+    Tipo de cambio del comprobante. El importe está en dólares y ARCA exige,
+    para todo comprobante en moneda extranjera, cuántos pesos vale cada unidad
+    (`MonCotiz`). Antes se mandaba `null` y TODA factura quedaba con el motivo
+    «moneda» anotado en Errores del sistema —siete facturas de la demo, siete
+    errores—. Es la misma cotización que usa el hotel para cobrar en pesos
+    (`venta`, ADR 0020); si no hay ninguna disponible, el motivo se registra y
+    la factura interna se emite igual, como ya hacía.
+  */
+  const pesosPorDolar = (await cotizacionVigente('ARS'))?.venta ?? null
+
   const { comprobante, motivo: motivoComprobante } = armarComprobante({
     cuitEmisor: emisor?.cuit ?? null,
     tipo,
@@ -282,11 +263,10 @@ export async function emitirFactura(formData: FormData): Promise<void> {
     discriminaIva: discriminaIva(tipo),
     cuitReceptor: cuitLimpio,
     condicionReceptor: receptor.condicion,
-    // `facturas.total` está en USD, igual que `reservas.total`. La conversión a
-    // pesos para ARCA es parte del adapter real y de una decisión del contador;
-    // hoy se declara la moneda que efectivamente tiene el importe.
+    // `facturas.total` está en USD, igual que `reservas.total`: se declara la
+    // moneda que efectivamente tiene el importe, con su tipo de cambio.
     moneda: 'USD',
-    cotizacion: null,
+    cotizacion: pesosPorDolar,
     tieneProductos: consumos.length > 0,
     servicioDesde: periodo[0]?.check_in ?? null,
     servicioHasta: periodo[0]?.check_out ?? null,

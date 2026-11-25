@@ -14,3 +14,19 @@ export function nombreCompleto(h: { apellido?: string; nombre?: string }): strin
   if (!nombre || nombre.toLowerCase() === apellido.toLowerCase()) return apellido
   return `${apellido}, ${nombre}`
 }
+
+/**
+ * Iniciales del huésped para el círculo del listado de reservas: nombre y
+ * apellido («María Pérez» → «MP»). Con el nombre vacío o repetido (la reserva
+ * rápida de mostrador, ver arriba) se usan las dos primeras letras del apellido.
+ * Considera la primera letra de cada palabra con su acento, en mayúscula.
+ */
+export function iniciales(h: { apellido?: string; nombre?: string }): string {
+  const apellido = (h.apellido ?? '').trim()
+  const nombre = (h.nombre ?? '').trim()
+  const primera = (t: string) => Array.from(t)[0] ?? ''
+  if (!nombre || nombre.toLowerCase() === apellido.toLowerCase()) {
+    return Array.from(apellido).slice(0, 2).join('').toLocaleUpperCase('es') || '?'
+  }
+  return (primera(nombre) + primera(apellido)).toLocaleUpperCase('es') || '?'
+}

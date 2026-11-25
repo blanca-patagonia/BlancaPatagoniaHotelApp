@@ -19,7 +19,6 @@
 export const es = {
   /* ─────────────────────────────── navegación ─────────────────────────────── */
   nav: {
-    idioma: 'Idioma',
     volverArriba: 'Volver arriba',
     navegacion: 'Navegación principal',
     inicio: 'Inicio',
@@ -28,7 +27,6 @@ export const es = {
     ubicacion: 'Ubicación',
     reservar: 'Reservar',
     conocerMas: 'Conocer más',
-    cambiarIdioma: 'Cambiar idioma',
     irAlContenido: 'Ir al contenido',
   },
 
@@ -112,7 +110,7 @@ export const es = {
 
     comoLlegarEtiqueta: 'Cómo llegar',
     comoLlegarTitulo: 'En el corazón de la Patagonia',
-    direccion: 'Charles Furh 149, Barrio Los Guías, El Calafate, Santa Cruz.',
+    direccion: 'Charles Fuhr 149, Barrio Los Guías, El Calafate, Santa Cruz.',
     distancias: 'Distancias',
     distanciaCentro: 'Centro de El Calafate',
     distanciaAeropuerto: 'Aeropuerto (FTE)',
@@ -137,7 +135,7 @@ export const es = {
     cierreSecundario: 'Ver alojamientos',
 
     pieDescripcion:
-      'Hostería boutique y cabañas frente al Lago Argentino. Charles Furh 149, B° Los Guías, El Calafate, Santa Cruz, Patagonia Argentina.',
+      'Hostería boutique y cabañas frente al Lago Argentino. Charles Fuhr 149, B° Los Guías, El Calafate, Santa Cruz, Patagonia Argentina.',
     pieElHotel: 'El hotel',
     pieRedes: 'Redes sociales',
     pieAccesoPersonal: 'Acceso del personal',
@@ -248,19 +246,6 @@ export const es = {
     escribiendo: 'Escribiendo…',
     abrir: '¿Consultas?',
     cerrar: 'Cerrar',
-    recepcionBoton: 'Hablar con recepción',
-    recepcionTitulo: 'Recepción',
-    recepcionIntro: 'Dejanos tu nombre y tu email y te respondemos por acá. Si cerrás la página, la respuesta te llega también por correo.',
-    recepcionNombre: 'Tu nombre',
-    recepcionEmail: 'Tu email',
-    recepcionMensaje: 'Tu mensaje',
-    recepcionIniciar: 'Enviar a recepción',
-    recepcionEsperando: 'Recibimos tu mensaje. Alguien de recepción te va a responder acá.',
-    recepcionVolver: 'Volver al asistente',
-    recepcionError: 'No pudimos enviar tu mensaje. Probá de nuevo en un momento.',
-    recepcionLimite: 'Mandaste muchos mensajes seguidos. Esperá unos minutos.',
-    recepcionTu: 'Vos',
-    recepcionHotel: 'Recepción',
   },
 
   /* ──────────────────────────────── común ────────────────────────────────── */
@@ -550,6 +535,8 @@ export const es = {
     todoPagoTexto: 'No tenés que hacer nada más; te esperamos el día de la llegada.',
     saldoPendienteTitulo: 'Queda un saldo pendiente.',
     saldoPendienteTexto: 'Podés abonarlo ahora o al llegar al hotel.',
+    canceladaTitulo: 'Esta reserva está cancelada.',
+    canceladaTexto: 'Si querés volver a reservar, hacé una nueva reserva o escribinos y te ayudamos.',
     sinConfirmarTitulo: 'La reserva todavía no está confirmada.',
     sinConfirmarTexto: 'Queda tomada por {dias} días; para asegurarla hay que abonar la seña.',
     pagarSaldo: 'Pagar el saldo',

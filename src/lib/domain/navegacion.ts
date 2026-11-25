@@ -1,20 +1,16 @@
 /**
  * Agrupación del menú lateral del panel.
  *
- * Por qué existe. El menú listaba las 18 áreas al mismo nivel visual, en una
+ * Por qué existe. El menú listaba las áreas al mismo nivel visual, en una
  * columna plana. Para quien ya conoce el sistema da igual; para alguien que
- * entra a recepción por primera vez, encontrar «Objetos perdidos» entre
- * «Housekeeping» y «Avisos» obliga a leer la lista entera, y eso se paga todos
+ * entra a recepción por primera vez, encontrar «Housekeeping» entre
+ * «Reportes» y «Auditoría» obliga a leer la lista entera, y eso se paga todos
  * los días. Agrupar convierte una búsqueda lineal en dos saltos: primero el
  * grupo, después el ítem.
  *
  * El criterio de agrupación es **por momento de uso**, no por parecido temático:
  *
  *  · `Operación` — lo que se toca con un huésped enfrente o al teléfono.
- *  · `Unidades` — el estado físico de la casa, que mira otra gente y en otro
- *    momento del día (housekeeping y mantenimiento, más cocina).
- *  · `Comercial` — lo que se hace con terceros: agencias, proveedores, contratos.
- *  · `Equipo` — comunicación interna.
  *  · `Administración` — lo que mira gerencia y lo que se configura una vez.
  *
  * `Ayuda` queda fuera de todo grupo, al final: no compite con el trabajo y se
@@ -23,7 +19,7 @@
  *
  * Este módulo es puro y **no decide permisos**: recibe las áreas que el rol ya
  * puede ver (`areasDe`) y solo las ordena. Un grupo sin áreas visibles no se
- * dibuja, así que housekeeping —que ve tres áreas— no termina con cuatro
+ * dibuja, así que housekeeping —que ve pocas áreas— no termina con
  * encabezados vacíos.
  */
 
@@ -44,20 +40,8 @@ export interface GrupoNavegacion {
  * silencio del menú.
  */
 export const GRUPOS: readonly GrupoNavegacion[] = [
-  // La bandeja va en Operación, al lado de reservas y huéspedes: contestar a
-  // quien pregunta por disponibilidad es parte de vender, no de administrar.
-  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'bandeja', 'punto_venta', 'huespedes'] },
-  { titulo: 'Unidades', areas: ['housekeeping', 'mantenimiento', 'servicio', 'objetos_perdidos'] },
-  { titulo: 'Comercial', areas: ['agencias', 'proveedores', 'contratos', 'canales'] },
-  // El registro de envíos va en Equipo, junto al tablón: las dos responden la
-  // misma pregunta —«¿esto se avisó?»— desde los dos lados, el interno y el que
-  // salió al huésped.
-  { titulo: 'Equipo', areas: ['avisos', 'notificaciones', 'conversaciones'] },
-  // `conciliacion` va en Administración y no en Comercial: no se toca con un
-  // tercero enfrente, se mira a fin de mes con el extracto del banco al lado.
-  // `ia` entra justo después de `reportes`: contesta preguntas con los mismos
-  // números que esos informes, así que conviene que aparezca al lado.
-  { titulo: 'Administración', areas: ['reportes', 'ia', 'conciliacion', 'auditoria', 'errores', 'config', 'usuarios', 'respaldos'] },
+  { titulo: 'Operación', areas: ['dashboard', 'ocupacion', 'reservas', 'punto_venta', 'huespedes', 'housekeeping'] },
+  { titulo: 'Administración', areas: ['reportes', 'auditoria', 'errores', 'config', 'usuarios'] },
   { titulo: null, areas: ['ayuda'] },
 ]
 
@@ -102,28 +86,14 @@ export function agruparAreas(visibles: readonly Area[]): GrupoNavegacion[] {
 export const RUTA_AREA: Record<Area, string> = {
   dashboard: '/panel',
   ocupacion: '/panel/ocupacion',
-  servicio: '/panel/servicio',
   reservas: '/panel/reservas',
   punto_venta: '/panel/punto-venta',
   huespedes: '/panel/huespedes',
   housekeeping: '/panel/housekeeping',
-  mantenimiento: '/panel/mantenimiento',
-  objetos_perdidos: '/panel/objetos-perdidos',
-  avisos: '/panel/avisos',
-  bandeja: '/panel/bandeja',
-  conversaciones: '/panel/conversaciones',
-  agencias: '/panel/agencias',
-  proveedores: '/panel/proveedores',
-  contratos: '/panel/contratos',
-  canales: '/panel/canales',
-  conciliacion: '/panel/conciliacion',
   auditoria: '/panel/auditoria',
   errores: '/panel/errores',
-  notificaciones: '/panel/notificaciones',
   reportes: '/panel/reportes',
-  ia: '/panel/ia',
   config: '/panel/config',
   usuarios: '/panel/usuarios',
-  respaldos: '/panel/respaldos',
   ayuda: '/panel/ayuda',
 }

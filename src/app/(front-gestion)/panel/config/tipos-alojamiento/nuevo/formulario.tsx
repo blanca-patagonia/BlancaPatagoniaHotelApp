@@ -3,7 +3,8 @@
 import { useActionState } from 'react'
 import { CATEGORIAS_UNIDAD, ETIQUETAS_CATEGORIA } from '@/lib/domain/unidades'
 import { crearTipoUnidad, type EstadoAltaTipo } from '../../tipos-unidad.actions'
-import { CAMPO, Campo, Mensaje } from '../../../_components/ui'
+import Link from 'next/link'
+import { CAMPO, Campo, Mensaje, PieDeFormulario, botonClases } from '../../../_components/ui'
 import { BotonEnvio } from '../../../_components/boton-envio'
 
 const INICIAL: EstadoAltaTipo = {}
@@ -77,11 +78,14 @@ export function FormularioTipo() {
           />
         </Campo>
       </div>
-      <div className="sm:col-span-2">
+      <PieDeFormulario hayObligatorios={false}>
         <BotonEnvio cargando="Creando…" extra="w-full sm:w-auto">
           Crear tipo
         </BotonEnvio>
-      </div>
+        <Link href="/panel/config/tipos-alojamiento" className={botonClases('secundario', 'w-full sm:w-auto')}>
+          Cancelar
+        </Link>
+      </PieDeFormulario>
     </form>
   )
 }

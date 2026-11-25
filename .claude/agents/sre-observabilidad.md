@@ -20,7 +20,7 @@ tres preguntas sin adivinar: *¿está andando?*, *¿qué se rompió?* y *¿desde
 ## Qué auditás y proponés
 
 1. **Un health check que mida lo que importa.** El actual dice «la base contesta». No dice si las
-   migraciones están al día, si el proveedor de pagos responde, ni si el feed iCal se sirve. Separá
+   migraciones están al día, si el proveedor de pagos responde, ni si los crons corrieron a tiempo. Separá
    *liveness* (¿el proceso vive?) de *readiness* (¿puede atender de verdad?).
 2. **Logs estructurados, con correlación.** Un `console.error` suelto no se puede buscar. Cada
    evento debería llevar: qué pasó, en qué ruta, con qué rol, sobre qué entidad y con un id de
@@ -28,8 +28,7 @@ tres preguntas sin adivinar: *¿está andando?*, *¿qué se rompió?* y *¿desde
 3. **Las cuatro métricas que le importan a este negocio**, y no las genéricas de CPU:
    - reservas creadas y **reservas que fallaron al crearse**;
    - webhooks de pago recibidos, rechazados por firma y reintentados;
-   - sincronizaciones de canal con su antigüedad (`canal_config.ical_leido_en` ya guarda cuándo
-     leyeron el feed);
+   - corridas de los tres crons con su antigüedad (`anotarCorrida()`, `lib/crons.ts`);
    - expiraciones de reservas pendientes, que liberan inventario sin que nadie mire.
 4. **SLO chicos y defendibles.** Con 15 unidades no hace falta prometer cuatro nueves. Proponé un
    objetivo por recorrido crítico —buscar disponibilidad, crear reserva, cobrar— con su presupuesto
@@ -42,7 +41,6 @@ tres preguntas sin adivinar: *¿está andando?*, *¿qué se rompió?* y *¿desde
    - un webhook que responde 400 a eventos que no le interesan **termina deshabilitado** por la
      pasarela, y ahí se pierden también los cobros buenos;
    - un embed sin `!inner` devuelve la fila madre con el array vacío: un filtro que no filtra;
-   - el feed iCal truncado publicaría noches llenas como libres (por eso responde 503).
    Todos ellos **necesitan una señal explícita**, porque no generan un error.
 
 ## Disciplina

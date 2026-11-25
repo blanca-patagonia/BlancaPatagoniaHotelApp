@@ -20,9 +20,7 @@ import { join, relative, resolve, sep } from 'node:path'
  *
  * Porque el sink no escribe bajo Vitest a propósito (`sinkActivo()` corta si
  * `process.env.VITEST`), así que no se puede comprobar «apareció la fila»
- * ejecutando. Lo que sí se puede fijar es la regla. Es el mismo enfoque que
- * `tests/contratos/pwa.test.ts`, que lee `public/sw.js` y falla si se separa de la lista
- * blanca del dominio.
+ * ejecutando. Lo que sí se puede fijar es la regla, leyendo el código.
  *
  * ── Las excepciones son parte del contrato ──────────────────────────────────
  *
@@ -64,7 +62,6 @@ const EXCEPCIONES: Record<string, string> = {
     'Componente de cliente y lib/registro.ts es server-only. Además corre cuando el layout raíz falló: no hay nada del servidor sobre lo que apoyarse.',
   'src/app/(front-gestion)/panel/error.tsx':
     'Componente de cliente y lib/registro.ts es server-only. El servidor ya captura la excepción en instrumentation.ts con el mismo digest que se muestra en pantalla.',
-  'src/app/(front-gestion)/panel/_components/pwa.tsx': 'Componente de cliente: corre en el navegador, sin acceso a la base.',
   'src/lib/email/index.ts':
     'El proveedor «consola» ES la consola: escribir el correo ahí es literalmente lo que hace.',
   'src/lib/integraciones/seleccion.ts':

@@ -58,6 +58,5 @@ export async function guardarDatosFiscales(formData: FormData): Promise<void> {
 
   cortarSiFalla(error, '/panel/config/datos-fiscales', 'fiscales')
   revalidatePath('/panel/config/datos-fiscales')
-  revalidatePath('/panel/proveedores/comprobantes')
   redirect('/panel/config/datos-fiscales?ok=fiscales')
 }

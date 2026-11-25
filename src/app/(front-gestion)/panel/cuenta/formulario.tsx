@@ -65,7 +65,7 @@ export function FormularioCuenta() {
         />
       </Campo>
 
-      <PieDeFormulario>
+      <PieDeFormulario flotante={false}>
         <button
           type="submit"
           disabled={pendiente}

@@ -66,12 +66,6 @@ function borrarBorrador(clave: string): void {
  */
 const SIN_CAMBIOS = () => () => {}
 
-export interface OpcionAgencia {
-  id: string
-  nombre: string
-  descuento_pct: number
-}
-
 export interface OpcionPromocion {
   id: string
   codigo: string
@@ -112,7 +106,6 @@ export interface HuespedFijo {
 export function FormularioReserva({
   opciones,
   unidadesPorTipo,
-  agencias,
   promociones,
   checkIn,
   checkOut,
@@ -124,7 +117,6 @@ export function FormularioReserva({
   huespedFijo?: HuespedFijo | null
   opciones: OpcionTipo[]
   unidadesPorTipo: Record<string, OpcionUnidad[]>
-  agencias: OpcionAgencia[]
   promociones: OpcionPromocion[]
   checkIn: string
   checkOut: string
@@ -414,23 +406,6 @@ export function FormularioReserva({
               <option value="expedia">Expedia (neto)</option>
             </select>
           </Campo>
-
-          {/* Si la reserva entra por convenio, la agencia es la que factura: de
-              ella salen la tarifa neta y la letra del comprobante (ADR 0012). */}
-          <Campo
-            etiqueta="Agencia / empresa"
-            ayuda="Con convenio siempre se aplica tarifa neta, sea cual sea el canal."
-          >
-            <select name="agencia_id" key={`agencia_id-${v.agencia_id ?? ''}`} defaultValue={v.agencia_id ?? ''} className={CAMPO}>
-              <option value="">Sin convenio (huésped directo)</option>
-              {agencias.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre}
-                  {a.descuento_pct > 0 ? ` · ${a.descuento_pct}% dto.` : ''}
-                </option>
-              ))}
-            </select>
-          </Campo>
         </div>
       </Tarjeta>
 
@@ -533,7 +508,7 @@ export function FormularioReserva({
             ayuda="Sin garantía, un no-show no se puede cobrar."
           >
             <select name="garantia" key={`garantia-${v.garantia ?? 'sin_garantia'}`} defaultValue={v.garantia ?? 'sin_garantia'} className={CAMPO}>
-              {GARANTIAS.map((g) => (
+              {GARANTIAS.filter((g) => g !== 'agencia' && g !== 'contrato' || g === v.garantia).map((g) => (
                 <option key={g} value={g}>
                   {ETIQUETAS_GARANTIA[g]}
                 </option>
@@ -552,7 +527,7 @@ export function FormularioReserva({
             </select>
           </Campo>
 
-          <Campo etiqueta="Voucher" ayuda="Número que dio la agencia o el canal, si hay.">
+          <Campo etiqueta="Voucher" ayuda="Número del comprobante de la reserva, si hay.">
             <input name="voucher" defaultValue={v.voucher ?? ''} className={CAMPO} />
           </Campo>
 
@@ -572,7 +547,7 @@ export function FormularioReserva({
 
           <Campo
             etiqueta="Descuento adicional (%)"
-            ayuda="Se aplica sobre la tarifa. El descuento del convenio de la agencia va aparte."
+            ayuda="Se aplica sobre la tarifa."
           >
             <input
               name="descuento_pct"
@@ -608,7 +583,26 @@ export function FormularioReserva({
 
       {estado.error && <Mensaje tono="error">{estado.error}</Mensaje>}
 
-      <PieDeFormulario>
+      <PieDeFormulario
+        resumen={(() => {
+          // Lo que se está por confirmar, siempre a la vista: la unidad elegida
+          // y su total, como el total de la comanda en el punto de venta.
+          const elegida = opciones.find((o) => o.tipoUnidadId === tipoElegido && !o.faltanTarifas)
+          return elegida ? (
+            <>
+              <p className="text-stone-600">
+                {elegida.nombre} · {noches} {noches === 1 ? 'noche' : 'noches'}
+              </p>
+              <p className="tabular text-xl leading-tight font-semibold text-stone-900">
+                {formatearUSD(elegida.total)}
+                <span className="ml-1.5 text-xs font-normal text-stone-500">total de referencia</span>
+              </p>
+            </>
+          ) : (
+            <p className="text-stone-600">Elegí una unidad para ver el total.</p>
+          )
+        })()}
+      >
         <button
           type="submit"
           disabled={pendiente || cotizables.length === 0}

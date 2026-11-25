@@ -17,7 +17,6 @@ export default function robots(): MetadataRoute.Robots {
         '/panel',
         '/login',
         '/portal',
-        '/firmar',
         '/encuesta',
         '/auth',
         '/reservar/pagar',

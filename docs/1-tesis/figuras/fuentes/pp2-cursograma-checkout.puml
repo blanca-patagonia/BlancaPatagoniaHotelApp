@@ -1,0 +1,16 @@
+@startuml
+!include _estilo.iuml
+|Huésped|
+start
+:1. Se presenta en recepción\npara hacer el check-out;
+|Recepción|
+:2. Busca los consumos en las notas del\nrestaurante y los registros del frigobar;
+:3. Suma los consumos al costo\ndel alojamiento (a mano o con calculadora);
+:4. Descuenta la seña pagada;
+|Huésped|
+:5. Paga el saldo en efectivo,\ntarjeta o transferencia;
+|Recepción|
+:6. Emite la factura de forma manual;
+:7. Actualiza la planilla:\nhabitación libre;
+stop
+@enduml

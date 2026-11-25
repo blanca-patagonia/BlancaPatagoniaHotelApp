@@ -1,0 +1,23 @@
+@startuml
+!include _estilo.iuml
+left to right direction
+actor "Huésped" as HUE
+actor "Recepción" as REC
+actor "Gerencia" as GER
+actor "Pasarela\nde pagos" as PAS
+actor "Facturación\nelectrónica" as FAC
+rectangle "Sistema de Gestión Hotelera — Blanca Patagonia" {
+  usecase "CU-01\nReservar desde el portal público" as CU1
+  usecase "CU-02\nHacer el check-in" as CU2
+  usecase "CU-03\nCargar un consumo" as CU3
+  usecase "CU-04\nHacer el check-out\ny emitir la factura" as CU4
+  usecase "CU-05\nConsultar los indicadores\nde gestión" as CU5
+}
+HUE --> CU1
+REC --> CU2
+REC --> CU3
+REC --> CU4
+GER --> CU5
+CU1 --> PAS
+CU4 --> FAC
+@enduml

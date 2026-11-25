@@ -27,7 +27,7 @@ export function archivoInvalido(archivo: File): string | null {
 
 /**
  * Sube un archivo a una carpeta del bucket. `carpeta` es el prefijo de primer
- * nivel por módulo (`mantenimiento`, `housekeeping`, `proveedores`, `agencias`)
+ * nivel por módulo (`mantenimiento`, `housekeeping`)
  * seguido del id de la entidad, así cada módulo queda separado sin necesitar
  * buckets ni políticas propias.
  */
@@ -38,7 +38,10 @@ export async function subirAdjunto(
   const invalido = archivoInvalido(archivo)
   if (invalido) return { error: invalido }
 
-  const extension = archivo.name.includes('.') ? archivo.name.split('.').pop() : undefined
+  // La extensión viene del nombre que mandó el cliente: sólo se acepta tal cual
+  // si es corta y alfanumérica; si no, se sube sin extensión.
+  const candidata = archivo.name.includes('.') ? archivo.name.split('.').pop() : undefined
+  const extension = candidata && /^[a-z0-9]{1,5}$/i.test(candidata) ? candidata.toLowerCase() : undefined
   const ruta = `${carpeta}/${crypto.randomUUID()}${extension ? `.${extension}` : ''}`
 
   const admin = crearClienteAdmin()
@@ -56,9 +59,4 @@ export async function urlAdjunto(ruta: string, segundos = 300): Promise<string |
   const { data, error } = await admin.storage.from(BUCKET_ADJUNTOS).createSignedUrl(ruta, segundos)
   if (error || !data) return null
   return data.signedUrl
-}
-
-export async function eliminarAdjunto(ruta: string): Promise<void> {
-  const admin = crearClienteAdmin()
-  await admin.storage.from(BUCKET_ADJUNTOS).remove([ruta])
 }

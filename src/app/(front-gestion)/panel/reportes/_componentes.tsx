@@ -1,11 +1,14 @@
-import { mesRelativo, semanaRelativa, etiquetaSemana } from '@/lib/domain/metricas'
+import {
+  mesRelativo,
+  semanaRelativa,
+  etiquetaSemana,
+  INDICADORES,
+  tituloIndicador,
+  type Indicador,
+} from '@/lib/domain/metricas'
 import { Icono } from '../_components/iconos'
-import { BarraHerramientas, Mensaje, botonClases } from '../_components/ui'
+import { BarraHerramientas, Explicacion, Mensaje, botonClases } from '../_components/ui'
 import { SelectorMes } from '../_components/selector-mes'
-import Link from 'next/link'
-import { puedeAcceder } from '@/lib/domain/permisos'
-import type { Rol } from '@/lib/domain/roles'
-import { iaActiva } from '@/lib/ia/proveedor'
 
 /**
  * Piezas compartidas por los informes.
@@ -170,22 +173,29 @@ export function AbrirAparte({ href, titulo }: { href: string; titulo: string }) 
 }
 
 /**
- * «Analizar con IA»: abre el asistente con una pregunta sobre este informe ya
- * escrita. No la manda sola —cada consulta gasta cupo del proveedor—: la
- * persona la lee, la ajusta si quiere y aprieta «Preguntar».
+ * Qué significa cada indicador, en castellano, arriba de los números.
  *
- * No aparece si el rol no usa el asistente o si no hay proveedor configurado:
- * un botón que lleva a «no está configurado» no ayuda a nadie.
+ * Al probar la demo, el docente leyó «ADR» y «RevPAR» y no supo qué eran. Son
+ * las siglas del rubro y se mantienen, pero ya no se muestran solas.
  */
-export function AnalizarConIA({ rol, pregunta }: { rol: Rol; pregunta: string }) {
-  if (!puedeAcceder(rol, 'ia') || !iaActiva()) return null
+export function ExplicacionIndicadores({
+  indicadores = ['ocupacion', 'adr', 'revpar'],
+}: {
+  indicadores?: Indicador[]
+}) {
   return (
-    <Link
-      href={`/panel/ia?pregunta=${encodeURIComponent(pregunta)}`}
-      className={botonClases('secundario', 'gap-1.5')}
-    >
-      <Icono nombre="ia" tam={16} />
-      Analizar con IA
-    </Link>
+    <Explicacion titulo="Cómo leer estos indicadores">
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3">
+        {indicadores.map((i) => (
+          <div key={i}>
+            <dt className="font-medium">{tituloIndicador(i)}</dt>
+            <dd className="text-lago-800">
+              {INDICADORES[i].explicacion}{' '}
+              <span className="text-xs text-lago-700">({INDICADORES[i].cuenta})</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Explicacion>
   )
 }

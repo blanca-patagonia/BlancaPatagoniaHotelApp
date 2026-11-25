@@ -8,7 +8,7 @@ import type { Rol } from './roles'
  *
  * Nace de una necesidad concreta de recepción: alguien llama preguntando por su
  * reserva y hay que encontrarlo **mientras está al teléfono**, sin adivinar si
- * está cargado como huésped, como reserva o como cuenta de agencia.
+ * está cargado como huésped o como reserva.
  *
  * La regla que vive acá es de qué se puede buscar según el rol. No alcanza con
  * que la pantalla no muestre un módulo: si el buscador consultara todo, alguien
@@ -24,8 +24,6 @@ import type { Rol } from './roles'
 export const AMBITOS = [
   'reservas',
   'huespedes',
-  'agencias',
-  'proveedores',
   'unidades',
   'tipos_unidad',
   'productos',
@@ -39,8 +37,6 @@ export type Ambito = (typeof AMBITOS)[number]
 const AREA_DEL_AMBITO: Record<Ambito, Area> = {
   reservas: 'reservas',
   huespedes: 'huespedes',
-  agencias: 'agencias',
-  proveedores: 'proveedores',
   unidades: 'config',
   tipos_unidad: 'config',
   productos: 'punto_venta',
@@ -51,8 +47,6 @@ const AREA_DEL_AMBITO: Record<Ambito, Area> = {
 export const ETIQUETAS_AMBITO: Record<Ambito, string> = {
   reservas: 'Reservas',
   huespedes: 'Huéspedes',
-  agencias: 'Agencias y empresas',
-  proveedores: 'Proveedores',
   unidades: 'Habitaciones y cabañas',
   tipos_unidad: 'Tipos de alojamiento',
   productos: 'Productos y servicios',

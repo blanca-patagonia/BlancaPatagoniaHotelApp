@@ -1,0 +1,39 @@
+@startuml
+!include _estilo.iuml
+actor "Huésped" as H
+participant "Portal\npúblico" as P
+participant "Disponibilidad\ny precios" as D
+participant "Límite de\nintentos" as L
+database "PostgreSQL" as B
+participant "Pasarela\nde pagos" as G
+participant "Bandeja de\ncorreos" as M
+H -> P : fechas y cantidad de personas
+P -> D : disponibilidad por tipo
+D -> B : disponibilidad_por_tipo()
+B --> D : tipos con unidades libres
+D -> B : cotizar_estadia_publica()
+B --> D : precio por noche (tarifa de mostrador)
+D --> P : opciones con precio final (IVA incluido)
+P --> H : alojamientos disponibles
+H -> P : elige el alojamiento, carga sus datos\ny acepta las condiciones
+P -> L : ¿el origen superó el límite?
+L --> P : permitido
+P -> B : busca o crea al huésped
+P -> B : crear_reserva() — reserva y estadía\nen una sola transacción
+alt la unidad se ocupó mientras tanto
+  B --> P : rechazo por superposición de fechas
+  P --> H : «ya no hay disponibilidad»
+else hay lugar
+  B --> P : reserva **pendiente** con su código
+  P -> M : encola el correo de confirmación
+  opt elige pagar la seña ahora
+    P -> G : solicitud de cobro de la seña
+    G --> H : página de pago
+    H -> G : paga
+    G -> P : aviso firmado de pago acreditado (webhook)
+    P -> B : registra el pago · reserva **confirmada**
+    P -> M : encola «recibimos tu pago»
+  end
+  P --> H : confirmación con código, total y saldo
+end
+@enduml

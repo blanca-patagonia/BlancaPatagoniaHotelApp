@@ -15,19 +15,10 @@ export type AccionLimitada =
   | 'login'
   | 'encuesta'
   | 'recuperar_password'
-  | 'ical'
   | 'webhook_pago'
-  | 'webhook_email'
-  | 'webhook_canal_externo'
-  | 'webhook_meta'
-  | 'webhook_telegram'
-  | 'chat_web'
-  | 'comprobante_agencia'
   | 'payway_ejecutar_pago'
   | 'pago_portal'
   | 'registro_firma_rechazada'
-  | 'ia_consulta'
-  | 'ia_mensaje_huesped'
 
 export interface Limite {
   /** Intentos permitidos dentro de la ventana. */
@@ -99,23 +90,6 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
   },
 
   /*
-    El feed iCal de salida. No filtra datos personales —el archivo dice «ocupado» y
-    nada más— pero cada lectura recorre un año de estadías, así que sin techo la URL
-    es un amplificador gratis para cualquiera que la tenga.
-
-    El techo es alto a propósito. El hotel tiene 11 tipos de unidad, y si Booking,
-    Airbnb y Expedia sondean cada uno todos los feeds una vez por hora son 33
-    lecturas legítimas: un límite ajustado cortaría la sincronización, que es
-    justamente el daño que este feed viene a evitar. Ciento veinte deja margen de
-    sobra y sigue cortando un bucle, que haría miles.
-  */
-  ical: {
-    maximo: 120,
-    minutos: 60,
-    motivo: 'Cada lectura recorre un año de estadías.',
-  },
-
-  /*
     El webhook de pagos, y **solo cuando la firma no valida**.
 
     Esta distinción es la decisión importante del límite, no el número. Un
@@ -140,77 +114,6 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     motivo: 'Martilleo del webhook de pagos por parte de quien no tiene el secreto.',
   },
 
-  // Mismo criterio que webhook_pago: se cuenta DESPUÉS de rechazar el token,
-  // nunca antes, para no bloquear una racha de reservas legítimas de un
-  // channel manager real (Fase 7, preparación).
-  webhook_canal_externo: {
-    maximo: 20,
-    minutos: 60,
-    motivo: 'Martilleo del webhook de canales externos por parte de quien no tiene el token.',
-  },
-
-  /*
-    El webhook de entrega de correo, con el mismo criterio y por el mismo motivo:
-    el contador se incrementa **después** de rechazar la firma, nunca antes.
-
-    Un evento legítimo llega firmado con el secreto que sólo tiene el proveedor,
-    así que no pasa por acá jamás. Y descartar eventos buenos por volumen sería
-    perder justamente los rebotes: el hotel volvería a creer que un correo llegó
-    cuando no llegó, que es lo que este webhook viene a corregir.
-
-    El techo es más alto que el de pagos porque el volumen legítimo también lo es
-    —cada correo genera hasta cuatro eventos—, aunque los legítimos no cuenten.
-  */
-  webhook_email: {
-    maximo: 40,
-    minutos: 60,
-    motivo: 'Martilleo del webhook de correo por parte de quien no tiene el secreto.',
-  },
-
-  /*
-    Los webhooks de la bandeja de mensajes (ADR 0043), con el mismo criterio:
-    se cuenta DESPUÉS de rechazar la firma o el token. Un evento legítimo nunca
-    pasa por acá, y descartarlo por volumen sería perder el mensaje de un
-    huésped, que no vuelve a llegar.
-  */
-  webhook_meta: {
-    maximo: 40,
-    minutos: 60,
-    motivo: 'Martilleo del webhook de Meta por parte de quien no tiene el secreto de la app.',
-  },
-  webhook_telegram: {
-    maximo: 40,
-    minutos: 60,
-    motivo: 'Martilleo del webhook de Telegram por parte de quien no tiene el token secreto.',
-  },
-
-  /*
-    El chat de la web, sin sesión: cualquiera puede abrirlo. Treinta mensajes
-    por hora por IP es una conversación muy larga con recepción y está muy por
-    debajo de lo que haría falta para llenar la bandeja de basura.
-  */
-  chat_web: {
-    maximo: 30,
-    minutos: 60,
-    motivo: 'Cada mensaje del chat de la web aparece en la bandeja del staff.',
-  },
-
-  /*
-    Subida de comprobante de pago desde el portal del socio, sin sesión de
-    staff: el token de la URL es la única credencial. Sin techo, quien lo tenga
-    podría llenar el bucket privado de archivos (cada uno pesa hasta 4 MB) y
-    ensuciar la cuenta corriente con filas de «pago pendiente» sin comprobante
-    real detrás.
-
-    Diez por hora deja margen de sobra para el caso legítimo más intenso: una
-    agencia que liquida el mes y sube el comprobante de varias reservas
-    seguidas. Un script que quisiera llenar el bucket necesitaría cientos.
-  */
-  comprobante_agencia: {
-    maximo: 10,
-    minutos: 60,
-    motivo: 'El bucket privado y la cuenta corriente, desde un enlace sin sesión de staff.',
-  },
 
   /*
     Ejecutar un pago con Payway (`/pago-payway/[reservaId]`), sin sesión de
@@ -258,33 +161,6 @@ export const LIMITES: Record<AccionLimitada, Limite> = {
     minutos: 10,
     motivo: 'Que firmas falsas en masa no tapen las señales reales en /panel/errores.',
   },
-  /*
-    Consultas al asistente de IA, POR PERSONA (`permitirIntentoDe`). Cada una
-    son hasta cinco llamadas al proveedor, que tiene cupo o costo. Cuarenta por
-    hora es mucho más de lo que alguien pregunta trabajando, y corta una pestaña
-    que reintenta sola o un script.
-  */
-  ia_consulta: {
-    maximo: 40,
-    minutos: 60,
-    motivo: 'Cupo del proveedor de IA, compartido por todo el hotel.',
-  },
-
-  /*
-    Mensajes a huéspedes desde el asistente (`mensaje_huesped`), por persona.
-
-    Es la única vía del sistema que manda un correo con texto libre firmado por
-    el hotel, y no tiene pantalla equivalente que lo frene. Con una sesión
-    robada se podía mandar en bucle a cada reserva visible un «pagá acá:
-    https://…» desde el dominio del hotel. Diez por hora sobra para la
-    recepción más ocupada —un mensaje así se escribe y se revisa a mano— y
-    corta un script en el décimo primero.
-  */
-  ia_mensaje_huesped: {
-    maximo: 10,
-    minutos: 60,
-    motivo: 'Correo con texto libre firmado por el hotel: phishing desde una sesión robada.',
-  },
 
 }
 
@@ -294,4 +170,34 @@ export function mensajeLimite(accion: AccionLimitada): string {
   return accion === 'login'
     ? `Demasiados intentos. Esperá unos minutos y volvé a probar.`
     : `Recibimos varios envíos desde tu conexión. Probá de nuevo en ${minutos} minutos, o escribinos y lo resolvemos por teléfono.`
+}
+
+/**
+ * La clave con la que se cuenta una IP.
+ *
+ * Una IPv4 se cuenta entera. Una IPv6 se cuenta por su **prefijo /64**: a una
+ * conexión residencial o a un servidor barato le asignan un /64 completo, así que
+ * contar la dirección entera deja rotar de a una por cada intento y el límite
+ * deja de existir. Una IPv4 mapeada (`::ffff:1.2.3.4`) vuelve a ser la IPv4.
+ *
+ * Si el texto no parece una IP se devuelve tal cual: la base decide si lo acepta.
+ */
+export function claveDeIp(ip: string): string {
+  const limpia = ip.trim().replace(/^\[|\]$/g, '').split('%')[0]
+
+  const mapeada = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(limpia)
+  if (mapeada) return mapeada[1]
+
+  if (!limpia.includes(':')) return limpia
+
+  const [cabeza, cola = ''] = limpia.split('::')
+  const antes = cabeza ? cabeza.split(':') : []
+  const despues = limpia.includes('::') && cola ? cola.split(':') : []
+  const grupos = limpia.includes('::')
+    ? [...antes, ...Array(Math.max(0, 8 - antes.length - despues.length)).fill('0'), ...despues]
+    : antes
+
+  if (grupos.length !== 8 || grupos.some((g) => !/^[0-9a-f]{1,4}$/i.test(g))) return limpia
+
+  return `${grupos.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')).join(':')}::`
 }

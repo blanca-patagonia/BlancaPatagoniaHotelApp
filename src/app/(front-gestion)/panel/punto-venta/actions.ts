@@ -16,6 +16,7 @@ import {
 } from '@/lib/domain/punto-venta'
 import { esFolio } from '@/lib/domain/folios'
 import { formatearUSD } from '@/lib/domain/moneda'
+import { hoyISO } from '@/lib/fechas'
 
 /**
  * Cierre de una comanda del punto de venta.
@@ -141,6 +142,8 @@ export async function cerrarComanda(
       // Snapshot del precio, como ya hacía el alta de a uno: si mañana sube el
       // vino, esta comanda sigue diciendo lo que se cobró.
       precio_unitario: l.precioUnitario,
+      // El día del hotel, no `current_date` de la base (UTC).
+      fecha: hoyISO(),
       // Se copia el departamento del producto, no se deriva al consultar: si mañana
       // el producto cambia de sector, la línea ya cobrada tiene que seguir diciendo
       // dónde se vendió. Es la ÚNICA clasificación del consumo — la migración 0044

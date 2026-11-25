@@ -12,15 +12,9 @@ export type NombreIcono =
   | 'reservas'
   | 'huespedes'
   | 'housekeeping'
-  | 'mantenimiento'
   | 'objetos'
-  | 'avisos'
-  | 'sobre'
   | 'agencias'
-  | 'proveedores'
   | 'contratos'
-  | 'firma'
-  | 'chat'
   | 'auditoria'
   | 'reportes'
   | 'config'
@@ -38,9 +32,8 @@ export type NombreIcono =
   | 'ok'
   | 'ayuda'
   | 'divisas'
-  | 'canales'
-  | 'conciliacion'
-  | 'ia'
+  | 'ojo'
+  | 'ojo_tachado'
 
 /** Trazos de cada icono (todo dentro de un viewBox 0 0 24 24). */
 const TRAZOS: Record<NombreIcono, string[]> = {
@@ -57,26 +50,12 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     'M11 3.5l1.6 4.4 4.4 1.6-4.4 1.6L11 15.5 9.4 11.1 5 9.5l4.4-1.6z',
     'M17.5 14.5l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z',
   ],
-  mantenimiento: [
-    'M15.2 3.6a5 5 0 0 0-6 6.4l-6 6a2 2 0 1 0 2.8 2.8l6-6a5 5 0 0 0 6.4-6l-3 3-2.6-.6-.6-2.6z',
-  ],
   objetos: ['M12 3.5l8 4.3v8.4L12 20.5l-8-4.3V7.8z', 'M4 7.8 12 12l8-4.2', 'M12 12v8.5'],
-  avisos: [
-    'M4 10v4a1 1 0 0 0 1 1h2.5l6.5 3.5v-13L7.5 9H5a1 1 0 0 0-1 1z',
-    'M17.5 8.5a4 4 0 0 1 0 7',
-  ],
   // Sobre abierto: el registro de lo que salió, no un buzón de entrada.
-  sobre: ['M3.5 6.5h17v11h-17z', 'M3.5 7 12 13l8.5-6'],
   agencias: [
     'M3.5 7.5h17v12h-17z',
     'M9 7.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2',
     'M3.5 12.5h17',
-  ],
-  proveedores: [
-    'M2.5 6.5h11v9h-11z',
-    'M13.5 9.5h3.8l3.2 3v3h-7z',
-    'M7 18.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5z',
-    'M17.5 18.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5z',
   ],
   contratos: [
     'M6 3.5h8l4 4v13h-12z',
@@ -91,21 +70,9 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     'M9 15h6',
     'M9 18h3',
   ],
-  firma: ['M4 17.5c3-1 4-8 6-8s1.5 6 3.5 6 2-2.5 3.5-2.5', 'M3.5 20.5h17'],
-  chat: [
-    'M20.5 12.5c0 3.6-3.8 6.5-8.5 6.5-1 0-2-.1-2.9-.4l-5.1 1.4 1.5-4.2c-1.2-1-1.9-2.4-1.9-3.9C3.6 8.9 7.4 6 12 6s8.5 2.9 8.5 6.5z',
-  ],
   reportes: ['M3.5 20.5h17', 'M7 20.5v-7', 'M12 20.5V5.5', 'M17 20.5v-10'],
   // Nodo central con tres ramas: el hotel y los canales que le mandan reservas.
   // No se usa un globo terráqueo, que en el panel ya sugeriría «portal público».
-  canales: [
-    'M12 6.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5z',
-    'M5 22a2.25 2.25 0 1 0 0-4.5A2.25 2.25 0 0 0 5 22z',
-    'M19 22a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5z',
-    'M12 6.5v5',
-    'M12 11.5H5.5a.5.5 0 0 0-.5.5v5.5',
-    'M12 11.5h6.5a.5.5 0 0 1 .5.5v5.5',
-  ],
   // Billete con una moneda: la conversión entre divisas, no un signo «$» suelto
   // (que en este sistema significaría un importe, no un tipo de cambio).
   /*
@@ -114,18 +81,6 @@ const TRAZOS: Record<NombreIcono, string[]> = {
     reusar `divisas`: son cosas distintas y el menú las muestra juntas, en
     Administración, donde dos iconos iguales serían un error de lectura.
   */
-  conciliacion: [
-    'M3.5 8.5h13',
-    'M13 5l3.5 3.5L13 12',
-    'M20.5 15.5h-13',
-    'M11 12l-3.5 3.5L11 19',
-  ],
-  // Dos destellos, el clásico glifo de «asistente / generado con IA»: uno
-  // grande y uno chico, cada uno una cometa de cuatro puntas.
-  ia: [
-    'M11.5 3c.7 3.6 2.4 5.4 6 6.1-3.6.7-5.3 2.5-6 6.1-.7-3.6-2.4-5.4-6-6.1 3.6-.7 5.3-2.5 6-6.1z',
-    'M18 14.5c.3 1.5 1 2.2 2.5 2.5-1.5.3-2.2 1-2.5 2.5-.3-1.5-1-2.2-2.5-2.5 1.5-.3 2.2-1 2.5-2.5z',
-  ],
   divisas: [
     'M2.5 7.5h13v7h-13z',
     'M9 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
@@ -156,6 +111,13 @@ const TRAZOS: Record<NombreIcono, string[]> = {
   montana: ['M2.5 19.5 9 8l3.5 6 2-3.4 7 8.9z', 'M9 8l2.2 3.9'],
   alerta: ['M12 4.5 21 19.5H3z', 'M12 10v4', 'M12 16.8v.2'],
   ok: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M8.5 12.2l2.4 2.4 4.6-4.8'],
+  // Mostrar y ocultar una contraseña.
+  ojo: ['M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z', 'M12 14.8a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6z'],
+  ojo_tachado: [
+    'M2.5 12S6 5.5 12 5.5c1.6 0 3 .4 4.2 1.1',
+    'M21.5 12s-3.5 6.5-9.5 6.5c-1.6 0-3-.4-4.2-1.1',
+    'M4 20 20 4',
+  ],
   // Signo de pregunta dentro de un círculo: la convención universal de ayuda.
   ayuda: [
     'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',

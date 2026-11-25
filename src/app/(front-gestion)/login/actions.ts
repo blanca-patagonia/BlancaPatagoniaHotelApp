@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { crearClienteServidor } from '@/lib/supabase/server'
 import { permitirIntento } from '@/lib/limites'
 import { mensajeLimite } from '@/lib/domain/limites'
-import { LARGO_MINIMO_PASSWORD } from '@/lib/domain/cuenta'
+import { LARGO_MINIMO_PASSWORD, avisoDeEspacios } from '@/lib/domain/cuenta'
 import { envPublico, urlDelSitio } from '@/lib/env'
 import { registrarError } from '@/lib/registro'
 import { falloConValores, type ValoresFormulario } from '@/lib/domain/formularios'
@@ -43,8 +43,13 @@ export async function iniciarSesion(
 
   if (error) {
     // Mensaje único a propósito: distinguir «no existe» de «contraseña
-    // incorrecta» le confirmaría a un atacante qué cuentas existen.
-    return falloConValores('Email o contraseña incorrectos.', formData)
+    // incorrecta» le confirmaría a un atacante qué cuentas existen. El aviso de
+    // espacios no revela nada: habla de lo que la persona misma escribió.
+    const espacios = avisoDeEspacios(password)
+    return falloConValores(
+      espacios ? `Email o contraseña incorrectos. ${espacios}` : 'Email o contraseña incorrectos.',
+      formData,
+    )
   }
 
   redirect('/panel')

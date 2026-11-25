@@ -2,11 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   EVENTOS_EMAIL,
   PLANTILLAS,
-  esInterno,
   renderizar,
   textoAHtml,
   variablesFaltantes,
-  type EventoEmail,
 } from '@/lib/domain/plantillas'
 
 describe('catálogo de plantillas', () => {
@@ -127,9 +125,9 @@ describe('render', () => {
 /**
  * El catálogo ampliado (2026-09-08).
  *
- * El prompt del sistema enumera 19 tipos de aviso y había 4. Estos casos fijan
- * las decisiones que un evento nuevo obliga a tomar, para que agregar el número
- * 21 no sea copiar el 20 sin pensar.
+ * Estos casos fijan
+ * las decisiones que un evento nuevo obliga a tomar, para que agregar uno nuevo
+ * no sea copiar el anterior sin pensar.
  */
 describe('catálogo de avisos', () => {
   it('cubre el ciclo completo de la reserva', () => {
@@ -142,7 +140,6 @@ describe('catálogo de avisos', () => {
     const delCiclo = [
       'confirmacion_reserva',
       'reserva_confirmada',
-      'reserva_por_vencer',
       'reserva_reprogramada',
       'reserva_cancelada',
       'no_show',
@@ -151,33 +148,8 @@ describe('catálogo de avisos', () => {
   })
 
   it('cubre el dinero', () => {
-    for (const e of ['pago_recibido', 'pago_rechazado', 'saldo_pendiente']) {
+    for (const e of ['pago_recibido', 'pago_rechazado']) {
       expect(EVENTOS_EMAIL).toContain(e)
-    }
-  })
-
-  it('cubre los seis avisos internos', () => {
-    const internos = [
-      'interno_nueva_reserva',
-      'interno_nuevo_pago',
-      'interno_error_sincronizacion',
-      'interno_discrepancia_factura',
-      'interno_habitacion_lista',
-      'interno_incidente_mantenimiento',
-    ]
-    for (const e of internos) {
-      expect(EVENTOS_EMAIL).toContain(e)
-      expect(esInterno(e as EventoEmail), `${e} tendría que ser interno`).toBe(true)
-    }
-  })
-
-  it('ningún aviso al huésped se marca como interno', () => {
-    // Un interno se salta el consentimiento y la franja horaria. Marcar uno del
-    // huésped como interno lo mandaría a las 3 de la mañana a quien pidió que no
-    // le escriban.
-    for (const e of EVENTOS_EMAIL) {
-      if (e.startsWith('interno_')) continue
-      expect(esInterno(e), `${e} quedó marcado como interno`).toBe(false)
     }
   })
 
@@ -198,30 +170,6 @@ describe('catálogo de avisos', () => {
     expect(cuerpo).toContain('no se te cobró nada')
   })
 
-  it('un marcador opcional desaparece; uno obligatorio se deja ver', () => {
-    // Sin esto, el huésped recibía «hasta las 10:00. {{aviso_saldo}}».
-    const r = renderizar('checkout_proximo', {
-      nombre: 'Ana',
-      codigo: 'BP-1',
-      check_out: '2026-10-02',
-      hora_check_out: '10:00',
-    })
-
-    expect(r.cuerpo, 'el marcador opcional quedó a la vista').not.toContain('{{aviso_saldo}}')
-    expect(r.faltantes, 'un opcional ausente no es una variable faltante').toEqual([])
-  })
-
-  it('y cuando el opcional viene, se usa', () => {
-    const r = renderizar('checkout_proximo', {
-      nombre: 'Ana',
-      codigo: 'BP-1',
-      check_out: '2026-10-02',
-      hora_check_out: '10:00',
-      aviso_saldo: 'Te queda un saldo de USD 40.',
-    })
-
-    expect(r.cuerpo).toContain('USD 40')
-  })
 
   it('renderizar trae también el cuerpo en HTML', () => {
     const r = renderizar('reserva_confirmada', {
@@ -237,49 +185,6 @@ describe('catálogo de avisos', () => {
     expect(r.cuerpoHtml).toContain('Ana')
   })
 
-  /*
-    Plantillas editables desde el panel (migración 0097, `plantillas_email`):
-    `lib/domain/plantillas.ts` sigue siendo puro y no sabe leer la base, así que
-    el override llega ya resuelto como parámetro. Estos tests cubren esa
-    prioridad sin pasar por Supabase.
-  */
-  it('usa el override de asunto/cuerpo cuando viene', () => {
-    const r = renderizar(
-      'confirmacion_reserva',
-      { nombre: 'Ana', codigo: 'BP-1', enlace: 'https://x.com', total: 'USD 1' },
-      { asunto: 'Asunto editado {{codigo}}', cuerpo: 'Hola {{nombre}}, texto editado.' },
-    )
-    expect(r.asunto).toBe('Asunto editado BP-1')
-    expect(r.cuerpo).toBe('Hola Ana, texto editado.')
-  })
-
-  it('sin override, usa el texto original de PLANTILLAS', () => {
-    const sinOverride = renderizar('confirmacion_reserva', {
-      nombre: 'Ana',
-      codigo: 'BP-1',
-      enlace: 'https://x.com',
-      total: 'USD 1',
-    })
-    const conOverrideVacio = renderizar(
-      'confirmacion_reserva',
-      { nombre: 'Ana', codigo: 'BP-1', enlace: 'https://x.com', total: 'USD 1' },
-      { asunto: null, cuerpo: null },
-    )
-    expect(conOverrideVacio.asunto).toBe(sinOverride.asunto)
-    expect(conOverrideVacio.cuerpo).toBe(sinOverride.cuerpo)
-  })
-
-  it('variables/opcionales del override siguen viniendo del catálogo, no se editan', () => {
-    // Si el texto editado deja afuera un marcador obligatorio, `faltantes` lo
-    // sigue marcando: el contrato de qué datos hacen falta no cambia con el
-    // contenido.
-    const r = renderizar(
-      'confirmacion_reserva',
-      { nombre: 'Ana' },
-      { asunto: 'Aviso', cuerpo: 'Sin marcadores del todo.' },
-    )
-    expect(r.faltantes).toContain('codigo')
-  })
 })
 
 /*

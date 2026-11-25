@@ -63,7 +63,7 @@ try {
 if (correr('docker', ['info'], 3000) !== null) {
   console.error('Base de tests: Docker disponible (npx supabase start)')
 } else {
-  console.error('Base de tests: sin Docker → 43 tests de integración se van a saltear.')
+  console.error('Base de tests: sin Docker → unos 580 tests de integración se van a saltear.')
 }
 
 // ── Dependencias ────────────────────────────────────────────────────────────

@@ -1,0 +1,26 @@
+@startuml
+!include _estilo.iuml
+actor "Gerencia" as G
+participant "Panel de\nreportes" as PA
+participant "Control\nde acceso" as AC
+participant "Métricas\n(dominio)" as ME
+database "PostgreSQL" as B
+G -> PA : abre «Ocupación, ADR y RevPAR»\ny elige el mes
+PA -> AC : requerirAcceso('reportes')
+alt rol sin permiso
+  AC --> PA : no autorizado
+  PA --> G : redirige al inicio
+else autorizado
+  AC --> PA : autorizado
+  PA -> B : estadías del período y unidades activas
+  B --> PA : datos
+  PA -> ME : metricasDeMes(estadías, mes, unidades)
+  ME -> ME : prorratea las estadías\nque cruzan de un mes a otro
+  ME --> PA : ocupación, tarifa media (ADR) y RevPAR
+  PA -> ME : metricasDeMes(mes anterior)
+  ME --> PA : valores de comparación
+  PA -> ME : serie de los últimos meses
+  ME --> PA : evolución
+  PA --> G : indicadores, variación y gráfico
+end
+@enduml

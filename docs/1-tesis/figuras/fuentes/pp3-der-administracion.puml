@@ -1,0 +1,128 @@
+@startuml
+!include _estilo.iuml
+hide methods
+skinparam linetype ortho
+
+entity "tipos_unidad" as tipos_unidad {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  * categoria : categoria_unidad
+  * capacidad_max : integer
+  * descripcion : text
+  * amenities : jsonb
+  * activo : boolean
+  * creado_en : timestamptz
+}
+entity "tarifas" as tarifas {
+  * **id** : uuid <<PK>>
+  --
+  * tipo_unidad_id : uuid <<FK>>
+  * temporada_id : uuid <<FK>>
+  * precio_neto : numeric
+  * precio_rack : numeric
+  * moneda : character
+  * iva_pct : numeric
+  * vigente : boolean
+}
+entity "temporadas" as temporadas {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  * orden : integer
+  * creado_en : timestamptz
+}
+entity "temporada_rangos" as temporada_rangos {
+  * **id** : uuid <<PK>>
+  --
+  * temporada_id : uuid <<FK>>
+  * rango : daterange
+}
+entity "promociones" as promociones {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  * tipo : text
+  * valor : numeric
+  * condiciones : jsonb
+  vigencia_desde : date
+  vigencia_hasta : date
+  * activo : boolean
+  * creado_en : timestamptz
+}
+entity "perfiles" as perfiles {
+  * **id** : uuid <<PK>>
+  --
+  * nombre : text
+  * rol : rol_usuario
+  * activo : boolean
+  * creado_en : timestamptz
+  * telefono : text
+}
+entity "auditoria" as auditoria {
+  * **id** : bigint <<PK>>
+  --
+  * tabla : text
+  registro_id : uuid
+  * accion : text
+  usuario_id : uuid
+  rol : rol_usuario
+  datos_previos : jsonb
+  datos_nuevos : jsonb
+  * creado_en : timestamptz
+}
+entity "auditoria_accesos" as auditoria_accesos {
+  * **id** : bigint <<PK>>
+  --
+  * huesped_id : uuid <<FK>>
+  usuario_id : uuid
+  rol : rol_usuario
+  * origen : text
+  * creado_en : timestamptz
+}
+entity "errores" as errores {
+  * **id** : uuid <<PK>>
+  --
+  * evento : text
+  * nivel : text
+  detalle : text
+  pedido : text
+  digest : text
+  ruta : text
+  usuario_id : uuid <<FK>>
+  rol : text
+  * datos : jsonb
+  * creado_en : timestamptz
+}
+entity "cron_corridas" as cron_corridas {
+  * **nombre** : text <<PK>>
+  --
+  ultima_ok : timestamptz
+  ultima_falla : timestamptz
+  * detalle_falla : text
+  * actualizado_en : timestamptz
+}
+entity "consultas_bot" as consultas_bot {
+  * **id** : uuid <<PK>>
+  --
+  * pregunta : text
+  contacto : text
+  * respondida : boolean
+  * creado_en : timestamptz
+  ip : inet
+}
+entity "intentos_limitados" as intentos_limitados {
+  * **id** : bigint <<PK>>
+  --
+  * ip : inet
+  * accion : text
+  * creado_en : timestamptz
+}
+temporadas ||--o{ tarifas : temporada_id
+tipos_unidad ||--o{ tarifas : tipo_unidad_id
+temporadas ||--o{ temporada_rangos : temporada_id
+perfiles |o--o{ errores : usuario_id
+@enduml

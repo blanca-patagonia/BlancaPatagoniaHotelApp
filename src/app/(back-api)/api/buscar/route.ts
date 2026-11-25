@@ -4,7 +4,6 @@ import { buscarGlobal } from '@/lib/busqueda/servicio'
 import { formatoFechaCorta, parsearPeriodo } from '@/lib/fechas'
 import { nombreCompleto } from '@/lib/domain/huespedes'
 import { ETIQUETAS_ESTADO_RESERVA } from '@/lib/domain/reservas'
-import { ETIQUETAS_AMBITO } from '@/lib/domain/busqueda'
 
 /**
  * Búsqueda global en vivo: `GET /api/buscar?q=`.
@@ -77,25 +76,13 @@ export async function GET(req: Request) {
           ? '¿Quisiste decir…? (parecido, no exacto)'
           : [h.email, h.doc_numero].filter(Boolean).join(' · ') || 'sin datos de contacto',
       })),
-      agencias: resultado.agencias.map((a) => ({
-        id: `agencia-${a.id}`,
-        href: `/panel/agencias/${a.id}`,
-        titulo: a.nombre,
-        detalle: ETIQUETAS_AMBITO.agencias,
-      })),
-      proveedores: resultado.proveedores.map((p) => ({
-        id: `proveedor-${p.id}`,
-        href: `/panel/proveedores/${p.id}`,
-        titulo: p.nombre,
-        detalle: p.rubro || ETIQUETAS_AMBITO.proveedores,
-      })),
       unidades: resultado.unidades.map((u) => ({
         id: `unidad-${u.id}`,
-        href: `/panel/config/unidades`,
+        href: `/panel/config/ubicaciones`,
         titulo: u.nombre,
         detalle: [
           u.tipo?.nombre,
-          u.piso !== null ? `Piso ${u.piso}` : null,
+          u.piso ? `Piso ${u.piso}` : null,
           u.activo ? null : 'Inactiva',
         ]
           .filter(Boolean)
@@ -109,7 +96,7 @@ export async function GET(req: Request) {
       })),
       productos: resultado.productos.map((p) => ({
         id: `producto-${p.id}`,
-        href: `/panel/punto_venta`,
+        href: `/panel/punto-venta`,
         titulo: p.nombre,
         detalle: [p.departamento?.nombre, `USD ${Number(p.precio).toFixed(2)}`]
           .filter(Boolean)

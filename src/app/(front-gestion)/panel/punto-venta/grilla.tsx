@@ -5,7 +5,7 @@ import { cerrarComanda, type EstadoComanda } from './actions'
 import { filtrarCatalogo, subtotalLinea } from '@/lib/domain/punto-venta'
 import { ETIQUETAS_FOLIO, FOLIOS, type Folio } from '@/lib/domain/folios'
 import { ETIQUETAS_CATEGORIA_PRODUCTO, type CategoriaProducto } from '@/lib/domain/consumos'
-import { CAMPO, Campo, Mensaje, Tabla, botonClases } from '../_components/ui'
+import { CAMPO, Campo, Mensaje, PieDeFormulario, Tabla, botonClases } from '../_components/ui'
 import { formatearUSD } from '@/lib/domain/moneda'
 
 export interface ProductoPos {
@@ -253,38 +253,40 @@ export function GrillaPos({
       {estado.ok && <Mensaje tono="ok">{estado.ok}</Mensaje>}
 
       {/* Resumen pegado abajo: el total tiene que estar visible sin scrollear
-          hasta el final de una grilla de veinte productos. */}
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-300 bg-white px-5 py-3 shadow-lg">
-        <div className="text-sm">
-          <p className="text-stone-600">
-            {lineas.length === 0
-              ? 'Ninguna línea cargada'
-              : `${lineas.length} línea(s) · ${lineas.reduce((a, l) => a + l.cantidad, 0)} artículo(s)`}
-          </p>
-          <p className="tabular text-xl leading-tight font-semibold text-stone-900">
-            {formatearUSD(total)}
-          </p>
-        </div>
-
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          {lineas.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setCantidades({})}
-              className={botonClases('fantasma', 'w-full sm:w-auto')}
-            >
-              Vaciar
-            </button>
-          )}
+          hasta el final de una grilla de veinte productos. Es la barra que el
+          resto de las altas del panel tomó como modelo (`PieDeFormulario`). */}
+      <PieDeFormulario
+        hayObligatorios={false}
+        resumen={
+          <>
+            <p className="text-stone-600">
+              {lineas.length === 0
+                ? 'Ninguna línea cargada'
+                : `${lineas.length} línea(s) · ${lineas.reduce((a, l) => a + l.cantidad, 0)} artículo(s)`}
+            </p>
+            <p className="tabular text-xl leading-tight font-semibold text-stone-900">
+              {formatearUSD(total)}
+            </p>
+          </>
+        }
+      >
+        <button
+          type="submit"
+          disabled={pendiente || lineas.length === 0}
+          className={botonClases('primario', 'w-full disabled:cursor-not-allowed sm:w-auto')}
+        >
+          {pendiente ? 'Cargando…' : 'Cerrar comanda'}
+        </button>
+        {lineas.length > 0 && (
           <button
-            type="submit"
-            disabled={pendiente || lineas.length === 0}
-            className={botonClases('primario', 'w-full disabled:cursor-not-allowed sm:w-auto')}
+            type="button"
+            onClick={() => setCantidades({})}
+            className={botonClases('fantasma', 'w-full sm:w-auto')}
           >
-            {pendiente ? 'Cargando…' : 'Cerrar comanda'}
+            Vaciar
           </button>
-        </div>
-      </div>
+        )}
+      </PieDeFormulario>
     </form>
   )
 }

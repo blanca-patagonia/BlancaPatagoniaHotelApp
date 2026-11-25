@@ -55,7 +55,7 @@ export async function guardarUbicacionUnidad(formData: FormData): Promise<void> 
  * ── Por qué se bloquea si tiene una estadía ACTIVA ──────────────────────────
  *
  * `activo = false` la saca de la grilla de ocupación y de cualquier alta
- * nueva (mismo criterio que agencias, proveedores y tarifas — ADR/migración
+ * nueva (mismo criterio que las tarifas — ADR/migración
  * 0061). Pero si la unidad tiene una estadía en un estado que **ocupa
  * inventario** (`ESTADOS_ACTIVOS`, el mismo que usa la restricción anti-
  * overbooking de la base), desactivarla dejaría a un huésped alojado o por

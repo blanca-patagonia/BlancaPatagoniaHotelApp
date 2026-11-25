@@ -8,7 +8,7 @@ import { ETIQUETAS_MEDIO } from '@/lib/domain/pagos'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { mesValido } from '@/lib/domain/informes'
 import { traerFacturasConFecha, traerPagosConMedio } from '../datos'
-import { SelectorDeMes, AvisoIncompleto, Variacion, AnalizarConIA } from '../_componentes'
+import { SelectorDeMes, AvisoIncompleto, Variacion } from '../_componentes'
 import { BotonExportar, Encabezado, Mensaje, Pagina, Tarjeta } from '../../_components/ui'
 
 /** Cantidad de meses del gráfico de evolución. */
@@ -28,7 +28,7 @@ export default async function InformeFacturacionPage({
 }: {
   searchParams: Promise<{ mes?: string }>
 }) {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
   const sp = await searchParams
   const mes = mesValido(sp.mes, mesActual())
 
@@ -74,10 +74,6 @@ export default async function InformeFacturacionPage({
           />
         }
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={`¿Cuánto se facturó en ${etiquetaMes(mes)} contra el mes anterior, por qué medios se cobró y qué saldos quedan pendientes?`} />
-      </div>
-
       {(facturas.error || pagos.error) && (
         <Mensaje tono="error">
           No se pudieron leer {facturas.error ? 'las facturas' : 'los cobros'}: los importes de

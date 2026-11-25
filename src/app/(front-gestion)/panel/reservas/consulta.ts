@@ -1,7 +1,8 @@
 import 'server-only'
 import type { crearClienteServidor } from '@/lib/supabase/server'
 import { terminoBusqueda, patronOr } from '@/lib/listados'
-import { definicionDe, type VistaReservas } from '@/lib/domain/vistas-reservas'
+import { definicionDe, VENTANA_SIN_FACTURAR_DIAS, type VistaReservas } from '@/lib/domain/vistas-reservas'
+import { sumarDias } from '@/lib/fechas'
 import { registrarFalla } from '@/lib/acciones'
 
 /**
@@ -36,8 +37,6 @@ export interface FiltrosReservas {
   plan?: string
   garantia?: string
   segmento?: string
-  /** Contrato que fija la tarifa. La columna existe desde el paso 6. */
-  contrato?: string
   /**
    * Habitación asignada y tipo pedido. Van sobre `estadias`, no sobre `reservas`,
    * y por eso hacen falta las dos: una reserva grupal tiene varias estadías, así
@@ -51,7 +50,17 @@ export interface FiltrosReservas {
    * testeable, y para que el export CSV use el mismo día que la pantalla.
    */
   hoy?: string
+  /**
+   * Ids de la vista «Saldo pendiente», resueltos antes por
+   * `reservasConSaldoVencido` (`lib/reservas/atencion.ts`): el saldo es una cuenta
+   * y PostgREST no puede filtrar por ella. Con esa vista activa y sin ids, la
+   * consulta no devuelve nada en vez de devolver todo.
+   */
+  idsSaldoVencido?: string[]
 }
+
+/** Uuid que no existe: un `in` con lista vacía tiene que seguir filtrando. */
+const NINGUNA = '00000000-0000-0000-0000-000000000000'
 
 /**
  * Columnas del listado.
@@ -72,6 +81,18 @@ export interface FiltrosReservas {
  */
 export const SELECT_RESERVAS =
   'id, codigo, estado, total, total_neto, iva, canal, plan, garantia, segmento, creada_en, grupo_id, agencia_id, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre, email, vip), estadias!inner(periodo, check_in, check_out, huespedes, adultos, menores, bebes), pagos(tipo, monto, estado), consumos(cantidad, precio_unitario)'
+
+/**
+ * Variante para la vista «Consumos sin facturar»: las mismas columnas, pero
+ * `consumos!inner` (sólo reservas con algún consumo; sin esto contaría también
+ * el alojamiento solo) y `facturas(id)` para poder pedir las que no tienen
+ * ninguna (`facturas=is.null`, el anti-join de PostgREST). Así la vista se
+ * resuelve entera en la base y el tablero cuenta con la misma consulta.
+ */
+export const SELECT_RESERVAS_SIN_FACTURAR = SELECT_RESERVAS.replace(
+  'consumos(cantidad, precio_unitario)',
+  'consumos!inner(cantidad, precio_unitario), facturas(id)',
+)
 
 /** Tope de ids de huésped que se inyectan en el filtro `in` de la búsqueda. */
 const MAX_HUESPEDES_BUSQUEDA = 200
@@ -178,9 +199,10 @@ export async function filtroTermino(supabase: Cliente, q: string | undefined): P
  * @param orTermino resultado de `filtroTermino`, ya resuelto por el llamador.
  */
 export function consultaReservas(supabase: Cliente, f: FiltrosReservas, orTermino: string | null) {
+  const calculada = f.vista ? definicionDe(f.vista).calculada : undefined
   let q = supabase
     .from('reservas')
-    .select(SELECT_RESERVAS, { count: 'exact' })
+    .select(calculada === 'sin_facturar' ? SELECT_RESERVAS_SIN_FACTURAR : SELECT_RESERVAS, { count: 'exact' })
     .order('creada_en', { ascending: false })
     // Desempate fijo: la exportación lee por tramos (`traerTodo`), y con dos
     // reservas del mismo instante un tramo podía repetir una y saltear otra.
@@ -192,7 +214,6 @@ export function consultaReservas(supabase: Cliente, f: FiltrosReservas, orTermin
   if (f.plan) q = q.eq('plan', f.plan)
   if (f.garantia) q = q.eq('garantia', f.garantia)
   if (f.segmento) q = q.eq('segmento', f.segmento)
-  if (f.contrato) q = q.eq('contrato_id', f.contrato)
 
   // Habitación y tipo van sobre la tabla embebida. Funcionan porque `estadias` se
   // trae con `!inner`: con un embed normal, PostgREST devolvería todas las reservas
@@ -217,6 +238,15 @@ export function consultaReservas(supabase: Cliente, f: FiltrosReservas, orTermin
     // esto había que escribirlo con operadores de rango negados, ilegibles.
     if (d.fecha && f.hoy) {
       q = q.eq(d.fecha === 'llega' ? 'estadias.check_in' : 'estadias.check_out', f.hoy)
+    }
+
+    if (d.calculada === 'saldo_vencido') {
+      const ids = f.idsSaldoVencido ?? []
+      q = q.in('id', ids.length > 0 ? ids : [NINGUNA])
+    } else if (d.calculada === 'sin_facturar' && f.hoy) {
+      // Sin factura y con salida dentro de la ventana. `!inner` en `estadias` es
+      // lo que hace que el filtro por fecha recorte la reserva (AGENTS.md).
+      q = q.is('facturas', null).gte('estadias.check_out', sumarDias(f.hoy, -VENTANA_SIN_FACTURAR_DIAS))
     }
 
     if (d.agrupacion === 'grupo') {

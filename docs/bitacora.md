@@ -9161,3 +9161,350 @@ Pedido del usuario, con una captura de la bandeja vacía: «agregá las otras co
 **No se hizo:** enviar archivos desde la bandeja (pide Storage, ADR 0013), el inicio de sesión con Facebook de WhatsApp (pide una app de Meta aprobada), presencia en línea y exportar contactos a CSV.
 
 **Para el deploy:** aplicar **0127**. En la base local ya está aplicada.
+
+## 2026-11-09 — Rama `tesis-a-presentar`: el proyecto se achica para poder defenderlo (ADR 0045)
+
+Pedido de los autores: el sistema quedó demasiado grande para presentarlo y defenderlo en la tesis. Se crea una rama aparte, `tesis-a-presentar`, a partir de `main` (`c160c74`), y se le sacan los módulos que exceden el pedido original. **`main` queda intacto** con el sistema completo.
+
+**Cómo se hizo.** Un módulo por commit, en este orden, cada uno con typecheck, lint y tests antes de pushear: asistente de IA → bandeja de mensajes y chat interno → conciliación → contratos → proveedores → agencias → canales de venta → notificaciones avanzadas → mantenimiento, objetos perdidos y avisos → configuración avanzada → portal multi-idioma → PWA, respaldos, cierre del día y servicio de cocina. Se partió de una base verde (typecheck y lint sin errores, 2.267 tests pasando) y se terminó en verde (1.195 tests: los restantes son los de los módulos que ya no existen).
+
+**Qué quedó.** El núcleo del pedido (PP2 §1.2): reservas con anti-overbooking en la base, check-in/out, consumos y factura, pagos, huéspedes, reportes, housekeeping, usuarios y roles, portal público en español, auditoría y registro de errores. Detalle y motivos en el ADR 0045.
+
+**Cosas que aparecieron al sacar, y se corrigieron en el mismo commit en que aparecieron:**
+- El tablero vigila que cada tarea programada haya corrido (`lib/domain/crons.ts`). Al quitar los crons de canales, ari y recordatorios de `vercel.json` había que quitarlos también de esa lista, o la alerta de «tarea atrasada» habría quedado encendida para siempre.
+- Al sacar el registro de envíos, el área «notificaciones» quedó en el menú apuntando a una pantalla que ya no existía. Se quitó en el commit siguiente, junto con «avisos».
+- `lib/domain/servicio.ts` se llamaba como el servicio de cocina pero también guarda la regla de cuándo se puede cargar un consumo, que usan el punto de venta y la cuenta de la reserva. Se conservó esa parte y se sacó solo la lista de desayuno.
+- Housekeeping cruzaba cada habitación con las órdenes de mantenimiento abiertas («en reparación»). Con el módulo fuera, ese cruce se quitó de la prioridad de limpieza, de las dos pantallas y del tablero.
+
+**Decisiones de alcance que conviene que los autores confirmen:**
+1. La reserva dejó de poder vincularse a una agencia (la tarifa sale del canal; la factura va siempre al huésped).
+2. Auditoría, errores, buscador global y encuestas se conservaron (ver ADR 0045, «Lo que se dejó a propósito»).
+3. La base de datos no se achicó: las tablas y migraciones de los módulos quitados siguen. Está explicado en el ADR por qué, y qué hay que hacer antes de tocarlas.
+
+**Lo que NO se verificó:** los tests que usan Postgres (anti-overbooking, RLS por rol, etc.) no corrieron porque el entorno no tiene Docker. Antes de la entrega hay que correr `npm run test:aislado` en una máquina con Docker. Sí se verificó que `npm run build` compila.
+
+
+## 2026-11-09 · Rama `tesis-a-presentar` · Auditoría posterior a la reducción
+
+**Qué:** revisión de código y de seguridad de la rama reducida (typecheck, lint, tests y build en verde). Correcciones:
+- `despachar` (bandeja de avisos) sólo toma filas `canal = 'email'` con evento del catálogo: una fila vieja de un módulo quitado ya no traba el cron.
+- Enlaces del buscador rotos (`/panel/punto_venta`, `/panel/config/unidades`) y typo en Auditoría.
+- Ayuda sin la app instalable, la reparación de habitaciones, Booking ni agencias; el asistente público ya no promete un contacto que nadie lee.
+- Reserva de mostrador: se ocultan las garantías «agencia» y «contrato» (la base las conserva por el `check`).
+- Housekeeping: `unidad_id` validado como UUID y extensión del adjunto saneada.
+- Se quitó `lib/supabase/client.ts`, que quedó sin uso.
+
+**Decisiones pendientes del equipo (no se tocaron):** pantalla de Auditoría oculta por `AREAS_OCULTAS` frente a la ADR 0045; el simulador de pagos si se usa `PAGO_PROVIDER=simulado` en una demo pública; el límite de tasa por IPv6 (migración); revocar grants de las tablas de módulos quitados.
+
+## 2026-11-10 · Rama `tesis-a-presentar` · Segunda pasada de limpieza
+
+**Qué:** se borró de la rama todo lo que no responde al alcance reducido: informes y auditorías del sistema completo, pendientes y agente `i18n`, SVG y script de QA sin uso, exportaciones huérfanas, claves del selector de idioma. `CLAUDE.md`, `AGENTS.md`, manuales, wiki y arquitectura se reescribieron para describir solo lo que existe (cifras recontadas). La Auditoría quedó visible para administración y con capítulo de Ayuda; se eliminó el mecanismo de áreas apagadas. El límite de intentos cuenta las IPv6 por /64.
+
+**Por qué:** el sistema se presenta y defiende; lo que describe módulos que no están resta. Detalle y decisiones en la ADR 0045 (sección «Revisión posterior»).
+
+**Verificación:** typecheck, lint y build sin errores; 1.197 tests pasan sin base (583 requieren Docker y no se corrieron).
+
+**Seguimiento (2026-11-10):** se quitaron seis iconos del panel que sólo usaban módulos borrados, los comentarios que todavía nombraban pantallas inexistentes (conversaciones, agencias, contratos, respaldos) y las cifras viejas («43 salteados») de `.claude/`. Quedan a propósito las reglas de dominio con test que hoy no llama la app (p. ej. `puedeFacturarse`, `tieneCae`, `precioPorNoche`): son reglas del negocio documentadas y probadas, y sacarlas no aporta a la defensa.
+
+**Segunda auditoría (2026-11-10):** revisión de código y de seguridad con agentes de solo lectura. Corregido: tokens públicos validados como UUID antes de consultar; fotos de housekeeping sólo bajo su prefijo; reembolso sin aviso de «pago recibido»; cargo manual creable por recepción; avisos nocturnos al día correcto; consumos con la fecha del hotel; confirmación de reserva cancelada. Lo que requiere una migración probada con Docker o una decisión del hotel quedó en `docs/5-pendientes/PENDIENTES.md` (el más importante: el staff puede leer `reservas.token`).
+
+## 2026-11-12 · Tesis · Fase 1: la aplicación corriendo y el material visual
+
+**Qué se hizo.** Se levantó el sistema, se lo recorrió entero y se produjo el material visual de
+la tesis en `docs/1-tesis/figuras/` (71 figuras, con su índice en `INDICE.md`):
+
+- **30 diagramas** (`diagramas/`), generados con PlantUML desde `fuentes/*.puml`: organigrama y
+  cuatro cursogramas del relevamiento; contexto, paquetes, casos de uso, ciclo de vida de la
+  reserva, arquitectura y despliegue; cuatro DER (vista general de las 30 tablas y tres de
+  detalle) generados del esquema real con `fuentes/generar-der.py`; y, para cada uno de los cinco
+  casos de uso principales, diagrama de asociaciones, de clases y de secuencia.
+- **32 capturas** (`capturas/`) del panel y del portal, a doble resolución.
+- **9 imágenes de anexo** (`anexos/`): WinPAX 9 y el extranet de Booking, provistas por el
+  comitente, con los nombres de personas difuminados.
+
+**Cómo se verificó.** Recorrido automatizado con Playwright de las 35 pantallas fijas del panel y
+de 11 rutas del portal: todas responden 200, sin errores de consola ni enlaces rotos. No hizo
+falta corregir código. La suite completa (`npm run test:aislado`) corrió por primera vez en esta
+rama: **142 archivos, 1.788 tests, todos pasan y ninguno se saltea**.
+
+**Decisiones.**
+
+- **Las capturas se sacaron sobre la base aislada (`supabase-tests`, puerto 55321) con datos
+  ficticios**, no sobre el proyecto de Supabase en la nube. Ese proyecto tiene el catálogo pero
+  ninguna reserva, le faltan tablas que el código usa (`errores`, `cron_corridas`,
+  `auditoria_accesos`, `notificaciones`, `notas_credito`, `housekeeping_registros`,
+  `datos_fiscales`) y la clave de servicio configurada no es válida. Queda pendiente
+  ponerlo al día antes de un despliegue (`npm run esquema:comparar`).
+- **Los datos de demostración se cargaron por la interfaz** (alta de mostrador, check-in,
+  consumos, pagos, check-out, factura y una reserva completa desde el portal con la seña paga),
+  no con SQL: así cada captura muestra un estado al que el sistema llega por sus propios caminos.
+  Son 27 reservas con huéspedes inventados.
+- **Casos de uso principales, cinco** (indicación del docente): reservar desde el portal, hacer
+  el check-in, cargar un consumo, hacer el check-out y emitir la factura, y consultar los
+  indicadores de gestión.
+- **Los diagramas se guardan con su fuente** para poder corregirlos al redactar: si un paso de un
+  diagrama de secuencia cambia al verificarlo contra el código, se edita el `.puml` y se regenera.
+
+**Para tener en cuenta.** En este entorno `next dev` entra en un bucle de recargas con el
+navegador automatizado; el recorrido se hizo sobre el build de producción (`next start`) con los
+proveedores simulados declarados. El simulador de pagos exige `PAGO_WEBHOOK_SECRET` en ese modo.
+
+## 2026-11-12 · Tesis · Fase 2: Parte 1, relevamiento y propuesta
+
+**Qué se hizo.** Se redactó la Parte 1 de la tesis en `docs/1-tesis/parte-1-relevamiento.md`,
+sobre la base del PP2 que vio el docente (`PP2_Moran_Fakiani`, mayo de 2026): se respetan su
+estructura, sus datos y la sección «Firmas y conformidades».
+
+**Observaciones del docente incorporadas.**
+
+- Organigrama como figura y un cursograma por proceso (reserva, check-in, check-out y
+  facturación, limpieza), cada uno con su descripción y sus problemas.
+- **Anexo D** con las pantallas de los sistemas que el hotel usa hoy (Winpax 9 y el extranet de
+  Booking.com), de las capturas que mandó el comitente, con los nombres difuminados.
+- Respuesta a «¿se conecta a una impresora fiscal?»: no; el sistema trabaja con factura
+  electrónica y código de autorización (CAE).
+- Tabla de tecnologías con el porqué de cada una, el alojamiento (Vercel y Supabase) y el
+  cuadro de costos de licenciamiento.
+
+**Decisiones.**
+
+- **La tecnología que figura es solo la que el sistema usa.** El PP2 de mayo anticipaba React
+  con un servidor Express; la tesis presenta el producto terminado, así que la tabla lista
+  Next.js, PostgreSQL sobre Supabase, Tailwind, las tres pasarelas, Resend y Vercel.
+- **La propuesta se ajustó a lo que el sistema hace.** Los reportes son los que existen
+  (ocupación, tarifa promedio, ingreso por habitación disponible, venta por categoría,
+  facturación) y la cancelación calcula el cargo según el plazo; no se prometen el ranking de
+  canales ni los reembolsos automáticos que mencionaba el borrador.
+- **Costos:** valores de referencia de noviembre de 2026 (Vercel Pro USD 20, Supabase Pro
+  USD 25, Resend gratuito hasta 3.000 correos por mes, Mercado Pago entre 1,49 % y 6,29 % + IVA).
+  Los sitios oficiales no eran alcanzables desde el entorno de trabajo: salen de una búsqueda
+  web y **hay que confirmarlos antes de la entrega**.
+- **Casos de uso principales: cinco** (se actualizó `PREPARACION.md`).
+
+**Pendiente de confirmar con los autores.** La grafía de la calle («Charles Furh», como está en
+el PP2) y los pasos del proceso de limpieza, que no estaban en el PP2 de mayo.
+
+## 2026-11-12 · Tesis · Fase 3: Parte 2, análisis y diseño
+
+**Qué se hizo.** Se redactaron los capítulos 4 a 6 de la tesis en
+`docs/1-tesis/parte-2-analisis-y-diseno.md` y el diccionario de datos en
+`docs/1-tesis/diccionario-de-datos.md`:
+
+- **Objetivos, límites y alcance** del sistema, por módulo.
+- **Requerimientos:** 9 actores, 37 requerimientos funcionales, 20 no funcionales y 20 reglas de
+  negocio.
+- **Modelado ambiental** (propósito, contexto, 16 acontecimientos) y **de paquetes**.
+- **Los cinco casos de uso principales**, cada uno con requerimientos específicos, prototipos de
+  interfaz, ficha (curso normal y alternativo), vista estática y vista dinámica.
+- **Modelo de datos:** DER, ciclo de vida de la reserva, la decisión anti-sobreventa y el
+  diccionario de 13 tablas (207 campos), generado del esquema real con
+  `figuras/fuentes/generar-diccionario.py`.
+
+**Cómo se verificó.** Cada cifra y cada paso de las fichas se contrastó con el código o con la
+base: 30 tablas con seguridad por fila y 55 políticas, 57 módulos de dominio, 127 migraciones,
+los límites de intentos (`lib/domain/limites.ts`), las transiciones de estado
+(`lib/domain/reservas.ts`), los estados facturables, los disparadores de auditoría y la
+política de cancelación cargada.
+
+**Correcciones.**
+
+- **La dirección del hotel estaba mal escrita en el portal** («Charles Furh» por «Charles
+  Fuhr», `src/lib/i18n/diccionarios/es.ts`); se corrigió ahí y en la tesis.
+- Dos diagramas se ajustaron al verificarlos: en el punto de venta se elige la habitación y el
+  folio (no el departamento), y el stock lo descuenta un disparador de la base, no la pantalla.
+
+**Decisión.** El diccionario detalla solo las tablas que tocan los casos de uso principales y
+describe las otras 17 en una línea: campo por campo, las 30 tablas ocuparían más que el resto
+del capítulo sin aportar a la defensa.
+
+## 2026-11-12 · Tesis · Fase 4: implementación, testing, especificaciones y documento final
+
+**Qué se hizo.**
+
+- Se redactaron los capítulos 7 a 10 en `docs/1-tesis/parte-3-implementacion-y-especificaciones.md`:
+  implementación por módulo y caso de uso, integración y testing, especificaciones del sistema
+  (despliegue, hardware mínimo y óptimo, software de base y de aplicación, seguridad y auditoría)
+  y conclusión. Los agradecimientos van como texto de ejemplo, para que los editen los autores.
+- Se armó el documento de entrega, **`docs/1-tesis/Tesis_Moran_Fakiani.docx`** (113 páginas, 60
+  figuras), con el formato de la cátedra: A4, márgenes de 2,5 cm, Arial 11, interlineado 1,3,
+  texto justificado con partición de palabras, carátula, índice general, índice de figuras,
+  membrete, número de página y epígrafe con número, descripción, año y fuente en cada figura.
+
+**Cómo se arma.** `docs/1-tesis/armar-docx.sh` genera el Word desde los `.md` en dos pasadas: la
+primera lleva marcas invisibles para saber en qué página cae cada título y cada figura; la
+segunda escribe los índices con esos números. Los índices quedan como campos de Word (se
+actualizan desde Word) y ya completos.
+
+**Cómo se verificó.** El archivo pasa la validación de esquema; se convirtió a PDF y se
+revisaron a ojo la carátula, los índices, la carta y las firmas, una ficha de caso de uso, las
+figuras y los anexos; y se comprobó que la página que anuncian los índices coincide con la
+página real de siete títulos y figuras tomados de muestra.
+
+**Decisiones.**
+
+- **Los anexos y el glosario van al final del documento**, sin número de capítulo: en el PP2
+  eran los capítulos 4 y 5, que en la tesis son Objetivos y Requerimientos.
+- **Las cifras de pruebas que se citan** son las de la corrida completa del 11/11/2026 sobre la
+  base aislada: 142 archivos y 1.788 pruebas, ninguna omitida.
+- **El texto se edita en los `.md` y el Word se regenera.** `tesis-completa.md` y `tesis-pp3.md`
+  quedan como borradores anteriores; no se borraron.
+
+**Para tener en cuenta.** LibreOffice recorta las imágenes en línea si el párrafo no declara su
+regla de interlineado; por eso los párrafos con imagen la llevan explícita. La partición de
+palabras está activada en el archivo y la aplica Word; la vista previa hecha con LibreOffice no
+la mostraba.
+
+## 2026-11-19 · Demo pública para el docente
+
+**Qué se hizo.** Se publicó una demo del sistema en https://blanca-patagonia-demo.vercel.app para
+que el profesor de Práctica Profesionalizante III lo pruebe.
+
+- **Base:** proyecto Supabase nuevo y aparte (`blanca-patagonia-demo`, São Paulo), con las 127
+  migraciones aplicadas en orden por la API de administración, el catálogo de `seed.sql`, un
+  usuario por rol y datos ficticios cargados por la propia interfaz: 26 reservas en todos los
+  estados, con consumos, pagos y siete facturas. Ningún dato es de huéspedes reales.
+- **Aplicación:** proyecto Vercel `blanca-patagonia-demo` (plan gratuito), publicado desde una
+  copia del repositorio. Proveedores: correo a consola, facturación y pagos simulados, cotización
+  real (`dolarapi`).
+- **Tareas programadas:** el plan gratuito de Vercel solo admite una corrida diaria, así que en
+  la copia publicada `vercel.json` deja solo `mantenimiento`; `notificaciones` (cada 5 min) y
+  `salud` (cada 15 min) las dispara la base con pg_cron y pg_net. El `vercel.json` del
+  repositorio no se tocó.
+- **Autenticación:** registro público deshabilitado; la URL del sitio apunta a la demo.
+
+**Cómo se verificó.** Salud en 200 contra la base; una reserva desde el portal con pago de la seña
+en la pasarela de prueba, que quedó confirmada; ingreso con los cuatro roles a sus pantallas; y
+housekeeping redirigido al intentar abrir las reservas.
+
+**Para tener en cuenta.** Con el pago simulado en un sitio público, cualquiera puede marcar como
+pagada una reserva que cree; sirve para la demo, no para producción (ver `PENDIENTES.md`). Un
+proyecto gratuito de Supabase se pausa tras siete días sin uso.
+
+## 2026-11-20 · Tesis · Correcciones del docente
+
+**Qué se hizo.** Se aplicaron las observaciones del profesor de Práctica Profesionalizante III
+sobre el documento:
+
+1. **Política de cancelación:** el Anexo A y la regla RN-05 dicen lo mismo. El tarifario pone el
+   día 14 en los dos primeros tramos; se explicita la interpretación que aplica el sistema y que
+   ve el huésped al reservar (15 días o más, sin cargo; de 14 a 7, la primera noche; menos de 7
+   y no-show, el total).
+2. **Pedido contra alcance:** el alcance aclara que la cancelación la registra recepción a pedido
+   del huésped, y la sección 6.3 explica que la gestión de huéspedes está dentro de CU-01 y CU-02.
+3. **Diagrama de paquetes:** en dos columnas, a lo alto de la hoja y sin los asteriscos que
+   dejaba el formato en negrita partido en dos líneas.
+4. **Diccionario de datos:** la columna «Obl.» distingue *Sí* (hay que informarlo), *No* (puede
+   quedar vacío) y *Automático* (lo completa la base); los enumerados figuran como «lista de
+   valores» con sus valores en la descripción.
+5. **Evidencia de las pruebas:** Anexo E con la salida de la suite completa (142 archivos,
+   1.788 pruebas, 20/11/2026), la verificación de GitHub Actions y los enlaces al repositorio
+   y a la demo.
+6. **Menores:** dimensionamiento con las 37 unidades reales (15 habitaciones y 22 cabañas),
+   glosario ampliado, carátula con materia, docente y «Proyecto Final», filas de tabla que se
+   pueden partir entre páginas, y encabezado y pie armados con tablas.
+
+**Un hallazgo de paso.** La verificación automática de GitHub estaba en rojo en esta rama
+desde el 12/11: el script que arma el Word usaba `require()` y ESLint lo rechaza. Se pasó a
+módulo ES (`armar-docx.mjs`) en lugar de desactivar la regla, y la corrida 355 terminó con
+todos los pasos aprobados.
+
+**Por qué el pie se rearmó con una tabla.** Con tabulaciones, Word aplica también las del estilo
+«Pie de página» y el número quedaba amontonado junto al texto; en LibreOffice no se veía.
+
+**Firmas.** El Word del repositorio se arma sin las firmas de los autores (el repositorio es
+público); la versión firmada se genera aparte y no se sube.
+
+## 2026-11-22 · Demo · Lo que marcó el docente al probarla
+
+El docente probó la demo pública y grabó un video de 11 minutos con observaciones. Se
+transcribió y se revisó cuadro por cuadro; la lista se acordó con el equipo antes de tocar nada.
+Cada arreglo entra con su test; la suite completa contra la base aislada da **149 archivos y
+1.840 pruebas, todas en verde y ninguna salteada** (22/11/2026).
+
+**Errores**
+
+1. **«Requiere atención» abría el listado entero.** El aviso decía «7 reservas con saldo
+   pendiente» y el enlace mostraba todas las reservas; lo mismo con «cuentas con consumos sin
+   facturar». Ahora son dos vistas del listado («Saldo pendiente» y «Consumos sin facturar») y el
+   aviso cuenta con **la misma consulta** que la vista: `reservasConSaldoVencido`
+   (`lib/reservas/atencion.ts`, regla pura `saldoVencido` en `vistas-reservas.ts`) y el
+   anti-join `facturas=is.null` de PostgREST. Contrato nuevo: ningún enlace del tablero puede
+   abrir el listado sin filtro (`tests/contratos/enlaces-del-tablero.test.ts`).
+2. **Cada pantalla abría a mitad de página**, con el desplazamiento de la anterior. El panel
+   desplaza la ventana entera y Next sólo vuelve arriba cuando el comienzo de la página nueva
+   quedó fuera de la vista. `useArribaAlNavegar` (en `shell.tsx`) vuelve arriba al avanzar y
+   respeta la posición al volver con «atrás».
+3. **Una contraseña pegada con un espacio de más** fallaba sin explicación. El login tiene
+   «Mostrar/Ocultar» y avisa si hay espacios al principio o al final (`avisoDeEspacios`). No se
+   quitan en silencio: un espacio puede ser parte de la contraseña.
+4. **Cada factura dejaba un error en «Errores del sistema»** («La moneda del comprobante no se
+   puede informar a ARCA»). El comprobante se armaba en dólares con tipo de cambio `null`; ahora
+   lleva la cotización vigente del sistema (ADR 0020). Test de acción que captura lo que llega al
+   proveedor de facturación.
+
+**Mejoras**
+
+5. **Inicio de la dirección con la plata**: cobrado hoy y en el mes (contra los mismos días del
+   mes anterior), facturado en el mes, saldo vencido, flujo de caja diario y mensual y «Quién
+   debe» (`lib/domain/caja.ts`, `panel/_inicio/caja.tsx`). Recepción conserva su tablero.
+6. **El logo lleva al Inicio.**
+7. **La barra flotante del punto de venta en todas las altas**: `PieDeFormulario` flota por
+   defecto y puede mostrar un resumen (en la reserva nueva, la unidad elegida y su total).
+8. **Housekeeping «Por responsable»**: explicación, cuántas tiene cada una y asignación de
+   varias habitaciones a la vez (`asignarVarias`). Asignar de a una devolvía a «Por unidad»; ahora
+   vuelve a la vista desde la que se asignó (lista blanca, `retornoHousekeeping`).
+9. **ADR y RevPAR explicados**: nombre en castellano, la cuenta y qué significan, desde un solo
+   lugar (`INDICADORES` en `metricas.ts`) que usan los informes y el glosario de Ayuda.
+10. **«Errores del sistema» en palabras del hotel**: cada evento con su área y su explicación
+    (`lib/domain/errores.ts`); un contrato exige que todo evento nuevo tenga la suya.
+11. **Identidad propia**: el login muestra el lobby del hotel y la marca; el listado de reservas
+    tiene franja de color por estado, iniciales del huésped y una marca por noche.
+
+**La demo**: historial ficticio de enero a noviembre (1.876 reservas con pagos, consumos,
+facturas numeradas por fecha y encuestas), sólo en la base de la demo y con la nota «Historial
+de demostración». **La lentitud** venía de la región: Vercel corría en Washington y la base está
+en São Paulo; `vercel.json` fija `gru1` y el manual de despliegue lo explica.
+
+**Tesis, al cierre de estas mejoras.** Se reemplazaron las capturas de Inicio, Reservas, Reserva
+nueva, Housekeeping, Reportes y Ocupación (los informes, con octubre completo), y la evidencia de
+las pruebas (149 archivos y 1.840 pruebas, 22/11/2026). De paso se sacaron dos menciones de la
+rama de trabajo que habían quedado en el Anexo E (en el texto y en el título de la terminal de la
+Figura 62): la tesis presenta el sistema terminado y no la organización del repositorio.
+
+## 2026-11-22 · Dependencias · Next.js 16.4.2 → 16.4.6 (aviso de seguridad)
+
+Next avisaba en `dev` y en `build` que la versión instalada tenía un aviso de seguridad publicado
+(registro de npm) y cortaba el build hasta mostrarlo. Se actualizó `next` y `eslint-config-next`
+a 16.4.6, un parche de la misma versión mayor: el lockfile sólo cambia los paquetes de Next (se
+rearmó con npm 11, porque el npm 10 del entorno borraba los campos `libc` de todo el árbol y
+ensuciaba el diff). Verificado: `npm run check` en verde y la suite completa contra la base
+aislada, 149 archivos y 1.840 pruebas aprobadas. No se agregó ninguna opción de configuración
+ni se envió telemetría: el asistente de actualización lo proponía y no hace falta para el arreglo.
+
+## 2026-11-24 · Portal · Dos errores de la portada en el iPhone
+
+Visto en un iPhone sobre la demo publicada:
+
+1. **El texto del hero pasaba por debajo del encabezado.** El encabezado es fijo y transparente
+   sobre el video, y ganaba fondo recién entre el 60 % y el 85 % de la altura de la pantalla
+   (`animation-range` en `globals.css`). Con poco scroll, «El Calafate · Patagonia Argentina»
+   quedaba debajo de «Blanca Patagonia · Alojamientos · Reservar» y se leían encimados. Ahora el
+   fondo aparece en los primeros 6rem de scroll: arriba de todo sigue transparente.
+2. **El campo «Salida» se salía de la tarjeta.** Safari de iOS les da a los campos de fecha un
+   ancho mínimo propio que no cede a `width: 100%`, y la grilla de dos columnas usaba `1fr`
+   (que no baja de su contenido). Las columnas pasan a `minmax(0, 1fr)`, las etiquetas a
+   `min-w-0`, y en Safari de iOS el campo de fecha pierde la apariencia nativa
+   (`appearance: none`) para respetar el ancho; el selector de fecha se sigue abriendo igual.
+
+Verificado en Chromium con la vista de un iPhone 13 (el encabezado gana fondo al bajar y las dos
+fechas terminan en el borde de la tarjeta, sin scroll horizontal). La regla específica de Safari
+de iOS no se puede probar en este entorno, que sólo tiene Chromium.
+
+## 2026-11-25 · Panel · La caja del Inicio en el celular
+
+Visto en un celular sobre la demo: en «Caja y cobranzas» las cuatro cifras iban en dos columnas,
+y un importe como «USD 109.925,37» (que no se parte, `whitespace-nowrap`) no entraba en media
+pantalla y quedaba cortado contra el borde. En pantallas chicas las cifras van ahora una debajo
+de la otra; desde `sm` siguen en dos columnas y desde `lg` en cuatro, así que en la computadora
+no cambia nada. Verificado con Playwright en la vista de un iPhone 13 sobre la demo publicada:
+las cuatro cifras completas y sin desplazamiento horizontal.

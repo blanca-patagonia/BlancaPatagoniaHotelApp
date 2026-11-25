@@ -20,31 +20,22 @@ falla si aparece uno sin listar.
 | `domain/` | Reglas de negocio puras (precios, IVA, cancelación, estados…) |
 | `supabase/` | Clientes de la base: navegador, servidor, `admin` (saltea RLS: sólo servidor) y el del `proxy` |
 | `auth/` | Sesión del staff y `requerirAcceso(area)` |
-| `seguridad/` | Cifrado de credenciales de terceros (ADR 0036) |
 | `auditoria/` | Registro de quién abrió la ficha de un huésped |
 | `reservas/` | Alta de reserva, saldo, cancelación y cuenta cerrada: lo que comparten panel y portal |
-| `housekeeping/` | Estado de limpieza de las unidades y el aviso a recepción (compartido con el asistente) |
+| `housekeeping/` | Estado de limpieza de las unidades |
 | `availability/` | Consulta de disponibilidad (la garantía real es la base, ADR 0002) |
 | `pricing/` | Cotización de una estadía contra las tarifas cargadas |
 | `payments/` | Pasarelas de pago: MercadoPago, Stripe, Payway y el simulador (ADR 0027) |
 | `facturacion/` | Facturación electrónica y datos del hotel como emisor |
-| `conciliacion/` | Extractos del banco y de MercadoPago (ADR 0030) |
 | `divisas/` | Cotización del dólar, con su cadena de respaldo |
-| `canales/` | Booking y otros canales: CSV, iCal, reseñas y publicación (ADR 0021/0032) |
 | `email/` | Envío de correo: consola o Resend |
-| `whatsapp/` | Envío por WhatsApp (opcional) |
-| `notificaciones/` | Bandeja de salida de avisos y recordatorios |
-| `bandeja/` | Bandeja de mensajes con huéspedes: entrada de webhooks, respuesta por cada canal, chat de la web y consultas (ADR 0043) |
-| `firma/` | Firma electrónica de contratos (ADR 0010) |
-| `integraciones/` | Elección de proveedor por variable de entorno, firma de webhooks (también la de Meta), pruebas de conexión de cada integración y conexión automática de los canales (`meta.ts`, ADR 0044) |
-| `conexiones/` | OAuth2 con Mercado Pago y Google |
+| `notificaciones/` | Bandeja de salida de avisos al huésped, con reintentos |
+| `integraciones/` | Elección de proveedor por variable de entorno y firma de webhooks |
 | `storage/` | Fotos operativas en Supabase Storage (ADR 0037) |
 | `asistente/` | Asistente del portal público, por reglas (ADR 0011) |
-| `ia/` | Asistente de IA del panel, de sólo lectura (ADR 0039) |
 | `busqueda/` | Consulta del buscador global |
 | `catalogo/` | Catálogo público cacheado |
-| `i18n/` | Diccionarios del portal en cinco idiomas |
-| `pwa/` | Ícono de la aplicación instalable |
+| `i18n/` | Diccionario del portal en español (la estructura admite más idiomas) |
 
 ## Archivos sueltos (utilidades que usa todo el sistema)
 

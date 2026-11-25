@@ -52,17 +52,6 @@ export interface ParamsReserva {
   unidadId?: string
 
   /**
-   * Agencia con convenio, si la reserva es de una.
-   *
-   * Viaja acá y **no** en un `update` posterior (auditoría 2026-09, P1-7). No es
-   * un dato decorativo: decide a quién se le factura, qué tarifa corresponde
-   * —neto de agencia contra rack de mostrador, ADR 0004— y qué cuenta corriente
-   * se debita. Una reserva de agencia sin `agencia_id` es una estadía que el
-   * hotel presta y no le cobra a nadie.
-   */
-  agenciaId?: string | null
-
-  /**
    * Promoción elegida, si hay. Va ANTES de cotizar —no solo al insertar—
    * porque el descuento se calcula sobre el subtotal (`calcularEstadia`,
    * `lib/domain/precios.ts`). Si el id no corresponde a una promoción
@@ -82,7 +71,6 @@ export interface ParamsReserva {
     garantia?: Garantia
     segmento?: Segmento
     voucher?: string
-    contratoId?: string | null
     descuentoPct?: number
   }
 }
@@ -102,9 +90,8 @@ export async function crearReservaEnUnidadLibre(
   // «no encontré ninguna» y el sistema respondía **«no hay unidades
   // disponibles»**: la misma frase que cuando el hotel está lleno de verdad.
   // Las dos situaciones piden lo contrario —una es esperar, la otra reintentar—
-  // y llegan a gente que no puede distinguirlas: al huésped en `/reservar`, y a
-  // recepción en la zona de canales, donde el motivo queda escrito en la fila
-  // pendiente (`lib/canales/servicio.ts`) y manda a buscar un overbooking que
+  // y llegan a gente que no puede distinguirlas: al huésped en `/reservar` y a
+  // recepción en el alta de mostrador, que irían a buscar un overbooking que
   // nunca existió.
   const { data: libres, error: eLibres } = await client.rpc('unidades_disponibles', {
     desde: p.checkIn,
@@ -232,7 +219,6 @@ export async function crearReservaEnUnidadLibre(
     // por definición, y pedirlo dos veces sólo habilita que se contradigan.
     p_segmento: c?.segmento ?? segmentoDeCanal(p.canal),
     p_voucher: c?.voucher ?? '',
-    p_contrato_id: c?.contratoId ?? null,
     p_descuento_pct: c?.descuentoPct ?? 0,
 
     // Desglose de importes: sale de la cotización, no se recibe de afuera. Así el
@@ -241,11 +227,6 @@ export async function crearReservaEnUnidadLibre(
     p_subtotal: cot.resumen.subtotalNeto,
     p_total_neto: cot.resumen.totalNeto,
     p_iva: cot.resumen.iva,
-
-    // La agencia, en la MISMA transacción (migración 0084). Antes se vinculaba
-    // con un `update` aparte y un fallo ahí dejaba la reserva sin agencia: sin
-    // saber a quién facturarle ni qué cuenta corriente debitar.
-    p_agencia_id: p.agenciaId ?? null,
 
     // La promoción, ya validada arriba. `crear_reserva` la acepta desde la
     // 0039 (parámetro #12) — nadie la había usado hasta ahora.

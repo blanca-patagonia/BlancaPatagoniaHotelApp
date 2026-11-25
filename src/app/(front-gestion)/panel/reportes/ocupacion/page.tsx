@@ -14,11 +14,20 @@ import {
   etiquetaSemana,
   textoOcupacion,
   textoRevPAR,
+  tituloIndicador,
+  INDICADORES,
 } from '@/lib/domain/metricas'
 import { formatearUSD } from '@/lib/domain/moneda'
 import { mesValido, semanaValida } from '@/lib/domain/informes'
 import { traerUnidades, traerEstadias } from '../datos'
-import { SelectorDeMes, SelectorDeSemana, SelectorDeVista, AvisoIncompleto, Variacion, AnalizarConIA } from '../_componentes'
+import {
+  SelectorDeMes,
+  SelectorDeSemana,
+  SelectorDeVista,
+  AvisoIncompleto,
+  Variacion,
+  ExplicacionIndicadores,
+} from '../_componentes'
 import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
 
 /** Cantidad de columnas del gráfico de evolución, en cada vista. */
@@ -39,7 +48,7 @@ export default async function InformeOcupacionPage({
 }: {
   searchParams: Promise<{ mes?: string; semana?: string; vista?: string }>
 }) {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
   const sp = await searchParams
   const vista = sp.vista === 'semanal' ? 'semanal' : 'mensual'
 
@@ -63,13 +72,11 @@ export default async function InformeOcupacionPage({
         descripcion="Los tres indicadores con los que se mide un hotel, mes a mes o semana a semana."
         icono="ocupacion"
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={'¿Cómo vienen la ocupación, el ADR y el RevPAR este mes comparados con el mes anterior y con el mismo mes del año pasado? ¿Qué harías?'} />
-      </div>
-
       <AvisoIncompleto incompleto={incompleto} />
 
       <SelectorDeVista base="/panel/reportes/ocupacion" vista={vista} />
+
+      <ExplicacionIndicadores />
 
       {vista === 'mensual' ? (
         <VistaMensual mes={mesValido(sp.mes, mesActual())} estadias={estadias.filas} cantidadUnidades={cantidadUnidades} />
@@ -199,22 +206,22 @@ function TarjetasKpi({
       </div>
 
       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">ADR (tarifa media)</p>
+        <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">{tituloIndicador('adr')}</p>
         <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
           {formatearUSD(actual.adr)}
         </p>
-        <p className="mt-1.5 text-xs text-stone-600">por noche vendida (neto)</p>
+        <p className="mt-1.5 text-xs text-stone-600">precio promedio de cada noche vendida, sin IVA</p>
         <p className="mt-1">
           <Variacion valor={variacionPct(actual.adr, previo.adr)} etiquetaBase={etiquetaBase} />
         </p>
       </div>
 
       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">RevPAR</p>
+        <p className="text-xs font-medium tracking-wide text-stone-500 uppercase">{tituloIndicador('revpar')}</p>
         <p className="tabular mt-2 font-display text-3xl leading-none font-semibold text-stone-900">
           {textoRevPAR(actual.ingreso, actual.nochesDisponibles, actual.revpar)}
         </p>
-        <p className="mt-1.5 text-xs text-stone-600">por unidad disponible (neto)</p>
+        <p className="mt-1.5 text-xs text-stone-600">lo que rindió cada habitación, ocupada o vacía</p>
         <p className="mt-1">
           <Variacion valor={variacionPct(actual.revpar, previo.revpar)} etiquetaBase={etiquetaBase} />
         </p>
@@ -247,7 +254,7 @@ function ColumnaEvolucion({
         />
       </div>
       <span className={`text-xs ${activa ? 'font-semibold text-lago-800' : 'text-stone-600'}`}>{etiqueta}</span>
-      <span className="tabular text-[10px] text-stone-600">ADR {adr ? formatearUSD(adr) : '—'}</span>
+      <span className="tabular text-[10px] text-stone-600" title={INDICADORES.adr.nombre}>ADR {adr ? formatearUSD(adr) : '—'}</span>
     </div>
   )
 }

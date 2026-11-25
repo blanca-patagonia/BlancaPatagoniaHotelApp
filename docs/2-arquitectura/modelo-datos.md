@@ -3,69 +3,98 @@
 El modelo se construye de forma incremental mediante migraciones SQL versionadas
 en `supabase/migrations/`. Este documento describe las entidades y su estado.
 
-## Entidades
+> **Rama `tesis-a-presentar` (versión reducida, [ADR 0045](../decisiones/0045-version-reducida-para-la-tesis.md)).**
+> **La base de datos no se achicó.** Las 127 migraciones crean 69 tablas, y de
+> esas, 30 las usa el sistema reducido (las dos primeras secciones). Las otras 39
+> pertenecen a módulos que se quitaron del código: siguen en la base, con su RLS
+> y sus tests de políticas, **pero sin pantalla ni código que las lea o escriba**
+> (última sección). Una migración aplicada no se edita, y borrar tablas con
+> claves foráneas y funciones que las referencian no se puede verificar sin una
+> base real: la limpieza queda como paso aparte, contra la base de tests aislada.
+>
+> Cómo se contaron: las 30 son las que el código toca con `.from('…')` más las
+> que alcanza por funciones SQL (`registrar_intento`, `reservar_numero_factura`).
+> Se verifica con `rg "\.from\('" src` contra
+> `grep -hoiE 'create table[^(]*' supabase/migrations/*.sql`.
 
-| Entidad | Descripción | Fase |
-|---|---|---|
-| `perfiles` | Usuario del staff ↔ rol (admin, gerencia, recepción, housekeeping). | 0 ✅ |
-| `tipos_unidad` | Tipos de alojamiento: Single, Doble Std, Doble Sup, Triple, Suite, Cabañas 1/2/3 dorm. | 1 ✅ |
-| `unidades` | Unidad física (habitación o cabaña) con su estado de housekeeping. | 1 ✅ |
-| `temporadas` + `temporada_rangos` | Baja / Media / Alta con sus rangos de fecha (Anexo A). | 1 ✅ |
-| `tarifas` | Precio por (tipo × temporada): neto (agencia) y rack (mostrador), en USD. | 1 ✅ |
-| `promociones` | Reglas de descuento / paquetes configurables. | 1 ✅ |
-| `politicas_cancelacion` | Umbrales en días → cargo aplicable. | 1 ✅ |
-| `huespedes` | Datos del huésped (documento, email, nacionalidad). | 1 ✅ |
-| `reservas` | Reserva con estado, canal y totales. | 1 ✅ (estructura) · lógica en 2 |
-| `estadias` | Ocupación reserva ↔ unidad + período (`daterange`); lleva la exclusión anti-overbooking. | 1 ✅ (estructura) · lógica en 2 |
-| `reserva_huespedes` | Acompañantes de una reserva. | 1 ✅ |
-| `pagos` | Pagos por reserva, con proveedor (mercadopago / stripe). | 3 |
-| `productos_servicios` | Catálogo de consumos (frigobar, restaurante, excursiones). | 5 |
-| `consumos` | Consumos vinculados a una estadía. | 5 |
-| `facturas` | Comprobante interno; columnas AFIP preparadas para fase posterior. | 5 / 8 |
-| `auditoria` | Trazabilidad *append-only* de operaciones sensibles: guarda actor, rol y la fila completa previa en `datos_previos`. | 7 ✅ |
+## Entidades del sistema reducido
 
-### Ampliación ERP y operación (fases 8 a 12)
+### Inventario, catálogo y reservas
 
 | Entidad | Descripción |
 |---|---|
-| `agencias` · `movimientos_cuenta` | Cuentas corrientes de agencias y empresas. |
-| `proveedores` · `movimientos_proveedor` | Cuentas por pagar. |
-| `contratos` · `firmas` | Contratos con firma electrónica por token y hash de integridad. |
-| `ordenes_mantenimiento` · `planes_mantenimiento` | Correctivo y preventivo. |
-| `objetos_perdidos` | Objetos hallados y su devolución. |
-| `encuestas_satisfaccion` | NPS por token. |
-| `mensajes` · `avisos` | Conversaciones internas en tiempo real y avisos fijables. |
-| `consultas_bot` | Preguntas al asistente del portal (ADR 0011). |
-| `intentos_limitados` | Límite de tasa de las entradas públicas (migración 0029). Sin políticas RLS a propósito: la maneja solo `registrar_intento()`. |
-| `perfiles` | Staff ↔ rol. El alta nace **sin privilegios** (ADR 0017). |
+| `perfiles` | Usuario del staff ↔ rol (admin, gerencia, recepción, housekeeping). El alta nace **sin privilegios** (ADR 0017). |
+| `tipos_unidad` | Tipos de alojamiento: Single, Doble Std, Doble Sup, Triple, Suite y las cabañas. |
+| `unidades` | Unidad física (habitación o cabaña) con su estado de housekeeping, piso, bloque y orden. |
+| `temporadas` + `temporada_rangos` | Baja / Media / Alta con sus rangos de fecha (Anexo A), sin solape entre temporadas. |
+| `tarifas` | Precio por (tipo × temporada): neto y rack, en USD, sin IVA (ADR 0004). |
+| `promociones` | Reglas de descuento / paquetes configurables. |
+| `politicas_cancelacion` | Umbrales en días → cargo aplicable. |
+| `huespedes` | Datos del huésped (documento, email, nacionalidad, residencia en el exterior, VIP, puntos de fidelidad). |
+| `reservas` | Reserva con estado, canal y totales; ficha completa (plan, garantía, segmento, voucher, ocupantes). |
+| `estadias` | Ocupación reserva ↔ unidad + período (`daterange`); lleva la exclusión anti-overbooking. |
 
-### Modernización WinPAX (migraciones 0036–0043)
+### Dinero y operación
 
 | Entidad | Descripción |
 |---|---|
-| `cotizaciones` | Tipo de cambio por moneda y fuente, con override manual del gerente (ADR 0020). |
-| `canales` · `canal_config` | Canales de venta y su configuración: comisión pactada, moneda de liquidación, modalidad de cobro, `ical_token`. |
-| `canal_reservas` | **Zona de recepción**: lo que trae el canal aterriza acá para que alguien lo revise. No crea reservas (ADR 0021). |
-| `canal_sincronizaciones` | Registro de cada corrida, con su `origen` (`manual` o `cron`). |
-| `canal_cargos` | Comisiones y costos por canal, con su estado de conciliación. |
-| `canal_mapeos_columnas` | Mapeo manual de las columnas del informe CSV del extranet. |
-| `canal_mensajes` · `canal_resenas` | Mensajes y reseñas del canal. |
+| `pagos` | Pagos por reserva, con su medio (efectivo, transferencia, tarjeta, mercadopago, stripe, payway). `monto` siempre en USD (ADR 0027). |
+| `productos_servicios` | Catálogo de consumos (frigobar, restaurante, excursiones). |
 | `departamentos` | Jerarquía de **dos niveles** (con trigger que rechaza el tercero) para los folios. |
-| `puntos_venta` · `productos_servicios` | Punto de venta y catálogo. |
-| `respaldos` | Registro de cada exportación de datos operativos. |
+| `consumos` | Consumos vinculados a una estadía, con folio, departamento y número de comanda. |
+| `facturas` | Comprobante; una por reserva, inmutable una vez emitido; columnas del CAE. |
+| `notas_credito` | El único camino de corrección de una factura emitida (migración 0076). |
+| `facturas_numeracion` · `puntos_venta` | Numeración correlativa sin huecos (exigencia fiscal): el número se reserva antes de pedir el CAE (migración 0069). |
+| `datos_fiscales` | Datos del hotel como **emisor**; una sola fila impuesta por la base y no sembrada a propósito (migración 0082). |
+| `cotizaciones` | Tipo de cambio por moneda y fuente, con override manual del gerente (ADR 0020). |
+| `housekeeping_registros` | Historial de limpieza por unidad: comentario y fotos. |
+| `encuestas_satisfaccion` | NPS por token. |
+| `notificaciones` | Bandeja de salida de correos al huésped, con reintentos e idempotencia (migración 0075). |
+| `consultas_bot` | Preguntas al asistente del portal (ADR 0011). |
+
+### Sistema
+
+| Entidad | Descripción |
+|---|---|
+| `auditoria` | Trazabilidad *append-only* de operaciones sensibles: guarda actor, rol y la fila completa previa en `datos_previos`. |
+| `auditoria_accesos` | Quién abrió la ficha de un huésped y cuándo (la auditoría de lectura; `auditoria` cubre sólo escrituras). |
+| `errores` | Errores del servidor, visibles en `/panel/errores` (ADR 0029). |
+| `cron_corridas` | Última corrida correcta y última fallida de cada tarea programada. |
+| `intentos_limitados` | Límite de tasa de las entradas públicas (migración 0029). Sin políticas RLS a propósito: la maneja solo `registrar_intento()`. |
+
+## Tablas que quedaron en la base sin pantalla ni código (39)
+
+Son de los módulos quitados. Siguen creadas por las migraciones y con RLS activo;
+nada en `src/` las lee ni las escribe (verificado con `rg` el 2026-11-10).
+
+| Módulo quitado | Tablas |
+|---|---|
+| Agencias y portal del socio | `agencias`, `movimientos_cuenta` |
+| Proveedores y comprobantes | `proveedores`, `movimientos_proveedor`, `comprobantes_recibidos` |
+| Contratos y firma | `contratos`, `firmas` |
+| Canales de venta | `canal_cargos`, `canal_config`, `canal_externo_tipos`, `canal_mapeos_columnas`, `canal_mensajes`, `canal_resenas`, `canal_reservas`, `canal_restricciones`, `canal_sincronizaciones`, `canal_tipos`, `canales_externos` |
+| Conciliación y gastos | `movimientos_externos`, `gastos_operativos` |
+| Bandeja de mensajes (CRM) | `crm_bandejas`, `crm_contactos`, `crm_conversacion_etiquetas`, `crm_conversaciones`, `crm_etiquetas`, `crm_identidades`, `crm_mensajes`, `crm_respuestas` |
+| Chat interno | `canales`, `mensajes` |
+| Mantenimiento, objetos perdidos y avisos | `ordenes_mantenimiento`, `planes_mantenimiento`, `objetos_perdidos`, `avisos` |
+| Configuración avanzada | `plantillas_email`, `conexiones_proveedores` |
+| Respaldos | `respaldos` |
+| Servicio de cocina | `lista_compras_cocina` |
+| Acompañantes de una reserva | `reserva_huespedes` (sólo la toca la función `fusionar_huespedes`) |
+
+También quedan las columnas `reservas.agencia_id` y `reservas.contrato_id`. **La
+reserva ya no se vincula a una agencia**: la tarifa sale del canal (rack para
+mostrador y web, neto para Booking y Expedia) y la factura toma siempre al
+huésped como receptor (ADR 0045).
 
 ### Vistas
 
-Las cuatro con `security_invoker = true`, y fuera del alcance público desde la
-migración 0057:
+Las cuatro vistas de la base (`saldos_agencias`, `saldos_proveedores`,
+`conciliacion_comision_canal` y `resumen_canal_mes`) son de módulos quitados:
+**el sistema reducido no usa ninguna**. Son `security_invoker = true` y están
+fuera del alcance público desde la migración 0057.
 
-| Vista | Qué resuelve |
-|---|---|
-| `saldos_agencias` · `saldos_proveedores` | Saldo por socio, agregado en la base. |
-| `conciliacion_comision_canal` | Comisiones por mes y estado de conciliación. |
-| `resumen_canal_mes` | Rentabilidad por canal. ⚠️ `tarifa_tipo = 'neto'` es un **tipo de tarifa**, no «importe ya sin comisión». |
-
-## Diagrama entidad-relación (implementado en Fase 1)
+## Diagrama entidad-relación (núcleo)
 
 ```mermaid
 erDiagram
@@ -74,8 +103,6 @@ erDiagram
     temporadas   ||--o{ temporada_rangos : "abarca"
     temporadas   ||--o{ tarifas : "precio_por_temporada"
     huespedes ||--o{ reservas : titular
-    huespedes ||--o{ reserva_huespedes : acompanante
-    reservas  ||--o{ reserva_huespedes : incluye
     reservas  ||--o{ estadias : compone
     unidades  ||--o{ estadias : "ocupada_en"
     tipos_unidad ||--o{ estadias : "reservado_como"
@@ -149,10 +176,11 @@ garantía vive en el motor de datos, no en la aplicación. Ver
 - **Una factura por reserva**: `facturas_una_por_reserva unique (reserva_id)`
   (`0045:67`).
 - **Facturas inmutables** una vez emitidas (`0034`).
-- **Dinero sin coma flotante**: las 31 columnas de importe son `numeric` con
-  escala fija — `(12,2)` totales, `(10,2)` precios unitarios, `(5,2)`
-  porcentajes, `(14,4)` tipos de cambio. Ninguna es `float`.
+- **Dinero sin coma flotante**: las columnas de importe son `numeric` con escala
+  fija — `(12,2)` totales, `(10,2)` precios unitarios, `(5,2)` porcentajes,
+  `(14,4)` tipos de cambio. Ninguna columna de ninguna tabla es `float`.
 - **Auditoría *append-only***: el staff lee, no escribe (`0020`).
+- **RLS activado en las 69 tablas** que crean las migraciones, incluidas las 39 sin código.
 
 ## Convenciones
 
@@ -164,6 +192,10 @@ garantía vive en el motor de datos, no en la aplicación. Ver
 
 ## Estado actual
 
-**83 migraciones** (hasta `0083_cancelacion_a_los_14_dias.sql`),
-**51 tablas**, **103 políticas RLS** y **4 vistas**, todas aplicadas y verificadas
-contra una base local levantada desde cero.
+**127 migraciones** (hasta `0127_bandeja_saludo_horario_y_asignacion.sql`),
+**69 tablas** (30 del sistema reducido, 39 sin código) y **4 vistas** (ninguna
+usada), con **148 sentencias `create policy`** en las migraciones (algunas las
+reemplaza una migración posterior, así que no es el recuento de políticas
+vigentes). La aplicación de las 127 contra una base levantada desde cero se
+verifica con `npm run test:aislado` y `npm run esquema:comparar`; **no se corrió
+desde esta rama** (sin Docker, ADR 0045).

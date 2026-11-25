@@ -7,7 +7,10 @@ import {
   esVista,
   estadosDesconocidos,
   vistasSinChip,
+  saldoVencido,
+  VENTANA_SIN_FACTURAR_DIAS,
 } from '@/lib/domain/vistas-reservas'
+import { ESTADOS_FACTURABLES } from '@/lib/domain/facturacion'
 
 /**
  * Las vistas operativas son los filtros del día de recepción. Lo que se prueba
@@ -143,5 +146,69 @@ describe('las vistas por fecha son solo dos', () => {
     // export CSV, o el CSV bajaría otra cosa que lo que se ve.
     const porFecha = VISTAS_RESERVAS.filter((v) => VISTAS[v].fecha)
     expect(porFecha).toEqual(['llegadas', 'salidas'])
+  })
+})
+
+describe('«Saldo pendiente»: la regla del aviso del tablero', () => {
+  const HOY = '2026-11-10'
+  const base = {
+    total: 100,
+    pagos: [] as { tipo: 'senia' | 'saldo' | 'reembolso'; monto: number; estado: 'aprobado' }[],
+    consumos: [] as { cantidad: number; precioUnitario: number }[],
+  }
+
+  it('una confirmada que debía llegar ayer y no pagó está vencida', () => {
+    expect(
+      saldoVencido({ ...base, estado: 'confirmada', estadias: [{ check_in: '2026-11-09', check_out: '2026-11-12' }] }, HOY),
+    ).toBe(true)
+  })
+
+  it('una confirmada para el mes que viene NO es un aviso: es el curso normal', () => {
+    expect(
+      saldoVencido({ ...base, estado: 'confirmada', estadias: [{ check_in: '2026-12-09', check_out: '2026-12-12' }] }, HOY),
+    ).toBe(false)
+  })
+
+  it('una alojada que se va hoy con saldo está vencida', () => {
+    expect(
+      saldoVencido({ ...base, estado: 'in_house', estadias: [{ check_in: '2026-11-07', check_out: HOY }] }, HOY),
+    ).toBe(true)
+  })
+
+  it('el saldo se mide contra la cuenta consolidada: los consumos cuentan', () => {
+    // Pagó el alojamiento entero pero no el consumo: debe 20.
+    const r = {
+      estado: 'in_house',
+      total: 50,
+      pagos: [{ tipo: 'saldo' as const, monto: 50, estado: 'aprobado' as const }],
+      consumos: [{ cantidad: 1, precioUnitario: 20 }],
+      estadias: [{ check_in: '2026-11-07', check_out: HOY }],
+    }
+    expect(saldoVencido(r, HOY)).toBe(true)
+    expect(saldoVencido({ ...r, consumos: [] }, HOY)).toBe(false)
+  })
+
+  it('una cancelada o una pagada no generan aviso aunque tengan saldo', () => {
+    const estadias = [{ check_in: '2026-11-01', check_out: '2026-11-05' }]
+    expect(saldoVencido({ ...base, estado: 'cancelada', estadias }, HOY)).toBe(false)
+    expect(saldoVencido({ ...base, estado: 'pagada', estadias }, HOY)).toBe(false)
+  })
+})
+
+describe('las vistas de «Requiere atención»', () => {
+  it('«Consumos sin facturar» usa los mismos estados que la facturación', () => {
+    // Si divergieran, el aviso contaría reservas que la ficha no deja facturar.
+    expect([...(definicionDe('sin_facturar').estados ?? [])].sort()).toEqual([...ESTADOS_FACTURABLES].sort())
+  })
+
+  it('las dos son vistas calculadas y tienen chip', () => {
+    expect(definicionDe('por_cobrar').calculada).toBe('saldo_vencido')
+    expect(definicionDe('sin_facturar').calculada).toBe('sin_facturar')
+    expect(ORDEN_CHIPS).toContain('por_cobrar')
+    expect(ORDEN_CHIPS).toContain('sin_facturar')
+  })
+
+  it('la ventana de «sin facturar» es de dos meses', () => {
+    expect(VENTANA_SIN_FACTURAR_DIAS).toBe(60)
   })
 })

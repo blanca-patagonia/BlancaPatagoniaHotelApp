@@ -2,9 +2,9 @@
 /**
  * Stop — corre la suite al terminar la tarea y avisa si quedó algo roto.
  *
- * Informa además cuántos tests SE SALTEARON. Sin base local hoy se saltean 43,
+ * Informa además cuántos tests SE SALTEARON. Sin base local hoy se saltean unos 580,
  * entre ellos el anti-overbooking, que es la garantía central del sistema
- * (ADR 0002). Una suite verde con 43 tests sin ejecutar no es una suite verde,
+ * (ADR 0002). Una suite verde con unos 580 tests sin ejecutar no es una suite verde,
  * y confundir una cosa con la otra es exactamente cómo se entrega algo roto.
  *
  * Nunca bloquea: informa.

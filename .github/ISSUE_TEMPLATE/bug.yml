@@ -12,10 +12,9 @@ body:
         - Pagos
         - Facturación
         - Consumos / Punto de venta
-        - Housekeeping / Mantenimiento
-        - Agencias y proveedores
+        - Housekeeping
+        - Huéspedes
         - Reportes
-        - Canales de venta
         - Base de datos / RLS
         - Otra
     validations:

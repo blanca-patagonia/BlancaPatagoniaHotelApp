@@ -21,8 +21,7 @@ import type { Rol } from '@/lib/domain/roles'
  * que el buscador "en vivo" del encabezado (`GET /api/buscar`, que responde
  * JSON mientras se escribe) use EXACTAMENTE la misma consulta que la
  * pantalla de resultados completa — no una segunda versión que con el tiempo
- * diverja, la misma situación que ya pasó con `saldarSiCorresponde` y con
- * `MUESTRA_PLANTILLAS`.
+ * diverja, la misma situación que ya pasó con `saldarSiCorresponde`.
  */
 
 /** Tope por ámbito: la búsqueda es para encontrar algo puntual, no para listar. */
@@ -44,22 +43,10 @@ export interface HuespedHit {
   doc_numero: string | null
 }
 
-export interface AgenciaHit {
-  id: string
-  nombre: string
-  tipo?: string
-}
-
-export interface ProveedorHit {
-  id: string
-  nombre: string
-  rubro?: string
-}
-
 export interface UnidadHit {
   id: string
   nombre: string
-  piso: number | null
+  piso: string | null
   activo: boolean
   tipo: { nombre: string } | null
 }
@@ -102,8 +89,6 @@ export interface ResultadoBusqueda {
   glosario: TerminoEncontrado[]
   reservas: ReservaHit[]
   huespedes: HuespedHit[]
-  agencias: AgenciaHit[]
-  proveedores: ProveedorHit[]
   unidades: UnidadHit[]
   tipos_unidad: TipoUnidadHit[]
   productos: ProductoHit[]
@@ -131,29 +116,17 @@ function filas<T>(contexto: string) {
   }
 }
 
-export interface OpcionesBusqueda {
-  /**
-   * No buscar personas (huéspedes ni usuarios) y no leer el nombre del huésped
-   * de las reservas. Lo usa el asistente de IA: lo que encuentra viaja a un
-   * tercero y los datos personales no salen del sistema (ADR 0039).
-   */
-  sinPersonas?: boolean
-}
-
 export async function buscarGlobal(
   supabase: Awaited<ReturnType<typeof crearClienteServidor>>,
   rol: Rol,
   qCrudo: string | undefined,
   tope: number = TOPE_BUSQUEDA,
-  opciones: OpcionesBusqueda = {},
 ): Promise<ResultadoBusqueda> {
   const termino = terminoBuscado(qCrudo)
   const ambitos = ambitosPara(rol)
-  const personas = ['huespedes', 'usuarios']
-  const puede = (a: string) =>
-    ambitos.includes(a as never) && !(opciones.sinPersonas && personas.includes(a))
+  const puede = (a: string) => ambitos.includes(a as never)
 
-  const [huespedesExactos, agencias, proveedores, unidades, tipos_unidad, productos, promociones, usuarios] =
+  const [huespedesExactos, unidades, tipos_unidad, productos, promociones, usuarios] =
     termino
       ? await Promise.all([
           puede('huespedes')
@@ -165,22 +138,6 @@ export async function buscarGlobal(
                 )
                 .limit(tope)
                 .then(filas<HuespedHit>('huespedes'))
-            : Promise.resolve([]),
-          puede('agencias')
-            ? supabase
-                .from('agencias')
-                .select('id, nombre, tipo')
-                .ilike('nombre', `%${termino}%`)
-                .limit(tope)
-                .then(filas<AgenciaHit>('agencias'))
-            : Promise.resolve([]),
-          puede('proveedores')
-            ? supabase
-                .from('proveedores')
-                .select('id, nombre, rubro')
-                .ilike('nombre', `%${termino}%`)
-                .limit(tope)
-                .then(filas<ProveedorHit>('proveedores'))
             : Promise.resolve([]),
           puede('unidades')
             ? supabase
@@ -274,11 +231,7 @@ export async function buscarGlobal(
     termino && puede('reservas')
       ? await supabase
           .from('reservas')
-          .select(
-            opciones.sinPersonas
-              ? 'id, codigo, estado, estadias(periodo)'
-              : 'id, codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre), estadias(periodo)',
-          )
+          .select('id, codigo, estado, huesped:huespedes!reservas_huesped_id_fkey(apellido, nombre), estadias(periodo)')
           .or(filtroReservas)
           .limit(tope)
           .then(filas<ReservaHit>('reservas'))
@@ -299,8 +252,6 @@ export async function buscarGlobal(
   const total =
     reservas.length +
     huespedes.length +
-    agencias.length +
-    proveedores.length +
     unidades.length +
     tipos_unidad.length +
     productos.length +
@@ -317,8 +268,6 @@ export async function buscarGlobal(
     reservas,
     huespedes,
     huespedesAproximados,
-    agencias,
-    proveedores,
     unidades,
     tipos_unidad,
     productos,

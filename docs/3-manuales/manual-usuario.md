@@ -8,75 +8,23 @@ cada persona ve solo los capítulos de lo que puede hacer.
 
 ## Perfiles de usuario
 
-- **Recepción:** reservas, check-in / check-out, consumos, huéspedes, punto de
-  venta, agencias y canales de venta.
-- **Gerencia:** todo lo de recepción, más reportes, mantenimiento, proveedores,
-  contratos y configuración.
-- **Administración (`admin`):** todo, más usuarios, auditoría y respaldos.
-- **Housekeeping:** estado de las habitaciones, su propio trabajo del día,
-  mantenimiento y avisos. **No ve** datos de huéspedes, pagos ni facturas.
+- **Recepción:** inicio, ocupación, reservas (check-in / check-out), punto de
+  venta y consumos, huéspedes y ayuda.
+- **Gerencia:** todo lo de recepción, más housekeeping, reportes, configuración
+  y los errores del sistema.
+- **Administración (`admin`):** todo, más usuarios y auditoría.
+- **Housekeeping:** inicio, el estado de las habitaciones, su propio trabajo del
+  día y ayuda. **No ve** datos de huéspedes, pagos ni facturas.
 - **Huésped:** reserva desde el portal público, sin cuenta.
 
-## Canales de venta (Booking y otras OTA)
-
-> ⚠️ **Lo primero que hay que entender.** El sistema **lee** de Booking; no le
-> escribe. Nadie le informa a Booking qué habitaciones quedan libres, así que
-> **Booking puede vender una unidad que el hotel ya vendió**. La sincronización
-> avisa antes y mejor, pero no evita el overbooking. La única solución real es
-> contratar un *channel manager*, y es una decisión del hotel.
-
-### Cómo entra una reserva de Booking
-
-Hay tres caminos, y los tres **dejan la reserva en la zona de recepción**, no en
-el listado de reservas. Nada entra solo al inventario: siempre hay una persona
-que revisa y confirma.
-
-1. **Automático (todos los días).** Una tarea programada lee el feed iCal y deja
-   lo nuevo en la zona de recepción. Corre a las 6 de la mañana. En la pantalla
-   de Canales se ve cuándo fue la última sincronización.
-2. **Botón «Sincronizar ahora».** Lo mismo, cuando no se quiere esperar.
-3. **Informe CSV del extranet.** Es el que trae más datos (importes, comisiones).
-
-### Importar el informe CSV
-
-1. En el extranet de Booking, descargar el informe de reservas.
-2. En **Canales → Importar informe**, subir el archivo.
-3. Si el sistema no reconoce alguna columna, lleva a **mapear columnas**: se le
-   indica una sola vez qué columna del archivo es cada dato. Queda guardado para
-   las próximas importaciones.
-4. Revisar lo que aterrizó en la zona de recepción y confirmar una por una.
-
-### Conflicto de cupo
-
-Si lo que trae el canal choca con una reserva que el hotel ya tiene, la fila
-aparece marcada en rojo y el aviso se enciende en la pantalla de inicio. **No se
-resuelve solo a propósito:** hay que decidir a mano qué se hace, porque es la
-situación más cara que le puede pasar al hotel y no debe perderse en un registro
-que nadie lee.
-
-### Conciliar la factura del canal
-
-Booking cobra su comisión aparte. En **Canales → Costos**:
-
-1. Cargar la factura del canal.
-2. El sistema compara lo que Booking dice que corresponde contra lo que el
-   sistema calculó a partir de la comisión pactada.
-3. Las diferencias quedan marcadas para revisar.
-
-> «Neto de comisión» es el total **menos** la comisión. No confundirlo con
-> `tarifa_tipo = 'neto'`, que es el tipo de tarifa (agencia contra mostrador).
-> Restarle la comisión a un importe que ya la tenía descontada da un número más
-> bajo **y no falla**.
-
-### Importar reseñas
-
-En **Canales → Reseñas**, subir el export de comentarios del extranet. El sistema
-las vincula con la reserva cuando puede identificarla.
+Es la matriz de `src/lib/domain/permisos.ts`: el panel tiene 12 áreas (inicio,
+ocupación, punto de venta, reservas, huéspedes, housekeeping, auditoría, errores,
+reportes, configuración, usuarios y ayuda).
 
 ## Cotización del dólar
 
-El sistema busca la cotización solo, todos los días. En **Configuración** se ve
-de qué fuente salió, de cuándo es, y si el valor vigente es el automático o uno
+El sistema busca la cotización solo, todos los días. En **Configuración →
+Divisas** se ve de qué fuente salió, de cuándo es, y si el valor vigente es el automático o uno
 cargado a mano.
 
 El gerente puede **fijar un valor a mano** cuando quiera: ése le gana al
@@ -121,7 +69,7 @@ número de comanda. Anular una comanda pide confirmación y dice cuántas línea
 por qué importe.
 
 La cuenta admite **folios A y B**: sirve para separar lo que paga el huésped de
-lo que paga la agencia.
+lo que paga un tercero (una empresa, por ejemplo).
 
 ## Housekeeping
 
@@ -132,20 +80,14 @@ se limpia antes que una vacía.
 La pantalla general muestra los contadores por mucama: asignadas, limpiadas y
 lo que falta.
 
-## Respaldos
-
-**Respaldos** exporta los datos operativos a un archivo verificable y registra
-cuándo fue la última vez.
-
-> ⚠️ **Esto NO es un backup de la base de datos.** El backup de Postgres lo hace
-> la plataforma donde está alojado el sistema, no la aplicación. Esta pantalla
-> exporta los datos para tenerlos afuera; no reemplaza al backup de la plataforma.
-
 ## Lo que el sistema todavía no hace
 
 Para que nadie lo descubra en el peor momento:
 
-- **No procesa pagos con tarjeta.** Los pagos se registran a mano.
-- **No envía correos de verdad.** Quedan registrados, no salen.
-- **El CAE de la factura es simulado.** No hay conexión con AFIP todavía.
-- **No le informa disponibilidad a Booking** (ver la advertencia de arriba).
+- **No procesa pagos con tarjeta de verdad.** Los adaptadores de Mercado Pago,
+  Stripe y Payway están escritos, pero ninguna cuenta está contratada: hasta
+  entonces los pagos se registran a mano o con el pago simulado.
+- **No envía correos de verdad.** Quedan anotados en la bandeja de salida, no salen.
+- **El CAE de la factura es simulado.** No hay conexión con ARCA/AFIP todavía.
+- **No hace backups de la base de datos.** Los hace la plataforma donde está
+  alojado el sistema, no la aplicación.

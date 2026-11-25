@@ -19,7 +19,7 @@ import { registrarError, registrarInfo } from '@/lib/registro'
  *
  * ── Autenticación ───────────────────────────────────────────────────────────
  *
- * El mismo secreto compartido que `/api/cron/canales`. Si `CRON_SECRET` no está,
+ * El mismo secreto compartido que el resto de `/api/cron/*`. Si `CRON_SECRET` no está,
  * el handler rechaza: un cron que no se puede autenticar no debe correr.
  */
 

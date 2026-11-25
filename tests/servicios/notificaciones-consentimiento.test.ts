@@ -12,7 +12,6 @@ import type { ClienteServicio } from '@/lib/supabase/admin'
 
 vi.mock('@/lib/acciones', () => ({ registrarFalla: vi.fn() }))
 vi.mock('@/lib/email', () => ({ enviarPlantilla: vi.fn() }))
-vi.mock('@/lib/whatsapp', () => ({ whatsappActivo: () => false, enviarPorWhatsApp: vi.fn() }))
 
 const { encolar } = await import('@/lib/notificaciones')
 
@@ -31,7 +30,7 @@ describe('encolar: consentimiento', () => {
   it('si no se puede leer la ficha del huésped, NO encola', async () => {
     const { cliente, insert } = clienteQueFalla()
     const r = await encolar(cliente, {
-      evento: 'solicitud_resena',
+      evento: 'encuesta_postcheckout',
       entidadId: 'r1',
       destinatario: 'huesped@ejemplo.com',
       variables: {},

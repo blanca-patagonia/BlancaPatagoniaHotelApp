@@ -1,0 +1,182 @@
+@startuml
+!include _estilo.iuml
+hide methods
+skinparam linetype ortho
+
+entity "reservas" as reservas {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  huesped_id : uuid <<FK>>
+  * estado : estado_reserva
+  * canal : text
+  * tarifa_tipo : text
+  promocion_id : uuid <<FK>>
+  politica_id : uuid <<FK>>
+  * moneda : character
+  * total : numeric
+  * notas : text
+  creada_por : uuid <<FK>>
+  * creada_en : timestamptz
+  * token : uuid
+  grupo_id : uuid
+  * plan : text
+  * garantia : text
+  … y 17 columnas más
+}
+entity "consumos" as consumos {
+  * **id** : uuid <<PK>>
+  --
+  * reserva_id : uuid <<FK>>
+  * producto_id : uuid <<FK>>
+  * cantidad : integer
+  * precio_unitario : numeric
+  * fecha : date
+  cargado_por : uuid <<FK>>
+  * creado_en : timestamptz
+  comanda : bigint
+  * nota : text
+  * folio : character
+  * comprobante : text
+  departamento_id : uuid <<FK>>
+  moneda_origen : character
+  importe_origen : numeric
+  cotizacion_usada : numeric
+}
+entity "productos_servicios" as productos_servicios {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  * categoria : categoria_producto
+  * precio : numeric
+  * moneda : character
+  * activo : boolean
+  * creado_en : timestamptz
+  stock : integer
+  * stock_minimo : integer
+  departamento_id : uuid <<FK>>
+}
+entity "departamentos" as departamentos {
+  * **id** : uuid <<PK>>
+  --
+  * codigo : text
+  * nombre : text
+  padre_id : uuid <<FK>>
+  * orden : integer
+  * activo : boolean
+  * creado_en : timestamptz
+}
+entity "pagos" as pagos {
+  * **id** : uuid <<PK>>
+  --
+  * reserva_id : uuid <<FK>>
+  * medio : medio_pago
+  * tipo : tipo_pago
+  * monto : numeric
+  * moneda : character
+  * estado : estado_pago
+  external_id : text
+  * nota : text
+  creado_por : uuid <<FK>>
+  * creado_en : timestamptz
+  monto_cobrado : numeric
+  cotizacion : numeric
+  cupon : text
+  ultimos4 : character
+  tarjeta_marca : text
+  url_pago : text
+  … y 1 columnas más
+}
+entity "facturas" as facturas {
+  * **id** : uuid <<PK>>
+  --
+  * reserva_id : uuid <<FK>>
+  * numero : text
+  * total : numeric
+  * moneda : character
+  pdf_url : text
+  cae : text
+  cae_vto : date
+  punto_venta : integer
+  tipo_comprobante : tipo_comprobante
+  emitida_por : uuid <<FK>>
+  * emitida_en : timestamptz
+  neto : numeric
+  iva : numeric
+  * alicuota_iva : numeric
+  condicion_iva_receptor : condicion_iva
+  cuit_receptor : text
+  … y 4 columnas más
+}
+entity "notas_credito" as notas_credito {
+  * **id** : uuid <<PK>>
+  --
+  * factura_id : uuid <<FK>>
+  * numero : text
+  * tipo_comprobante : tipo_comprobante
+  punto_venta : integer
+  * total : numeric
+  neto : numeric
+  iva : numeric
+  * alicuota_iva : numeric
+  * exento : numeric
+  * moneda : character
+  * motivo : text
+  cae : text
+  cae_vto : date
+  numero_fiscal : text
+  cae_solicitado_en : timestamptz
+  emitida_por : uuid <<FK>>
+  … y 1 columnas más
+}
+entity "puntos_venta" as puntos_venta {
+  * **numero** : integer <<PK>>
+  --
+  * descripcion : text
+  * ultimo_numero : integer
+  * activo : boolean
+  * creado_en : timestamptz
+  * ultimo_nc : integer
+}
+entity "facturas_numeracion" as facturas_numeracion {
+  * **reserva_id** : uuid <<PK>>
+  --
+  * punto_venta : integer <<FK>>
+  * numero : integer
+  * creado_en : timestamptz
+}
+entity "datos_fiscales" as datos_fiscales {
+  * **id** : boolean <<PK>>
+  --
+  * razon_social : text
+  * cuit : text
+  * condicion_iva : condicion_iva
+  * domicilio : text
+  inicio_actividades : date
+  ingresos_brutos : text
+  actualizado_por : uuid <<FK>>
+  * actualizado_en : timestamptz
+}
+entity "cotizaciones" as cotizaciones {
+  * **id** : bigint <<PK>>
+  --
+  * moneda : character
+  * compra : numeric
+  * venta : numeric
+  * fuente : text
+  * obtenida_en : timestamptz
+  cargada_por : uuid <<FK>>
+  * creada_en : timestamptz
+}
+departamentos |o--o{ consumos : departamento_id
+productos_servicios ||--o{ consumos : producto_id
+reservas ||--o{ consumos : reserva_id
+departamentos |o--o{ productos_servicios : departamento_id
+reservas ||--o{ facturas : reserva_id
+departamentos |o--o{ departamentos : padre_id
+facturas ||--o{ notas_credito : factura_id
+puntos_venta ||--o{ facturas_numeracion : punto_venta
+reservas ||--o{ facturas_numeracion : reserva_id
+reservas ||--o{ pagos : reserva_id
+@enduml

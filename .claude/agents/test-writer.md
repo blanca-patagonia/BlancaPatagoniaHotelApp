@@ -49,6 +49,6 @@ npm test -- <patrón>
 ## Al terminar reportá
 
 - Qué archivos creaste o modificaste.
-- Cuántos tests agregaste y cuántos **se saltean** sin base local. Este dato importa: hoy ya hay 43
+- Cuántos tests agregaste y cuántos **se saltean** sin base local. Este dato importa: hoy ya hay unos 580
   sin ejecutar, entre ellos el anti-overbooking, y una suite verde con tests salteados es engañosa.
 - Qué casos borde dejaste sin cubrir y por qué.

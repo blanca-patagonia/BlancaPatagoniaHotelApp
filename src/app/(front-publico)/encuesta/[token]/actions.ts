@@ -1,6 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { esUuid } from '@/lib/domain/reserva-publica'
 import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { puntajeValido } from '@/lib/domain/encuestas'
 import { permitirIntento } from '@/lib/limites'
@@ -10,7 +11,7 @@ import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
  * Registra la respuesta de la encuesta de satisfacción.
  *
  * Sin cuenta: el token de la URL es la credencial, igual que en la confirmación
- * de reserva y en la firma de contratos. Se resuelve con `service_role`, de modo
+ * de reserva. Se resuelve con `service_role`, de modo
  * que `anon` no necesita ninguna política sobre la tabla.
  */
 export async function responderEncuesta(formData: FormData): Promise<void> {
@@ -18,7 +19,7 @@ export async function responderEncuesta(formData: FormData): Promise<void> {
   const puntaje = Number(formData.get('puntaje'))
   const comentario = String(formData.get('comentario') ?? '').trim().slice(0, 1000)
 
-  if (!token) redirect('/')
+  if (!esUuid(token)) redirect('/')
   if (!puntajeValido(puntaje)) redirect(`/encuesta/${token}?error=puntaje`)
 
   // Una encuesta se responde una vez. El límite evita que se inflen los

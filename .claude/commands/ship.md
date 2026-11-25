@@ -13,7 +13,7 @@ Preparar los cambios para el PR.
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-Los cuatro en verde o no seguimos. Reportá el conteo de tests salteados: si son 43, la garantía de
+Los cuatro en verde o no seguimos. Reportá el conteo de tests salteados: si son unos 580, la garantía de
 anti-overbooking no se verificó acá.
 
 ## 2. Secretos y basura

@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import { HORA_CHECK_IN, HORA_CHECK_OUT } from '@/lib/domain/hotel'
 import { textos, rellenar, rutaConIdioma, idiomaValido } from '@/lib/i18n'
 import { Montana, Tarjeta } from './ui'
-import { SelectorIdioma } from './selector-idioma'
 
 interface MarcoProps {
   children: ReactNode
@@ -71,11 +70,6 @@ export function Marco({ children, ancho = 'normal', volver, idioma }: MarcoProps
             >
               {t.nav.alojamientos}
             </Link>
-            {propio && (
-              <span className="hidden sm:inline-flex">
-                <SelectorIdioma idioma={propio} variante="menu" etiqueta={t.nav.idioma} />
-              </span>
-            )}
             <Link
               href={ruta('/reservar')}
               className="toque inline-flex items-center rounded-full bg-lago-700 px-4 text-white transition hover:bg-lago-800 active:scale-[0.97]"
@@ -107,10 +101,6 @@ export function Marco({ children, ancho = 'normal', volver, idioma }: MarcoProps
 
       <footer className="border-t border-tinta/10 bg-hueso">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-5 py-5 text-sm text-tinta-suave sm:px-6">
-          {/* En el pie, a la vista y en el teléfono también: el encabezado no
-              tiene lugar para el selector en 390 px, y un idioma que no se
-              puede cambiar desde el teléfono no se puede cambiar. */}
-          {propio && <SelectorIdioma idioma={propio} etiqueta={t.nav.idioma} />}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span>{t.comun.hosteriaYCabanas}</span>
             <span className="text-tinta-suave">

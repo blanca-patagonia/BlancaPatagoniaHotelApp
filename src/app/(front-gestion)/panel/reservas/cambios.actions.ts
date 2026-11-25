@@ -187,7 +187,7 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   const { data: reserva, error: eReserva } = await supabase
     .from('reservas')
     .select(
-      'estado, tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email, telefono)',
+      'estado, tarifa_tipo, codigo, huesped_id, huesped:huespedes!reservas_huesped_id_fkey(nombre, email)',
     )
     .eq('id', id)
     .maybeSingle()
@@ -270,7 +270,6 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
   const h = reserva.huesped as unknown as {
     nombre: string
     email: string | null
-    telefono: string | null
   } | null
   await avisarReservaReprogramada(
     crearClienteAdmin(),
@@ -278,7 +277,6 @@ export async function reprogramarReserva(formData: FormData): Promise<void> {
       reservaId: id,
       huespedId: reserva.huesped_id as string | null,
       email: h?.email ?? null,
-      telefono: h?.telefono ?? null,
       nombre: h?.nombre ?? '',
       codigo: reserva.codigo as string,
     },
@@ -376,8 +374,8 @@ export async function cambiarUnidadReserva(formData: FormData): Promise<void> {
       .maybeSingle()
 
     // Fail-closed, no fail-`rack`: si no se pudo leer `tarifa_tipo`, NO hay que
-    // asumir "rack" — una reserva de agencia (`tarifa_tipo: 'neto'`, ADR 0004)
-    // se recotizaría a precio de mostrador en vez de precio de agencia, sin que
+    // asumir "rack" — una reserva de tarifa neta (`tarifa_tipo: 'neto'`, ADR 0004)
+    // se recotizaría a precio de mostrador en vez de precio neto, sin que
     // nadie se entere. El huésped ya está mudado (lo urgente); la recotización
     // se corrige a mano, igual que cuando falta la tarifa del tipo destino.
     // `!reserva` también: con `maybeSingle` una fila que no se ve llega como

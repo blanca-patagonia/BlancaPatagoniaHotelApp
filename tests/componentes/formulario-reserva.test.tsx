@@ -38,7 +38,6 @@ function formulario() {
         },
       ]}
       unidadesPorTipo={{ t1: [] }}
-      agencias={[]}
       promociones={[]}
       noches={2}
       {...BUSQUEDA}

@@ -9,6 +9,12 @@
 >
 > **Cómo se mantiene:** al terminar cada paso se marca acá, con las rutas tocadas y los tests que
 > lo cubren. Si un paso descubre algo que hay que arreglar después, va a *Deuda descubierta*.
+>
+> **Rama `tesis-a-presentar` (versión reducida, [ADR 0045](../decisiones/0045-version-reducida-para-la-tesis.md)).**
+> Acá figuran sólo los pasos que siguen vigentes. Los pasos **4-5** (canales de venta:
+> informe CSV de Booking y feed iCal) y **11** (respaldos) pertenecen a módulos quitados
+> y se conservan en `main`; la numeración original se mantiene para no romper las
+> referencias de la bitácora y de los ADR.
 
 ---
 
@@ -32,44 +38,43 @@ Salieron del recorrido inicial del repo. Cada una tiene su razón.
    propia; toda etiqueta visible (Fase 15).
 6. **`npm run check` en verde antes de decir que un paso terminó.**
 
-## Cinco colisiones de nombres (leer antes de nombrar algo nuevo)
+## Cuatro colisiones de nombres (leer antes de nombrar algo nuevo)
 
 Varios módulos del checklist **parecen** existir y son otra cosa:
 
 | Nombre ya tomado | Qué es realmente | Qué NO es |
 |---|---|---|
-| tabla `canales` (0019) | canales de **chat interno** del staff | canales de venta / OTA |
 | tabla `puntos_venta` (0025) | punto de venta **fiscal**, numera facturas | POS de frigobar |
+| tabla `canales` (0019) | del chat interno del staff, módulo quitado (la tabla sigue en la base, sin código) | canales de venta |
 | `src/lib/domain/cuenta.ts` | validación de **cambio de contraseña** | cuenta corriente del huésped |
 | `src/lib/domain/moneda.ts` | **formateo** de importes (`USD 145,20`) | tipo de cambio |
 | `src/lib/pricing/cotizar.ts`, `0008_cotizacion.sql` | cotizar una **estadía** (precio) | cotización de moneda |
 
 Por eso el paso 1 se llama **divisas** y no «cotización», y el paso 7 no puede llamarse
-`puntos_venta`.
+`puntos_venta`. Y la tabla `canales` ya está tomada aunque ningún código la use.
 
 ---
 
-## Estado de los 11 pasos
+## Estado de los pasos
 
 | # | Paso | Estado | Toca esquema | Toca código existente |
 |---|---|---|---|---|
 | 1 | Cotización de divisas (cierra ADR 0003) | ✅ | tabla nueva | dashboard + config |
 | 2 | Grilla: fila resumen + accesibilidad | ✅ | no | `ocupacion/page.tsx` |
 | 3 | Toggles operativos del listado de reservas | ✅ | `estadias` (+2 generadas) | listado + export CSV |
-| 4 | Canales: enchufar el puerto + CSV de Booking | ✅ | 4 tablas nuevas | puerto + cotizar.ts |
-| 5 | Canal iCal de Booking | ✅ | no | no |
 | 6 | Ficha de reserva completa | ✅ | `reservas`, `estadias`, `huespedes` + RPC | alta, detalle, listado, CSV |
 | 7 | POS con grilla, buscador y comanda | ✅ | `consumos` (+3 col) + secuencia | no |
 | 8 | Folio A/B, departamentos y split | ✅ | tabla nueva + `consumos`, `reservas`, `productos` | detalle + POS |
 | 9 | Housekeeping móvil para mucamas | ✅ | no | tablero HK |
-| 10 | Piso/bloque + acciones rápidas en la grilla | ✅ | `unidades` (+3 col) | grilla + config + mant. |
-| 11 | Respaldos verificables | ✅ | tabla nueva | no |
+| 10 | Piso/bloque en la grilla | ✅ | `unidades` (+3 col) | grilla + config |
 
 Leyenda: ⬜ pendiente · 🔨 en curso · ✅ terminado con `npm run check` verde
 
-**Los 11 pasos están terminados.** `npm run check` exit 0 · **882 tests, cero salteados**, contra
-la base local con las tres variables exportadas. 8 migraciones nuevas (`0036`–`0043`), todas
-aplicadas y verificadas con `npx supabase migration up --local`.
+**Los 8 pasos vigentes están terminados** (los 11 originales menos el 4, el 5 y el 11, que esta
+rama no tiene). Al cerrar el trabajo en `main`, el 2026-08-16, `npm run check` dio exit 0 con 882 tests
+y cero salteados, contra la base local con las tres variables exportadas (cifra histórica de
+`main`, no de esta rama). Las migraciones `0036`–`0043` siguen en el repositorio;
+la `0038` (canales de venta) y la `0043` (respaldos) crean tablas que esta rama no usa.
 
 ---
 
@@ -88,7 +93,7 @@ hoy el sistema no sabía convertir nada.
 - [x] `src/lib/divisas/servicio.ts` — cadena de respaldo: caché → fuente → base → USD
 - [x] Migración `0036_cotizaciones_de_divisas.sql`
 - [x] `src/app/(back-api)/api/cotizacion/route.ts` — endpoint interno, con sesión obligatoria
-- [x] Widget en el dashboard (en `Suspense`) + carga manual en `src/app/(front-gestion)/panel/config#divisas`
+- [x] Widget en el dashboard (en `Suspense`) + carga manual en `src/app/(front-gestion)/panel/config/divisas`
 - [x] Icono `divisas` en `iconos.tsx` (aditivo)
 - [x] [ADR 0020](../decisiones/0020-cotizacion-de-divisas.md)
 
@@ -189,85 +194,6 @@ no falla. El test «Llegadas hoy NO trae a quien entró ayer» es el que lo dete
   guardando el desglose (subtotal / descuento / IVA), que el paso 6 agrega de todos modos.
 - **Filtros por garantía, segmento y pensión**: esas columnas no existen todavía.
 
-## Paso 4 y 5 — Canales / Booking
-
-**Hallazgo clave: el puerto existe y está desconectado de todo.** `src/lib/canales/index.ts`
-(`CanalVentaProvider` + simulador) y `src/lib/domain/canales.ts` (reglas puras, 19 tests) tienen
-**cero referencias** fuera de sus propios tests. El diseño está hecho; falta el cableado.
-
-Ya fijado por esos módulos: OTA va a tarifa **neto** (ADR 0004), entra como **confirmada** (no
-pendiente, o la expiración automática liberaría una unidad ya vendida), idempotencia por
-`externalId`, y el canal **nunca** fija el precio de nuestra base.
-
-**Los tres caminos a Booking, evaluados:**
-
-1. **Connectivity API directa — descartada.** Exige entidad comercial, certificación técnica de
-   ARI + reservas y compromisos de volumen. No es alcanzable para un hotel en el plazo de la
-   tesis, y no es un problema de código.
-2. **Channel manager (SiteMinder, Cloudbeds, RoomCloud, Octorate) — el camino de producción.**
-   Sincronización real en dos direcciones, una integración cubre Booking + Expedia + Airbnb, la
-   certificación es del proveedor. ~USD 50-150/mes. **Es una decisión del hotel, no del código.**
-3. **Solo lectura, sin aprobación de nadie — lo que se implementa acá:**
-   - **CSV** del Informe de reservas del extranet: trae nombre, importes, comisión, estado.
-   - **iCal** por habitación: trae fechas y una referencia. Sin tarifas ni contacto.
-
-⚠️ **Ninguna de las dos evita el overbooking**: son de solo lectura, nadie le empuja el cupo a
-Booking. Hay que decirlo en pantalla o alguien va a creer que está cubierto.
-
-⚠️ **El puerto necesita un descriptor de capacidades**: declara `publicarDisponibilidad()` y
-`confirmarRecepcion()`, que un provider de solo lectura no puede cumplir. Si los deja como no-op
-miente; si lanza, rompe al llamador.
-
-### Estado: ✅ terminado el 2026-08-16 · 118 tests nuevos
-
-- [x] Migración `0038_canales_de_venta.sql` — 4 tablas: `canal_reservas`,
-      `canal_sincronizaciones`, `canal_mensajes`, `canal_resenas`. Ninguna legible por `anon`
-- [x] Descriptor `CapacidadesCanal` + `ResultadoEnvio.noSoportado` en el puerto
-- [x] `src/lib/canales/csv.ts` — lector del informe del extranet (50 tests)
-- [x] `src/lib/canales/ical.ts` + `booking-ical.ts` — feed iCal (33 + 20 tests)
-- [x] `src/lib/canales/servicio.ts` — aterrizar e importar (15 tests contra Postgres)
-- [x] `src/app/(front-gestion)/panel/canales` — entrantes, mensajes y reseñas, con la advertencia de overbooking
-- [x] Área `canales` en permisos (admin, gerencia, **recepción**), navegación, icono y ayuda
-- [x] [ADR 0021](../decisiones/0021-canales-de-venta-solo-lectura.md)
-
-**Variables nuevas:** `CANAL_PROVIDER` (`simulado` | `booking-ical`, obligatoria en producción)
-y `BOOKING_ICAL_FEEDS` con pares `CODIGO_TIPO=url`.
-
-**Lo que se decidió y por qué (el detalle está en el ADR):**
-
-- **Staging, no escritura directa.** Lo que llega aterriza en `canal_reservas` y **no ocupa
-  inventario** hasta que alguien lo importa. Es lo que hace que el choque con el anti-overbooking
-  sea **visible**: si el canal sobrevendió, la fila queda en `error` con el motivo escrito en vez
-  de perderse en un log. Hay un test dedicado a ese caso.
-- **El precio lo pone el hotel.** El importe del canal es referencia para conciliar; el total se
-  recalcula a tarifa neto (ADR 0004). Si difiere, se avisa — nunca se ajusta.
-- **La importada entra `confirmada`**, no pendiente: si no, la expiración automática de la 0011
-  la borraría en 5 días y liberaría una unidad ya vendida.
-- **El CSV no es un provider.** Es una subida manual de archivo; el iCal sí es un sondeo. Meterlos
-  en el mismo `traerReservas` habría forzado que uno mintiera sobre lo que hace.
-- **Se buscan huéspedes sólo por email.** Por apellido se fusionarían dos personas distintas, que
-  es peor que tener dos fichas de la misma.
-
-**Trampas que aparecieron y quedaron cubiertas por tests:**
-
-- El separador del CSV es **punto y coma** cuando Excel exporta en español. Asumir coma no falla:
-  devuelve columnas vacías.
-- `10/09/2026` es el 10 de septiembre o el 9 de octubre y **no se puede resolver mirando el
-  archivo**. Se asume día/mes y la pantalla **advierte** cuántas fechas eran ambiguas.
-- `1.234,56` y `1,234.56` son el mismo número; leerlo mal es un factor de mil.
-- En iCal, el espacio inicial de una línea de continuación **es el marcador de plegado** y se
-  descarta (RFC 5545 §3.1). Para un espacio real hacen falta dos.
-- **`DTEND` de iCal ya es exclusivo** y coincide con nuestro `[desde, hasta)`. Restarle un día
-  —el reflejo natural— dejaría todas las estadías una noche cortas.
-- Un estado desconocido del canal cae en `nueva`, no en `cancelada`: interpretarlo mal liberaría
-  una unidad vendida.
-
-**Bug preexistente corregido de paso:** `src/lib/pricing/cotizar.ts` siempre creaba su propio cliente
-con `cookies()`, así que `crearReservaEnUnidadLibre` —que recibe un cliente justamente para poder
-correr con `service_role`— quedaba atada a una petición HTTP. No se podía crear una reserva desde
-un webhook, un cron ni un test, y el error no dejaba adivinar la causa. Ahora el cliente se
-inyecta; sin pasarlo, el comportamiento es el de antes.
-
 ## Paso 6 — Ficha de reserva completa ✅
 
 **Terminado el 2026-08-16.** `npm run check` exit 0 · 36 tests nuevos (12 contra Postgres).
@@ -304,8 +230,7 @@ los `update` de mudanza (0028) y reprogramación tocan la unidad y el período s
 cualquier `insert` directo futuro con sólo `huespedes` fallaría con un error que no explica nada.
 
 En su lugar, **`crear_reserva` deriva `huespedes` del desglose** (`adultos + menores`). Como es el
-**único** lugar donde nacen estadías —lo usan el panel, el portal público y la importación de
-canales— la coherencia queda garantizada en el origen. `desgloseCoincide()` es la red de
+**único** lugar donde nacen estadías —lo usan el panel y el portal público— la coherencia queda garantizada en el origen. `desgloseCoincide()` es la red de
 seguridad: la ficha avisa en pantalla si una fila vieja no cierra, en vez de mostrar dos números
 contradictorios en silencio.
 
@@ -342,13 +267,12 @@ enum del que dependen la exclusión GiST y el trigger de sincronización de esta
 ## Detalle original del paso 6 (**mostrar diff**)
 
 Están: huésped, fechas, noches, tipo y número de habitación, cantidad de habitaciones (grupales),
-canal, agencia, neto/rack, moneda, total, notas internas, política de cancelación, promoción, y el
+canal, neto/rack, moneda, total, notas internas, política de cancelación, promoción, y el
 ciclo completo (cancelar, reprogramar, cambiar de unidad — migración 0028).
 
 Faltan: **VIP**, **adultos/menores/bebés** (hoy `estadias.huespedes` es un `int` plano),
 **cama extra**, **cunas**, **plan** (habitación y desayuno), **«no mover»**, **voucher**,
-**descuento % y subtotal por reserva** (existe `agencias.descuento_pct`, no por reserva),
-**contrato o tarifa especial ligado a la reserva**.
+**descuento % y subtotal por reserva**.
 
 El estado `preautorización` no existe (hay 7 estados; `pendiente` cubre parte). El depósito está
 cubierto por `pagos.tipo = 'senia'`.
@@ -501,7 +425,7 @@ mirar la planilla de llegadas.
   proyecto prohíbe.
 - **Orden numérico dentro de la prioridad**: «9» antes que «102», que es el recorrido del pasillo.
 
-## Paso 10 — Piso, bloque y acciones rápidas ✅
+## Paso 10 — Piso y bloque ✅
 
 **Terminado el 2026-08-16.**
 
@@ -509,8 +433,6 @@ mirar la planilla de llegadas.
       clasificación inicial por categoría (Hostería / Cabañas)
 - [x] Filtros de la grilla por **bloque** (chips) y por **piso** + estado de limpieza (formulario)
 - [x] Orden de la grilla por recorrido físico: bloque → piso → orden → nombre
-- [x] Acciones rápidas en la columna de la unidad: limpieza y reportar desperfecto
-- [x] `mantenimiento/nueva?unidad=…` preselecciona la unidad (sin esto la acción no ahorraba nada)
 - [x] Sección en Configuración para cargar bloque, piso y orden
 
 **Decisiones:**
@@ -523,60 +445,12 @@ mirar la planilla de llegadas.
   «1» en todas sería un dato falso que nadie corregiría porque parecería cargado.
 - **Los valores de los filtros salen de los datos**, no de una lista fija: el hotel nombra sus
   sectores como quiera. Si no hay ninguno cargado, el filtro no aparece.
-- **Las acciones rápidas son enlaces, no botones de acción directa.** Un clic accidental en una
-  grilla densa no puede cambiar el estado de una habitación sin confirmación.
 
 **No implementado, con motivo:** «cerrar noche» y «optimizar asignación» del checklist. El primero
 es un proceso de cierre contable que necesita una definición del hotel (qué se congela, qué pasa
 con las cuentas abiertas); el segundo es un problema de asignación que exige decidir qué se
 optimiza —ocupación, rotación, ingresos— y esa decisión no está tomada. Se dejan afuera antes que
 adivinarlas.
-
-## Paso 11 — Respaldos ✅
-
-**Terminado el 2026-08-16.** 22 tests nuevos.
-
-### La parte incómoda, dicha de frente
-
-El pedido era «backups (o al menos un botón que dispare/verifique el backup automático de la
-base)». **La aplicación no puede hacer eso.** Los backups de Postgres los hace la plataforma
-(Supabase: copias diarias y, según el plan, PITR) y no hay API para dispararlos desde la app.
-
-Un botón que dijera «Hacer backup» sin hacerlo sería la peor función del sistema: alguien lo
-apretaría, vería «listo», y se enteraría de la verdad el día que necesite restaurar. Así que la
-pantalla hace tres cosas que sí son ciertas:
-
-1. **Explica quién es responsable de qué**, con nombre.
-2. **Exporta los datos operativos** a un JSON que el hotel se baja y guarda. No reemplaza al backup
-   de la base —no incluye usuarios de auth, políticas ni funciones— pero responde la pregunta que
-   importa («si esto se cae, ¿tengo mis reservas?») y **se puede abrir y verificar**, que es más de
-   lo que se puede decir del backup de la plataforma.
-3. **Registra cuándo fue la última vez**, para que la respuesta no dependa de que alguien se acuerde.
-
-- [x] Migración `0043_registro_de_respaldos.sql` — tabla `respaldos`, sin `update` ni `delete`
-- [x] `src/lib/domain/respaldos.ts` — las 22 tablas con el motivo de cada una, frescura, nombre de archivo
-- [x] `tests/dominio/respaldos.test.ts` — 22 tests, incluido el orden de dependencia de las tablas
-- [x] `src/app/(back-api)/api/respaldo/route.ts` — export completo, **solo admin**, con `traerTodo`
-- [x] `src/app/(front-gestion)/panel/respaldos` — estado, explicación, qué incluye y historial
-- [x] Área `respaldos`: admin exporta, **gerencia sólo mira** el estado
-
-**Decisiones:**
-
-- **Solo admin exporta.** El archivo concentra nombre, email y teléfono de todos los huéspedes que
-  pasaron por el hotel: es la mayor concentración de datos personales que el sistema puede producir.
-  Gerencia ve el estado —saber que hace 40 días que nadie exporta es información de gestión— pero
-  no baja el archivo.
-- **`traerTodo` y no un `select` pelado.** PostgREST corta en 1000 filas sin error y sin aviso. Un
-  respaldo truncado en silencio es peor que ninguno: parece completo.
-- **La aclaración de alcance va DENTRO del archivo**, no sólo en la pantalla: si alguien lo
-  encuentra en un disco en tres años tiene que saber qué no contiene.
-- **No se exporta todo.** Queda afuera lo regenerable (`intentos_limitados`) y `auditoria`, que
-  crece sin techo y no sirve para reconstruir la operación. Exportar de más hace el archivo más
-  grande y más peligroso, no más útil.
-- **Sin `update` ni `delete` en el registro.** Si se pudiera borrar, la respuesta a «cuándo fue el
-  último» dejaría de ser confiable — que es lo único que esa tabla existe para garantizar.
-- **«Nunca» se distingue de «viejo».** Son dos situaciones distintas: nadie lo configuró todavía,
-  contra alguien lo hacía y dejó de hacerlo.
 
 ## Detalle original del paso 9 — Housekeeping móvil
 
@@ -587,16 +461,10 @@ Faltan: llegadas/salidas/en reparación en el mismo panel, contadores por mucama
 (asignadas/limpiadas/faltantes/inspeccionadas), y el **flujo pensado para el celular de la
 mucama** — hoy es un tablero de administración.
 
-## Paso 10 — Piso/bloque + acciones rápidas (**mostrar diff**)
+## Paso 10 — Piso/bloque (**mostrar diff**)
 
 `unidades` tiene `tipo_unidad_id`, `nombre`, `estado`, `activo`, `asignada_a`. **No hay piso ni
-bloque.** Faltan también las acciones rápidas desde la celda de la grilla: mantenimiento, mucama,
-marcar sucia/limpia, cerrar noche.
-
-## Paso 11 — Backups
-
-No existe nada (`grep backup|respaldo` → cero). Falta el botón que dispare/verifique el backup y
-muestre cuándo fue el último. Solo admin.
+bloque.**
 
 ---
 

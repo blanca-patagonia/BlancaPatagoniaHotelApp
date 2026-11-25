@@ -1,10 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": [
+    "gru1"
+  ],
   "crons": [
-    {
-      "path": "/api/cron/canales",
-      "schedule": "0 6 * * *"
-    },
     {
       "path": "/api/cron/salud",
       "schedule": "*/15 * * * *"
@@ -16,14 +15,6 @@
     {
       "path": "/api/cron/notificaciones",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/recordatorios",
-      "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/ari",
-      "schedule": "20 6 * * *"
     }
   ]
 }

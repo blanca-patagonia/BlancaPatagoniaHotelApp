@@ -1,0 +1,19 @@
+@startuml
+!include _estilo.iuml
+left to right direction
+actor "Recepción" as REC
+rectangle "Reservas y estadías" {
+  usecase "**CU-02**\nHacer el check-in" as CU #FFF4D6
+  usecase "Buscar la reserva\n(llegadas de hoy)" as A
+  usecase "Completar los datos\ndel huésped" as B
+  usecase "Validar el cambio de estado\nde la reserva" as C
+  usecase "Registrar un pago" as D
+  usecase "Cambiar de unidad" as E
+}
+REC --> CU
+CU ..> A : <<include>>
+CU ..> C : <<include>>
+B ..> CU : <<extend>>
+D ..> CU : <<extend>>
+E ..> CU : <<extend>>
+@enduml

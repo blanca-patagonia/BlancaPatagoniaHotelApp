@@ -1,0 +1,31 @@
+@startuml
+!include _estilo.iuml
+left to right direction
+skinparam ArrowFontSize 10
+actor "Huésped" as HUE
+actor "Recepción" as REC
+actor "Housekeeping" as HK
+actor "Gerencia" as GER
+actor "Administrador" as ADM
+rectangle "**SISTEMA DE GESTIÓN HOTELERA**\nBlanca Patagonia" as SIS #D6E6F5
+rectangle "Pasarela\nde pagos" as PAS #FFFFFF
+rectangle "Servicio\nde correo" as COR #FFFFFF
+rectangle "Facturación\nelectrónica" as FAC #FFFFFF
+rectangle "Fuente de cotización\ndel dólar" as COT #FFFFFF
+HUE --> SIS : fechas · datos de la reserva ·\npago de la seña · encuesta
+SIS --> HUE : opciones con precio · código de reserva ·\ncomprobante · avisos
+REC --> SIS : reservas · check-in y check-out ·\nconsumos · pagos
+SIS --> REC : grilla de ocupación · llegadas y salidas ·\ncuenta del huésped · factura
+HK --> SIS : estado de limpieza\nde cada unidad
+SIS --> HK : unidades a limpiar\npor prioridad
+GER --> SIS : mes a consultar
+SIS --> GER : ocupación · tarifa media ·\ningresos · satisfacción
+ADM --> SIS : usuarios y roles · tarifas ·\ntemporadas · catálogo
+SIS --> ADM : auditoría · registro\nde errores
+SIS --> PAS : solicitud de cobro
+PAS --> SIS : aviso de pago acreditado
+SIS --> COR : confirmación · recordatorio ·\nencuesta
+SIS --> FAC : datos del comprobante
+FAC --> SIS : código de autorización (CAE)
+COT --> SIS : cotización del día
+@enduml

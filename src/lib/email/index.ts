@@ -15,8 +15,6 @@ import { renderizar, type EventoEmail } from '@/lib/domain/plantillas'
  */
 
 import { seleccionarProveedor, advertirSiEsSimulado, esProduccion } from '@/lib/integraciones/seleccion'
-import { crearClienteAdmin } from '@/lib/supabase/admin'
-import { registrarFalla } from '@/lib/acciones'
 import { ProveedorResend } from './resend'
 
 export interface MensajeEmail {
@@ -25,19 +23,6 @@ export interface MensajeEmail {
   cuerpo: string
   /** Variante HTML del mismo mensaje (Fase 5). Opcional: un proveedor puede ignorarla. */
   cuerpoHtml?: string
-  /**
-   * Clave de idempotencia propia (bandeja de mensajes, ADR 0043).
-   *
-   * ⚠️ Sin ella se usa `destinatario:asunto`, que sirve para los avisos —cada
-   * evento tiene su asunto— pero NO para una conversación: dos respuestas al
-   * mismo huésped en el mismo hilo («Re: Consulta») tienen igual asunto, y
-   * Resend devolvería el id de la primera sin mandar la segunda.
-   */
-  claveIdempotencia?: string
-  /** Cabeceras extra. La bandeja manda `In-Reply-To`/`References` para hilar. */
-  cabeceras?: Record<string, string>
-  /** A dónde responde el huésped, si no es el remitente. */
-  responderA?: string
 }
 
 export interface ResultadoEnvio {
@@ -45,12 +30,8 @@ export interface ResultadoEnvio {
   /** Detalle para mostrar en pantalla (motivo del rechazo o confirmación). */
   detalle: string
   /**
-   * Id que le dio el proveedor al mensaje.
-   *
-   * Es con lo que el webhook de entrega (`/api/webhooks/email/[proveedor]`) casa
-   * el evento contra la fila de la bandeja: sin él, un rebote no tiene a qué
-   * imputarse y el estado se queda en `enviada` para siempre — que es
-   * indistinguible de «salió bien y todavía no informaron».
+   * Id que le dio el proveedor al mensaje. Se guarda en la fila de la bandeja
+   * de salida para poder rastrear el envío del lado del proveedor.
    *
    * Opcional porque el proveedor de consola no manda nada y no tiene ninguno.
    */
@@ -163,38 +144,10 @@ export function verificarCredencialesDeEmail(valor = process.env.EMAIL_PROVIDER)
 }
 
 /**
- * Trae el override de asunto/cuerpo de `plantillas_email` (migración 0097),
- * si alguien lo editó desde el panel.
- *
- * Por `crearClienteAdmin()` y no el cliente del usuario: `enviarPlantilla` se
- * llama también desde cron y webhooks, donde no hay sesión ni cookies. El
- * contenido de una plantilla no es un dato sensible por rol — la RLS de la
- * tabla ya deja leerla a cualquier staff, esto solo evita depender de que
- * haya una petición HTTP con sesión detrás.
- */
-async function obtenerOverridePlantilla(
-  evento: EventoEmail,
-): Promise<{ asunto: string | null; cuerpo: string | null } | null> {
-  const { data, error } = await crearClienteAdmin()
-    .from('plantillas_email')
-    .select('asunto, cuerpo')
-    .eq('evento', evento)
-    .maybeSingle()
-  // Sin esto, una lectura que falla (RLS, la tabla caída, lo que sea) se
-  // confunde con «no hay texto editado para este evento»: el correo sale
-  // igual, pero con el texto ORIGINAL del código en vez del que alguien
-  // personalizó a mano, y nadie se entera de que la personalización no se
-  // aplicó.
-  registrarFalla(error, 'email:override_plantilla')
-  return data
-}
-
-/**
  * Renderiza una plantilla y la envía.
  *
  * Es el único punto por el que salen las comunicaciones al huésped: así el
- * texto siempre viene del catálogo de plantillas (o de su override editado
- * desde el panel) y nunca se arma a mano.
+ * texto siempre viene del catálogo de plantillas y nunca se arma a mano.
  */
 export async function enviarPlantilla(
   evento: EventoEmail,
@@ -203,8 +156,7 @@ export async function enviarPlantilla(
 ): Promise<ResultadoEnvio> {
   if (!para) return { ok: false, detalle: 'El destinatario no tiene email cargado.' }
 
-  const override = await obtenerOverridePlantilla(evento)
-  const { asunto, cuerpo, cuerpoHtml, faltantes } = renderizar(evento, variables, override ?? undefined)
+  const { asunto, cuerpo, cuerpoHtml, faltantes } = renderizar(evento, variables)
   if (faltantes.length > 0) {
     return {
       ok: false,

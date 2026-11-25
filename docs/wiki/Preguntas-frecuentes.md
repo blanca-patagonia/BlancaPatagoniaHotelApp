@@ -19,16 +19,14 @@ Vender dos veces la misma cabaña en El Calafate en enero es un huésped que lle
 desde el otro lado del mundo y no tiene dónde dormir, en un pueblo con todo lleno.
 No es un caso para confiar en que la app esté bien.
 
-### ¿Por qué la integración con Booking no evita el overbooking?
+### ¿Por qué esta versión no se conecta con Booking?
 
-Porque para publicarle disponibilidad a Booking hay que ser **Connectivity
-Partner**, y eso es una contratación del hotel, no código. Los dos caminos que
-quedan sin serlo —el informe CSV y el feed iCal— son de **sólo lectura**.
-
-Se declara en tres lugares: en `capacidades()`, en el resultado de envío (que
-distingue «no puedo» de «fallé») y en la pantalla. **Esas advertencias no se
-quitan**: la solución real es un *channel manager*
-([ADR 0021](Decisiones-de-arquitectura)).
+Porque el módulo de canales de venta se quitó de la rama de la tesis
+([ADR 0045](https://github.com/blanca-patagonia/BlancaPatagoniaHotelApp/blob/tesis-a-presentar/docs/decisiones/0045-version-reducida-para-la-tesis.md)).
+En `main` existe, y es de **sólo lectura**: publicarle disponibilidad a Booking
+exige ser *Connectivity Partner* (o contratar un *channel manager*), que es una
+decisión del hotel y no código. Con o sin módulo, la reserva de la OTA no evita
+el overbooking por sí sola.
 
 ### ¿Por qué el asistente del portal no usa un modelo de lenguaje?
 
@@ -42,19 +40,22 @@ Es un requisito de la tesis, y tiene una ventaja práctica: el código se lee ig
 que la documentación y que el vocabulario del hotel. `cargoPorCancelacion` y
 `rol_actual()` se entienden sin traducir.
 
-### ¿Por qué la exportación de datos no se llama «backup»?
+### ¿Quién hace los backups?
 
-Porque **la aplicación no puede hacer un backup de Postgres** — eso lo hace la
-plataforma. Un botón que dijera «hacer backup» daría por cubierto lo que no está,
-y sería la peor función del sistema. La pantalla explica exactamente qué exporta.
+**La aplicación no puede hacer un backup de Postgres**: lo hace la plataforma
+(Supabase). Por eso esta versión no tiene ningún botón de respaldo —el de `main`
+exporta datos operativos y lo aclara—: uno que dijera «hacer backup» daría por
+cubierto lo que no está. Y conviene recordar que **nunca se probó restaurar uno**
+(`docs/3-manuales/despliegue.md` §3.4).
 
-### ¿Por qué hay funciones apagadas en vez de borradas?
+### ¿Por qué se quitaron módulos pero las tablas siguen en la base?
 
-Tres áreas —Auditoría, Conversaciones y Objetos perdidos— están apagadas por
-decisión del hotel. El código, las tablas, las políticas y los tests siguen
-enteros: borrar tres módulos que funcionan para reescribirlos si el hotel cambia
-de idea supondría descartar trabajo ya verificado. Se reactivan retirando el
-nombre de una lista.
+La rama `tesis-a-presentar` quitó del código 14 de las 26 áreas del panel, pero **no
+tocó la base**: una migración aplicada no se edita, y borrar tablas con claves
+foráneas y funciones que las referencian no se puede verificar sin una base real.
+Quedan 39 tablas sin pantalla ni código, y la limpieza es un paso aparte.
+Todo lo quitado sigue en `main`, y cada módulo salió en un commit propio, así que
+se puede revertir uno sin tocar los demás.
 
 ### ¿Por qué el sistema no cotiza en invierno?
 
@@ -141,8 +142,8 @@ panel. Y no se nota en local, porque un contenedor que ya está corriendo conser
 la configuración con la que arrancó: el síntoma aparece recién en un entorno nuevo.
 Lo destapó el CI.
 
-**`npm run check` devuelve 0 con tests en rojo** si faltan las variables de la base.
-Debe leerse la salida, no el código de salida.
+**`npm test` sale verde con unos 580 tests salteados** si no hay base local, entre
+ellos el anti-overbooking. Debe leerse la salida, no el código de salida.
 
 ### De las pasarelas de pago
 

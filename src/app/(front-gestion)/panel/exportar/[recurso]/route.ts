@@ -15,7 +15,6 @@ import {
 } from '@/lib/fechas'
 import { metricasDeMes, ultimosMeses, type MetricasMes } from '@/lib/domain/metricas'
 import { mesValido } from '@/lib/domain/informes'
-import { deLista } from '@/lib/domain/listas'
 import {
   filasLibroVentas,
   type FacturaLibro,
@@ -35,15 +34,10 @@ import {
   type Plan,
   type Segmento,
 } from '@/lib/domain/reservas'
-import { esNotaDeCredito, nombreDeComprobante, numeroVisible } from '@/lib/domain/comprobante-qr'
 import { consultaReservas, filtroTermino } from '../../reservas/consulta'
+import { reservasConSaldoVencido } from '@/lib/reservas/atencion'
 import { traerEstadias, traerUnidades } from '../../reportes/datos'
-import { busquedaHuespedes, busquedaOrdenes, busquedaProveedores, contiene } from '../busquedas'
-import {
-  CATEGORIAS_GASTO,
-  ETIQUETAS_CATEGORIA_GASTO,
-  type CategoriaGasto,
-} from '@/lib/domain/gastos'
+import { busquedaHuespedes } from '../busquedas'
 
 /**
  * Punto único de exportación a CSV del panel.
@@ -165,8 +159,6 @@ function termino(params: URLSearchParams): string | null {
   return terminoBusqueda(params.get('q') ?? undefined)
 }
 
-const SI_NO = (v: boolean) => (v ? 'Sí' : 'No')
-
 interface FilaReserva {
   codigo: string
   estado: EstadoReserva
@@ -208,6 +200,18 @@ const RECURSOS: Record<string, Definicion> = {
     generar: async (supabase, params) => {
       const q = params.get('q') ?? undefined
       const orTermino = await filtroTermino(supabase, q)
+      const vista = esVista(params.get('vista') ?? undefined)
+        ? (params.get('vista') as VistaReservas)
+        : undefined
+      const hoy = hoyISO()
+      // «Saldo pendiente» se resuelve con la misma función que la pantalla; si
+      // la lectura falla, el CSV no puede salir vacío como si no hubiera nada.
+      let idsSaldoVencido: string[] | undefined
+      if (vista === 'por_cobrar') {
+        const r = await reservasConSaldoVencido(supabase, hoy)
+        if (r.error) throw new FallaDeLectura('reservas con saldo pendiente', r.error.message)
+        idsSaldoVencido = r.ids
+      }
       const consulta = consultaReservas(
         supabase,
         {
@@ -220,16 +224,14 @@ const RECURSOS: Record<string, Definicion> = {
           // La vista tiene que viajar o el CSV bajaría todas las reservas
           // mientras la pantalla muestra sólo las llegadas de hoy. El botón de
           // exportar ya conserva los filtros vigentes en la URL.
-          vista: esVista(params.get('vista') ?? undefined)
-            ? (params.get('vista') as VistaReservas)
-            : undefined,
+          vista,
           plan: params.get('plan') ?? undefined,
           garantia: params.get('garantia') ?? undefined,
           segmento: params.get('segmento') ?? undefined,
-          contrato: params.get('contrato') ?? undefined,
           unidad: params.get('unidad') ?? undefined,
           tipoUnidad: params.get('tipo') ?? undefined,
-          hoy: hoyISO(),
+          hoy,
+          idsSaldoVencido,
         },
         orTermino,
       )
@@ -434,239 +436,6 @@ const RECURSOS: Record<string, Definicion> = {
     ),
   },
 
-  agencias: {
-    area: 'agencias',
-    archivo: 'agencias',
-    generar: simple<{
-      nombre: string
-      tipo: string
-      cuit: string | null
-      email: string | null
-      descuento_pct: number
-      activo: boolean
-    }>(
-      'agencias',
-      'nombre, tipo, cuit, email, descuento_pct, activo',
-      { columna: 'nombre' },
-      [
-        { titulo: 'Nombre', valor: (a) => a.nombre },
-        { titulo: 'Tipo', valor: (a) => a.tipo },
-        { titulo: 'CUIT', valor: (a) => a.cuit ?? '' },
-        { titulo: 'Email', valor: (a) => a.email ?? '' },
-        { titulo: 'Descuento %', valor: (a) => decimal(a.descuento_pct) },
-        { titulo: 'Activa', valor: (a) => SI_NO(a.activo) },
-      ],
-      (c, p) => {
-        const t = termino(p)
-        return t ? c.ilike('nombre', contiene(t)) : c
-      },
-    ),
-  },
-
-  gastos: {
-    area: 'conciliacion',
-    archivo: 'gastos-operativos',
-    generar: simple<{
-      fecha: string
-      categoria: string
-      descripcion: string
-      monto: number | string
-      moneda: string
-    }>(
-      'gastos_operativos',
-      'fecha, categoria, descripcion, monto, moneda',
-      { columna: 'fecha', descendente: true },
-      [
-        { titulo: 'Fecha', valor: (g) => g.fecha },
-        {
-          titulo: 'Categoría',
-          valor: (g) => ETIQUETAS_CATEGORIA_GASTO[g.categoria as CategoriaGasto] ?? g.categoria,
-        },
-        { titulo: 'Descripción', valor: (g) => g.descripcion },
-        { titulo: 'Monto', valor: (g) => decimal(g.monto) },
-        { titulo: 'Moneda', valor: (g) => g.moneda },
-      ],
-      (c, p) => {
-        // Los mismos filtros que la pantalla: categoría y búsqueda en la descripción.
-        const categoria = deLista(CATEGORIAS_GASTO, p.get('categoria'))
-        const t = termino(p)
-        let filtrada = categoria ? c.eq('categoria', categoria) : c
-        if (t) filtrada = filtrada.ilike('descripcion', contiene(t))
-        return filtrada
-      },
-    ),
-  },
-
-  proveedores: {
-    area: 'proveedores',
-    archivo: 'proveedores',
-    generar: simple<{
-      nombre: string
-      rubro: string | null
-      cuit: string | null
-      email: string | null
-      telefono: string | null
-      activo: boolean
-    }>(
-      'proveedores',
-      'nombre, rubro, cuit, email, telefono, activo',
-      { columna: 'nombre' },
-      [
-        { titulo: 'Nombre', valor: (p) => p.nombre },
-        { titulo: 'Rubro', valor: (p) => p.rubro ?? '' },
-        { titulo: 'CUIT', valor: (p) => p.cuit ?? '' },
-        { titulo: 'Email', valor: (p) => p.email ?? '' },
-        { titulo: 'Teléfono', valor: (p) => p.telefono ?? '' },
-        { titulo: 'Activo', valor: (p) => SI_NO(p.activo) },
-      ],
-      (c, p) => {
-        const t = termino(p)
-        return t ? c.or(busquedaProveedores(t)) : c
-      },
-    ),
-  },
-
-  /*
-    Comprobantes recibidos — la segunda mitad del objetivo 9.
-
-    «Que se le saque una foto a una factura y que se carguen los datos de esa
-    factura a un excel»: la foto la resuelve el escaneo del QR, y el «excel» es
-    esto. Se baja como CSV con `;`, que es lo que Excel en es-AR abre en columnas
-    sin preguntar nada.
-
-    Las columnas son las que sirven para conciliar contra el papel y para pasarle
-    el archivo al contador: identidad fiscal completa, importe con su moneda, y de
-    dónde salieron los datos —un número tipeado puede estar mal y uno del QR no—.
-  */
-  comprobantes: {
-    area: 'proveedores',
-    archivo: 'comprobantes-recibidos',
-    generar: simple<{
-      fecha: string
-      tipo_codigo: number
-      letra: string | null
-      punto_venta: number
-      numero: number
-      cuit_emisor: string
-      razon_social: string | null
-      total: number | string
-      moneda: string
-      cae: string
-      origen_dato: string
-      movimiento_id: string | null
-      proveedor: { nombre: string } | null
-    }>(
-      'comprobantes_recibidos',
-      'fecha, tipo_codigo, letra, punto_venta, numero, cuit_emisor, razon_social, total, moneda, cae, origen_dato, movimiento_id, proveedor:proveedores(nombre)',
-      { columna: 'fecha', descendente: true },
-      [
-        { titulo: 'Fecha', valor: (c) => c.fecha },
-        { titulo: 'Comprobante', valor: (c) => nombreDeComprobante(c.tipo_codigo) },
-        { titulo: 'Letra', valor: (c) => c.letra ?? '' },
-        { titulo: 'Número', valor: (c) => numeroVisible(c.punto_venta, c.numero) },
-        { titulo: 'CUIT emisor', valor: (c) => c.cuit_emisor },
-        { titulo: 'Razón social', valor: (c) => c.razon_social ?? c.proveedor?.nombre ?? '' },
-        { titulo: 'Moneda', valor: (c) => c.moneda },
-        // Sin comillas ni símbolo: Excel lo tiene que poder sumar.
-        { titulo: 'Total', valor: (c) => decimal(c.total) },
-        // El signo contable, resuelto acá: una nota de crédito devuelve plata.
-        { titulo: 'Signo', valor: (c) => (esNotaDeCredito(c.tipo_codigo) ? 'Haber' : 'Debe') },
-        { titulo: 'CAE', valor: (c) => c.cae },
-        { titulo: 'Origen del dato', valor: (c) => (c.origen_dato === 'qr' ? 'QR' : 'Manual') },
-        { titulo: 'Imputado', valor: (c) => SI_NO(c.movimiento_id !== null) },
-        { titulo: 'Proveedor', valor: (c) => c.proveedor?.nombre ?? '' },
-      ],
-      (c, p) => {
-        // Los mismos filtros que la pantalla: la vista «sin imputar» y la búsqueda.
-        let filtrada = p.get('vista') === 'sin_imputar' ? c.is('movimiento_id', null) : c
-        const t = termino(p)
-        if (t) filtrada = filtrada.ilike('razon_social', contiene(t))
-        return filtrada
-      },
-    ),
-  },
-
-  mantenimiento: {
-    area: 'mantenimiento',
-    archivo: 'ordenes-mantenimiento',
-    generar: simple<{
-      titulo: string
-      descripcion: string | null
-      prioridad: string
-      estado: string
-      creada_en: string
-      unidad: { nombre: string } | null
-    }>(
-      'ordenes_mantenimiento',
-      'titulo, descripcion, prioridad, estado, creada_en, unidad:unidades(nombre)',
-      { columna: 'creada_en', descendente: true },
-      [
-        { titulo: 'Unidad', valor: (o) => o.unidad?.nombre ?? '' },
-        { titulo: 'Título', valor: (o) => o.titulo },
-        { titulo: 'Descripción', valor: (o) => o.descripcion ?? '' },
-        { titulo: 'Prioridad', valor: (o) => o.prioridad },
-        { titulo: 'Estado', valor: (o) => o.estado },
-        { titulo: 'Creada', valor: (o) => (o.creada_en ? fechaDelHotel(o.creada_en) : '') },
-      ],
-      (c, p) => {
-        // Los mismos filtros que la pantalla: estado, prioridad y búsqueda.
-        const estado = deLista(['pendiente', 'en_proceso', 'resuelta'] as const, p.get('estado'))
-        const prioridad = deLista(['baja', 'media', 'alta'] as const, p.get('prioridad'))
-        let filtrada = estado ? c.eq('estado', estado) : c
-        if (prioridad) filtrada = filtrada.eq('prioridad', prioridad)
-        const t = termino(p)
-        if (t) filtrada = filtrada.or(busquedaOrdenes(t))
-        return filtrada
-      },
-    ),
-  },
-
-  'objetos-perdidos': {
-    area: 'objetos_perdidos',
-    archivo: 'objetos-perdidos',
-    generar: simple<{
-      descripcion: string
-      ubicacion: string | null
-      fecha_hallazgo: string
-      estado: string
-    }>(
-      'objetos_perdidos',
-      'descripcion, ubicacion, fecha_hallazgo, estado',
-      { columna: 'fecha_hallazgo', descendente: true },
-      [
-        { titulo: 'Descripción', valor: (o) => o.descripcion },
-        { titulo: 'Ubicación', valor: (o) => o.ubicacion ?? '' },
-        { titulo: 'Hallazgo', valor: (o) => o.fecha_hallazgo },
-        { titulo: 'Estado', valor: (o) => o.estado },
-      ],
-    ),
-  },
-
-  'lista-compras': {
-    area: 'servicio',
-    archivo: 'lista-compras',
-    generar: simple<{
-      nombre: string
-      cantidad: string
-      precio_estimado: number | string | null
-      comprado: boolean
-      nota: string
-    }>(
-      'lista_compras_cocina',
-      'nombre, cantidad, precio_estimado, comprado, nota',
-      { columna: 'nombre' },
-      [
-        { titulo: 'Artículo', valor: (i) => i.nombre },
-        { titulo: 'Cantidad', valor: (i) => i.cantidad },
-        {
-          titulo: 'Precio estimado ARS',
-          valor: (i) => decimal(i.precio_estimado),
-        },
-        { titulo: 'Comprado', valor: (i) => SI_NO(i.comprado) },
-        { titulo: 'Nota', valor: (i) => i.nota },
-      ],
-    ),
-  },
 }
 
 /**

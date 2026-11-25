@@ -2,6 +2,13 @@
 
 **Fecha:** 2026-08-07 · **Alcance:** todo el repositorio, sin modificar código.
 
+> **Fotografía de esa fecha.** Las cifras (commits, archivos, tests, tablas, usos de
+> `service_role`) son las del 2026-08-07 y **no se actualizan**: este informe es el
+> punto de partida de la auditoría, no el estado de hoy. Lo que cambió desde
+> entonces está en `SEGURIDAD.md` y en la bitácora. De la lista de superficie se
+> sacaron las rutas de los módulos que la rama `tesis-a-presentar` no tiene
+> (ADR 0045).
+
 Este informe es el punto de partida de una auditoría de seguridad y robustez.
 No asume que nada esté bien: cada afirmación se apoya en una comprobación hecha
 sobre el repositorio, y se indica cómo repetirla.
@@ -79,8 +86,7 @@ Tres comprobaciones independientes, todas limpias:
 const password = process.env.ADMIN_PASSWORD ?? 'blancadev1234'
 ```
 
-Está documentada en `README.md` y `CLAUDE.md` como credencial **de
-desarrollo**. El riesgo no es que esté en el repo, sino que **si alguien corre
+Está documentada en `CLAUDE.md` como credencial **de desarrollo**. El riesgo no es que esté en el repo, sino que **si alguien corre
 el seed contra la base de producción sin definir `ADMIN_PASSWORD`, queda un
 administrador con contraseña pública**. Se trata en la Fase 1.
 
@@ -96,8 +102,6 @@ administrador con contraseña pública**. Se trata en la Fase 1.
 /reservar/checkout            alta de reserva  ← escribe en la base
 /reservar/confirmacion/[token]
 /encuesta/[token]             ← escribe
-/firmar/[token]               ← escribe (firma de contratos)
-/portal/[token]               cuenta corriente de agencias y proveedores
 /login                        ← autenticación
 /api/webhooks/pagos/[proveedor]  ← escribe (pagos)
 ```
@@ -108,14 +112,12 @@ administrador con contraseña pública**. Se trata en la Fase 1.
 que la expone (`lib/supabase/admin.ts`) está marcado con `server-only`, lo que
 impide que un import accidental la filtre al navegador — verificado.
 
-Siete de esos usos están en rutas públicas y son los que más importan:
+Cinco de esos usos están en rutas públicas y son los que más importan:
 
 | Ruta pública | Qué la protege |
 |---|---|
 | `/api/webhooks/pagos/…` | Verifica firma; responde 401 si falla |
-| `/firmar/[token]` | Token opaco + límite por IP |
 | `/encuesta/[token]` | Token opaco |
-| `/portal/[token]` | Token opaco |
 | `/reservar/confirmacion/[token]` | Token opaco |
 | `/reservar` (alta) | Solo validación de campos |
 | Asistente del portal | Límite por IP |
@@ -183,7 +185,7 @@ No todo es deuda; conviene registrar lo que no hay que rehacer.
   typecheck, lint, los 342 tests y el build en cada push.
 - **Auditoría de operaciones sensibles** (`auditoria`), append-only, con los
   permisos de escritura revocados a `authenticated`.
-- **Ningún borde externo real**: pagos, facturación, firma, email y asistente
+- **Ningún borde externo real**: pagos, facturación, email y asistente
   son adapters con stub. No hay credenciales de terceros que filtrar.
 - ESLint y TypeScript `strict` corriendo en CI.
 
@@ -217,5 +219,5 @@ comm -23 \
   <(grep -rhoE "alter table [a-z_]+ +enable row level security" supabase/migrations/*.sql | awk '{print $3}' | sort -u)
 
 # Dónde se usa la clave privilegiada
-grep -rln "crearClienteAdmin" app lib
+grep -rln "crearClienteAdmin" src
 ```

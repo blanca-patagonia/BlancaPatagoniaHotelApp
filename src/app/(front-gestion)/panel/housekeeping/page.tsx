@@ -23,8 +23,10 @@ import {
   botonClases,
   Pagina,
   Mensaje,
+  Explicacion,
+  PieDeFormulario,
 } from '../_components/ui'
-import { cambiarEstadoUnidad, asignarMucama } from './actions'
+import { cambiarEstadoUnidad, asignarMucama, asignarVarias } from './actions'
 
 interface UnidadRow {
   id: string
@@ -40,7 +42,7 @@ interface Mucama {
 }
 
 /** Una unidad con sus botones de estado y su selector de responsable. */
-function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
+function FilaUnidad({ u, mucamas, vista }: { u: UnidadRow; mucamas: Mucama[]; vista?: string }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-t border-stone-100 px-4 py-3 first:border-0">
       <EstadoUnidad estado={u.estado} />
@@ -70,6 +72,8 @@ function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
 
       <form action={asignarMucama} className="flex items-center gap-1.5">
         <input type="hidden" name="unidad_id" value={u.id} />
+        {/* Para volver a la misma vista después de asignar. */}
+        {vista && <input type="hidden" name="vista" value={vista} />}
         {/*
           `<label>` visible y no `aria-label` a secas (Fase 15): un lector de
           pantalla que llega al control por tabulación, sin haber leído antes
@@ -77,7 +81,7 @@ function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
           contexto de a qué habitación correspondía.
         */}
         <label className="flex items-center gap-1 text-xs text-stone-500">
-          <span>Mucama</span>
+          <span>Responsable</span>
           <select
             name="mucama_id"
             defaultValue={u.asignada_a ?? ''}
@@ -107,12 +111,22 @@ function FilaUnidad({ u, mucamas }: { u: UnidadRow; mucamas: Mucama[] }) {
 const MENSAJES_ERROR: Record<string, string> = {
   estado: 'No se pudo cambiar el estado de la unidad. Quedó como estaba.',
   asignar: 'No se pudo asignar la mucama/o. La unidad quedó como estaba.',
+  sin_marcar: 'Marcá al menos una habitación para repartir.',
+  asignar_parcial:
+    'Algunas habitaciones no se pudieron asignar. Revisá la lista: las que no cambiaron siguen como estaban.',
 }
 
 export default async function HousekeepingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string; mucama?: string; vista?: string; error?: string }>
+  searchParams: Promise<{
+    estado?: string
+    mucama?: string
+    vista?: string
+    error?: string
+    ok?: string
+    n?: string
+  }>
 }) {
   await requerirAcceso('housekeeping')
   const sp = await searchParams
@@ -146,9 +160,8 @@ export default async function HousekeepingPage({
         .select('unidad_id, check_in, check_out')
         .in('estado', [...ESTADOS_DEL_DIA_HOUSEKEEPING])
         .or(`check_in.eq.${hoy},check_out.eq.${hoy}`),
-      supabase.from('ordenes_mantenimiento').select('unidad_id').neq('estado', 'resuelta'),
     ])
-  const [{ data }, { data: mucamasData }, { data: estadiasData }, { data: ordenesData }] = lecturas
+  const [{ data }, { data: mucamasData }, { data: estadiasData }] = lecturas
   /*
     Nunca descartar el error de una lectura (regla de la auditoría QA/UX): un
     saldo o una lista vacía por una lectura fallida se ven igual que un dato
@@ -166,11 +179,6 @@ export default async function HousekeepingPage({
     if (e.check_in === hoy) llegaHoy.add(e.unidad_id)
     if (e.check_out === hoy) saleHoy.add(e.unidad_id)
   }
-  const enReparacion = new Set(
-    ((ordenesData ?? []) as { unidad_id: string | null }[])
-      .map((o) => o.unidad_id)
-      .filter((x): x is string => Boolean(x)),
-  )
 
   /** Las unidades en la forma del dominio, para poder priorizarlas y contarlas. */
   const paraDominio: UnidadHousekeeping[] = todas.map((u) => ({
@@ -182,7 +190,6 @@ export default async function HousekeepingPage({
     ocupada: false,
     saleHoy: saleHoy.has(u.id),
     llegaHoy: llegaHoy.has(u.id),
-    enReparacion: enReparacion.has(u.id),
   }))
   const resumen = contadores(paraDominio)
 
@@ -258,11 +265,18 @@ export default async function HousekeepingPage({
         </div>
       )}
 
+      {sp.ok === 'asignadas' && (
+        <Mensaje tono="ok">
+          Listo: {Number(sp.n) === 1 ? 'se asignó 1 habitación' : `se asignaron ${Number(sp.n) || 'las'} habitaciones`}.
+          Cada responsable ya las ve en su «Vista para el celular».
+        </Mensaje>
+      )}
+
       {/* ── Contexto operativo del día ────────────────────────────────────────
           Lo que WinPAX mostraba y acá faltaba: no sólo cuántas están sucias, sino
           cuántas tienen a alguien llegando hoy. Es la diferencia entre una lista de
           estados y un orden de trabajo. */}
-      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
           titulo="Faltan por hacer"
           valor={String(resumen.faltantes)}
@@ -287,13 +301,6 @@ export default async function HousekeepingPage({
           detalle="se desocupan y hay que prepararlas"
           icono="salir"
           tono="alerta"
-        />
-        <Kpi
-          titulo="En reparación"
-          valor={String(enReparacion.size)}
-          detalle="no se limpian hasta resolverlas"
-          icono="mantenimiento"
-          href="/panel/mantenimiento"
         />
       </div>
 
@@ -369,16 +376,101 @@ export default async function HousekeepingPage({
         </Tarjeta>
       ) : porMucama ? (
         <div className="flex flex-col gap-4">
+          {/*
+            Para qué es esta vista y cómo se usa. Sin esto se veía una lista de
+            habitaciones con un desplegable y un botón, y no se entendía que se
+            trataba de repartir el trabajo (lo marcó el docente al probar la demo).
+          */}
+          <Explicacion titulo="Repartir el trabajo de limpieza">
+            Cada habitación tiene una responsable. Lo que se asigna acá es lo que cada una ve en su
+            celular («Vista para el celular»), ordenado por prioridad. Para repartir varias de una
+            vez, marcalas abajo y elegí a quién; para cambiar una sola, usá su desplegable
+            «Responsable» y tocá «Asignar».
+            {mucamas.length === 0 && (
+              <span className="mt-1 block font-medium">
+                Todavía no hay personal de housekeeping dado de alta: se crea desde Usuarios, con el
+                rol Housekeeping.
+              </span>
+            )}
+          </Explicacion>
+
+          {/* Cuántas tiene cada una: el reparto de un vistazo. */}
+          <div className="flex flex-wrap gap-2" aria-label="Habitaciones por responsable">
+            {[...grupos.entries()].map(([clave, lista]) => (
+              <span
+                key={clave}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm ring-1 ${
+                  clave === 'sin'
+                    ? 'bg-lenga-50 text-lenga-900 ring-lenga-200'
+                    : 'bg-lago-50 text-lago-900 ring-lago-200'
+                }`}
+              >
+                {clave === 'sin' ? 'Sin asignar' : (nombreMucama.get(clave) ?? 'Responsable')}
+                <strong className="tabular">{lista.length}</strong>
+              </span>
+            ))}
+          </div>
+
+          {mucamas.length > 0 && (
+            <Tarjeta
+              titulo="Repartir varias habitaciones"
+              descripcion="Marcá las habitaciones, elegí la responsable y confirmá."
+            >
+              <form action={asignarVarias} className="flex flex-col gap-4 p-5">
+                <fieldset>
+                  <legend className="sr-only">Habitaciones a asignar</legend>
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                    {unidades.map((u) => (
+                      <label
+                        key={u.id}
+                        className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm transition hover:border-lago-300 has-[:checked]:border-lago-600 has-[:checked]:bg-lago-50"
+                      >
+                        <input type="checkbox" name="unidad_id" value={u.id} className="size-4 accent-lago-600" />
+                        <EstadoUnidad estado={u.estado} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium text-stone-800">{u.nombre}</span>
+                          <span className="block truncate text-xs text-stone-500">
+                            {u.asignada_a ? (nombreMucama.get(u.asignada_a) ?? 'Asignada') : 'Sin asignar'}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <PieDeFormulario flotante={false} hayObligatorios={false}>
+                  <label className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-2">
+                    <span className="font-medium text-stone-700">Asignar a</span>
+                    <select
+                      name="mucama_id"
+                      defaultValue={mucamas[0]?.id ?? ''}
+                      className="w-full rounded-lg border border-stone-300 px-2 py-2 text-sm focus:border-lago-500 focus:outline-none sm:w-auto"
+                    >
+                      {mucamas.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nombre}
+                        </option>
+                      ))}
+                      <option value="">Nadie (dejar sin asignar)</option>
+                    </select>
+                  </label>
+                  <BotonEnvio cargando="Asignando…" extra="w-full sm:w-auto">
+                    Asignar las marcadas
+                  </BotonEnvio>
+                </PieDeFormulario>
+              </form>
+            </Tarjeta>
+          )}
+
           {[...grupos.entries()].map(([clave, lista]) => (
             <Tarjeta
               key={clave}
               titulo={clave === 'sin' ? 'Sin asignar' : (nombreMucama.get(clave) ?? 'Responsable')}
-              descripcion={`${lista.length} unidad(es)`}
+              descripcion={`${lista.length} ${lista.length === 1 ? 'habitación' : 'habitaciones'}`}
               className="overflow-hidden"
             >
               <ul>
                 {lista.map((u) => (
-                  <FilaUnidad key={u.id} u={u} mucamas={mucamas} />
+                  <FilaUnidad key={u.id} u={u} mucamas={mucamas} vista="mucama" />
                 ))}
               </ul>
             </Tarjeta>

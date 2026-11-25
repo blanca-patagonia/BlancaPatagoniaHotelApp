@@ -1,0 +1,33 @@
+@startuml
+!include _estilo.iuml
+skinparam packageStyle folder
+package "Presentación — src/app" {
+  rectangle "(front-publico)\nportal del huésped" as A1
+  rectangle "(front-gestion)\npanel por rol y login" as A2
+  rectangle "(back-api)\nwebhook de pagos,\ntareas programadas, salud" as A3
+}
+package "Lógica — src/lib" {
+  rectangle "domain\nreglas puras de negocio" as L1
+  rectangle "reservas · pricing · availability\nauth · notificaciones" as L2
+  rectangle "payments · facturacion\nemail · divisas" as L3
+  rectangle "supabase\nclientes de datos" as L4
+}
+package "Datos — Supabase" {
+  database "PostgreSQL\ntablas, funciones,\ndisparadores y RLS por rol" as D1
+  rectangle "Auth\nusuarios del personal" as D2
+  rectangle "Storage\nfotos de housekeeping" as D3
+}
+A1 --> L2
+A2 --> L2
+A3 --> L3
+A1 --> L1
+A2 --> L1
+A2 --> L3
+L2 --> L1
+L3 --> L1
+L2 --> L4
+L3 --> L4
+L4 --> D1
+L4 --> D2
+L4 --> D3
+@enduml

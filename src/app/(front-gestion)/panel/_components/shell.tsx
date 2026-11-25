@@ -38,31 +38,17 @@ import { BuscadorGlobal } from './buscador-global'
 const ICONO_AREA: Record<Area, NombreIcono> = {
   dashboard: 'inicio',
   ocupacion: 'ocupacion',
-  servicio: 'reportes',
   reservas: 'reservas',
   punto_venta: 'objetos',
   huespedes: 'huespedes',
   housekeeping: 'housekeeping',
-  mantenimiento: 'mantenimiento',
-  objetos_perdidos: 'objetos',
-  avisos: 'avisos',
-  bandeja: 'chat',
-  conversaciones: 'chat',
-  agencias: 'agencias',
-  proveedores: 'proveedores',
-  contratos: 'contratos',
-  canales: 'canales',
-  conciliacion: 'conciliacion',
   auditoria: 'auditoria',
   // Se reusa `alerta` en vez de dibujar un icono nuevo: es exactamente lo que
   // significa la pantalla y ya está en la paleta.
   errores: 'alerta',
-  notificaciones: 'sobre',
   reportes: 'reportes',
-  ia: 'ia',
   config: 'config',
   usuarios: 'usuarios',
-  respaldos: 'descargar',
   ayuda: 'ayuda',
 }
 
@@ -207,10 +193,19 @@ function Enlaces({
   )
 }
 
-function Marca({ colapsado = false }: { colapsado?: boolean }) {
+/**
+ * Logo y nombre del hotel, arriba del menú. Es un enlace al Inicio: en casi
+ * todos los sistemas el logo lleva a la portada y la gente lo busca por reflejo
+ * (lo pidió el docente al probar la demo: «siempre van al ícono y van al inicio»).
+ */
+function Marca({ colapsado = false, alNavegar }: { colapsado?: boolean; alNavegar?: () => void }) {
   return (
-    <div
-      className={`flex items-center gap-3 border-b border-white/10 py-4 ${colapsado ? 'justify-center px-2' : 'px-4'}`}
+    <Link
+      href="/panel"
+      onClick={alNavegar}
+      aria-label="Blanca Patagonia · ir al Inicio"
+      title="Ir al Inicio"
+      className={`flex items-center gap-3 border-b border-white/10 py-4 transition hover:bg-white/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white ${colapsado ? 'justify-center px-2' : 'px-4'}`}
     >
       <Logotipo tam={34} />
       {!colapsado && (
@@ -223,8 +218,39 @@ function Marca({ colapsado = false }: { colapsado?: boolean }) {
           </p>
         </div>
       )}
-    </div>
+    </Link>
   )
+}
+
+/**
+ * Cada pantalla nueva abre desde arriba.
+ *
+ * El panel desplaza la ventana entera (el menú es `sticky`), y Next sólo lleva
+ * la vista al comienzo de la página nueva cuando ese comienzo quedó fuera de la
+ * pantalla. Con la barra superior fija y los esqueletos de carga eso no se
+ * cumplía: quien bajaba en Punto de venta y pasaba a Huéspedes caía a mitad del
+ * formulario, sin haberse movido (lo marcó el docente al probar la demo).
+ *
+ * Sólo al AVANZAR: al volver con «atrás» el navegador restaura la posición en
+ * la que estaba esa pantalla, que es lo que se espera. `popstate` se dispara
+ * antes de que cambie la ruta, así que la marca llega a tiempo.
+ */
+function useArribaAlNavegar(pathname: string) {
+  const volviendo = useRef(false)
+  useEffect(() => {
+    const alVolver = () => {
+      volviendo.current = true
+    }
+    window.addEventListener('popstate', alVolver)
+    return () => window.removeEventListener('popstate', alVolver)
+  }, [])
+  useEffect(() => {
+    if (volviendo.current) {
+      volviendo.current = false
+      return
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [pathname])
 }
 
 /**
@@ -476,6 +502,7 @@ interface Props {
 export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props) {
   const pathname = usePathname()
   const [abierto, setAbierto] = useState(false)
+  useArribaAlNavegar(pathname)
 
   const ancho = useSyncExternalStore(
     suscribirAncho,
@@ -686,7 +713,7 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
           >
             <div className="flex items-center justify-between border-b border-white/10 pr-2">
               <div className="min-w-0 flex-1">
-                <Marca />
+                <Marca alNavegar={() => setAbierto(false)} />
               </div>
               <button
                 type="button"
@@ -717,9 +744,13 @@ export function PanelShell({ rol, nombre, rolEtiqueta, salir, children }: Props)
           >
             <Icono nombre="menu" tam={20} />
           </button>
-          <span className="font-display text-base font-semibold text-lago-800 lg:hidden">
+          <Link
+            href="/panel"
+            title="Ir al Inicio"
+            className="font-display text-base font-semibold text-lago-800 lg:hidden"
+          >
             Blanca Patagonia
-          </span>
+          </Link>
 
           {/*
             Espaciador izquierdo. Junto con su gemelo de la derecha es lo que

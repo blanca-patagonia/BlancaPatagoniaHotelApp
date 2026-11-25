@@ -1,5 +1,6 @@
-import { puedeAcceder, rutaDeArea, ETIQUETAS_AREA, type Area } from './permisos'
+import { puedeAcceder, ETIQUETAS_AREA, type Area } from './permisos'
 import type { Rol } from './roles'
+import { INDICADORES } from './metricas'
 
 /**
  * Contenido de la guía de uso del sistema.
@@ -51,16 +52,6 @@ export const PRIMEROS_PASOS: Paso[] = [
     titulo: 'Desde el celular se ve distinto',
     detalle:
       'En pantallas chicas algunas columnas de las tablas se ocultan para que se pueda leer sin mover la pantalla de costado. Los datos completos están siempre tocando la fila.',
-  },
-  {
-    titulo: 'Se puede instalar en el teléfono',
-    detalle:
-      'El sistema se agrega a la pantalla de inicio y se abre como una aplicación, sin la barra del navegador. En Android aparece un cartel con el botón "Instalar"; en iPhone hay que tocar el botón de compartir de Safari y elegir "Agregar a inicio".',
-  },
-  {
-    titulo: 'Sin internet no se puede trabajar, y el sistema lo avisa',
-    detalle:
-      'Aunque esté instalado como aplicación, el sistema no guarda una copia de los datos en el teléfono: los muestra siempre desde el servidor, para que nadie vea una habitación libre que ya se vendió. Si se corta la conexión aparece un aviso, y lo que ya habías guardado está a salvo.',
   },
 ]
 
@@ -170,7 +161,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Unir dos fichas de la misma persona',
         detalle:
-          'Pasa seguido con el que entra por Booking sin documento y después vuelve directo. Desde "Fusionar con otra ficha" buscás la otra y se unen: el historial y los puntos pasan a la que estás mirando, y la otra desaparece. No se puede deshacer.',
+          'Pasa seguido con el huésped que se cargó una vez sin documento y después vuelve a reservar. Desde "Fusionar con otra ficha" buscás la otra y se unen: el historial y los puntos pasan a la que estás mirando, y la otra desaparece. No se puede deshacer.',
       },
       {
         titulo: 'Si alguien pide que se borren sus datos',
@@ -204,11 +195,6 @@ export const CAPITULOS: Capitulo[] = [
           'La lista se ordena por urgencia y dice el motivo al lado. "Urgente" significa que llega alguien hoy y la habitación todavía no está lista. "Prioridad alta" es que se desocupó hoy y hay que prepararla. Si dice "Normal", se puede dejar para después.',
       },
       {
-        titulo: 'Las que están en reparación no se limpian',
-        detalle:
-          'Si hay una orden de mantenimiento abierta, la habitación aparece como "sin tarea" aunque esté sucia. Es a propósito: no tiene sentido limpiar algo que todavía están arreglando.',
-      },
-      {
         titulo: 'La inspección no la hace la mucama',
         detalle:
           'Desde el celular sólo se puede marcar "limpia". Pasar a "inspeccionada" lo hace la gobernanta o gerencia desde el tablero: es el control de calidad, y no lo puede firmar quien hizo el trabajo.',
@@ -216,169 +202,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'El avance del turno',
         detalle:
-          'Arriba se ve el porcentaje y cuántas faltan. Las habitaciones bloqueadas o en reparación no se cuentan, así que el 100% significa de verdad que terminaste.',
-      },
-    ],
-  },
-  {
-    area: 'mantenimiento',
-    resumen: 'Órdenes de trabajo: lo que hay que arreglar y en qué anda.',
-    pasos: [
-      {
-        titulo: 'Cargar un desperfecto',
-        detalle:
-          'Apretá "Crear orden", contá qué pasa y elegí la habitación. Poné prioridad alta solo si impide usarla.',
-      },
-      {
-        titulo: 'Mantenimiento preventivo',
-        detalle:
-          'Los planes generan órdenes solas cada tanto (por ejemplo, revisar calefactores cada 6 meses), para no acordarse cuando ya se rompió.',
-      },
-    ],
-  },
-  {
-    area: 'objetos_perdidos',
-    resumen: 'Lo que los huéspedes se olvidan, hasta que lo reclaman.',
-    pasos: [
-      {
-        titulo: 'Registrar y devolver',
-        detalle:
-          'Cargá qué es y dónde apareció. Cuando alguien lo reclama, apretá "Marcar devuelto" y queda el registro de la entrega.',
-      },
-    ],
-  },
-  {
-    area: 'servicio',
-    resumen: 'La lista de desayuno del día, lo vendido y la lista de compras de cocina.',
-    pasos: [
-      {
-        titulo: 'Lista de desayuno',
-        detalle:
-          'Quién desayuna hoy y cuántos cubiertos preparar, por habitación. Se arma sola con quién durmió anoche: el que llega hoy no entra, el que se va hoy sí. Se imprime con el botón de arriba.',
-      },
-      {
-        titulo: 'Desayuno extra vendido',
-        detalle:
-          'Si alguien pagó un desayuno suelto para hoy —llegó a la mañana antes del check-in, por ejemplo— aparece marcado como "extra" en la misma lista, para que la cocina no prepare un cubierto de menos.',
-      },
-      {
-        titulo: 'Consumos vendidos',
-        detalle:
-          'Lo que salió del frigobar y de la cocina en el rango de fechas elegido, total y por categoría. Sirve para reponer stock y para el arqueo.',
-      },
-      {
-        titulo: 'Lista de compras',
-        detalle:
-          'El botón "Lista de compras" abre una hoja aparte para ir anotando, con el tiempo, qué hay que comprarle al supermercado para el restaurante: artículo, cantidad, precio estimado y una nota. Se tilda "comprado" con el casillero, sin tener que tocar el resto de la fila.',
-      },
-      {
-        titulo: 'Imprimir la lista de compras',
-        detalle:
-          'El papel muestra casilleros en blanco para lo que todavía no está tildado en el sistema —para marcarlos a mano en el súper— y ya tildado lo que se cargó como comprado antes de imprimir, con el total estimado de lo que falta al final.',
-      },
-    ],
-  },
-  {
-    area: 'agencias',
-    resumen: 'Agencias y empresas con convenio, y lo que nos deben.',
-    pasos: [
-      {
-        titulo: 'El descuento del convenio',
-        detalle:
-          'Lo que cargues como descuento se aplica solo a las reservas de esa cuenta: pagan tarifa neta en lugar de la de mostrador.',
-      },
-      {
-        titulo: 'Cargos y pagos',
-        detalle:
-          'Un cargo es lo que la agencia nos debe; un pago es lo que nos deposita. El saldo lo calcula el sistema, no hace falta llevarlo aparte.',
-      },
-    ],
-  },
-  {
-    area: 'proveedores',
-    resumen: 'A quiénes les compramos y cuánto les debemos.',
-    pasos: [
-      {
-        titulo: 'Cargar una factura',
-        detalle:
-          'Registrá el comprobante con su vencimiento. De esa fecha sale el informe de qué hay que pagar primero.',
-      },
-      {
-        titulo: 'La moneda del comprobante',
-        detalle:
-          'Cargá el importe tal como figura en el papel y elegí la moneda al lado. El saldo del proveedor se lleva en dólares, así que el sistema convierte solo con la cotización del día y guarda las dos cosas. Antes había que hacer la cuenta a mano, y una factura en pesos cargada como dólares multiplicaba la deuda por mil.',
-      },
-      {
-        titulo: 'Sacarle una foto a la factura',
-        detalle:
-          'En "Comprobantes recibidos" apretás "Sacar foto", el teléfono abre la cámara y se lee el código QR que toda factura electrónica trae desde 2021. Los datos entran solos: CUIT, número, fecha, importe y CAE. No es que el sistema "lea" la factura adivinando: son los datos que el proveedor le informó a ARCA.',
-      },
-      {
-        titulo: 'La foto no se guarda',
-        detalle:
-          'El código se lee en el mismo teléfono y al sistema viaja sólo el texto del QR. La imagen no se sube ni queda archivada en ninguna parte.',
-      },
-      {
-        titulo: 'Cargar es una cosa; imputar es otra',
-        detalle:
-          'Escanear la factura la registra. Recién cuando apretás "Imputar" pasa a la cuenta corriente del proveedor y suma a lo que el hotel debe. Es a propósito: una factura puede llegar con un error o corresponder a otro lado, y no todo lo que alguien apunta con la cámara tiene que entrar al libro mayor.',
-      },
-      {
-        titulo: 'Escanear dos veces no duplica',
-        detalle:
-          'Si la primera foto sale movida y volvés a intentar, el sistema reconoce que es el mismo comprobante y avisa en vez de cargarlo de nuevo.',
-      },
-      {
-        titulo: 'Bajarlo a Excel',
-        detalle:
-          'El botón "Bajar a Excel (CSV)" arma el archivo con todos los comprobantes del filtro, listo para abrir en Excel o mandarle al contador. Incluye si cada uno se leyó del QR o se cargó a mano.',
-      },
-    ],
-  },
-  {
-    area: 'contratos',
-    resumen: 'Convenios con firma electrónica.',
-    pasos: [
-      {
-        titulo: 'Redactar y enviar',
-        detalle:
-          'Primero se guarda como borrador y se puede corregir. Al enviarlo a firmar, el texto queda congelado: desde ese momento no se puede cambiar sin invalidar la firma.',
-      },
-      {
-        titulo: 'Cómo firma la otra parte',
-        detalle:
-          'Recibe un enlace propio. No necesita usuario ni contraseña: entra, lee y acepta. Queda registrado cuándo lo hizo.',
-      },
-    ],
-  },
-  {
-    area: 'respaldos',
-    resumen: 'Cómo bajar una copia de los datos, y quién se ocupa de los backups.',
-    pasos: [
-      {
-        titulo: 'Son dos cosas distintas',
-        detalle:
-          'El backup completo de la base lo hace automáticamente la empresa donde está alojado el sistema. Este sistema NO lo puede disparar ni comprobar: no existe forma de pedirlo desde acá, y un botón que dijera que sí estaría mintiendo.',
-      },
-      {
-        titulo: 'Lo que sí podés hacer',
-        detalle:
-          'Bajar un archivo con todas las reservas, los huéspedes, los pagos, las facturas y el tarifario. Se guarda donde quieras —un pendrive, la nube, el correo— y se puede abrir para comprobar que está. Es la respuesta a «si esto se cae, ¿tengo mis reservas?».',
-      },
-      {
-        titulo: 'Cada cuánto',
-        detalle:
-          'Una vez por semana. La pantalla avisa cuando pasaron más de siete días y avisa más fuerte pasado el mes: con un mes de hueco, rehacer las reservas de memoria ya no es posible.',
-      },
-      {
-        titulo: 'El archivo es confidencial',
-        detalle:
-          'Tiene el nombre, el email y el teléfono de todos los huéspedes que pasaron por el hotel. Guardalo como guardarías el libro de pasajeros: no lo dejes en una carpeta compartida ni lo mandes por correo sin pensarlo.',
-      },
-      {
-        titulo: 'Solo administración exporta',
-        detalle:
-          'Gerencia puede ver cuándo fue la última vez —para controlar que se esté haciendo— pero no puede bajar el archivo. Es por lo del punto anterior.',
+          'Arriba se ve el porcentaje y cuántas faltan. Las habitaciones bloqueadas no se cuentan, así que el 100% significa de verdad que terminaste.',
       },
     ],
   },
@@ -419,196 +243,23 @@ export const CAPITULOS: Capitulo[] = [
     ],
   },
   {
-    area: 'canales',
-    resumen: 'Las reservas que llegan de Booking, y qué hacer con ellas.',
+    area: 'auditoria',
+    resumen: 'Quién cambió qué y cuándo en las operaciones sensibles. Solo administración.',
     pasos: [
       {
-        titulo: 'Lo que llega no es todavía una reserva',
+        titulo: 'Qué se registra',
         detalle:
-          'Las reservas de Booking aterrizan en una lista aparte y no ocupan habitación hasta que alguien aprieta "Importar". Es a propósito: Booking llama a las habitaciones con sus propios nombres, y hay que confirmar a qué tipo corresponde antes de darla por buena.',
+          'Cada cambio en pagos, tarifas, facturas y estados de reserva queda anotado con la fecha, el usuario y los campos que se modificaron. No se puede editar ni borrar desde el panel: es el rastro para revisar qué pasó.',
       },
       {
-        titulo: 'Si el huésped cambia las fechas en Booking',
+        titulo: 'Filtrar por tipo de operación',
         detalle:
-          'La reserva vuelve a llegar con los datos nuevos, pero la que está cargada en el sistema NO se mueve sola: aparece un cartel rojo en la lista diciendo qué cambió, y hay que corregirla a mano desde la ficha. Es a propósito. Moverla sola puede chocar con otra habitación ocupada, y el precio no se recalcula: quedaría cobrando la tarifa de las fechas viejas.',
+          'Arriba hay una fila de botones, uno por tabla. Tocá uno para ver solo esos movimientos, y "Todos" para volver a la lista completa.',
       },
       {
-        titulo: 'El sistema avisa cuando entra algo',
+        titulo: 'Quién abrió una ficha',
         detalle:
-          'Si la sincronización trae reservas nuevas, aparece un aviso en el tablón de Avisos marcado "Del sistema". Así una reserva que entró el viernes a la noche no espera hasta que alguien abra esta pantalla. Si la sincronización falla, también avisa.',
-      },
-      {
-        titulo: 'Cerrar fechas o pedir un mínimo de noches',
-        detalle:
-          'En la pestaña Publicación hay dos niveles. La tabla de arriba vale siempre: "esta habitación pide 2 noches, todo el año". La de abajo vale para un tramo de fechas: "el fin de semana largo pide 3", "esas dos semanas las guardo para el grupo que reservó por teléfono".',
-      },
-      {
-        titulo: 'El "hasta" de una restricción queda AFUERA',
-        detalle:
-          'Del 9 al 13 alcanza al 9, 10, 11 y 12. Es la misma forma de contar que las temporadas y las estadías. La lista muestra el último día incluido, así que lo que se lee ahí es lo que rige.',
-      },
-      {
-        titulo: '"Sin llegadas" no es lo mismo que "cerrado"',
-        detalle:
-          'Cerrado no vende nada ese día. "Sin llegadas" deja que alguien pase esa noche pero no que empiece ahí, y es lo que evita que un fin de semana largo se parta al medio: sin eso, un mínimo de tres noches igual permite reservar sábado, domingo y lunes.',
-      },
-      {
-        titulo: 'Ojo: estas restricciones todavía no salen',
-        detalle:
-          'Se calculan y quedan registradas, pero con el proveedor actual no llegan a Booking, porque la conexión que tiene el hotel es de solo lectura. Sirven para el día que se contrate un channel manager. Mientras tanto, cerrar fechas en Booking se sigue haciendo desde el extranet.',
-      },
-      {
-        titulo: 'Cómo traerlas',
-        detalle:
-          'En el extranet de Booking: Administración → Informe de reservas. Se descarga el CSV y se sube en esta pantalla. No hay que abrirlo en Excel antes: si se abre y se guarda, las fechas y los precios cambian de formato y algunas filas dejan de leerse.',
-      },
-      {
-        titulo: 'Ojo: esto NO evita el overbooking',
-        detalle:
-          'Traemos las reservas de Booking, pero no le avisamos a Booking qué nos queda libre. Booking puede vender una habitación que ustedes ya vendieron por teléfono. Hay que seguir cerrando fechas a mano en el extranet. Para que se sincronice en las dos direcciones el hotel tiene que contratar un channel manager.',
-      },
-      {
-        titulo: 'Cuando una queda "Con problema"',
-        detalle:
-          'Significa que no se pudo crear. El motivo aparece escrito en la misma fila: casi siempre es que la habitación ya estaba ocupada esas fechas, o que el tipo de habitación que informó Booking no existe en el sistema. Se resuelve y se aprieta "Importar" de nuevo.',
-      },
-      {
-        titulo: 'El precio lo pone el hotel, no Booking',
-        detalle:
-          'Al importar, el total se calcula con el tarifario propio a precio de agencia. Lo que informa Booking se guarda al lado para comparar: si hay diferencia, el sistema lo avisa, pero no cambia el precio.',
-      },
-      {
-        titulo: 'Mensajes y reseñas se cargan a mano',
-        detalle:
-          'El informe de Booking no los trae. Se cargan acá para que no queden sólo en la memoria de quien los leyó: un pedido de cuna sin atender termina siendo una queja en la reseña.',
-      },
-      {
-        titulo: 'Cómo llama el canal a cada habitación',
-        detalle:
-          'En "Publicación al canal" se anota, una sola vez, con qué nombre conoce Booking a cada tipo de unidad del hotel. Sirve para que la importación no falle cuando los nombres no coinciden: antes había que renombrar el tipo del hotel para que coincidiera con el que eligió la OTA.',
-      },
-      {
-        titulo: 'Guardarse habitaciones para la venta directa',
-        detalle:
-          'El "tope de cupo" limita cuántas unidades de ese tipo se le ofrecen al canal. Vacío significa todas. Sirve para no quedarse sin nada que vender por teléfono en temporada alta, y para no pagar comisión por el 100% de lo que se vende.',
-      },
-      {
-        titulo: 'Por qué la publicación dice que no salió',
-        detalle:
-          'Porque hoy es cierto. El sistema calcula todos los días qué habría que informarle al canal, pero los caminos disponibles sin ser socio certificado de Booking sólo sirven para traer reservas, no para mandar. Queda calculado y registrado para que el día que el hotel contrate un channel manager sea sólo enchufarlo.',
-      },
-      {
-        titulo: 'Los días sin tarifa no se publican',
-        detalle:
-          'Si una fecha no tiene temporada cargada, no se informa al canal en vez de informarla en cero: publicar cero sería publicar una noche gratis. La pantalla dice cuántos días quedaron afuera por eso.',
-      },
-    ],
-  },
-  {
-    area: 'conciliacion',
-    resumen: 'Cruzar lo que el sistema dice que se cobró contra lo que de verdad entró.',
-    pasos: [
-      {
-        titulo: 'Para qué sirve',
-        detalle:
-          'El sistema sabe lo que tendría que haber cobrado. Esta pantalla trae lo que realmente entró a la cuenta —del banco y de MercadoPago— y las cruza. Es donde se ve un cobro que la pasarela hizo y el sistema no registró, una comisión que salió más cara de lo pactado, y en qué se fue la plata cada mes.',
-      },
-      {
-        titulo: 'El extracto del banco se sube a mano',
-        detalle:
-          'El banco no tiene una forma automática de mandarnos los movimientos, así que hay que entrar al Home Banking, exportar el extracto en CSV y subirlo acá. Subir dos veces el mismo archivo no duplica nada: el sistema reconoce los movimientos que ya tenía.',
-      },
-      {
-        titulo: 'MercadoPago sí se trae solo',
-        detalle:
-          'Con el botón "Traer de MercadoPago". La primera vez el sistema le pide el reporte a MercadoPago y hay que volver a apretar en unos minutos, porque del otro lado tarda en armarlo. El reporte trae lo que MercadoPago acreditó de verdad, ya descontada su comisión, que no es lo mismo que lo que cobró.',
-      },
-      {
-        titulo: 'Lo que se concilia solo y lo que no',
-        detalle:
-          'Cuando el movimiento trae la referencia del cobro, el sistema lo cierra solo: no hay dudas posibles. Cuando sólo coinciden el importe y la fecha, se muestra como sugerencia y decide una persona. Es a propósito: dos huéspedes que pagan la misma seña el mismo día es lo más común del mundo, y casarlo con la reserva equivocada deja a uno figurando impago y al otro pagado sin haber pagado.',
-      },
-      {
-        titulo: 'Ignorar no es esconder',
-        detalle:
-          'Un movimiento sin contrapartida en el sistema —un gasto, una transferencia entre cuentas propias— se marca "Ignorado" con una nota. Deja de aparecer como pendiente pero sigue contando en los gastos del mes.',
-      },
-      {
-        titulo: 'Los gastos del mes (movimientos sin conciliar)',
-        detalle:
-          'Se calculan sobre los movimientos que salieron de la cuenta, agrupados por mes y por concepto. Cada moneda se muestra por separado: sumar pesos con dólares daría un total que no significa nada.',
-      },
-      {
-        titulo: 'Gastos operativos, otra pantalla',
-        detalle:
-          'El botón "Gastos operativos" del encabezado abre un registro aparte: sueldos, servicios y todo lo que el hotel paga sin una factura de proveedor de por medio. No es lo mismo que "los gastos del mes" de arriba, que sale de los movimientos bancarios sin cruzar; acá se carga cada gasto a mano, con su categoría.',
-      },
-    ],
-  },
-  {
-    area: 'avisos',
-    resumen: 'La cartelera interna del hotel.',
-    pasos: [
-      {
-        titulo: 'Avisos y conversaciones no son lo mismo',
-        detalle:
-          'Un aviso es un anuncio para todos, como el pizarrón de la cocina. Conversaciones es para hablar entre ustedes.',
-      },
-    ],
-  },
-  {
-    area: 'bandeja',
-    resumen: 'Todos los mensajes de los huéspedes —WhatsApp, Instagram, Messenger, correo, Telegram y el chat de la web— en un solo lugar.',
-    pasos: [
-      {
-        titulo: 'Cómo se lee la pantalla',
-        detalle:
-          'A la izquierda, las conversaciones, con pestañas arriba (abiertas, pendientes, pospuestas, resueltas) y el número de cada una. En el medio, la que elegiste, con la caja para responder abajo. A la derecha, quién es: si ya es huésped, sus reservas; y los botones para asignarla, etiquetarla o cerrarla. En el teléfono se ve una parte por vez.',
-      },
-      {
-        titulo: 'Responder o dejar una nota',
-        detalle:
-          'Arriba de la caja hay dos botones. «Responder» le manda el mensaje al huésped por el mismo canal por donde escribió. «Nota privada» la ve sólo el equipo (la caja se pone amarilla para que no se confunda). Se envía con el botón o con Ctrl + Enter.',
-      },
-      {
-        titulo: 'Respuestas guardadas',
-        detalle:
-          'Escribí «/» en la caja y aparecen los textos guardados (horarios, ubicación, saludo). Tocás uno y se completa. Si el texto lleva {{nombre}}, se reemplaza por el primer nombre del huésped; {{agente}}, por el tuyo. Los textos los carga la dirección en «Respuestas guardadas».',
-      },
-      {
-        titulo: 'Buscar',
-        detalle:
-          'El buscador de la lista encuentra por nombre, teléfono, email y también por lo que dice el mensaje: sirve para encontrar «¿quién preguntó por las mascotas?».',
-      },
-      {
-        titulo: 'Por qué a veces no deja responder',
-        detalle:
-          'WhatsApp, Instagram y Messenger dejan responder sólo durante 24 horas desde el último mensaje del huésped. Pasado ese tiempo, la pantalla lo avisa: escribile por correo o esperá a que vuelva a escribir. Tampoco se puede responder por un canal que todavía no está conectado.',
-      },
-      {
-        titulo: 'Abierta, pendiente, pospuesta y resuelta',
-        detalle:
-          'Abierta: hay que atenderla. Pendiente: estás esperando algo interno (un precio, una confirmación). Pospuesta: vuelve sola en la fecha elegida. Resuelta: terminada; si el huésped vuelve a escribir, se reabre sola.',
-      },
-      {
-        titulo: 'Las que esperan, en rojo',
-        detalle:
-          'Cada conversación muestra hace cuánto espera respuesta. Pasada una hora se marca en rojo: es lo que un huésped tolera antes de ir a reservar a otro lado. El saludo automático no cuenta como respuesta: sigue esperando hasta que conteste una persona.',
-      },
-      {
-        titulo: 'Contactos',
-        detalle:
-          'En «Contactos» están todas las personas que escribieron alguna vez. «Huéspedes» son los que ya tienen ficha y reservas; «Interesados», los que preguntaron y todavía no reservaron. Si el teléfono o el email coinciden con un único huésped, se vincula solo; si no, se vincula a mano desde la conversación.',
-      },
-      {
-        titulo: 'Informes',
-        detalle:
-          'En «Informes» ves cuántas conversaciones hubo, cuántas esperan, cuánto se tarda en contestar la primera vez y cuánto en resolver, por canal y por persona. Se usa la mediana: dice lo que le pasa a un huésped típico, sin que lo distorsione una consulta de la noche.',
-      },
-      {
-        titulo: 'Conectar un canal',
-        detalle:
-          'En «Canales» hay una tarjeta por cada uno con su estado y un botón «Conectar». El asistente te lleva paso a paso: qué datos conseguir, cómo cargarlos, un botón que avisa al proveedor y otro que verifica que funciona. Conectar lo hace la dirección. También se pueden configurar el saludo, el aviso de fuera de horario y la asignación automática.',
+          'Abajo figuran los accesos recientes a fichas de huéspedes, aunque no se haya cambiado nada. Sirve para saber quién consultó datos personales.',
       },
     ],
   },
@@ -640,47 +291,6 @@ export const CAPITULOS: Capitulo[] = [
         titulo: 'Se limpia sola',
         detalle:
           'Los errores de más de 90 días se borran automáticamente. Un error de hace tres meses ya no le sirve a nadie y la lista se volvería imposible de leer.',
-      },
-    ],
-  },
-  {
-    area: 'notificaciones',
-    resumen: 'Qué avisos salieron, a quién y en qué estado quedaron.',
-    pasos: [
-      {
-        titulo: 'Para qué es esta pantalla',
-        detalle:
-          'Cada vez que el sistema tiene algo que comunicar —una reserva confirmada, un pago recibido, un recordatorio de llegada— lo anota acá antes de mandarlo. Sirve para responder la pregunta que llega al mostrador todo el tiempo: "no me llegó nada".',
-      },
-      {
-        titulo: 'Los cinco estados',
-        detalle:
-          'Pendiente: todavía no salió, está esperando su turno. Enviada: el proveedor de correo la aceptó. Entregada: el correo del huésped la recibió. Leída: la abrió. Fallida: se intentó varias veces y no se pudo.',
-      },
-      {
-        titulo: '"Enviada" no es "entregada"',
-        detalle:
-          'Entre las dos está el rebote: el proveedor acepta el mensaje mucho antes de saber si la casilla del huésped existe. Si algo quedó en "enviada" y nunca pasó a "entregada", vale la pena revisar la dirección de correo.',
-      },
-      {
-        titulo: 'Que no diga "leída" no significa que no la haya leído',
-        detalle:
-          'La apertura se detecta con una imagen diminuta dentro del correo, y muchos programas de correo las bloquean. O sea: si dice leída, la abrió seguro; si no lo dice, no se sabe.',
-      },
-      {
-        titulo: 'Los avisos internos no salen del sistema',
-        detalle:
-          'Los que dicen "interno" no le llegan a ningún huésped: aparecen en el tablón de Avisos, marcados como "Del sistema", para el rol que corresponda.',
-      },
-      {
-        titulo: 'Reintentar a mano',
-        detalle:
-          'Si algo quedó fallido y ya se arregló el motivo —la dirección estaba mal, el proveedor estuvo caído—, se puede volver a poner en cola. Nunca manda dos veces el mismo aviso por error: cada uno tiene su clave.',
-      },
-      {
-        titulo: 'Frenar un aviso antes de que salga',
-        detalle:
-          'Sólo se puede cancelar lo que está "pendiente": es lo único que todavía no salió. Un aviso ya enviado no vuelve, así que cancelarlo no está permitido —diría que no se mandó algo que sí se mandó—. Lo cancelado se puede volver a encolar más tarde.',
       },
     ],
   },
@@ -752,7 +362,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Tipos de alojamiento',
         detalle:
-          'Hostería o Cabaña, con su capacidad y descripción. El código (el que usan las fotos y los canales de venta) no se puede cambiar una vez creado.',
+          'Hostería o Cabaña, con su capacidad y descripción. El código (el que usan las fotos y el catálogo público) no se puede cambiar una vez creado.',
       },
       {
         titulo: 'Promociones',
@@ -768,54 +378,7 @@ export const CAPITULOS: Capitulo[] = [
       {
         titulo: 'Elegir el rol',
         detalle:
-          'Recepción no ve facturación ni proveedores; housekeeping ve solo su trabajo. Dar de más es el error más caro de deshacer.',
-      },
-    ],
-  },
-  {
-    area: 'ia',
-    resumen:
-      'Preguntale por los números del hotel, por una reserva o por cómo se hace algo, y pedile que te prepare tareas simples. Está en esta pantalla y en el botón "Preguntale a la IA" de todas las demás.',
-    pasos: [
-      {
-        titulo: 'Qué puede responder',
-        detalle:
-          'Ocupación, ADR y RevPAR, venta por categoría, lo facturado y cobrado, quién llega y se va un día o en la semana, la disponibilidad y el precio de una estadía entre dos fechas, el estado de limpieza de las unidades, una reserva por su código o por el nombre del huésped, y las reservas con saldo pendiente. Cuando hace falta un dato, lo busca en el sistema en el momento: no inventa números. También responde cómo se hace algo, con esta misma guía y un enlace a la pantalla.',
-      },
-      {
-        titulo: 'Tareas que te prepara',
-        detalle:
-          'Casi todo: crear una reserva, confirmarla, hacer el check-in y el check-out, marcar un no-show, cancelar (con el cargo de la política a la vista), mudar de habitación, cambiar las fechas, emitir la factura o una nota de crédito, dar de alta o actualizar un huésped, cargar un consumo, marcar una habitación limpia, abrir una orden de mantenimiento y publicar un aviso —cada rol, las de sus pantallas—. El email, el teléfono y el documento de un huésped se completan en la tarjeta, no por el chat. Lo único que no prepara son los cobros: se registran en la ficha de la reserva. La conversación se recuerda mientras no cierres la pestaña; «Nueva conversación» la borra. Las deja en una tarjeta: no se hace nada hasta que apretás "Confirmar", y si algo no está bien apretás "Descartar". Se hacen con los mismos permisos y controles que si las cargaras a mano.',
-      },
-      {
-        titulo: 'Resumen del día y lo que necesita atención',
-        detalle:
-          'En el Inicio hay dos botones del asistente: "Resumen del día" (llegadas y salidas de hoy y mañana, unidades libres, habitaciones sucias, saldos pendientes y el clima) y "¿Qué necesita atención hoy?", que marca lo que conviene resolver y en qué pantalla. Sólo leen: no cambian nada.',
-      },
-      {
-        titulo: 'Escribirle a un huésped',
-        detalle:
-          'Pedile «escribile al huésped de BP-… que …». El asistente redacta el mensaje y te lo muestra en una tarjeta para que lo corrijas. Al confirmar, sale por correo con el saludo y la firma del hotel, queda registrado en "Avisos enviados" y no se envía si el huésped pidió no recibir avisos.',
-      },
-      {
-        titulo: 'Buscar y consultar cualquier módulo',
-        detalle:
-          'Si no sabés dónde está algo, preguntale: busca en todo el sistema (productos y su precio, unidades, agencias, proveedores, promociones y la pantalla donde se hace cada cosa). También te dice qué consumió y pagó una reserva, qué órdenes de mantenimiento siguen abiertas, qué hay en la cartelera, cuánto deben las agencias, cuánto se les debe a los proveedores y, a la dirección, si el sistema tuvo errores. Siempre dentro de lo que tu rol puede ver.',
-      },
-      {
-        titulo: 'Cerrar una orden de mantenimiento',
-        detalle:
-          'Decile «ya se arregló la ducha de la 12». El asistente busca la orden y te muestra la tarjeta para marcarla resuelta (o en proceso, o reabrirla). Al confirmar se hace con el mismo botón de la pantalla de Mantenimiento.',
-      },
-      {
-        titulo: 'Qué NO hace',
-        detalle:
-          'No cobra ni cambia tarifas: para eso te explica los pasos y te deja el enlace a la pantalla. Tampoco recibe datos personales de los huéspedes: busca por nombre, pero contesta con el código de la reserva y el enlace a la ficha.',
-      },
-      {
-        titulo: 'Si dice que no está configurado',
-        detalle:
-          'El asistente necesita un proveedor de IA enchufado por variable de entorno. Sin eso, la pantalla lo dice claramente en vez de simular una respuesta.',
+          'Recepción no ve facturación ni configuración; housekeeping ve solo su trabajo. Dar de más es el error más caro de deshacer.',
       },
     ],
   },
@@ -830,7 +393,7 @@ export const GLOSARIO: Termino[] = [
   {
     termino: 'Tarifa neta',
     definicion:
-      'El precio con el descuento del convenio. Es lo que paga una agencia; la diferencia es su comisión.',
+      'El precio sin el margen del mostrador. El sistema guarda dos precios por noche, el neto y el rack; el que se le muestra al huésped es el rack, con el IVA discriminado.',
   },
   { termino: 'In house', definicion: 'El huésped ya hizo el check-in y está alojado ahora.' },
   {
@@ -846,19 +409,10 @@ export const GLOSARIO: Termino[] = [
     definicion:
       'El número que AFIP le da a una factura para validarla. Sin CAE, el comprobante no tiene valor fiscal.',
   },
-  {
-    termino: 'Ocupación',
-    definicion: 'Qué porcentaje de las habitaciones disponibles se vendió.',
-  },
-  {
-    termino: 'ADR',
-    definicion: 'El precio promedio al que se vendió cada habitación ocupada.',
-  },
-  {
-    termino: 'RevPAR',
-    definicion:
-      'Lo que rindió en promedio cada habitación del hotel, ocupada o no. Resume ocupación y precio en un solo número.',
-  },
+  // Los tres indicadores salen del mismo texto que muestran los informes.
+  { termino: 'Ocupación', definicion: INDICADORES.ocupacion.explicacion },
+  { termino: 'ADR (tarifa promedio)', definicion: INDICADORES.adr.explicacion },
+  { termino: 'RevPAR (ingreso por habitación disponible)', definicion: INDICADORES.revpar.explicacion },
   {
     termino: 'Overbooking',
     definicion:
@@ -879,82 +433,4 @@ export function guiaPara(rol: Rol): Capitulo[] {
 /** Título legible de un capítulo, tomado de la etiqueta del menú. */
 export function tituloCapitulo(c: Capitulo): string {
   return ETIQUETAS_AREA[c.area]
-}
-
-/* ───────────────────────────────────────────── búsqueda (asistente de IA) ── */
-
-export interface FragmentoAyuda {
-  /** Dónde está en la guía: «Primeros pasos», el capítulo o «Glosario». */
-  seccion: string
-  titulo: string
-  texto: string
-  /** La pantalla de la que habla, para que el asistente dé un enlace. */
-  ruta?: string
-}
-
-/** Palabras que no ayudan a encontrar nada. */
-const VACIAS = new Set([
-  'como', 'cómo', 'que', 'qué', 'para', 'por', 'con', 'una', 'uno', 'los', 'las', 'del',
-  'hago', 'hacer', 'puedo', 'donde', 'dónde', 'cual', 'cuál', 'esta', 'este', 'sobre',
-])
-
-function normalizar(texto: string): string {
-  return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-}
-
-function palabras(texto: string): string[] {
-  return normalizar(texto)
-    .split(/[^a-z0-9ñ]+/)
-    .filter((p) => p.length >= 3 && !VACIAS.has(p))
-}
-
-/**
- * Los fragmentos de la guía que mejor responden una pregunta, **sólo de lo que
- * ese rol puede usar** (`guiaPara`).
- *
- * Es lo que le permite al asistente de IA contestar «¿cómo hago tal cosa?» con
- * la guía real del sistema en vez de con lo que el modelo cree que hace un PMS:
- * un paso inventado («apretá Facturar en la grilla») es tan dañino como un
- * número inventado. Y el filtro por rol evita explicarle a recepción una
- * pantalla a la que no puede entrar.
- *
- * Puntaje simple y explicable: cuántas palabras de la pregunta aparecen, con
- * más peso si están en el título. Una coincidencia por prefijo cuenta
- * («factur» encuentra «facturar» y «factura»).
- */
-export function buscarEnAyuda(rol: Rol, pregunta: string, maximo = 5): FragmentoAyuda[] {
-  const buscadas = palabras(pregunta).map((p) => p.slice(0, Math.max(4, p.length - 2)))
-  if (buscadas.length === 0) return []
-
-  const candidatos: FragmentoAyuda[] = [
-    ...PRIMEROS_PASOS.map((p) => ({ seccion: 'Primeros pasos', titulo: p.titulo, texto: p.detalle })),
-    ...guiaPara(rol).flatMap((c) => [
-      { seccion: tituloCapitulo(c), titulo: tituloCapitulo(c), texto: c.resumen, ruta: rutaDeArea(c.area) },
-      ...c.pasos.map((p) => ({
-        seccion: tituloCapitulo(c),
-        titulo: p.titulo,
-        texto: p.detalle,
-        ruta: rutaDeArea(c.area),
-      })),
-    ]),
-    ...GLOSARIO.map((t) => ({ seccion: 'Glosario', titulo: t.termino, texto: t.definicion })),
-  ]
-
-  const puntuar = (f: FragmentoAyuda) => {
-    const titulo = palabras(`${f.seccion} ${f.titulo}`)
-    const cuerpo = palabras(f.texto)
-    let puntos = 0
-    for (const b of buscadas) {
-      if (titulo.some((p) => p.startsWith(b))) puntos += 3
-      if (cuerpo.some((p) => p.startsWith(b))) puntos += 1
-    }
-    return puntos
-  }
-
-  return candidatos
-    .map((f) => ({ f, puntos: puntuar(f) }))
-    .filter((x) => x.puntos > 0)
-    .sort((a, b) => b.puntos - a.puntos)
-    .slice(0, maximo)
-    .map((x) => x.f)
 }

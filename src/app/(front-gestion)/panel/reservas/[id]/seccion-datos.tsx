@@ -46,7 +46,6 @@ export interface Reserva {
   garantia: Garantia
   segmento: Segmento
   voucher: string
-  agencia_id: string | null
   huesped_id: string | null
   /** Origen del pago para la exención de IVA (RG 3971). `null` = sin definir. */
   pago_desde_exterior: boolean | null
@@ -232,9 +231,8 @@ export function SeccionEstadia({
         {/* ── Exención de IVA al turista del exterior (RG 3971, ADR 0024) ──
             Se muestra solo cuando puede aplicar: si el huésped no reside en
             el exterior, este bloque sería ruido en la pantalla de todos los
-            días. Una reserva por agencia tampoco lo muestra: ahí el receptor
-            del comprobante es la agencia, no el turista. */}
-        {reserva.huesped?.residente_exterior && !reserva.agencia_id && (
+            días. */}
+        {reserva.huesped?.residente_exterior && (
           <ExencionIva
             reserva={reserva}
             exento={exento}

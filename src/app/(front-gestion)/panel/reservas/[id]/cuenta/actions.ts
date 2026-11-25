@@ -5,6 +5,7 @@ import { MENSAJES_NO_CARGABLE } from '@/lib/domain/servicio'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { crearClienteServidor } from '@/lib/supabase/server'
+import { crearClienteAdmin } from '@/lib/supabase/admin'
 import { obtenerSesion } from '@/lib/auth/session'
 import { cortarSiFalla, registrarFalla } from '@/lib/acciones'
 import { puedeAcceder } from '@/lib/domain/permisos'
@@ -17,6 +18,7 @@ import {
 } from '@/lib/domain/divisas'
 import { cotizacionVigente } from '@/lib/divisas/servicio'
 import { formatearUSD } from '@/lib/domain/moneda'
+import { hoyISO } from '@/lib/fechas'
 
 /**
  * Acciones de la cuenta del huésped: split entre folios y cargo manual.
@@ -200,7 +202,11 @@ export async function cargarManual(
   // necesita un producto contra el que apuntar. Se usa uno reservado del catálogo y
   // se crea la primera vez que hace falta: es preferible a hacer la columna
   // nullable, porque eso rompería las consultas que hoy asumen que hay producto.
-  const { data: existente, error: eExistente } = await supabase
+  // Con el cliente de servicio: el catálogo sólo lo escriben admin y gerencia
+  // (RLS), y el primer cargo manual lo suele hacer recepción. La acción ya
+  // verificó rol y cuenta abierta arriba.
+  const admin = crearClienteAdmin()
+  const { data: existente, error: eExistente } = await admin
     .from('productos_servicios')
     .select('id')
     .eq('codigo', 'CARGO-MANUAL')
@@ -214,19 +220,22 @@ export async function cargarManual(
 
   let productoId = existente?.id
   if (!productoId) {
-    const { data: creado, error: eProducto } = await supabase
+    // Nace inactivo: no es un producto vendible, así que no debe aparecer en la
+    // grilla del punto de venta a USD 0.
+    const { data: creado, error: eProducto } = await admin
       .from('productos_servicios')
       .insert({
         codigo: 'CARGO-MANUAL',
         nombre: 'Cargo manual',
         categoria: 'otro',
         precio: 0,
-        activo: true,
+        activo: false,
       })
       .select('id')
       .single<{ id: string }>()
 
     if (eProducto || !creado) {
+      registrarFalla(eProducto, 'cuenta:crear_producto_cargo_manual')
       return { error: 'No se pudo preparar el cargo manual. Probá de nuevo.' }
     }
     productoId = creado.id
@@ -237,6 +246,9 @@ export async function cargarManual(
     producto_id: productoId,
     cantidad,
     precio_unitario: precioUSD,
+    // El día del HOTEL: el default de la columna es `current_date` en UTC y entre las
+    // 21 y las 24 de El Calafate daba el día siguiente.
+    fecha: hoyISO(),
     folio,
     comprobante,
     // El concepto va en la nota: es lo que la cuenta muestra en la línea, ya que el

@@ -31,7 +31,7 @@ export const hayDB = Boolean(url && serviceKey && !url.includes('placeholder'))
   justamente lo que documentan `AGENTS.md` y el instructivo para no saltear los
   tests de integración.
 
-  Lo que estaría en juego no es un dato de prueba: 24 archivos escriben con
+  Lo que estaría en juego no es un dato de prueba: 20 archivos escriben con
   `service_role`, que saltea RLS **y** las revocaciones de `delete` de la
   migración 0061, y limpian haciendo `delete` sobre `reservas`, `huespedes`,
   `tarifas`, `unidades` y `tipos_unidad`. Contra la base real eso borra reservas

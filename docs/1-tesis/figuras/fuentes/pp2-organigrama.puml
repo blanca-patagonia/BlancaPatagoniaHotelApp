@@ -1,0 +1,18 @@
+@startuml
+!include _estilo.iuml
+top to bottom direction
+skinparam linetype ortho
+rectangle "**Dirección General**\nFranco Theo Cheli" as D #D6E6F5
+rectangle "**Recepción**\n2 personas por turno\n(mañana y tarde)" as R
+rectangle "**Housekeeping**\nEquipo de mucamas" as H
+rectangle "**Restaurante / Cocina**\nCocinero y ayudante" as RE
+rectangle "**Mantenimiento**\n1 persona" as M
+rectangle "**Excursiones**\nCoordinación turística" as E
+rectangle "**Administración**\nContabilidad" as A
+D -down-> R
+D -down-> H
+D -down-> RE
+D -down-> M
+D -down-> E
+D -down-> A
+@enduml

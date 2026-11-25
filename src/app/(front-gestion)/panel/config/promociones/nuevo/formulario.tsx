@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react'
 import { crearPromocion, type EstadoAltaPromocion } from '../../promociones.actions'
-import { CAMPO, Campo, Mensaje } from '../../../_components/ui'
+import Link from 'next/link'
+import { CAMPO, Campo, Mensaje, PieDeFormulario, botonClases } from '../../../_components/ui'
 import { BotonEnvio } from '../../../_components/boton-envio'
 
 const INICIAL: EstadoAltaPromocion = {}
@@ -95,11 +96,14 @@ export function FormularioPromocion() {
           className={CAMPO}
         />
       </Campo>
-      <div className="sm:col-span-2">
+      <PieDeFormulario hayObligatorios={false}>
         <BotonEnvio cargando="Creando…" extra="w-full sm:w-auto">
           Crear promoción
         </BotonEnvio>
-      </div>
+        <Link href="/panel/config/promociones" className={botonClases('secundario', 'w-full sm:w-auto')}>
+          Cancelar
+        </Link>
+      </PieDeFormulario>
     </form>
   )
 }

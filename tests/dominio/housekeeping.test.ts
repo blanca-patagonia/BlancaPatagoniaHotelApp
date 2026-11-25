@@ -32,7 +32,6 @@ function unidad(over: Partial<UnidadHousekeeping> = {}): UnidadHousekeeping {
     ocupada: false,
     saleHoy: false,
     llegaHoy: false,
-    enReparacion: false,
     ...over,
   }
 }
@@ -65,12 +64,6 @@ describe('prioridadDe', () => {
     // Mandar a alguien a limpiar una habitación con una cañería rota es hacerle
     // perder el viaje. Si además hay una llegada, el problema es de recepción.
     expect(prioridadDe(unidad({ estado: 'bloqueada', llegaHoy: true }))).toBe('sin_tarea')
-  })
-
-  it('en reparación tampoco, aunque el estado diga sucia', () => {
-    expect(prioridadDe(unidad({ estado: 'sucia', enReparacion: true, llegaHoy: true }))).toBe(
-      'sin_tarea',
-    )
   })
 
   it('cada prioridad tiene etiqueta y motivo', () => {
@@ -223,5 +216,32 @@ describe('siguienteEstadoMucama', () => {
   it('desde inspeccionada o bloqueada no avanza', () => {
     expect(siguienteEstadoMucama('inspeccionada')).toBeNull()
     expect(siguienteEstadoMucama('bloqueada')).toBeNull()
+  })
+})
+
+describe('repartir el trabajo', () => {
+  it('asignar desde «Por responsable» vuelve a «Por responsable»', async () => {
+    const { retornoHousekeeping } = await import('@/lib/domain/housekeeping')
+    expect(retornoHousekeeping('mucama')).toBe('/panel/housekeeping?vista=mucama')
+    expect(retornoHousekeeping(null)).toBe('/panel/housekeeping')
+  })
+
+  it('el retorno es una lista blanca: cualquier otra cosa vuelve al tablero', async () => {
+    const { retornoHousekeeping } = await import('@/lib/domain/housekeeping')
+    expect(retornoHousekeeping('https://otro-sitio.com')).toBe('/panel/housekeeping')
+    expect(retornoHousekeeping('//evil')).toBe('/panel/housekeeping')
+  })
+
+  it('la asignación en lote descarta repetidos y lo que no es un id', async () => {
+    const { unidadesParaAsignar } = await import('@/lib/domain/housekeeping')
+    const a = '11111111-1111-4111-8111-111111111111'
+    const b = '22222222-2222-4222-8222-222222222222'
+    expect(unidadesParaAsignar([a, a, b, 'x,id.gt.0', 7])).toEqual([a, b])
+  })
+
+  it('sin ninguna unidad marcada no se escribe nada', async () => {
+    const { unidadesParaAsignar } = await import('@/lib/domain/housekeeping')
+    expect(unidadesParaAsignar([])).toBeNull()
+    expect(unidadesParaAsignar(['no-es-un-id'])).toBeNull()
   })
 })

@@ -8,7 +8,7 @@ import {
   CATEGORIAS_NPS,
 } from '@/lib/domain/encuestas'
 import { traerEncuestas } from '../datos'
-import { AvisoIncompleto, AnalizarConIA } from '../_componentes'
+import { AvisoIncompleto } from '../_componentes'
 import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
 
 /**
@@ -18,7 +18,7 @@ import { Encabezado, Pagina, Tarjeta } from '../../_components/ui'
  * creer que el índice mostrado es el de ese mes.
  */
 export default async function InformeSatisfaccionPage() {
-  const sesion = await requerirAcceso('reportes')
+  await requerirAcceso('reportes')
 
   const encuestas = await traerEncuestas()
 
@@ -45,10 +45,6 @@ export default async function InformeSatisfaccionPage() {
         descripcion="Net Promoter Score de las encuestas posteriores al check-out."
         icono="reportes"
       />
-      <div className="mb-4 flex justify-end">
-        <AnalizarConIA rol={sesion.rol} pregunta={'¿Cómo viene la satisfacción de los huéspedes y qué te llama la atención?'} />
-      </div>
-
       <AvisoIncompleto incompleto={encuestas.truncado} />
 
       <Tarjeta titulo="NPS" descripcion="Histórico completo, no del mes">

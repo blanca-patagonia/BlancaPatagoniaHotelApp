@@ -20,26 +20,3 @@ export function busquedaHuespedes(termino: string): string {
   const p = patronOr(termino)
   return `apellido.ilike.${p},nombre.ilike.${p},doc_numero.ilike.${p},email.ilike.${p}`
 }
-
-/** Una palabra en el nombre o el apellido del huésped. Para `.or()` (asistente de IA). */
-export function condicionNombre(termino: string): string {
-  const p = patronOr(termino)
-  return `apellido.ilike.${p},nombre.ilike.${p}`
-}
-
-/** Proveedores: nombre o rubro. Para `.or()`. */
-export function busquedaProveedores(termino: string): string {
-  const p = patronOr(termino)
-  return `nombre.ilike.${p},rubro.ilike.${p}`
-}
-
-/** Órdenes de mantenimiento: título o descripción. Para `.or()`. */
-export function busquedaOrdenes(termino: string): string {
-  const p = patronOr(termino)
-  return `titulo.ilike.${p},descripcion.ilike.${p}`
-}
-
-/** Patrón de un `.ilike()` suelto (agencias, gastos, comprobantes). */
-export function contiene(termino: string): string {
-  return `%${termino}%`
-}
