@@ -9499,3 +9499,12 @@ Visto en un iPhone sobre la demo publicada:
 Verificado en Chromium con la vista de un iPhone 13 (el encabezado gana fondo al bajar y las dos
 fechas terminan en el borde de la tarjeta, sin scroll horizontal). La regla específica de Safari
 de iOS no se puede probar en este entorno, que sólo tiene Chromium.
+
+## 2026-11-25 · Panel · La caja del Inicio en el celular
+
+Visto en un celular sobre la demo: en «Caja y cobranzas» las cuatro cifras iban en dos columnas,
+y un importe como «USD 109.925,37» (que no se parte, `whitespace-nowrap`) no entraba en media
+pantalla y quedaba cortado contra el borde. En pantallas chicas las cifras van ahora una debajo
+de la otra; desde `sm` siguen en dos columnas y desde `lg` en cuatro, así que en la computadora
+no cambia nada. Verificado con Playwright en la vista de un iPhone 13 sobre la demo publicada:
+las cuatro cifras completas y sin desplazamiento horizontal.

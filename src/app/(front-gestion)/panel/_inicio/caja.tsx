@@ -242,7 +242,7 @@ export async function CajaDelHotel({
           </Mensaje>
         )}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Cifra titulo="Cobrado hoy" valor={formatearUSD(delDia.neto)}>
             {delDia.cobros === 0 ? 'todavía sin cobros' : delDia.cobros === 1 ? '1 cobro' : `${delDia.cobros} cobros`}
             {delDia.reembolsos > 0 && ` · ${formatearUSD(delDia.reembolsos)} devueltos`}
